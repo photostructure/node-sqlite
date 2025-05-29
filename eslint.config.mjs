@@ -51,6 +51,11 @@ export default [
       // Allow any for native bindings and Node.js compatibility
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unsafe-function-type": "off",
+      // Allow underscore-prefixed parameters to be unused
+      "@typescript-eslint/no-unused-vars": ["error", {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }],
     },
   },
 ];

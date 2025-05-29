@@ -171,7 +171,7 @@ describe("File-based Database Tests", () => {
         fs.unlinkSync(dbPath);
       }
       fs.rmdirSync(tempDir);
-    } catch (error) {
+    } catch {
       // Ignore cleanup errors in tests
     }
   });
@@ -189,7 +189,7 @@ describe("File-based Database Tests", () => {
 
   test("database file persists after closing", () => {
     // Create database and add data
-    let db = new DatabaseSync(dbPath);
+    const db = new DatabaseSync(dbPath);
     db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)");
     db.exec("INSERT INTO test (name) VALUES ('Alice')");
     db.close();
@@ -329,7 +329,7 @@ describe("Database Configuration Tests", () => {
         fs.unlinkSync(dbPath);
       }
       fs.rmdirSync(tempDir);
-    } catch (error) {
+    } catch {
       // Ignore cleanup errors in tests
     }
   });

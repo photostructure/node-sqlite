@@ -48,7 +48,7 @@ describe("Aggregate Functions Tests", () => {
     // Create a count function that accepts a value parameter (even if unused)
     db.aggregate("my_count", {
       start: 0,
-      step: (acc, value) => acc + 1,
+      step: (acc, _value) => acc + 1,
     });
 
     const result = db

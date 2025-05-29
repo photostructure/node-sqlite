@@ -86,7 +86,7 @@ describe("Node.js Compatibility: Custom Functions", () => {
     });
 
     test("varargs: throws if incorrect number of arguments provided", () => {
-      db.function("custom", (a: any, b: any, c: any, d: any) => {});
+      db.function("custom", () => {});
       expect(() => {
         db.prepare("SELECT custom(1, 2, 3) AS custom").get();
       }).toThrow(
@@ -161,7 +161,7 @@ describe("Node.js Compatibility: Custom Functions", () => {
       // ✅ FIXED: Our implementation now properly throws for unsafe numbers
       // Node.js: Throws ERR_OUT_OF_RANGE for numbers > MAX_SAFE_INTEGER
       const value = Number.MAX_SAFE_INTEGER + 1;
-      db.function("custom", (arg: any) => {
+      db.function("custom", (_value: any) => {
         // This should never be called due to range validation
         fail("Function should not be called with unsafe numbers");
       });

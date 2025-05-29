@@ -16,7 +16,7 @@ describe("File-based Database Tests", () => {
     // Clean up temporary directory
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch (error) {
+    } catch {
       // Ignore cleanup errors
     }
   });
@@ -35,7 +35,7 @@ describe("File-based Database Tests", () => {
       if (fs.existsSync(dbPath)) {
         fs.unlinkSync(dbPath);
       }
-    } catch (error) {
+    } catch {
       // Ignore cleanup errors
     }
   });
@@ -286,7 +286,7 @@ describe("File-based Database Tests", () => {
 
     try {
       db.close();
-    } catch (e) {
+    } catch {
       // Ignore close errors for corrupted databases
     }
   });
@@ -303,7 +303,7 @@ describe("File-based Database Tests", () => {
 
     // Second session: verify committed data exists
     const db2 = new DatabaseSync(dbPath);
-    let result = db2.prepare("SELECT * FROM txn_test").get();
+    const result = db2.prepare("SELECT * FROM txn_test").get();
     expect(result).toEqual({ id: 1, value: "committed" });
 
     // Third session: transaction with rollback

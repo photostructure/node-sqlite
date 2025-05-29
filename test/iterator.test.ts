@@ -114,13 +114,13 @@ describe("Statement Iterator Tests", () => {
 
     // Create first iterator and get one result
     const iter1 = stmt.iterate();
-    let result1 = iter1.next();
+    const result1 = iter1.next();
     expect(result1.done).toBe(false);
     expect(result1.value).toEqual({ name: "alice" });
 
     // Create second iterator - this resets the statement
     const iter2 = stmt.iterate();
-    let result2 = iter2.next();
+    const result2 = iter2.next();
 
     // iter2 should start from the beginning
     expect(result2.done).toBe(false);
