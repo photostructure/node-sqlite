@@ -45,10 +45,10 @@ describe("Aggregate Functions Tests", () => {
   });
 
   test("basic count aggregate function", () => {
-    // Create a count function
+    // Create a count function that accepts a value parameter (even if unused)
     db.aggregate("my_count", {
       start: 0,
-      step: (acc) => acc + 1,
+      step: (acc, value) => acc + 1,
     });
 
     const result = db

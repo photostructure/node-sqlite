@@ -2,6 +2,7 @@
 #include "sqlite_impl.h"
 #include "shims/node_errors.h"
 #include <cmath>
+#include <cstring>
 
 namespace photostructure {
 namespace sqlite {
@@ -13,7 +14,7 @@ CustomAggregate::CustomAggregate(Napi::Env env,
                                 Napi::Function step_fn,
                                 Napi::Function inverse_fn,
                                 Napi::Function result_fn)
-    : env_(env), db_(db), use_bigint_args_(use_bigint_args) {
+    : env_(env), db_(db), use_bigint_args_(use_bigint_args), async_context_(nullptr) {
   
   // Handle start value based on type
   if (start.IsNull()) {
@@ -47,6 +48,12 @@ CustomAggregate::CustomAggregate(Napi::Env env,
   if (!result_fn.IsEmpty()) {
     result_fn_ = Napi::Reference<Napi::Function>::New(result_fn, 1);
   }
+  
+  // Create async context for callbacks
+  napi_status status = napi_async_init(env, nullptr, Napi::String::New(env, "SQLiteAggregate"), &async_context_);
+  if (status != napi_ok) {
+    Napi::Error::New(env, "Failed to create async context").ThrowAsJavaScriptException();
+  }
 }
 
 CustomAggregate::~CustomAggregate() {
@@ -56,6 +63,11 @@ CustomAggregate::~CustomAggregate() {
   if (!step_fn_.IsEmpty()) step_fn_.Reset();
   if (!inverse_fn_.IsEmpty()) inverse_fn_.Reset();
   if (!result_fn_.IsEmpty()) result_fn_.Reset();
+  
+  // Cleanup async context
+  if (async_context_ != nullptr) {
+    napi_async_destroy(env_, async_context_);
+  }
 }
 
 void CustomAggregate::xStep(sqlite3_context* ctx, int argc, sqlite3_value** argv) {
@@ -80,10 +92,19 @@ void CustomAggregate::xDestroy(void* self) {
 
 void CustomAggregate::xStepBase(sqlite3_context* ctx, int argc, sqlite3_value** argv, bool use_inverse) {
   CustomAggregate* self = static_cast<CustomAggregate*>(sqlite3_user_data(ctx));
+  if (!self) {
+    sqlite3_result_error(ctx, "No user data", -1);
+    return;
+  }
+  
+  // Create HandleScope and CallbackScope for this operation
+  Napi::HandleScope scope(self->env_);
+  Napi::CallbackScope callback_scope(self->env_, self->async_context_);
   
   try {
     auto agg = self->GetAggregate(ctx);
     if (!agg) {
+      sqlite3_result_error(ctx, "Failed to get aggregate context", -1);
       return;
     }
 
@@ -96,14 +117,28 @@ void CustomAggregate::xStepBase(sqlite3_context* ctx, int argc, sqlite3_value** 
       }
       func = self->inverse_fn_.Value();
     } else {
+      if (self->step_fn_.IsEmpty()) {
+        sqlite3_result_error(ctx, "Step function is empty", -1);
+        return;
+      }
       func = self->step_fn_.Value();
     }
 
     // Prepare arguments for JavaScript function call
-    std::vector<napi_value> js_argv;
+    std::vector<Napi::Value> js_argv;
+    
     
     // First argument is the current aggregate value
-    js_argv.push_back(agg->value.Value());
+    Napi::Value agg_val;
+    if (agg->first_call) {
+      agg_val = self->GetStartValue();
+      // Store the start value as raw data for future reference
+      self->StoreJSValueAsRaw(agg, agg_val);
+      agg->first_call = false;
+    } else {
+      agg_val = self->RawValueToJS(agg);
+    }
+    js_argv.push_back(agg_val);
     
     // Add the SQLite arguments
     for (int i = 0; i < argc; ++i) {
@@ -112,20 +147,40 @@ void CustomAggregate::xStepBase(sqlite3_context* ctx, int argc, sqlite3_value** 
     }
     
     // Call the JavaScript function
-    Napi::Value result = func.Call(js_argv);
+    Napi::Value result;
+    try {
+      // Debug: Log the call
+      result = func.Call(js_argv);
+      if (result.IsEmpty() || result.IsUndefined()) {
+        sqlite3_result_error(ctx, "Step function returned empty/undefined", -1);
+        return;
+      }
+    } catch (const std::exception& e) {
+      throw;
+    }
     
     // Update the aggregate value
-    agg->value.Reset();
-    agg->value = Napi::Persistent(result);
-    agg->value.SuppressDestruct();
+    self->StoreJSValueAsRaw(agg, result);
     
   } catch (const Napi::Error& e) {
-    sqlite3_result_error(ctx, e.what(), -1);
+    // More detailed error message
+    std::string error_msg = "Aggregate step error: ";
+    error_msg += e.what();
+    sqlite3_result_error(ctx, error_msg.c_str(), -1);
+  } catch (const std::exception& e) {
+    // Catch any other exceptions
+    std::string error_msg = "Aggregate step exception: ";
+    error_msg += e.what();
+    sqlite3_result_error(ctx, error_msg.c_str(), -1);
   }
 }
 
 void CustomAggregate::xValueBase(sqlite3_context* ctx, bool finalize) {
   CustomAggregate* self = static_cast<CustomAggregate*>(sqlite3_user_data(ctx));
+  
+  // Create HandleScope and CallbackScope for this operation
+  Napi::HandleScope scope(self->env_);
+  Napi::CallbackScope callback_scope(self->env_, self->async_context_);
   
   try {
     auto agg = self->GetAggregate(ctx);
@@ -134,7 +189,7 @@ void CustomAggregate::xValueBase(sqlite3_context* ctx, bool finalize) {
       return;
     }
 
-    Napi::Value final_value = agg->value.Value();
+    Napi::Value final_value = self->RawValueToJS(agg);
     
     // If we have a result function, call it
     if (!self->result_fn_.IsEmpty()) {
@@ -147,7 +202,10 @@ void CustomAggregate::xValueBase(sqlite3_context* ctx, bool finalize) {
     
     // Clean up if this is finalization
     if (finalize) {
-      agg->value.Reset();
+      // Clean up object references if needed
+      if (agg->value_type == AggregateData::TYPE_OBJECT && !agg->object_ref.IsEmpty()) {
+        agg->object_ref.Reset();
+      }
     }
     
   } catch (const Napi::Error& e) {
@@ -157,22 +215,34 @@ void CustomAggregate::xValueBase(sqlite3_context* ctx, bool finalize) {
 
 CustomAggregate::AggregateData* CustomAggregate::GetAggregate(sqlite3_context* ctx) {
   AggregateData* agg = static_cast<AggregateData*>(sqlite3_aggregate_context(ctx, sizeof(AggregateData)));
+  
+  // sqlite3_aggregate_context only returns NULL if size is 0 or memory allocation fails
   if (!agg) {
     return nullptr;
   }
   
-  if (!agg->initialized) {
-    // First call - initialize the aggregate
-    agg->value = Napi::Persistent(GetStartValue());
-    agg->value.SuppressDestruct();
+  
+  // Check if this is uninitialized memory by testing if initialized flag is false or garbage
+  // We need to be careful because the memory might contain random values
+  // Check if this memory has been initialized as a C++ object
+  if (agg->initialized != true) {
+    // First call - use placement new to properly construct the C++ object
+    new (agg) AggregateData();
+    agg->value_type = AggregateData::TYPE_NULL;
+    agg->number_val = 0.0;
+    agg->boolean_val = false;
+    agg->bigint_val = 0;
     agg->initialized = true;
     agg->is_window = false;
+    agg->first_call = true;  // Mark that we need to initialize with start value
   }
   
   return agg;
 }
 
 Napi::Value CustomAggregate::SqliteValueToJS(sqlite3_value* value) {
+  // Don't create HandleScope here - let the caller manage it
+  
   int type = sqlite3_value_type(value);
   
   switch (type) {
@@ -239,6 +309,8 @@ void CustomAggregate::JSValueToSqliteResult(sqlite3_context* ctx, Napi::Value va
 }
 
 Napi::Value CustomAggregate::GetStartValue() {
+  // Don't create HandleScope here - let the caller manage it
+  
   switch (start_type_) {
     case PRIMITIVE_NULL:
       return env_.Null();
@@ -254,6 +326,59 @@ Napi::Value CustomAggregate::GetStartValue() {
       return Napi::BigInt::New(env_, bigint_value_);
     case OBJECT:
       return object_ref_.Value();
+    default:
+      return env_.Null();
+  }
+}
+
+void CustomAggregate::StoreJSValueAsRaw(AggregateData* agg, Napi::Value value) {
+  
+  if (value.IsNull()) {
+    agg->value_type = AggregateData::TYPE_NULL;
+  } else if (value.IsUndefined()) {
+    agg->value_type = AggregateData::TYPE_UNDEFINED;
+  } else if (value.IsNumber()) {
+    agg->value_type = AggregateData::TYPE_NUMBER;
+    agg->number_val = value.As<Napi::Number>().DoubleValue();
+  } else if (value.IsString()) {
+    agg->value_type = AggregateData::TYPE_STRING;
+    agg->string_val = value.As<Napi::String>().Utf8Value();
+  } else if (value.IsBoolean()) {
+    agg->value_type = AggregateData::TYPE_BOOLEAN;
+    agg->boolean_val = value.As<Napi::Boolean>().Value();
+  } else if (value.IsBigInt()) {
+    agg->value_type = AggregateData::TYPE_BIGINT;
+    bool lossless;
+    agg->bigint_val = value.As<Napi::BigInt>().Int64Value(&lossless);
+  } else {
+    // Complex object - this still requires Persistent reference
+    agg->value_type = AggregateData::TYPE_OBJECT;
+    if (!agg->object_ref.IsEmpty()) {
+      agg->object_ref.Reset();
+    }
+    agg->object_ref = Napi::Reference<Napi::Value>::New(value, 1);
+  }
+}
+
+Napi::Value CustomAggregate::RawValueToJS(AggregateData* agg) {
+  
+  // Don't create HandleScope here - it should be managed by the caller
+  
+  switch (agg->value_type) {
+    case AggregateData::TYPE_NULL:
+      return env_.Null();
+    case AggregateData::TYPE_UNDEFINED:
+      return env_.Undefined();
+    case AggregateData::TYPE_NUMBER:
+      return Napi::Number::New(env_, agg->number_val);
+    case AggregateData::TYPE_STRING:
+      return Napi::String::New(env_, agg->string_val);
+    case AggregateData::TYPE_BOOLEAN:
+      return Napi::Boolean::New(env_, agg->boolean_val);
+    case AggregateData::TYPE_BIGINT:
+      return Napi::BigInt::New(env_, agg->bigint_val);
+    case AggregateData::TYPE_OBJECT:
+      return agg->object_ref.Value();
     default:
       return env_.Null();
   }

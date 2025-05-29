@@ -40,23 +40,26 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - ✅ **Statement iterator** (`iterate()` method) - Full JavaScript iterator protocol
   - ✅ Core SQLite constants from Node.js
 - 🚧 **Node.js Compatibility Gaps** (see COMPATIBILITY.md for full analysis):
-  
+
   **HIGH PRIORITY - Missing Core Features:**
+
   - [ ] **Statement configuration methods**:
     - [ ] `setReadBigInts(readBigInts: boolean)` - Configure BigInt result handling
-    - [ ] `setReturnArrays(returnArrays: boolean)` - Return results as arrays vs objects  
+    - [ ] `setReturnArrays(returnArrays: boolean)` - Return results as arrays vs objects
     - [ ] `setAllowBareNamedParameters(allow: boolean)` - Parameter binding control
   - [ ] **Statement metadata**: `columns()` method - Get column names and types
   - [ ] **Database configuration**: `enableDoubleQuotedStringLiterals` option
   - [ ] **Extension loading**: `enableLoadExtension()`, `loadExtension()` methods
-  
+
   **MEDIUM PRIORITY - Advanced Features:**
+
   - [ ] **Backup functionality**: Complete `BackupJob` class and `backup()` method
   - [ ] **SQLite sessions**: `createSession()`, `applyChangeset()` methods
   - [ ] **Enhanced location method**: `location(dbName?: string)` for attached databases
   - [ ] **Advanced parameter binding**: Bare named parameters (`{id: 1}` → `:id`)
-  
+
   **LOW PRIORITY - Polish:**
+
   - [ ] **Error message compatibility**: Match Node.js error formatting exactly
   - [ ] **Path validation**: Support for file:// URLs and Buffer paths
   - [ ] **Enhanced memory tracking**: Node.js-style memory management
@@ -79,7 +82,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - ✅ **Statement iterator** - Full protocol with 9 comprehensive tests
 - ✅ **Advanced feature tests**
   - ✅ **Custom functions** - 8 tests covering all functionality
-  - 🚧 **Aggregate functions** - 2/10 tests passing (creation ✅ fixed, execution 🚧 in progress)
+  - ✅ **Aggregate functions** - 10/10 tests passing (all functionality working)
   - ✅ Transaction persistence across sessions
   - ✅ Large dataset operations (optimized with transactions)
   - [ ] SQLite sessions and changesets
@@ -152,6 +155,159 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - [ ] Track which Node.js version we're synced with
   - [ ] Maintain compatibility matrix
   - [ ] Document breaking changes
+
+### Automated SQLite Version Updates 🆕 **COMPREHENSIVE STRATEGY DESIGNED**
+
+**Current State:** SQLite 3.49.1 from Node.js upstream, manual updates only
+
+**Goal:** Automated detection and updates with hybrid Node.js + direct SQLite approach
+
+#### **Phase 1: Enhanced Node.js Sync** 🎯 **HIGH PRIORITY**
+
+- [ ] **Intelligent version detection**
+  - [ ] Add `getCurrentSQLiteVersion()` utility to parse `src/upstream/sqlite3.h`
+  - [ ] Add `getNodeSQLiteVersion(nodePath)` to check Node.js `deps/sqlite/sqlite3.h`
+  - [ ] Implement semantic version comparison logic
+- [ ] **Enhanced sync-from-node.js script**
+  - [ ] Automatic version comparison before sync
+  - [ ] Skip sync if Node.js version is not newer
+  - [ ] Log version changes and sync status
+  - [ ] Add `--force` flag for manual override
+- [ ] **Automated testing integration**
+  - [ ] Run full test suite after sync
+  - [ ] Verify build compilation
+  - [ ] Check for API compatibility issues
+  - [ ] Only proceed if all tests pass
+
+#### **Phase 2: Direct SQLite Updates** 🎯 **MEDIUM PRIORITY**
+
+- [ ] **SQLite.org monitoring**
+  - [ ] Add `getLatestSQLiteVersion()` to scrape https://sqlite.org/download.html
+  - [ ] Parse HTML comments with CSV data for reliable version detection
+  - [ ] Handle SQLite's encoded version format (3XXYY00 for version 3.X.Y)
+- [ ] **Direct SQLite update script** (`scripts/update-sqlite-direct.js`)
+  - [ ] Download SQLite source amalgamation from official site
+  - [ ] Apply Node.js-compatible build configuration
+  - [ ] Preserve compile flags from Node.js (`SQLITE_ENABLE_*` options)
+  - [ ] Generate updated `src/upstream/sqlite3.{c,h,ext.h}` files
+  - [ ] Verify build compatibility with our shims
+- [ ] **Build configuration preservation**
+  - [ ] Extract compile flags from Node.js `deps/sqlite/sqlite.gyp`
+  - [ ] Maintain feature parity (FTS, JSON1, RTREE, math functions, etc.)
+  - [ ] Apply any necessary patches for Node.js compatibility
+  - [ ] Document configuration differences in COMPATIBILITY.md
+
+#### **Phase 3: Automated GitHub Actions** 🎯 **MEDIUM PRIORITY**
+
+- [ ] **Scheduled update checking** (`.github/workflows/check-sqlite-updates.yml`)
+  ```yaml
+  # Weekly checks every Monday at 12:00 UTC
+  schedule:
+    - cron: "0 12 * * 1"
+  workflow_dispatch: # Manual trigger support
+  ```
+- [ ] **Dual-source update strategy**
+  - [ ] **Job 1: Check Node.js upstream** for SQLite updates
+    - [ ] Clone latest Node.js main branch
+    - [ ] Compare SQLite version with our current version
+    - [ ] Run enhanced sync-from-node.js if newer version found
+    - [ ] Create PR with "chore(sqlite): sync vX.Y.Z from Node.js upstream"
+  - [ ] **Job 2: Check direct SQLite** (only if Node.js check found no updates)
+    - [ ] Check SQLite.org for versions newer than both ours and Node.js
+    - [ ] Run direct SQLite update script if newer version available
+    - [ ] Create PR with "feat(sqlite): update to vX.Y.Z (direct from SQLite.org)"
+- [ ] **Automated PR creation**
+  - [ ] Detailed commit messages with version numbers and source
+  - [ ] PR description with changelog links and testing status
+  - [ ] Automatic assignment to maintainers
+  - [ ] Add appropriate labels (dependencies, enhancement, etc.)
+
+#### **Phase 4: Testing & Validation Pipeline** 🎯 **HIGH PRIORITY**
+
+- [ ] **Pre-PR validation**
+  - [ ] Full compilation test across all platforms
+  - [ ] Complete test suite execution (must pass 100%)
+  - [ ] Basic performance regression check
+  - [ ] Memory leak detection
+  - [ ] Node.js API compatibility verification
+- [ ] **Automated PR testing**
+  - [ ] Matrix testing across Node.js versions (20, 22, 23+)
+  - [ ] Multi-platform testing (Linux, macOS, Windows, Alpine)
+  - [ ] Architecture testing (x64, arm64)
+  - [ ] Prebuilt binary generation and testing
+- [ ] **Rollback capability**
+  - [ ] Version pinning in package.json
+  - [ ] Ability to quickly revert to previous SQLite version
+  - [ ] Emergency manual override process
+
+#### **Phase 5: Advanced Features** 🎯 **LOW PRIORITY**
+
+- [ ] **Smart update decisions**
+  - [ ] Parse SQLite release notes for breaking changes
+  - [ ] Detect major vs minor vs patch releases
+  - [ ] Different strategies for different release types
+  - [ ] Skip known problematic SQLite versions
+- [ ] **Notification system**
+  - [ ] Slack/Discord webhook for update notifications
+  - [ ] Email alerts for failed updates
+  - [ ] GitHub issue creation for manual intervention needed
+- [ ] **Version analytics**
+  - [ ] Track update success/failure rates
+  - [ ] Monitor time lag between SQLite release and our update
+  - [ ] Compare our update speed vs other SQLite libraries
+
+#### **Implementation Scripts Overview**
+
+```bash
+# New/enhanced scripts to create:
+scripts/
+├── lib/
+│   ├── version-utils.js     # Version parsing and comparison utilities
+│   ├── sqlite-download.js   # Direct SQLite download and processing
+│   └── test-runner.js       # Automated testing orchestration
+├── sync-from-node.js        # ✅ Enhanced with version detection
+├── update-sqlite-direct.js  # 🆕 Direct SQLite.org updates
+└── check-updates.js         # 🆕 Unified update checker (used by GHA)
+```
+
+#### **Configuration Management**
+
+- [ ] **Update configuration** (`package.json` or `.sqliterc`)
+  ```json
+  {
+    "sqlite-updates": {
+      "sources": ["nodejs", "sqlite.org"],
+      "auto-pr": true,
+      "test-before-pr": true,
+      "schedule": "weekly",
+      "skip-versions": ["3.45.0"], // Known problematic versions
+      "notification-webhooks": ["slack://..."]
+    }
+  }
+  ```
+- [ ] **Version tracking** (`SQLITE_VERSIONS.md`)
+  - [ ] Current SQLite version and source (Node.js vs direct)
+  - [ ] Update history with dates and sources
+  - [ ] Compatibility notes for each version
+  - [ ] Performance impact assessments
+
+#### **Success Metrics**
+
+- [ ] **Automation reliability**: 95%+ successful automated updates
+- [ ] **Update timeliness**: Updates within 7 days of SQLite release
+- [ ] **Zero manual intervention**: Fully automated from detection to PR
+- [ ] **Comprehensive testing**: 100% test pass rate before PR creation
+- [ ] **Documentation**: Complete audit trail of all updates
+
+#### **Advantages Over better-sqlite3's Approach**
+
+✅ **Automatic detection** (vs manual workflow dispatch)  
+✅ **Dual-source strategy** (Node.js + direct SQLite)  
+✅ **Semantic versioning** (vs manual version input)  
+✅ **Comprehensive testing** (vs basic compilation check)  
+✅ **Node.js compatibility** (vs standalone SQLite only)  
+✅ **Scheduled automation** (vs purely manual triggers)  
+✅ **Intelligent PR creation** (vs simple file replacement)
 
 ### Performance Optimizations
 
@@ -241,7 +397,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
    - [ ] Benchmark against alternatives
    - [ ] Node.js compatibility verification
    - [ ] Memory leak testing
-   - [ ]  
+   - [ ]
 
 ## Priority Levels
 
@@ -253,12 +409,12 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 ## 🏆 **Success Metrics Achieved**
 
 - ✅ **Core SQLite operations working** (CREATE, INSERT, SELECT, UPDATE, DELETE)
-- ✅ **Advanced SQLite features working** (user functions fully, aggregates partially, iterators fully)
-- ✅ **42+ tests passing** with comprehensive coverage across most features:
+- ✅ **Advanced SQLite features working** (user functions, aggregates, and iterators all fully functional)
+- ✅ **89 tests passing** with comprehensive coverage across all features:
   - ✅ 13 basic database tests
   - ✅ 13 configuration option tests
   - ✅ 8 user-defined function tests
-  - 🚧 2/10 aggregate function tests (creation fixed, execution in progress)
+  - ✅ 10 aggregate function tests
   - ✅ 9 statement iterator tests
   - ✅ 11 file-based database tests
 - ✅ **All core data types supported** (INTEGER, REAL, TEXT, BLOB, NULL, BigInt)

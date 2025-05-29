@@ -261,6 +261,7 @@ When choosing a SQLite library for Node.js, you have several options. Here's how
 Node.js 22.5.0+ includes an experimental built-in SQLite module.
 
 **Pros:**
+
 - ✅ **Zero dependencies**: Built into Node.js, no installation needed
 - ✅ **Official support**: Maintained by the Node.js core team
 - ✅ **High performance**: Direct C library integration with minimal overhead
@@ -268,6 +269,7 @@ Node.js 22.5.0+ includes an experimental built-in SQLite module.
 - ✅ **Complete feature set**: Full SQLite functionality including FTS, JSON functions
 
 **Cons:**
+
 - ❌ **Experimental status**: Not recommended for production use
 - ❌ **Version requirements**: Only available in Node.js 22.5.0+
 - ❌ **Flag required**: Needs `--experimental-sqlite` flag to use
@@ -281,6 +283,7 @@ Node.js 22.5.0+ includes an experimental built-in SQLite module.
 The most popular high-performance SQLite library for Node.js.
 
 **Pros:**
+
 - ✅ **Excellent performance**: 2-15x faster than sqlite3 in most operations
 - ✅ **Synchronous API**: Simple blocking operations, no callback/Promise complexity
 - ✅ **Mature and stable**: Battle-tested with thousands of projects using it
@@ -290,6 +293,7 @@ The most popular high-performance SQLite library for Node.js.
 - ✅ **Worker thread support**: For handling large/slow queries
 
 **Cons:**
+
 - ❌ **Synchronous only**: No async operations (though this is often an advantage)
 - ❌ **Different API**: Not compatible with Node.js built-in SQLite interface
 - ❌ **Not suitable for all cases**: High concurrent writes or very large databases
@@ -303,6 +307,7 @@ The most popular high-performance SQLite library for Node.js.
 The traditional asynchronous SQLite library for Node.js.
 
 **Pros:**
+
 - ✅ **Mature and established**: Long history, widely adopted (4000+ dependent packages)
 - ✅ **Asynchronous API**: Non-blocking operations with callbacks/Promises
 - ✅ **Extensive ecosystem**: Many tutorials, examples, and community resources
@@ -311,6 +316,7 @@ The traditional asynchronous SQLite library for Node.js.
 - ✅ **Node-API compatibility**: Works across Node.js versions without rebuilding
 
 **Cons:**
+
 - ❌ **Poor performance**: 2-15x slower than synchronous alternatives
 - ❌ **Complex API**: Callback-based with potential callback hell
 - ❌ **Resource waste**: Async overhead for inherently synchronous operations
@@ -323,35 +329,39 @@ The traditional asynchronous SQLite library for Node.js.
 
 Based on benchmarks from better-sqlite3 and our testing:
 
-| Operation | @photostructure/sqlite | better-sqlite3 | sqlite3 |
-|-----------|------------------------|----------------|---------|
-| SELECT 1 row | ~450,000 ops/sec | ~400,000 ops/sec | ~50,000 ops/sec |
-| SELECT 100 rows | 1x (baseline) | ~1x | ~3x slower |
-| INSERT 1 row | 1x (baseline) | ~1x | ~3x slower |
-| INSERT 100 rows (transaction) | 1x (baseline) | ~1x | ~15x slower |
+| Operation                     | @photostructure/sqlite | better-sqlite3   | sqlite3         |
+| ----------------------------- | ---------------------- | ---------------- | --------------- |
+| SELECT 1 row                  | ~450,000 ops/sec       | ~400,000 ops/sec | ~50,000 ops/sec |
+| SELECT 100 rows               | 1x (baseline)          | ~1x              | ~3x slower      |
+| INSERT 1 row                  | 1x (baseline)          | ~1x              | ~3x slower      |
+| INSERT 100 rows (transaction) | 1x (baseline)          | ~1x              | ~15x slower     |
 
 ### Recommendation Guide
 
 **Choose @photostructure/sqlite if:**
+
 - You want Node.js built-in SQLite API compatibility
-- You need to support multiple Node.js versions without experimental flags  
+- You need to support multiple Node.js versions without experimental flags
 - You want the performance of synchronous operations
 - You prefer Node-API stability over V8-specific implementations
 - You're building for the future when Node.js SQLite becomes stable
 
 **Choose better-sqlite3 if:**
+
 - Performance is your top priority
 - You're building a new application and control the API design
 - You want the most mature synchronous SQLite library
 - You need advanced features like user-defined functions
 
 **Choose sqlite3 if:**
+
 - You have an existing codebase using async SQLite patterns
 - You specifically need non-blocking database operations
 - You're working with legacy systems that require callback-based APIs
 - You need SQLCipher encryption support
 
 **Choose node:sqlite if:**
+
 - You're experimenting with cutting-edge Node.js features
 - You don't mind using experimental APIs
 - You want zero-dependency SQLite access

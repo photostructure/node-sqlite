@@ -18,7 +18,7 @@ This is @photostructure/sqlite - a standalone npm package that extracts the expe
 
 ### Project Status
 
-✅ **Core Functionality Complete** - As per TODO.md, core SQLite functionality is now working with 13+ tests passing.
+✅ **Core and Advanced Functionality Complete** - As per TODO.md, core SQLite functionality and most advanced features are now working with 89 tests passing.
 
 **What Works:**
 
@@ -30,12 +30,14 @@ This is @photostructure/sqlite - a standalone npm package that extracts the expe
 - ✅ Package structure and TypeScript setup
 - ✅ Automated sync from Node.js source
 - ✅ Multi-platform CI/CD with prebuilds
-- ✅ Comprehensive test coverage for core features
+- ✅ Comprehensive test coverage (89 tests passing)
+- ✅ User-defined functions with all options
+- ✅ Aggregate functions with window function support
+- ✅ Statement iterator implementation with full protocol
 
 **What's Missing:**
 
-- 🚧 Advanced features (user functions, aggregates, sessions)
-- 🚧 Statement iterator implementation
+- 🚧 SQLite sessions and changesets
 - 🚧 Backup functionality
 - 🚧 Extension loading
 
@@ -209,11 +211,12 @@ node scripts/sync-from-node.js /path/to/node/repo
 - ✅ **Node.js file synchronization automation**
 - ✅ **TypeScript interfaces and type definitions**
 
-### 🚧 In Progress
+### ✅ Recently Completed
 
-- 🚧 **Advanced features** - User functions, aggregates, sessions
-- 🚧 **Statement iterator** - Stubbed but not fully implemented
-- 🚧 **File-based database testing** - In-memory works, file testing needed
+- ✅ **User-defined functions** - Full implementation with all options
+- ✅ **Aggregate functions** - Complete with window function support
+- ✅ **Statement iterator** - Full JavaScript iterator protocol
+- ✅ **File-based database testing** - 11 comprehensive tests
 
 ### ❌ Future Features
 
@@ -281,6 +284,62 @@ db.close();
 4. **Add tests for all new functionality**
 5. **Update TODO.md** when completing tasks
 6. **Run full test suite** before submitting changes
+
+## Important Implementation Notes
+
+### Aggregate Functions and V8 HandleScope
+
+**Problem**: When implementing SQLite aggregate functions, we encountered "Invalid argument" errors that were caused by V8 HandleScope lifetime issues.
+
+**Root Cause**: SQLite aggregate callbacks (`xStep`, `xFinal`) are called from SQLite's context, not directly from JavaScript. Creating a HandleScope in helper methods like `GetStartValue()` or `SqliteValueToJS()` caused the scope to be destroyed before the JavaScript values were used, resulting in values becoming `<the_hole_value>`.
+
+**Solution**:
+
+1. Don't create HandleScope in methods that return JavaScript values - let the caller manage the scope
+2. Store aggregate values as raw C++ data instead of JavaScript objects to avoid cross-context issues
+3. Use placement new for proper C++ object initialization in SQLite-allocated memory
+
+**Key Code Pattern**:
+
+```cpp
+// DON'T do this:
+Napi::Value GetStartValue() {
+  Napi::HandleScope scope(env_);  // This scope will be destroyed before value is used!
+  return Napi::Number::New(env_, 0);
+}
+
+// DO this instead:
+Napi::Value GetStartValue() {
+  // No HandleScope - let the caller manage it
+  return Napi::Number::New(env_, 0);
+}
+```
+
+### Aggregate Function Argument Count
+
+**Problem**: SQLite determines the number of arguments for aggregate functions based on the JavaScript function's `length` property.
+
+**Key Behavior**:
+
+- For a step function `(acc) => acc + 1`, length is 1, so SQLite expects 0 SQL arguments
+- For a step function `(acc, value) => acc + value`, length is 2, so SQLite expects 1 SQL argument
+- The first parameter is always the accumulator, additional parameters map to SQL arguments
+
+**Example**:
+
+```javascript
+// This expects my_count() with no arguments
+db.aggregate("my_count", {
+  start: 0,
+  step: (acc) => acc + 1,
+});
+
+// This expects my_sum(value) with one argument
+db.aggregate("my_sum", {
+  start: 0,
+  step: (acc, value) => acc + value,
+});
+```
 
 ## References
 

@@ -4,6 +4,7 @@
 #include <iostream>
 #include <cmath>
 #include <climits>
+#include <algorithm>
 
 namespace photostructure {
 namespace sqlite {
@@ -430,6 +431,18 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo& info) {
       // Subtract 1 because the first argument is the aggregate value
       argc = length_prop.As<Napi::Number>().Int32Value() - 1;
     }
+    
+    // Also check inverse function length if provided
+    if (!inverse_fn.IsEmpty()) {
+      Napi::Value inverse_length = inverse_fn.Get("length");
+      if (inverse_length.IsNumber()) {
+        int inverse_argc = inverse_length.As<Napi::Number>().Int32Value() - 1;
+        argc = std::max({argc, inverse_argc, 0});
+      }
+    }
+    
+    // Ensure argc is non-negative
+    argc = std::max(argc, 0);
   }
   
   // Set SQLite flags
@@ -452,36 +465,21 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
   
-  // Register with SQLite - use window function if inverse is provided, otherwise use regular aggregate
-  int result;
-  if (!inverse_fn.IsEmpty()) {
-    // Window function with inverse support
-    result = sqlite3_create_window_function(
-      connection_,
-      name.c_str(),
-      argc,
-      flags,
-      user_data,
-      CustomAggregate::xStep,
-      CustomAggregate::xFinal,
-      CustomAggregate::xValue,
-      CustomAggregate::xInverse,
-      CustomAggregate::xDestroy
-    );
-  } else {
-    // Regular aggregate function
-    result = sqlite3_create_function_v2(
-      connection_,
-      name.c_str(),
-      argc,
-      flags,
-      user_data,
-      nullptr, // xFunc - not used for aggregates
-      CustomAggregate::xStep,
-      CustomAggregate::xFinal,
-      CustomAggregate::xDestroy
-    );
-  }
+  // Register with SQLite - Node.js always uses sqlite3_create_window_function for aggregates
+  auto xInverse = !inverse_fn.IsEmpty() ? CustomAggregate::xInverse : nullptr;
+  auto xValue = xInverse ? CustomAggregate::xValue : nullptr;
+  int result = sqlite3_create_window_function(
+    connection_,
+    name.c_str(),
+    argc,
+    flags,
+    user_data,
+    CustomAggregate::xStep,
+    CustomAggregate::xFinal,
+    xValue,
+    xInverse,
+    CustomAggregate::xDestroy
+  );
   
   if (result != SQLITE_OK) {
     delete user_data; // Clean up on failure

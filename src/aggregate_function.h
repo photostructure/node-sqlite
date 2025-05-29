@@ -4,6 +4,7 @@
 #include <napi.h>
 #include <sqlite3.h>
 #include <memory>
+#include <string>
 
 namespace photostructure {
 namespace sqlite {
@@ -31,9 +32,31 @@ class CustomAggregate {
 
  private:
   struct AggregateData {
-    Napi::Reference<Napi::Value> value;
+    // Store value as raw C++ data instead of JavaScript objects
+    enum ValueType {
+      TYPE_NULL,
+      TYPE_UNDEFINED,
+      TYPE_NUMBER,
+      TYPE_STRING,
+      TYPE_BOOLEAN,
+      TYPE_BIGINT,
+      TYPE_OBJECT  // For complex objects, we'll need special handling
+    } value_type;
+    
+    union {
+      double number_val;
+      bool boolean_val;
+      int64_t bigint_val;
+    };
+    std::string string_val;  // For strings
+    Napi::Reference<Napi::Value> object_ref;  // For complex objects (fallback)
+    
     bool initialized;
     bool is_window;
+    bool first_call;  // True if this is the first call and we need to initialize with start value
+    
+    // Default constructor
+    AggregateData() : value_type(TYPE_NULL), number_val(0.0), initialized(false), is_window(false), first_call(false) {}
   };
 
   // Helper methods
@@ -44,6 +67,10 @@ class CustomAggregate {
   Napi::Value SqliteValueToJS(sqlite3_value* value);
   void JSValueToSqliteResult(sqlite3_context* ctx, Napi::Value value);
   Napi::Value GetStartValue();
+  
+  // New methods for raw C++ value handling
+  void StoreJSValueAsRaw(AggregateData* agg, Napi::Value value);
+  Napi::Value RawValueToJS(AggregateData* agg);
 
   Napi::Env env_;
   DatabaseSync* db_;
@@ -61,6 +88,9 @@ class CustomAggregate {
   Napi::Reference<Napi::Function> step_fn_;
   Napi::Reference<Napi::Function> inverse_fn_;
   Napi::Reference<Napi::Function> result_fn_;
+  
+  // Async context for callbacks
+  napi_async_context async_context_;
 };
 
 } // namespace sqlite
