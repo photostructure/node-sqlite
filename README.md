@@ -1,9 +1,5 @@
 # @photostructure/sqlite
 
-[![npm version](https://badge.fury.io/js/%40photostructure%2Fsqlite.svg)](https://badge.fury.io/js/%40photostructure%2Fsqlite)
-[![Node.js Version](https://img.shields.io/node/v/@photostructure/sqlite.svg)](https://nodejs.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
 ## 🚀 Drop-in Replacement for node:sqlite
 
 This package provides **100% API compatibility** with Node.js's built-in SQLite module (`node:sqlite`). You can seamlessly switch between this package and the built-in module without changing any code.
@@ -20,7 +16,7 @@ const { DatabaseSync } = require("@photostructure/sqlite");
 
 ## Overview
 
-Node.js has an experimental built-in SQLite module that provides synchronous database operations with excellent performance. However, it's only available in the newest Node.js versions, and requires the `--experimental-sqlite` flag.
+Node.js has an [experimental built-in SQLite module](https://nodejs.org/docs/latest/api/sqlite.html) that provides synchronous database operations with excellent performance. However, it's only available in the newest Node.js versions, and requires the `--experimental-sqlite` flag.
 
 This package extracts that implementation into a standalone library that:
 
