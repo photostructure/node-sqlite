@@ -1,0 +1,29 @@
+# Development files
+src/
+test/
+scripts/
+
+# Config files
+tsconfig.json
+jest.config.js
+binding.gyp
+
+# Build artifacts (keep dist/ for published types and code)
+build/
+*.tsbuildinfo
+
+# Development dependencies
+node_modules/
+
+
+# Docs
+*.md
+!README.md
+
+# Temporary files
+*.log
+*.tmp
+.DS_Store
+
+# hidden files
+.*
