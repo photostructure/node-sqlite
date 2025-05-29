@@ -163,13 +163,15 @@ describe("Node.js Compatibility: Custom Functions", () => {
       const value = Number.MAX_SAFE_INTEGER + 1;
       db.function("custom", (arg: any) => {
         // This should never be called due to range validation
-        fail('Function should not be called with unsafe numbers');
+        fail("Function should not be called with unsafe numbers");
       });
 
       // Now correctly throws like Node.js does
       expect(() => {
         db.prepare(`SELECT custom(${value}) AS custom`).get();
-      }).toThrow(/Value is too large to be represented as a JavaScript number: 9007199254740992/);
+      }).toThrow(
+        /Value is too large to be represented as a JavaScript number: 9007199254740992/,
+      );
     });
 
     test("⚠️ Minor: Argument validation messages differ", () => {

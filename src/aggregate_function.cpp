@@ -13,28 +13,49 @@ CustomAggregate::CustomAggregate(Napi::Env env,
                                 Napi::Function step_fn,
                                 Napi::Function inverse_fn,
                                 Napi::Function result_fn)
-    : env_(env), db_(db), use_bigint_args_(use_bigint_args),
-      start_(Napi::Persistent(start)),
-      step_fn_(Napi::Persistent(step_fn)) {
+    : env_(env), db_(db), use_bigint_args_(use_bigint_args) {
   
-  start_.SuppressDestruct();
-  step_fn_.SuppressDestruct();
+  // Handle start value based on type
+  if (start.IsNull()) {
+    start_type_ = PRIMITIVE_NULL;
+  } else if (start.IsUndefined()) {
+    start_type_ = PRIMITIVE_UNDEFINED;
+  } else if (start.IsNumber()) {
+    start_type_ = PRIMITIVE_NUMBER;
+    number_value_ = start.As<Napi::Number>().DoubleValue();
+  } else if (start.IsString()) {
+    start_type_ = PRIMITIVE_STRING;
+    string_value_ = start.As<Napi::String>().Utf8Value();
+  } else if (start.IsBoolean()) {
+    start_type_ = PRIMITIVE_BOOLEAN;
+    boolean_value_ = start.As<Napi::Boolean>().Value();
+  } else if (start.IsBigInt()) {
+    start_type_ = PRIMITIVE_BIGINT;
+    bool lossless;
+    bigint_value_ = start.As<Napi::BigInt>().Int64Value(&lossless);
+  } else {
+    // Object, Array, or other complex type
+    start_type_ = OBJECT;
+    object_ref_ = Napi::Reference<Napi::Value>::New(start, 1);
+  }
+  
+  step_fn_ = Napi::Reference<Napi::Function>::New(step_fn, 1);
   
   if (!inverse_fn.IsEmpty()) {
-    inverse_fn_ = Napi::Persistent(inverse_fn);
-    inverse_fn_.SuppressDestruct();
+    inverse_fn_ = Napi::Reference<Napi::Function>::New(inverse_fn, 1);
   }
   if (!result_fn.IsEmpty()) {
-    result_fn_ = Napi::Persistent(result_fn);
-    result_fn_.SuppressDestruct();
+    result_fn_ = Napi::Reference<Napi::Function>::New(result_fn, 1);
   }
 }
 
 CustomAggregate::~CustomAggregate() {
-  start_.Reset();
-  step_fn_.Reset();
-  inverse_fn_.Reset();
-  result_fn_.Reset();
+  if (start_type_ == OBJECT && !object_ref_.IsEmpty()) {
+    object_ref_.Reset();
+  }
+  if (!step_fn_.IsEmpty()) step_fn_.Reset();
+  if (!inverse_fn_.IsEmpty()) inverse_fn_.Reset();
+  if (!result_fn_.IsEmpty()) result_fn_.Reset();
 }
 
 void CustomAggregate::xStep(sqlite3_context* ctx, int argc, sqlite3_value** argv) {
@@ -142,7 +163,7 @@ CustomAggregate::AggregateData* CustomAggregate::GetAggregate(sqlite3_context* c
   
   if (!agg->initialized) {
     // First call - initialize the aggregate
-    agg->value = Napi::Persistent(start_.Value());
+    agg->value = Napi::Persistent(GetStartValue());
     agg->value.SuppressDestruct();
     agg->initialized = true;
     agg->is_window = false;
@@ -214,6 +235,27 @@ void CustomAggregate::JSValueToSqliteResult(sqlite3_context* ctx, Napi::Value va
     // Convert to string as fallback
     std::string str_val = value.ToString().Utf8Value();
     sqlite3_result_text(ctx, str_val.c_str(), str_val.length(), SQLITE_TRANSIENT);
+  }
+}
+
+Napi::Value CustomAggregate::GetStartValue() {
+  switch (start_type_) {
+    case PRIMITIVE_NULL:
+      return env_.Null();
+    case PRIMITIVE_UNDEFINED:
+      return env_.Undefined();
+    case PRIMITIVE_NUMBER:
+      return Napi::Number::New(env_, number_value_);
+    case PRIMITIVE_STRING:
+      return Napi::String::New(env_, string_value_);
+    case PRIMITIVE_BOOLEAN:
+      return Napi::Boolean::New(env_, boolean_value_);
+    case PRIMITIVE_BIGINT:
+      return Napi::BigInt::New(env_, bigint_value_);
+    case OBJECT:
+      return object_ref_.Value();
+    default:
+      return env_.Null();
   }
 }
 

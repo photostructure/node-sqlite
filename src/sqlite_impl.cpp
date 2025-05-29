@@ -442,29 +442,56 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo& info) {
   }
   
   // Create CustomAggregate wrapper
-  CustomAggregate* user_data = new CustomAggregate(env, this, use_bigint_args, start, step_fn, inverse_fn, result_fn);
+  CustomAggregate* user_data;
+  try {
+    user_data = new CustomAggregate(env, this, use_bigint_args, start, step_fn, inverse_fn, result_fn);
+  } catch (const std::exception& e) {
+    std::string error = "Failed to create CustomAggregate: ";
+    error += e.what();
+    node::THROW_ERR_INVALID_ARG_VALUE(env, error.c_str());
+    return env.Undefined();
+  }
   
-  // Register with SQLite as window function (supports both aggregate and window operations)
-  auto xInverse = !inverse_fn.IsEmpty() ? CustomAggregate::xInverse : nullptr;
-  auto xValue = xInverse ? CustomAggregate::xValue : nullptr;
-  
-  int result = sqlite3_create_window_function(
-    connection_,
-    name.c_str(),
-    argc,
-    flags,
-    user_data,
-    CustomAggregate::xStep,
-    CustomAggregate::xFinal,
-    xValue,
-    xInverse,
-    CustomAggregate::xDestroy
-  );
+  // Register with SQLite - use window function if inverse is provided, otherwise use regular aggregate
+  int result;
+  if (!inverse_fn.IsEmpty()) {
+    // Window function with inverse support
+    result = sqlite3_create_window_function(
+      connection_,
+      name.c_str(),
+      argc,
+      flags,
+      user_data,
+      CustomAggregate::xStep,
+      CustomAggregate::xFinal,
+      CustomAggregate::xValue,
+      CustomAggregate::xInverse,
+      CustomAggregate::xDestroy
+    );
+  } else {
+    // Regular aggregate function
+    result = sqlite3_create_function_v2(
+      connection_,
+      name.c_str(),
+      argc,
+      flags,
+      user_data,
+      nullptr, // xFunc - not used for aggregates
+      CustomAggregate::xStep,
+      CustomAggregate::xFinal,
+      CustomAggregate::xDestroy
+    );
+  }
   
   if (result != SQLITE_OK) {
     delete user_data; // Clean up on failure
-    std::string error = "Failed to create aggregate function: ";
+    std::string error = "Failed to create aggregate function '";
+    error += name;
+    error += "': ";
     error += sqlite3_errmsg(connection_);
+    error += " (SQLite error code: ";
+    error += std::to_string(result);
+    error += ")";
     node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
   }
   

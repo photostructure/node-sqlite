@@ -39,10 +39,27 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - ✅ **Aggregate functions** (`aggregate()` method) - Complete with window function support
   - ✅ **Statement iterator** (`iterate()` method) - Full JavaScript iterator protocol
   - ✅ Core SQLite constants from Node.js
-- 🚧 **Remaining advanced features** from Node.js implementation:
-  - [ ] SQLite sessions (`createSession()`, `applyChangeset()`)
-  - [ ] Extension loading (`enableLoadExtension()`, `loadExtension()`)
-  - [ ] Backup functionality (`backup()` function)
+- 🚧 **Node.js Compatibility Gaps** (see COMPATIBILITY.md for full analysis):
+  
+  **HIGH PRIORITY - Missing Core Features:**
+  - [ ] **Statement configuration methods**:
+    - [ ] `setReadBigInts(readBigInts: boolean)` - Configure BigInt result handling
+    - [ ] `setReturnArrays(returnArrays: boolean)` - Return results as arrays vs objects  
+    - [ ] `setAllowBareNamedParameters(allow: boolean)` - Parameter binding control
+  - [ ] **Statement metadata**: `columns()` method - Get column names and types
+  - [ ] **Database configuration**: `enableDoubleQuotedStringLiterals` option
+  - [ ] **Extension loading**: `enableLoadExtension()`, `loadExtension()` methods
+  
+  **MEDIUM PRIORITY - Advanced Features:**
+  - [ ] **Backup functionality**: Complete `BackupJob` class and `backup()` method
+  - [ ] **SQLite sessions**: `createSession()`, `applyChangeset()` methods
+  - [ ] **Enhanced location method**: `location(dbName?: string)` for attached databases
+  - [ ] **Advanced parameter binding**: Bare named parameters (`{id: 1}` → `:id`)
+  
+  **LOW PRIORITY - Polish:**
+  - [ ] **Error message compatibility**: Match Node.js error formatting exactly
+  - [ ] **Path validation**: Support for file:// URLs and Buffer paths
+  - [ ] **Enhanced memory tracking**: Node.js-style memory management
 
 ## 🟡 Important - Testing & Quality ✅ **COMPREHENSIVE COVERAGE COMPLETE**
 
@@ -62,7 +79,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - ✅ **Statement iterator** - Full protocol with 9 comprehensive tests
 - ✅ **Advanced feature tests**
   - ✅ **Custom functions** - 8 tests covering all functionality
-  - ✅ **Aggregate functions** - 10 tests ✅ **FULLY WORKING**
+  - 🚧 **Aggregate functions** - 2/10 tests passing (creation ✅ fixed, execution 🚧 in progress)
   - ✅ Transaction persistence across sessions
   - ✅ Large dataset operations (optimized with transactions)
   - [ ] SQLite sessions and changesets
@@ -224,6 +241,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
    - [ ] Benchmark against alternatives
    - [ ] Node.js compatibility verification
    - [ ] Memory leak testing
+   - [ ]  
 
 ## Priority Levels
 
@@ -235,12 +253,12 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 ## 🏆 **Success Metrics Achieved**
 
 - ✅ **Core SQLite operations working** (CREATE, INSERT, SELECT, UPDATE, DELETE)
-- ✅ **Advanced SQLite features working** (user functions, aggregates, iterators)
-- ✅ **50+ tests passing** with comprehensive coverage across all features:
+- ✅ **Advanced SQLite features working** (user functions fully, aggregates partially, iterators fully)
+- ✅ **42+ tests passing** with comprehensive coverage across most features:
   - ✅ 13 basic database tests
-  - ✅ 13 configuration option tests  
+  - ✅ 13 configuration option tests
   - ✅ 8 user-defined function tests
-  - ✅ 10 aggregate function tests
+  - 🚧 2/10 aggregate function tests (creation fixed, execution in progress)
   - ✅ 9 statement iterator tests
   - ✅ 11 file-based database tests
 - ✅ **All core data types supported** (INTEGER, REAL, TEXT, BLOB, NULL, BigInt)

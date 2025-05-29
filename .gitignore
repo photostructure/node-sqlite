@@ -69,3 +69,6 @@ Thumbs.db
 # Test files
 test-results/
 coverage/
+
+# third-party libraries for reference
+vendored/

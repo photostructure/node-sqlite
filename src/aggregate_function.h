@@ -43,14 +43,24 @@ class CustomAggregate {
   AggregateData* GetAggregate(sqlite3_context* ctx);
   Napi::Value SqliteValueToJS(sqlite3_value* value);
   void JSValueToSqliteResult(sqlite3_context* ctx, Napi::Value value);
+  Napi::Value GetStartValue();
 
   Napi::Env env_;
   DatabaseSync* db_;
   bool use_bigint_args_;
-  Napi::Reference<Napi::Value> start_;
-  Napi::FunctionReference step_fn_;
-  Napi::FunctionReference inverse_fn_;
-  Napi::FunctionReference result_fn_;
+  
+  // Storage for start value - handle primitives differently
+  enum StartValueType { PRIMITIVE_NULL, PRIMITIVE_UNDEFINED, PRIMITIVE_NUMBER, PRIMITIVE_STRING, PRIMITIVE_BOOLEAN, PRIMITIVE_BIGINT, OBJECT };
+  StartValueType start_type_;
+  double number_value_;
+  std::string string_value_;
+  bool boolean_value_;
+  int64_t bigint_value_;
+  Napi::Reference<Napi::Value> object_ref_;
+  
+  Napi::Reference<Napi::Function> step_fn_;
+  Napi::Reference<Napi::Function> inverse_fn_;
+  Napi::Reference<Napi::Function> result_fn_;
 };
 
 } // namespace sqlite

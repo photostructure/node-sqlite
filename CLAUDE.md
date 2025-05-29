@@ -9,6 +9,7 @@ This is @photostructure/sqlite - a standalone npm package that extracts the expe
 ### Key Features
 
 - **Node.js API Compatible**: Exact same interface as Node.js built-in SQLite module
+- **better-sqlite3 Drop-in Replacement**: Goal to provide API compatibility with better-sqlite3 for easy migration
 - **Synchronous Operations**: DatabaseSync and StatementSync classes for blocking database operations
 - **Full SQLite Feature Set**: Includes FTS, JSON functions, math functions, spatial extensions, and session support
 - **Native Performance**: Direct SQLite C library integration without additional overhead
@@ -43,7 +44,7 @@ This is @photostructure/sqlite - a standalone npm package that extracts the expe
 ### File Structure
 
 ```
-sqlite/
+node-sqlite/
 ├── src/
 │   ├── index.ts              # Main TypeScript interface and exports
 │   ├── binding.cpp           # Native addon entry point (minimal wrapper)
@@ -59,6 +60,10 @@ sqlite/
 │       ├── node_mem.h        # Memory management utilities
 │       ├── util.h            # Node.js utility functions
 │       └── ...               # Other Node.js internal headers
+├── vendored/                 # Reference implementations for compatibility
+│   ├── node/                 # Complete Node.js repository (source of upstream/)
+│   ├── better-sqlite3/       # better-sqlite3 package for API reference
+│   └── node-sqlite3/         # node-sqlite3 package for compatibility testing
 ├── scripts/
 │   └── sync-from-node.js     # Automated sync from Node.js repository
 ├── test/                     # Test suite with comprehensive coverage
@@ -96,6 +101,16 @@ sqlite/
 - Public API that matches Node.js SQLite exactly
 - Loads native binding and exports typed interfaces
 - Handles Symbol.dispose integration
+
+**Vendored Reference Implementations** (`vendored/`):
+
+- **`vendored/node/`**: Complete Node.js repository used as source for `src/upstream/` sync
+- **`vendored/better-sqlite3/`**: Reference implementation for better-sqlite3 API compatibility
+  - Contains full source code, documentation, and comprehensive test suite
+  - Used for API reference when implementing better-sqlite3 drop-in replacement features
+  - Test suite provides validation that our implementation matches expected behavior
+- **`vendored/node-sqlite3/`**: node-sqlite3 package for additional compatibility testing
+  - Provides reference for async SQLite patterns and additional API coverage
 
 ## Common Commands
 
@@ -214,6 +229,8 @@ node scripts/sync-from-node.js /path/to/node/repo
 - **Main implementation** is in `src/sqlite_impl.{h,cpp}` (ported from Node.js)
 - **Shims** in `src/shims/` provide Node.js internal API compatibility
 - **User functions** are implemented in `src/user_function.{h,cpp}`
+- **Use `vendored/better-sqlite3/` for API reference** when implementing better-sqlite3 compatibility
+- **Validate against `vendored/better-sqlite3/test/`** to ensure drop-in replacement behavior
 
 ### Testing Requirements
 
