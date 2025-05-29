@@ -10,7 +10,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 - Full CRUD operations (CREATE, INSERT, SELECT, UPDATE, DELETE)
 - Parameter binding and data type handling
 - Proper error handling and memory management
-- Comprehensive test coverage (50+ tests passing across all features)
+- Comprehensive test coverage (100+ tests passing across all features)
 
 ---
 
@@ -43,11 +43,11 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 
   **HIGH PRIORITY - Missing Core Features:**
 
-  - [ ] **Statement configuration methods**:
-    - [ ] `setReadBigInts(readBigInts: boolean)` - Configure BigInt result handling
-    - [ ] `setReturnArrays(returnArrays: boolean)` - Return results as arrays vs objects
-    - [ ] `setAllowBareNamedParameters(allow: boolean)` - Parameter binding control
-  - [ ] **Statement metadata**: `columns()` method - Get column names and types
+  - ✅ **Statement configuration methods**:
+    - ✅ `setReadBigInts(readBigInts: boolean)` - Configure BigInt result handling
+    - ✅ `setReturnArrays(returnArrays: boolean)` - Return results as arrays vs objects
+    - ✅ `setAllowBareNamedParameters(allow: boolean)` - Parameter binding control
+  - ✅ **Statement metadata**: `columns()` method - Get column names and types
   - [ ] **Database configuration**: `enableDoubleQuotedStringLiterals` option
   - [ ] **Extension loading**: `enableLoadExtension()`, `loadExtension()` methods
 
@@ -56,7 +56,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - [ ] **Backup functionality**: Complete `BackupJob` class and `backup()` method
   - [ ] **SQLite sessions**: `createSession()`, `applyChangeset()` methods
   - [ ] **Enhanced location method**: `location(dbName?: string)` for attached databases
-  - [ ] **Advanced parameter binding**: Bare named parameters (`{id: 1}` → `:id`)
+  - ✅ **Advanced parameter binding**: Bare named parameters (`{id: 1}` → `:id`)
 
   **LOW PRIORITY - Polish:**
 
@@ -133,10 +133,11 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 - ✅ **Dependency management**
   - ✅ Dependabot configuration for automated updates
   - ✅ Weekly GitHub Actions and npm dependency updates
-- 🚧 **Code quality checks**
+- ✅ **Code quality checks**
   - ✅ ESLint configuration and rules
   - ✅ TypeScript strict mode compliance
   - ✅ Automated linting in CI/CD pipeline
+  - ✅ ESLint rule for underscore-prefixed unused parameters
   - [ ] C++ code formatting and linting
 - [ ] **Security scanning**
   - [ ] Dependency vulnerability scanning
@@ -373,6 +374,8 @@ scripts/
    - ✅ **User-defined functions** - Complete implementation with all options
    - ✅ **Statement iterator** - Full JavaScript iterator protocol
    - ✅ **Aggregate functions** - Complete implementation with window function support
+   - ✅ **Statement configuration methods** - setReadBigInts, setReturnArrays, setAllowBareNamedParameters
+   - ✅ **Statement metadata** - columns() method for column information
 
 2. **✅ Enhanced Testing** (COMPLETED!)
 
@@ -380,6 +383,8 @@ scripts/
    - ✅ **Configuration options testing** - 13 tests covering all options
    - ✅ **Advanced feature testing** - Iterator, functions, aggregates all tested
    - ✅ **Transaction testing** - Persistence across sessions verified
+   - ✅ **Statement configuration tests** - 25 tests for all new methods
+   - ✅ **Node.js compatibility tests** - 17 tests verifying API compatibility
 
 3. **✅ Multi-Platform Support** (COMPLETED!)
 
@@ -387,13 +392,18 @@ scripts/
    - ✅ GitHub Actions CI/CD
    - ✅ Automated prebuilds
 
-4. **🚧 Remaining Advanced Features** (Low Priority)
+4. **🚧 Remaining Core Features** (Next Priority)
+
+   - [ ] **Database configuration**: `enableDoubleQuotedStringLiterals` option
+   - [ ] **Extension loading**: `enableLoadExtension()`, `loadExtension()` methods
+
+5. **🚧 Advanced Features** (Medium Priority)
 
    - [ ] **SQLite sessions** (`createSession()`, `applyChangeset()`)
-   - [ ] **Extension loading** (`enableLoadExtension()`, `loadExtension()`)
    - [ ] **Backup functionality** (`backup()` function)
+   - [ ] **Enhanced location method**: `location(dbName?: string)` for attached databases
 
-5. **🚧 Performance & Compatibility** (Low Priority)
+6. **🚧 Performance & Compatibility** (Low Priority)
    - [ ] Benchmark against alternatives
    - [ ] Node.js compatibility verification
    - [ ] Memory leak testing
@@ -410,13 +420,15 @@ scripts/
 
 - ✅ **Core SQLite operations working** (CREATE, INSERT, SELECT, UPDATE, DELETE)
 - ✅ **Advanced SQLite features working** (user functions, aggregates, and iterators all fully functional)
-- ✅ **89 tests passing** with comprehensive coverage across all features:
+- ✅ **106 tests passing** with comprehensive coverage across all features:
   - ✅ 13 basic database tests
   - ✅ 13 configuration option tests
   - ✅ 8 user-defined function tests
   - ✅ 10 aggregate function tests
   - ✅ 9 statement iterator tests
   - ✅ 11 file-based database tests
+  - ✅ 25 statement configuration tests
+  - ✅ 17 Node.js compatibility tests
 - ✅ **All core data types supported** (INTEGER, REAL, TEXT, BLOB, NULL, BigInt)
 - ✅ **Error handling working** for invalid SQL and operations
 - ✅ **Memory management working** with proper cleanup and N-API references

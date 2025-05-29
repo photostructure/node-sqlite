@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <map>
+#include <optional>
 
 // Include our shims
 #include "shims/base_object.h"
@@ -116,9 +117,18 @@ class StatementSync : public Napi::ObjectWrap<StatementSync> {
   Napi::Value SourceSQLGetter(const Napi::CallbackInfo& info);
   Napi::Value ExpandedSQLGetter(const Napi::CallbackInfo& info);
   
+  // Configuration methods
+  Napi::Value SetReadBigInts(const Napi::CallbackInfo& info);
+  Napi::Value SetReturnArrays(const Napi::CallbackInfo& info);
+  Napi::Value SetAllowBareNamedParameters(const Napi::CallbackInfo& info);
+  
+  // Metadata methods
+  Napi::Value Columns(const Napi::CallbackInfo& info);
+  
  private:
   
   void BindParameters(const Napi::CallbackInfo& info, size_t start_index = 0);
+  void BindSingleParameter(int param_index, Napi::Value param);
   Napi::Value CreateResult();
   void Reset();
   
@@ -126,6 +136,14 @@ class StatementSync : public Napi::ObjectWrap<StatementSync> {
   sqlite3_stmt* statement_ = nullptr;
   std::string source_sql_;
   bool finalized_ = false;
+  
+  // Configuration options
+  bool use_big_ints_ = false;
+  bool return_arrays_ = false;
+  bool allow_bare_named_params_ = false;
+  
+  // Bare named parameters mapping (bare name -> full name with prefix)
+  std::optional<std::map<std::string, std::string>> bare_named_params_;
   
   friend class StatementSyncIterator;
 };
