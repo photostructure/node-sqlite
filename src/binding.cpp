@@ -9,6 +9,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   DatabaseSync::Init(env, exports);
   StatementSync::Init(env, exports);
   StatementSyncIterator::Init(env, exports);
+  Session::Init(env, exports);
   
   // Add SQLite constants
   Napi::Object constants = Napi::Object::New(env);
@@ -32,6 +33,18 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   constants.Set("SQLITE_OPEN_SHAREDCACHE", Napi::Number::New(env, SQLITE_OPEN_SHAREDCACHE));
   constants.Set("SQLITE_OPEN_PRIVATECACHE", Napi::Number::New(env, SQLITE_OPEN_PRIVATECACHE));
   constants.Set("SQLITE_OPEN_WAL", Napi::Number::New(env, SQLITE_OPEN_WAL));
+  
+  // Changeset/session constants
+  constants.Set("SQLITE_CHANGESET_OMIT", Napi::Number::New(env, SQLITE_CHANGESET_OMIT));
+  constants.Set("SQLITE_CHANGESET_REPLACE", Napi::Number::New(env, SQLITE_CHANGESET_REPLACE));
+  constants.Set("SQLITE_CHANGESET_ABORT", Napi::Number::New(env, SQLITE_CHANGESET_ABORT));
+  
+  constants.Set("SQLITE_CHANGESET_DATA", Napi::Number::New(env, SQLITE_CHANGESET_DATA));
+  constants.Set("SQLITE_CHANGESET_NOTFOUND", Napi::Number::New(env, SQLITE_CHANGESET_NOTFOUND));
+  constants.Set("SQLITE_CHANGESET_CONFLICT", Napi::Number::New(env, SQLITE_CHANGESET_CONFLICT));
+  constants.Set("SQLITE_CHANGESET_CONSTRAINT", Napi::Number::New(env, SQLITE_CHANGESET_CONSTRAINT));
+  constants.Set("SQLITE_CHANGESET_FOREIGN_KEY", Napi::Number::New(env, SQLITE_CHANGESET_FOREIGN_KEY));
+  
   exports.Set("constants", constants);
   
   // TODO: Add backup function

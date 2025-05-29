@@ -12,6 +12,8 @@ namespace sqlite {
 // Static member initialization
 Napi::FunctionReference DatabaseSync::constructor_;
 Napi::FunctionReference StatementSync::constructor_;
+Napi::FunctionReference StatementSyncIterator::constructor_;
+Napi::FunctionReference Session::constructor_;
 
 // DatabaseSync Implementation
 Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
@@ -24,6 +26,8 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("aggregate", &DatabaseSync::AggregateFunction),
     InstanceMethod("enableLoadExtension", &DatabaseSync::EnableLoadExtension),
     InstanceMethod("loadExtension", &DatabaseSync::LoadExtension),
+    InstanceMethod("createSession", &DatabaseSync::CreateSession),
+    InstanceMethod("applyChangeset", &DatabaseSync::ApplyChangeset),
     InstanceAccessor("location", &DatabaseSync::LocationGetter, nullptr),
     InstanceAccessor("isOpen", &DatabaseSync::IsOpenGetter, nullptr),
     InstanceAccessor("isTransaction", &DatabaseSync::IsTransactionGetter, nullptr)
@@ -285,6 +289,12 @@ void DatabaseSync::InternalClose() {
   if (connection_) {
     // Finalize all prepared statements
     prepared_statements_.clear();
+    
+    // Delete all sessions
+    for (auto* session : sessions_) {
+      sqlite3session_delete(session);
+    }
+    sessions_.clear();
     
     int result = sqlite3_close(connection_);
     if (result != SQLITE_OK) {
@@ -627,6 +637,211 @@ Napi::Value DatabaseSync::LoadExtension(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
   
+  return env.Undefined();
+}
+
+Napi::Value DatabaseSync::CreateSession(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+  
+  std::string table;
+  std::string db_name = "main";
+  
+  // Parse options if provided
+  if (info.Length() > 0) {
+    if (!info[0].IsObject()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(env, 
+        "The \"options\" argument must be an object.");
+      return env.Undefined();
+    }
+    
+    Napi::Object options = info[0].As<Napi::Object>();
+    
+    // Get table option
+    if (options.Has("table")) {
+      Napi::Value table_value = options.Get("table");
+      if (table_value.IsString()) {
+        table = table_value.As<Napi::String>().Utf8Value();
+      } else {
+        node::THROW_ERR_INVALID_ARG_TYPE(env, 
+          "The \"options.table\" argument must be a string.");
+        return env.Undefined();
+      }
+    }
+    
+    // Get db option
+    if (options.Has("db")) {
+      Napi::Value db_value = options.Get("db");
+      if (db_value.IsString()) {
+        db_name = db_value.As<Napi::String>().Utf8Value();
+      } else {
+        node::THROW_ERR_INVALID_ARG_TYPE(env, 
+          "The \"options.db\" argument must be a string.");
+        return env.Undefined();
+      }
+    }
+  }
+  
+  // Create the session
+  sqlite3_session* pSession;
+  int r = sqlite3session_create(connection_, db_name.c_str(), &pSession);
+  
+  if (r != SQLITE_OK) {
+    std::string error = "Failed to create session: ";
+    error += sqlite3_errmsg(connection_);
+    node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+    return env.Undefined();
+  }
+  
+  // Track the session
+  sessions_.insert(pSession);
+  
+  // Attach table if specified
+  r = sqlite3session_attach(pSession, table.empty() ? nullptr : table.c_str());
+  
+  if (r != SQLITE_OK) {
+    sqlite3session_delete(pSession);
+    sessions_.erase(pSession);
+    std::string error = "Failed to attach table to session: ";
+    error += sqlite3_errmsg(connection_);
+    node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+    return env.Undefined();
+  }
+  
+  // Create and return the Session object
+  return Session::Create(env, this, pSession);
+}
+
+// Static callbacks for changeset apply
+// Note: These need to be static because SQLite requires function pointers
+// TODO: Consider thread-safety implications
+static std::function<int(int)> g_conflictCallback;
+static std::function<bool(std::string)> g_filterCallback;
+
+static int xConflict(void* pCtx, int eConflict, sqlite3_changeset_iter* pIter) {
+  if (!g_conflictCallback) return SQLITE_CHANGESET_OMIT;
+  return g_conflictCallback(eConflict);
+}
+
+static int xFilter(void* pCtx, const char* zTab) {
+  if (!g_filterCallback) return 1;
+  return g_filterCallback(zTab) ? 1 : 0;
+}
+
+Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  
+  // Reset global callbacks
+  g_conflictCallback = nullptr;
+  g_filterCallback = nullptr;
+  
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+  
+  if (info.Length() < 1 || !info[0].IsBuffer()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env, 
+      "The \"changeset\" argument must be a Buffer.");
+    return env.Undefined();
+  }
+  
+  // Parse options if provided
+  if (info.Length() > 1 && !info[1].IsUndefined()) {
+    if (!info[1].IsObject()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(env, 
+        "The \"options\" argument must be an object.");
+      return env.Undefined();
+    }
+    
+    Napi::Object options = info[1].As<Napi::Object>();
+    
+    // Handle onConflict callback
+    if (options.Has("onConflict")) {
+      Napi::Value conflictValue = options.Get("onConflict");
+      if (!conflictValue.IsUndefined()) {
+        if (!conflictValue.IsFunction()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(env, 
+            "The \"options.onConflict\" argument must be a function.");
+          return env.Undefined();
+        }
+        
+        Napi::Function conflictFunc = conflictValue.As<Napi::Function>();
+        g_conflictCallback = [env, conflictFunc](int conflictType) -> int {
+          Napi::HandleScope scope(env);
+          Napi::Value result = conflictFunc.Call({Napi::Number::New(env, conflictType)});
+          
+          if (env.IsExceptionPending()) {
+            // If callback threw, abort the changeset apply
+            return SQLITE_CHANGESET_ABORT;
+          }
+          
+          if (!result.IsNumber()) {
+            return -1; // Invalid value
+          }
+          
+          return result.As<Napi::Number>().Int32Value();
+        };
+      }
+    }
+    
+    // Handle filter callback
+    if (options.Has("filter")) {
+      Napi::Value filterValue = options.Get("filter");
+      if (!filterValue.IsFunction()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(env, 
+          "The \"options.filter\" argument must be a function.");
+        return env.Undefined();
+      }
+      
+      Napi::Function filterFunc = filterValue.As<Napi::Function>();
+      g_filterCallback = [env, filterFunc](std::string tableName) -> bool {
+        Napi::HandleScope scope(env);
+        Napi::Value result = filterFunc.Call({Napi::String::New(env, tableName)});
+        
+        if (env.IsExceptionPending()) {
+          // If callback threw, exclude the table
+          return false;
+        }
+        
+        return result.ToBoolean().Value();
+      };
+    }
+  }
+  
+  // Get the changeset buffer
+  Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
+  
+  // Apply the changeset
+  int r = sqlite3changeset_apply(
+      connection_,
+      buffer.Length(),
+      buffer.Data(),
+      xFilter,
+      xConflict,
+      nullptr);
+      
+  // Clean up callbacks
+  g_conflictCallback = nullptr;
+  g_filterCallback = nullptr;
+  
+  if (r == SQLITE_OK) {
+    return Napi::Boolean::New(env, true);
+  }
+  
+  if (r == SQLITE_ABORT) {
+    // Not an error, just means the operation was aborted
+    return Napi::Boolean::New(env, false);
+  }
+  
+  // Other errors
+  std::string error = "Failed to apply changeset: ";
+  error += sqlite3_errmsg(connection_);
+  node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
   return env.Undefined();
 }
 
@@ -1151,8 +1366,6 @@ void StatementSync::Reset() {
 // StatementSyncIterator Implementation  
 // ================================
 
-Napi::FunctionReference StatementSyncIterator::constructor_;
-
 Napi::Object StatementSyncIterator::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "StatementSyncIterator", {
     InstanceMethod("next", &StatementSyncIterator::Next),
@@ -1252,6 +1465,109 @@ Napi::Value StatementSyncIterator::Return(const Napi::CallbackInfo& info) {
   result.Set("done", true);
   result.Set("value", env.Null());
   return result;
+}
+
+// Session Implementation
+Napi::Object Session::Init(Napi::Env env, Napi::Object exports) {
+  Napi::Function func = DefineClass(env, "Session", {
+    InstanceMethod("changeset", &Session::Changeset),
+    InstanceMethod("patchset", &Session::Patchset),
+    InstanceMethod("close", &Session::Close)
+  });
+  
+  constructor_ = Napi::Persistent(func);
+  constructor_.SuppressDestruct();
+  
+  exports.Set("Session", func);
+  return exports;
+}
+
+Napi::Object Session::Create(Napi::Env env, DatabaseSync* db, sqlite3_session* session) {
+  Napi::Object obj = constructor_.New({});
+  Session* sess = Napi::ObjectWrap<Session>::Unwrap(obj);
+  sess->SetSession(db, session);
+  return obj;
+}
+
+Session::Session(const Napi::CallbackInfo& info) 
+    : Napi::ObjectWrap<Session>(info), session_(nullptr), database_(nullptr) {
+}
+
+Session::~Session() {
+  Delete();
+}
+
+void Session::SetSession(DatabaseSync* db, sqlite3_session* session) {
+  database_ = db;
+  session_ = session;
+}
+
+void Session::Delete() {
+  if (!database_ || !database_->connection() || session_ == nullptr) return;
+  sqlite3session_delete(session_);
+  if (database_) {
+    database_->sessions_.erase(session_);
+  }
+  session_ = nullptr;
+}
+
+template <int (*sqliteChangesetFunc)(sqlite3_session*, int*, void**)>
+Napi::Value Session::GenericChangeset(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+  
+  if (session_ == nullptr) {
+    node::THROW_ERR_INVALID_STATE(env, "session is not open");
+    return env.Undefined();
+  }
+  
+  int nChangeset;
+  void* pChangeset;
+  int r = sqliteChangesetFunc(session_, &nChangeset, &pChangeset);
+  
+  if (r != SQLITE_OK) {
+    const char* errMsg = sqlite3_errmsg(database_->connection());
+    Napi::Error::New(env, std::string("Failed to generate changeset: ") + errMsg).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  
+  // Create a Buffer from the changeset data
+  Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::New(env, nChangeset);
+  std::memcpy(buffer.Data(), pChangeset, nChangeset);
+  
+  // Free the changeset allocated by SQLite
+  sqlite3_free(pChangeset);
+  
+  return buffer;
+}
+
+Napi::Value Session::Changeset(const Napi::CallbackInfo& info) {
+  return GenericChangeset<sqlite3session_changeset>(info);
+}
+
+Napi::Value Session::Patchset(const Napi::CallbackInfo& info) {
+  return GenericChangeset<sqlite3session_patchset>(info);
+}
+
+Napi::Value Session::Close(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+  
+  if (session_ == nullptr) {
+    node::THROW_ERR_INVALID_STATE(env, "session is not open");
+    return env.Undefined();
+  }
+  
+  Delete();
+  return env.Undefined();
 }
 
 } // namespace sqlite

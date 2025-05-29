@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <map>
+#include <set>
 #include <optional>
 
 // Include our shims
@@ -18,8 +19,10 @@ namespace photostructure {
 namespace sqlite {
 
 // Forward declarations
+class DatabaseSync;
 class StatementSync;
 class StatementSyncIterator;
+class Session;
 
 // Database configuration
 class DatabaseOpenConfiguration {
@@ -84,6 +87,10 @@ class DatabaseSync : public Napi::ObjectWrap<DatabaseSync> {
   Napi::Value EnableLoadExtension(const Napi::CallbackInfo& info);
   Napi::Value LoadExtension(const Napi::CallbackInfo& info);
   
+  // Session support
+  Napi::Value CreateSession(const Napi::CallbackInfo& info);
+  Napi::Value ApplyChangeset(const Napi::CallbackInfo& info);
+  
  private:
   static Napi::FunctionReference constructor_;
   
@@ -96,6 +103,9 @@ class DatabaseSync : public Napi::ObjectWrap<DatabaseSync> {
   bool allow_load_extension_ = false;
   bool enable_load_extension_ = false;
   std::map<std::string, std::unique_ptr<StatementSync>> prepared_statements_;
+  std::set<sqlite3_session*> sessions_;
+  
+  friend class Session;
 };
 
 // Statement class  
@@ -174,6 +184,33 @@ class StatementSyncIterator : public Napi::ObjectWrap<StatementSyncIterator> {
   
   StatementSync* stmt_;
   bool done_;
+};
+
+// Session class for SQLite changesets
+class Session : public Napi::ObjectWrap<Session> {
+ public:
+  static Napi::FunctionReference constructor_;
+  
+  static Napi::Object Init(Napi::Env env, Napi::Object exports);
+  static Napi::Object Create(Napi::Env env, DatabaseSync* db, sqlite3_session* session);
+  
+  explicit Session(const Napi::CallbackInfo& info);
+  virtual ~Session();
+  
+  // Session methods
+  Napi::Value Changeset(const Napi::CallbackInfo& info);
+  Napi::Value Patchset(const Napi::CallbackInfo& info);
+  Napi::Value Close(const Napi::CallbackInfo& info);
+  
+ private:
+  void SetSession(DatabaseSync* db, sqlite3_session* session);
+  void Delete();
+  
+  template <int (*sqliteChangesetFunc)(sqlite3_session*, int*, void**)>
+  Napi::Value GenericChangeset(const Napi::CallbackInfo& info);
+  
+  sqlite3_session* session_ = nullptr;
+  DatabaseSync* database_ = nullptr;
 };
 
 } // namespace sqlite

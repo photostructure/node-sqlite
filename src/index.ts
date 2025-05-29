@@ -73,6 +73,45 @@ export interface AggregateOptions {
   readonly varargs?: boolean;
 }
 
+export interface SessionOptions {
+  /** The table to track changes for. If omitted, all tables are tracked. */
+  readonly table?: string;
+  /** The database name. @default "main" */
+  readonly db?: string;
+}
+
+export interface Session {
+  /**
+   * Generate a changeset containing all changes recorded by the session.
+   * @returns A Buffer containing the changeset data.
+   */
+  changeset(): Buffer;
+  /**
+   * Generate a patchset containing all changes recorded by the session.
+   * @returns A Buffer containing the patchset data.
+   */
+  patchset(): Buffer;
+  /**
+   * Close the session and release its resources.
+   */
+  close(): void;
+}
+
+export interface ChangesetApplyOptions {
+  /**
+   * Function called when a conflict is detected during changeset application.
+   * @param conflictType The type of conflict (SQLITE_CHANGESET_CONFLICT, etc.)
+   * @returns One of SQLITE_CHANGESET_OMIT, SQLITE_CHANGESET_REPLACE, or SQLITE_CHANGESET_ABORT
+   */
+  readonly onConflict?: (conflictType: number) => number;
+  /**
+   * Function called to filter which tables to apply changes to.
+   * @param tableName The name of the table
+   * @returns true to include the table, false to skip it
+   */
+  readonly filter?: (tableName: string) => boolean;
+}
+
 export interface Database {
   readonly location: string;
   readonly isOpen: boolean;
@@ -103,8 +142,19 @@ export interface Database {
    * @param options Configuration object containing step function and other settings.
    */
   aggregate(name: string, options: AggregateOptions): void;
-  createSession(table?: string): any;
-  applyChangeset(changeset: Uint8Array, options?: any): void;
+  /**
+   * Create a new session to record database changes.
+   * @param options Optional configuration for the session.
+   * @returns A Session object for recording changes.
+   */
+  createSession(options?: SessionOptions): Session;
+  /**
+   * Apply a changeset to the database.
+   * @param changeset The changeset data to apply.
+   * @param options Optional configuration for applying the changeset.
+   * @returns true if successful, false if aborted.
+   */
+  applyChangeset(changeset: Buffer, options?: ChangesetApplyOptions): boolean;
   enableLoadExtension(enable: boolean): void;
   loadExtension(path: string, entryPoint?: string): void;
 
@@ -121,10 +171,20 @@ export interface SqliteModule {
     sql: string,
     options?: StatementOptions,
   ) => PreparedStatement;
+  Session: new () => Session;
   constants: {
     SQLITE_OPEN_READONLY: number;
     SQLITE_OPEN_READWRITE: number;
     SQLITE_OPEN_CREATE: number;
+    // Changeset constants
+    SQLITE_CHANGESET_OMIT: number;
+    SQLITE_CHANGESET_REPLACE: number;
+    SQLITE_CHANGESET_ABORT: number;
+    SQLITE_CHANGESET_DATA: number;
+    SQLITE_CHANGESET_NOTFOUND: number;
+    SQLITE_CHANGESET_CONFLICT: number;
+    SQLITE_CHANGESET_CONSTRAINT: number;
+    SQLITE_CHANGESET_FOREIGN_KEY: number;
     // ... more constants
   };
   backup(
@@ -161,6 +221,7 @@ export const DatabaseSync =
   binding.DatabaseSync as SqliteModule["DatabaseSync"];
 export const StatementSync =
   binding.StatementSync as SqliteModule["StatementSync"];
+export const Session = binding.Session as SqliteModule["Session"];
 export const constants = binding.constants as SqliteModule["constants"];
 export const backup = binding.backup as SqliteModule["backup"];
 
