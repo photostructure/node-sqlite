@@ -78,7 +78,7 @@ describe("Backup functionality", () => {
     // Check that tables exist
     const tables = destDb
       .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+        "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
       )
       .all() as { name: string }[];
     expect(tables).toEqual([{ name: "products" }, { name: "users" }]);
@@ -183,7 +183,7 @@ describe("Backup functionality", () => {
     // Verify main database tables
     const tables = destDb
       .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+        "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
       )
       .all() as { name: string }[];
     expect(tables).toEqual([{ name: "products" }, { name: "users" }]);
@@ -196,21 +196,21 @@ describe("Backup functionality", () => {
 
   it("should handle errors for invalid destination", async () => {
     await expect(
-      sourceDb.backup("/invalid/path/that/does/not/exist/backup.db")
+      sourceDb.backup("/invalid/path/that/does/not/exist/backup.db"),
     ).rejects.toThrow();
   });
 
   it("should handle errors for closed database", async () => {
     sourceDb.close();
     await expect(sourceDb.backup(destPath)).rejects.toThrow(
-      "database is not open"
+      "database is not open",
     );
   });
 
   it("should reject invalid options", async () => {
     // Invalid progress callback
     await expect(
-      sourceDb.backup(destPath, { progress: "not a function" as any })
+      sourceDb.backup(destPath, { progress: "not a function" as any }),
     ).rejects.toThrow("must be a function");
   });
 
@@ -302,7 +302,7 @@ describe("Backup functionality", () => {
     // Verify all tables exist
     const tables = restoredDb
       .prepare(
-        "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY type, name"
+        "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY type, name",
       )
       .all() as { name: string; type: string }[];
     expect(tables).toEqual([
@@ -316,7 +316,7 @@ describe("Backup functionality", () => {
     // Verify ALL indexes exist
     const indexes = restoredDb
       .prepare(
-        "SELECT name, sql FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%' ORDER BY name"
+        "SELECT name, sql FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%' ORDER BY name",
       )
       .all() as { name: string; sql: string }[];
     expect(indexes.length).toBe(3);
@@ -328,7 +328,7 @@ describe("Backup functionality", () => {
     // Verify trigger exists and its definition
     const triggers = restoredDb
       .prepare(
-        "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name"
+        "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name",
       )
       .all() as { name: string; sql: string }[];
     expect(triggers.length).toBe(1);
@@ -338,7 +338,7 @@ describe("Backup functionality", () => {
     // Verify CHECK constraints by examining table schema
     const ordersSql = restoredDb
       .prepare(
-        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'"
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'",
       )
       .get() as { sql: string };
     expect(ordersSql.sql).toContain("CHECK (quantity > 0)");
@@ -397,7 +397,7 @@ describe("Backup functionality", () => {
     expect(() => {
       restoredDb
         .prepare(
-          "INSERT INTO orders (product_id, quantity, total) VALUES (1, 0, 10)"
+          "INSERT INTO orders (product_id, quantity, total) VALUES (1, 0, 10)",
         )
         .run();
     }).toThrow(); // Should fail due to CHECK (quantity > 0)
@@ -405,7 +405,7 @@ describe("Backup functionality", () => {
     expect(() => {
       restoredDb
         .prepare(
-          "INSERT INTO orders (product_id, quantity, total) VALUES (1, 1, -10)"
+          "INSERT INTO orders (product_id, quantity, total) VALUES (1, 1, -10)",
         )
         .run();
     }).toThrow(); // Should fail due to CHECK (total >= 0)
@@ -418,7 +418,7 @@ describe("Backup functionality", () => {
       expect(() => {
         restoredDb
           .prepare(
-            "INSERT INTO orders (product_id, quantity, total) VALUES (999, 1, 10)"
+            "INSERT INTO orders (product_id, quantity, total) VALUES (999, 1, 10)",
           )
           .run();
       }).toThrow(); // Should fail due to foreign key constraint
@@ -515,7 +515,7 @@ describe("Backup functionality", () => {
     // Insert enough data to create multiple pages (SQLite default page size is usually 4096 bytes)
     const largeText = "x".repeat(1000); // 1KB of text per row
     const insertStmt = sourceDb.prepare(
-      "INSERT INTO large_data (data, padding) VALUES (?, ?)"
+      "INSERT INTO large_data (data, padding) VALUES (?, ?)",
     );
 
     for (let i = 0; i < 100; i++) {
@@ -556,7 +556,7 @@ describe("Backup functionality", () => {
     // Verify we had multiple progress callbacks
     expect(progressCalls.length).toBeGreaterThan(0);
     expect(progressCalls.length).toBeGreaterThanOrEqual(
-      Math.floor(totalPages / pagesPerStep) - 1
+      Math.floor(totalPages / pagesPerStep) - 1,
     );
 
     // Verify progress is incremental
@@ -581,14 +581,14 @@ describe("Backup functionality", () => {
       const firstCall = progressCalls[0];
       expect(firstCall.totalPages).toBe(totalPages);
       expect(firstCall.remainingPages).toBeGreaterThan(
-        totalPages - pagesPerStep - 1
+        totalPages - pagesPerStep - 1,
       );
     }
 
     // Verify timing - with small page sizes, the backup should take some measurable time
     // due to multiple iterations (though this is environment-dependent)
     console.log(
-      `Backup took ${duration}ms with ${progressCalls.length} progress callbacks`
+      `Backup took ${duration}ms with ${progressCalls.length} progress callbacks`,
     );
 
     // Verify the backup is complete and valid
@@ -717,7 +717,7 @@ describe("Backup functionality", () => {
 
     // Verify different behaviors
     console.log(
-      `Callbacks - All at once: ${callbackCount1}, One page: ${callbackCount2}, Five pages: ${callbackCount3}`
+      `Callbacks - All at once: ${callbackCount1}, One page: ${callbackCount2}, Five pages: ${callbackCount3}`,
     );
 
     // With rate=-1, we should get 0 or very few callbacks (maybe just 1)
