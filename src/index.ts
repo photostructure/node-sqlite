@@ -178,7 +178,7 @@ export interface Database {
   open(configuration?: DatabaseOpenConfiguration): void;
   /**
    * Closes the database connection. This method should be called to ensure that
-   * the database connection is properly cleaned up. Once a database is closed, 
+   * the database connection is properly cleaned up. Once a database is closed,
    * it cannot be used again.
    */
   close(): void;
@@ -243,38 +243,40 @@ export interface Database {
   loadExtension(path: string, entryPoint?: string): void;
 
   /**
-   * This method allows to read and write to a database that is concurrently
-   * modified by other connections. It operates page-by-page and makes a copy
-   * of each page of the source database file before it is overwritten by the
-   * backup process, allowing other database connections to continue reading
-   * from and writing to the source database while the backup is ongoing.
-   * 
-   * @param destination The path to the destination database file.
+   * Makes a backup of the database. This method abstracts the sqlite3_backup_init(),
+   * sqlite3_backup_step() and sqlite3_backup_finish() functions.
+   *
+   * The backed-up database can be used normally during the backup process. Mutations
+   * coming from the same connection will be reflected in the backup right away.
+   * However, mutations from other connections will cause the backup process to restart.
+   *
+   * @param path The path where the backup will be created. If the file already exists, the contents will be overwritten.
    * @param options Optional configuration for the backup operation.
-   * @param options.pages The number of pages to copy on each iteration. If negative or omitted, all pages are copied at once. @default -1
-   * @param options.sourceDb The source database name. @default 'main'
-   * @param options.destinationDb The destination database name. @default 'main'
-   * @param options.progress Optional callback function that is invoked after each iteration. Receives an object with totalPages and remainingPages properties.
-   * @returns A promise that resolves with the total number of pages backed up.
-   * 
+   * @param options.rate Number of pages to be transmitted in each batch of the backup. @default 100
+   * @param options.source Name of the source database. This can be 'main' (the default primary database) or any other database that have been added with ATTACH DATABASE. @default 'main'
+   * @param options.target Name of the target database. This can be 'main' (the default primary database) or any other database that have been added with ATTACH DATABASE. @default 'main'
+   * @param options.progress Callback function that will be called with the number of pages copied and the total number of pages.
+   * @returns A promise that resolves when the backup is completed and rejects if an error occurs.
+   *
    * @example
    * // Basic backup
    * await db.backup('./backup.db');
-   * 
+   *
    * @example
    * // Backup with progress
    * await db.backup('./backup.db', {
+   *   rate: 10,
    *   progress: ({ totalPages, remainingPages }) => {
    *     console.log(`Progress: ${totalPages - remainingPages}/${totalPages}`);
    *   }
    * });
    */
   backup(
-    destination: string,
+    path: string,
     options?: {
-      pages?: number;
-      sourceDb?: string;
-      destinationDb?: string;
+      rate?: number;
+      source?: string;
+      target?: string;
       progress?: (info: { totalPages: number; remainingPages: number }) => void;
     },
   ): Promise<number>;
@@ -366,17 +368,17 @@ if (binding.StatementSync && typeof Symbol.dispose !== "undefined") {
 /**
  * The DatabaseSync class represents a synchronous connection to a SQLite database.
  * All database operations are performed synchronously, blocking the thread until completion.
- * 
+ *
  * @example
  * ```typescript
  * import { DatabaseSync } from '@photostructure/sqlite';
- * 
+ *
  * // Create an in-memory database
  * const db = new DatabaseSync(':memory:');
- * 
+ *
  * // Create a file-based database
  * const fileDb = new DatabaseSync('./mydata.db');
- * 
+ *
  * // Create with options
  * const readOnlyDb = new DatabaseSync('./data.db', { readOnly: true });
  * ```
@@ -387,7 +389,7 @@ export const DatabaseSync =
 /**
  * The StatementSync class represents a prepared SQL statement.
  * This class should not be instantiated directly; use DatabaseSync.prepare() instead.
- * 
+ *
  * @example
  * ```typescript
  * const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
@@ -401,7 +403,7 @@ export const StatementSync =
 /**
  * The Session class for recording database changes.
  * This class should not be instantiated directly; use DatabaseSync.createSession() instead.
- * 
+ *
  * @example
  * ```typescript
  * const session = db.createSession({ table: 'users' });
@@ -414,11 +416,11 @@ export const Session = binding.Session as SqliteModule["Session"];
 
 /**
  * SQLite constants for various operations and flags.
- * 
+ *
  * @example
  * ```typescript
  * import { constants } from '@photostructure/sqlite';
- * 
+ *
  * const db = new DatabaseSync('./data.db', {
  *   readOnly: true,
  *   // Uses SQLITE_OPEN_READONLY internally
