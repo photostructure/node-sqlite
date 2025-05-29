@@ -1,0 +1,214 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version bump type"
+        required: false
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: "minor"
+
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Release - {0}', github.event.inputs.version) || format('Build - {0}', github.event.head_commit.message || github.event.pull_request.title) }}
+
+jobs:
+  prebuild-mac-win:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+      - run: npm ci
+      - run: npm run prebuild
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuilds-${{ matrix.os }}
+          path: prebuilds/
+
+  prebuild-ubuntu:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    runs-on: ubuntu-22.04 # < compile with oldest supported Ubuntu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-qemu
+        with:
+          arch: ${{ matrix.arch }}
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y build-essential
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+      - run: npm ci
+      - run: npm run prebuild
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuilds-linux-${{ matrix.arch }}-glibc
+          path: prebuilds/
+
+  prebuild-alpine:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-qemu
+        with:
+          arch: ${{ matrix.arch }}
+      - run: |
+          docker run --rm -v $(pwd):/tmp/project --entrypoint /bin/sh --platform linux/${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} node:20-alpine -c "\
+          apk add build-base git python3 py3-setuptools --update-cache && \
+          cd /tmp/project && \
+          npm ci && \
+          npm run prebuild"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuilds-linux-${{ matrix.arch }}-musl
+          path: prebuilds/
+
+  test-mac-win:
+    needs: [prebuild-mac-win]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+        node-version: [20, 22, 23]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./prebuilds
+          merge-multiple: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+      - run: npm ci
+      - run: npm test
+
+  test-ubuntu:
+    needs: [prebuild-ubuntu]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+        arch: [x64, arm64]
+        node-version: [20, 22, 23]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-qemu
+        with:
+          arch: ${{ matrix.arch }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./prebuilds
+          merge-multiple: true
+      - run: npm ci
+      - run: npm test
+
+  test-alpine:
+    needs: [prebuild-alpine]
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+        node-version: [20, 22, 23]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-qemu
+        with:
+          arch: ${{ matrix.arch }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./prebuilds
+          merge-multiple: true
+      - run: |
+          docker run --rm -v $(pwd):/tmp/project --entrypoint /bin/sh --platform linux/${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} node:${{ matrix.node-version }}-alpine -c "\
+          cd /tmp/project && \
+          npm ci && \
+          npm test"
+
+  publish:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-24.04
+    needs: [test-mac-win, test-ubuntu, test-alpine]
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./prebuilds
+          merge-multiple: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: "npm"
+      - run: ls -laR ./prebuilds
+      - run: npm ci
+      - run: npm run build
+
+      # readme: https://github.com/actions/checkout?tab=readme-ov-file#push-a-commit-using-the-built-in-token
+      # https://chatgpt.com/share/6761e017-9950-800e-ba1e-94d575010f2d
+
+      - name: Set up GPG
+        uses: crazy-max/ghaction-import-gpg@cb9bde2e2525e640591a934b1fd28eef1dcaf5e5
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          fingerprint: ${{ secrets.GPG_FINGERPRINT }}
+          git_config_global: true
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_tag_gpgsign: true
+
+      - name: Configure git for publishing
+        run: |
+          git config user.name "${{ secrets.GIT_USER_NAME }}"
+          git config user.email "${{ secrets.GIT_USER_EMAIL }}"
+
+      - name: Configure npm for publishing
+        run: npm config set //registry.npmjs.org/:_authToken ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to npm
+        run: npm run release -- --ci ${{ github.event.inputs.version }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup GPG keys
+        if: always()
+        run: |
+          gpg --batch --yes --delete-secret-keys ${{ secrets.GPG_FINGERPRINT }}
+          gpg --batch --yes --delete-keys ${{ secrets.GPG_FINGERPRINT }}
+          rm -rf ~/.gnupg/
+
+      - name: Remove npm token
+        if: always()
+        run: npm config delete //registry.npmjs.org/:_authToken
