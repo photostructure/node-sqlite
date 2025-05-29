@@ -13,6 +13,7 @@ export interface DatabaseOpenConfiguration {
   readonly enableForeignKeys?: boolean;
   readonly enableDoubleQuotedStringLiterals?: boolean;
   readonly timeout?: number;
+  readonly allowExtension?: boolean;
 }
 
 export interface StatementOptions {

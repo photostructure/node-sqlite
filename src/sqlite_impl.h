@@ -80,6 +80,10 @@ class DatabaseSync : public Napi::ObjectWrap<DatabaseSync> {
   // Aggregate functions
   Napi::Value AggregateFunction(const Napi::CallbackInfo& info);
   
+  // Extension loading
+  Napi::Value EnableLoadExtension(const Napi::CallbackInfo& info);
+  Napi::Value LoadExtension(const Napi::CallbackInfo& info);
+  
  private:
   static Napi::FunctionReference constructor_;
   
@@ -89,6 +93,8 @@ class DatabaseSync : public Napi::ObjectWrap<DatabaseSync> {
   sqlite3* connection_ = nullptr;
   std::string location_;
   bool read_only_ = false;
+  bool allow_load_extension_ = false;
+  bool enable_load_extension_ = false;
   std::map<std::string, std::unique_ptr<StatementSync>> prepared_statements_;
 };
 

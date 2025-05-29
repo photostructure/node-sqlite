@@ -22,6 +22,8 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("exec", &DatabaseSync::Exec),
     InstanceMethod("function", &DatabaseSync::CustomFunction),
     InstanceMethod("aggregate", &DatabaseSync::AggregateFunction),
+    InstanceMethod("enableLoadExtension", &DatabaseSync::EnableLoadExtension),
+    InstanceMethod("loadExtension", &DatabaseSync::LoadExtension),
     InstanceAccessor("location", &DatabaseSync::LocationGetter, nullptr),
     InstanceAccessor("isOpen", &DatabaseSync::IsOpenGetter, nullptr),
     InstanceAccessor("isTransaction", &DatabaseSync::IsTransactionGetter, nullptr)
@@ -66,6 +68,10 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo& info)
         
         if (options.Has("enableDoubleQuotedStringLiterals") && options.Get("enableDoubleQuotedStringLiterals").IsBoolean()) {
           config.set_enable_dqs(options.Get("enableDoubleQuotedStringLiterals").As<Napi::Boolean>().Value());
+        }
+        
+        if (options.Has("allowExtension") && options.Get("allowExtension").IsBoolean()) {
+          allow_load_extension_ = options.Get("allowExtension").As<Napi::Boolean>().Value();
         }
       }
       
@@ -120,6 +126,10 @@ Napi::Value DatabaseSync::Open(const Napi::CallbackInfo& info) {
   
   if (config_obj.Has("enableDoubleQuotedStringLiterals") && config_obj.Get("enableDoubleQuotedStringLiterals").IsBoolean()) {
     config.set_enable_dqs(config_obj.Get("enableDoubleQuotedStringLiterals").As<Napi::Boolean>().Value());
+  }
+  
+  if (config_obj.Has("allowExtension") && config_obj.Get("allowExtension").IsBoolean()) {
+    allow_load_extension_ = config_obj.Get("allowExtension").As<Napi::Boolean>().Value();
   }
   
   try {
@@ -284,6 +294,7 @@ void DatabaseSync::InternalClose() {
     connection_ = nullptr;
   }
   location_.clear();
+  enable_load_extension_ = false;
 }
 
 Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo& info) {
@@ -523,6 +534,97 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo& info) {
     error += std::to_string(result);
     error += ")";
     node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+  }
+  
+  return env.Undefined();
+}
+
+Napi::Value DatabaseSync::EnableLoadExtension(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
+    return env.Undefined();
+  }
+  
+  if (info.Length() < 1 || !info[0].IsBoolean()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env, "The \"allow\" argument must be a boolean.");
+    return env.Undefined();
+  }
+  
+  bool enable = info[0].As<Napi::Boolean>().Value();
+  
+  // Check if extension loading was disallowed at database creation
+  if (!allow_load_extension_ && enable) {
+    node::THROW_ERR_INVALID_STATE(env, 
+      "Cannot enable extension loading because it was disabled at database creation.");
+    return env.Undefined();
+  }
+  
+  enable_load_extension_ = enable;
+  
+  // Configure SQLite to enable/disable extension loading
+  int result = sqlite3_db_config(connection_, SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, 
+                                 enable ? 1 : 0, nullptr);
+  
+  if (result != SQLITE_OK) {
+    std::string error = "Failed to configure extension loading: ";
+    error += sqlite3_errmsg(connection_);
+    node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+  }
+  
+  return env.Undefined();
+}
+
+Napi::Value DatabaseSync::LoadExtension(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
+    return env.Undefined();
+  }
+  
+  if (!allow_load_extension_) {
+    node::THROW_ERR_INVALID_STATE(env, "Extension loading is not allowed");
+    return env.Undefined();
+  }
+  
+  if (!enable_load_extension_) {
+    node::THROW_ERR_INVALID_STATE(env, "Extension loading is not enabled");
+    return env.Undefined();
+  }
+  
+  if (info.Length() < 1 || !info[0].IsString()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env, "The \"path\" argument must be a string.");
+    return env.Undefined();
+  }
+  
+  std::string path = info[0].As<Napi::String>().Utf8Value();
+  
+  // Optional entry point parameter
+  const char* entry_point = nullptr;
+  std::string entry_point_str;
+  if (info.Length() > 1 && info[1].IsString()) {
+    entry_point_str = info[1].As<Napi::String>().Utf8Value();
+    entry_point = entry_point_str.c_str();
+  }
+  
+  // Load the extension
+  char* errmsg = nullptr;
+  int result = sqlite3_load_extension(connection_, path.c_str(), entry_point, &errmsg);
+  
+  if (result != SQLITE_OK) {
+    std::string error = "Failed to load extension '";
+    error += path;
+    error += "': ";
+    if (errmsg) {
+      error += errmsg;
+      sqlite3_free(errmsg);
+    } else {
+      error += sqlite3_errmsg(connection_);
+    }
+    node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+    return env.Undefined();
   }
   
   return env.Undefined();

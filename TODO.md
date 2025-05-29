@@ -49,7 +49,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
     - ✅ `setAllowBareNamedParameters(allow: boolean)` - Parameter binding control
   - ✅ **Statement metadata**: `columns()` method - Get column names and types
   - ✅ **Database configuration**: `enableDoubleQuotedStringLiterals` option
-  - [ ] **Extension loading**: `enableLoadExtension()`, `loadExtension()` methods
+  - ✅ **Extension loading**: `enableLoadExtension()`, `loadExtension()` methods
 
   **MEDIUM PRIORITY - Advanced Features:**
 
@@ -397,11 +397,13 @@ scripts/
    - ✅ **Database configuration**: `enableDoubleQuotedStringLiterals` option
    - ✅ **Important Note**: Added documentation about SQLite's quirky double-quote behavior
 
-5. **🚧 Remaining Core Features** (Next Priority)
+5. **✅ Extension Loading** (COMPLETED!)
 
-   - [ ] **Extension loading**: `enableLoadExtension()`, `loadExtension()` methods
+   - ✅ **Extension loading**: `enableLoadExtension()`, `loadExtension()` methods
+   - ✅ **Security model**: Two-step process (allowExtension + enableLoadExtension)
+   - ✅ **Comprehensive tests**: 14 tests covering all security and API aspects
 
-6. **🚧 Advanced Features** (Medium Priority)
+6. **🚧 Advanced Features** (Next Priority)
 
    - [ ] **SQLite sessions** (`createSession()`, `applyChangeset()`)
    - [ ] **Backup functionality** (`backup()` function)
@@ -424,7 +426,7 @@ scripts/
 
 - ✅ **Core SQLite operations working** (CREATE, INSERT, SELECT, UPDATE, DELETE)
 - ✅ **Advanced SQLite features working** (user functions, aggregates, and iterators all fully functional)
-- ✅ **113 tests passing** with comprehensive coverage across all features:
+- ✅ **127 tests passing** with comprehensive coverage across all features:
   - ✅ 13 basic database tests
   - ✅ 13 configuration option tests
   - ✅ 8 user-defined function tests
@@ -434,6 +436,7 @@ scripts/
   - ✅ 25 statement configuration tests
   - ✅ 17 Node.js compatibility tests
   - ✅ 7 double-quoted string literals tests
+  - ✅ 14 extension loading tests
 - ✅ **All core data types supported** (INTEGER, REAL, TEXT, BLOB, NULL, BigInt)
 - ✅ **Error handling working** for invalid SQL and operations
 - ✅ **Memory management working** with proper cleanup and N-API references
