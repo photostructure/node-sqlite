@@ -53,7 +53,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 
   **MEDIUM PRIORITY - Advanced Features:**
 
-  - [ ] **Backup functionality**: Complete `BackupJob` class and `backup()` method
+  - ✅ **Backup functionality**: Complete `BackupJob` class and `backup()` method - Node.js API compatible with 14 comprehensive tests
   - ✅ **SQLite sessions**: `createSession()`, `applyChangeset()` methods - Complete with full test coverage
   - [ ] **Enhanced location method**: `location(dbName?: string)` for attached databases
   - ✅ **Advanced parameter binding**: Bare named parameters (`{id: 1}` → `:id`)
@@ -410,12 +410,18 @@ scripts/
    - ✅ **Changeset application** with conflict and filter callbacks
    - ✅ **Session constants** (SQLITE*CHANGESET*\*)
 
-7. **🚧 Advanced Features** (Next Priority)
+7. **✅ Backup Functionality** (COMPLETED!)
 
-   - [ ] **Backup functionality** (`backup()` function)
+   - ✅ **Backup functionality** (`backup()` function) - Complete with Node.js-compatible API
+   - ✅ **Progress callbacks** for monitoring backup progress
+   - ✅ **Rate parameter** matching Node.js API (negative values supported)
+   - ✅ **Comprehensive tests** covering all backup scenarios and metadata preservation
+
+8. **🚧 Advanced Features** (Next Priority)
+
    - [ ] **Enhanced location method**: `location(dbName?: string)` for attached databases
 
-8. **🚧 Performance & Compatibility** (Low Priority)
+9. **🚧 Performance & Compatibility** (Low Priority)
    - [ ] Benchmark against alternatives
    - [ ] Node.js compatibility verification
    - [ ] Memory leak testing
@@ -431,8 +437,8 @@ scripts/
 ## 🏆 **Success Metrics Achieved**
 
 - ✅ **Core SQLite operations working** (CREATE, INSERT, SELECT, UPDATE, DELETE)
-- ✅ **Advanced SQLite features working** (user functions, aggregates, iterators, and sessions all fully functional)
-- ✅ **155 tests passing** with comprehensive coverage across all features:
+- ✅ **Advanced SQLite features working** (user functions, aggregates, iterators, sessions, and backup all fully functional)
+- ✅ **169 tests passing** with comprehensive coverage across all features:
   - ✅ 13 basic database tests
   - ✅ 13 configuration option tests
   - ✅ 8 user-defined function tests
@@ -444,6 +450,7 @@ scripts/
   - ✅ 7 double-quoted string literals tests
   - ✅ 14 extension loading tests
   - ✅ 28 SQLite session tests (with changeset content verification!)
+  - ✅ 14 backup functionality tests (with Node.js API compatibility and rate validation)
 - ✅ **All core data types supported** (INTEGER, REAL, TEXT, BLOB, NULL, BigInt)
 - ✅ **Error handling working** for invalid SQL and operations
 - ✅ **Memory management working** with proper cleanup and N-API references

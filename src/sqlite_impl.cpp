@@ -28,6 +28,7 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("loadExtension", &DatabaseSync::LoadExtension),
     InstanceMethod("createSession", &DatabaseSync::CreateSession),
     InstanceMethod("applyChangeset", &DatabaseSync::ApplyChangeset),
+    InstanceMethod("backup", &DatabaseSync::Backup),
     InstanceAccessor("location", &DatabaseSync::LocationGetter, nullptr),
     InstanceAccessor("isOpen", &DatabaseSync::IsOpenGetter, nullptr),
     InstanceAccessor("isTransaction", &DatabaseSync::IsTransactionGetter, nullptr)
@@ -1568,6 +1569,216 @@ Napi::Value Session::Close(const Napi::CallbackInfo& info) {
   
   Delete();
   return env.Undefined();
+}
+
+// BackupJob Implementation
+BackupJob::BackupJob(Napi::Env env,
+                     DatabaseSync* source,
+                     const std::string& destination_path,
+                     const std::string& source_db,
+                     const std::string& dest_db,
+                     int pages,
+                     Napi::Function progress_func)
+    : node::ThreadPoolWork<BackupJob>(env, "node_sqlite3.BackupJob"),
+      source_(source),
+      destination_path_(destination_path),
+      source_db_(source_db),
+      dest_db_(dest_db),
+      pages_(pages),
+      deferred_(Napi::Promise::Deferred::New(env)) {
+  if (!progress_func.IsEmpty() && !progress_func.IsUndefined()) {
+    progress_func_ = Napi::Persistent(progress_func);
+  }
+}
+
+void BackupJob::ScheduleBackup() {
+  backup_status_ = sqlite3_open_v2(
+      destination_path_.c_str(),
+      &dest_,
+      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI,
+      nullptr);
+      
+  if (backup_status_ != SQLITE_OK) {
+    HandleBackupError("Failed to open destination database");
+    return;
+  }
+  
+  backup_ = sqlite3_backup_init(
+      dest_, dest_db_.c_str(), source_->connection(), source_db_.c_str());
+      
+  if (backup_ == nullptr) {
+    HandleBackupError("Failed to initialize backup");
+    return;
+  }
+  
+  // Schedule the work
+  ScheduleWork();
+}
+
+void BackupJob::DoThreadPoolWork() {
+  // If pages_ is negative, use -1 to copy all remaining pages
+  int pages_to_copy = pages_ < 0 ? -1 : pages_;
+  backup_status_ = sqlite3_backup_step(backup_, pages_to_copy);
+}
+
+void BackupJob::AfterThreadPoolWork(int status) {
+  Napi::Env env = env_;
+  Napi::HandleScope scope(env);
+  
+  if (!(backup_status_ == SQLITE_OK || backup_status_ == SQLITE_DONE ||
+        backup_status_ == SQLITE_BUSY || backup_status_ == SQLITE_LOCKED)) {
+    HandleBackupError(sqlite3_errmsg(dest_));
+    return;
+  }
+  
+  int total_pages = sqlite3_backup_pagecount(backup_);
+  int remaining_pages = sqlite3_backup_remaining(backup_);
+  
+  if (remaining_pages != 0) {
+    // Call progress callback if provided
+    if (!progress_func_.IsEmpty()) {
+      Napi::Function progress_fn = progress_func_.Value();
+      Napi::Object progress_info = Napi::Object::New(env);
+      progress_info.Set("totalPages", Napi::Number::New(env, total_pages));
+      progress_info.Set("remainingPages", Napi::Number::New(env, remaining_pages));
+      
+      try {
+        progress_fn.Call(env.Null(), {progress_info});
+      } catch (const Napi::Error& e) {
+        Cleanup();
+        deferred_.Reject(e.Value());
+        delete this;
+        return;
+      }
+    }
+    
+    // More work to do
+    ScheduleWork();
+    return;
+  }
+  
+  if (backup_status_ != SQLITE_DONE) {
+    HandleBackupError("Backup did not complete successfully");
+    return;
+  }
+  
+  // Success!
+  Cleanup();
+  deferred_.Resolve(Napi::Number::New(env, total_pages));
+  delete this;
+}
+
+void BackupJob::HandleBackupError(const std::string& message) {
+  Napi::Env env = env_;
+  Napi::HandleScope scope(env);
+  
+  Cleanup();
+  
+  Napi::Error error = Napi::Error::New(env, message);
+  if (dest_) {
+    error.Set("code", Napi::String::New(env, sqlite3_errstr(backup_status_)));
+    error.Set("errno", Napi::Number::New(env, backup_status_));
+  }
+  
+  deferred_.Reject(error.Value());
+  delete this;
+}
+
+void BackupJob::Cleanup() {
+  if (backup_) {
+    sqlite3_backup_finish(backup_);
+    backup_ = nullptr;
+  }
+  
+  if (dest_) {
+    backup_status_ = sqlite3_errcode(dest_);
+    sqlite3_close_v2(dest_);
+    dest_ = nullptr;
+  }
+}
+
+// DatabaseSync::Backup implementation
+Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  
+  // Create a promise early for error handling
+  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+  
+  if (!IsOpen()) {
+    deferred.Reject(Napi::Error::New(env, "database is not open").Value());
+    return deferred.Promise();
+  }
+  
+  if (info.Length() < 1 || !info[0].IsString()) {
+    deferred.Reject(Napi::TypeError::New(env, "The \"destination\" argument must be a string").Value());
+    return deferred.Promise();
+  }
+  
+  std::string destination_path = info[0].As<Napi::String>().Utf8Value();
+  
+  // Default options matching Node.js API
+  int rate = 100;
+  std::string source_db = "main";
+  std::string target_db = "main";
+  Napi::Function progress_func;
+  
+  // Parse options if provided
+  if (info.Length() > 1) {
+    if (!info[1].IsObject()) {
+      deferred.Reject(Napi::TypeError::New(env, "The \"options\" argument must be an object").Value());
+      return deferred.Promise();
+    }
+    
+    Napi::Object options = info[1].As<Napi::Object>();
+    
+    // Get rate option (number of pages per step)
+    Napi::Value rate_value = options.Get("rate");
+    if (!rate_value.IsUndefined()) {
+      if (!rate_value.IsNumber()) {
+        deferred.Reject(Napi::TypeError::New(env, "The \"options.rate\" must be a number").Value());
+        return deferred.Promise();
+      }
+      rate = rate_value.As<Napi::Number>().Int32Value();
+      // Note: Node.js allows negative values for rate
+    }
+    
+    // Get source database option
+    Napi::Value source_value = options.Get("source");
+    if (!source_value.IsUndefined()) {
+      if (!source_value.IsString()) {
+        deferred.Reject(Napi::TypeError::New(env, "The \"options.source\" must be a string").Value());
+        return deferred.Promise();
+      }
+      source_db = source_value.As<Napi::String>().Utf8Value();
+    }
+    
+    // Get target database option
+    Napi::Value target_value = options.Get("target");
+    if (!target_value.IsUndefined()) {
+      if (!target_value.IsString()) {
+        deferred.Reject(Napi::TypeError::New(env, "The \"options.target\" must be a string").Value());
+        return deferred.Promise();
+      }
+      target_db = target_value.As<Napi::String>().Utf8Value();
+    }
+    
+    // Get progress callback
+    Napi::Value progress_value = options.Get("progress");
+    if (!progress_value.IsUndefined()) {
+      if (!progress_value.IsFunction()) {
+        deferred.Reject(Napi::TypeError::New(env, "The \"options.progress\" must be a function").Value());
+        return deferred.Promise();
+      }
+      progress_func = progress_value.As<Napi::Function>();
+    }
+  }
+  
+  // Create and schedule backup job
+  BackupJob* job = new BackupJob(env, this, destination_path, source_db, target_db, rate, progress_func);
+  Napi::Promise promise = job->GetPromise();
+  job->ScheduleBackup();
+  
+  return promise;
 }
 
 } // namespace sqlite

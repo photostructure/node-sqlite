@@ -14,6 +14,8 @@
 #include "shims/util.h"
 #include "shims/node_errors.h"
 #include "shims/napi_extensions.h"
+#include "shims/threadpoolwork-inl.h"
+#include "shims/promise_resolver.h"
 
 namespace photostructure {
 namespace sqlite {
@@ -90,6 +92,9 @@ class DatabaseSync : public Napi::ObjectWrap<DatabaseSync> {
   // Session support
   Napi::Value CreateSession(const Napi::CallbackInfo& info);
   Napi::Value ApplyChangeset(const Napi::CallbackInfo& info);
+  
+  // Backup support
+  Napi::Value Backup(const Napi::CallbackInfo& info);
   
  private:
   static Napi::FunctionReference constructor_;
@@ -211,6 +216,39 @@ class Session : public Napi::ObjectWrap<Session> {
   
   sqlite3_session* session_ = nullptr;
   DatabaseSync* database_ = nullptr;
+};
+
+// Backup job for asynchronous database backup
+class BackupJob : public node::ThreadPoolWork<BackupJob> {
+ public:
+  BackupJob(Napi::Env env,
+            DatabaseSync* source,
+            const std::string& destination_path,
+            const std::string& source_db,
+            const std::string& dest_db,
+            int pages,
+            Napi::Function progress_func);
+  
+  void ScheduleBackup();
+  void DoThreadPoolWork() override;
+  void AfterThreadPoolWork(int status) override;
+  Napi::Promise GetPromise() { return deferred_.Promise(); }
+  
+ private:
+  void HandleBackupError(const std::string& message);
+  void Cleanup();
+  
+  DatabaseSync* source_;
+  std::string destination_path_;
+  std::string source_db_;
+  std::string dest_db_;
+  int pages_;
+  int backup_status_ = SQLITE_OK;
+  sqlite3* dest_ = nullptr;
+  sqlite3_backup* backup_ = nullptr;
+  
+  Napi::FunctionReference progress_func_;
+  Napi::Promise::Deferred deferred_;
 };
 
 } // namespace sqlite

@@ -261,7 +261,13 @@ describe("File-based Database Tests", () => {
     db.close();
   });
 
-  test("handles database file deletion gracefully", () => {
+  // This test verifies SQLite's behavior when the database file is deleted while the database
+  // is still open. On Unix-like systems, you can delete an open file and the process continues
+  // to have access to it until the file handle is closed. On Windows, attempting to delete an
+  // open file results in EBUSY error. Since this test is specifically about Unix behavior,
+  // we skip it on Windows.
+  const testFn = process.platform === "win32" ? test.skip : test;
+  testFn("handles database file deletion gracefully", () => {
     const db = new DatabaseSync(dbPath);
     db.exec("CREATE TABLE test (id INTEGER)");
 
