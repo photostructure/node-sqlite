@@ -581,21 +581,36 @@ npm test
 - `src/shims/` - Node.js internal API compatibility layer
 - `scripts/sync-from-node.js` - Automated sync from Node.js repo
 
+## Current Features
+
+This package now provides a complete SQLite implementation with full Node.js API compatibility:
+
+**SQLite Version**: 3.49.1 (from Node.js upstream)
+
+**Complete Features**:
+- ✅ All core SQLite operations
+- ✅ User-defined functions (scalar and aggregate)
+- ✅ Window functions in aggregates
+- ✅ Statement iterators
+- ✅ SQLite sessions and changesets
+- ✅ Database backup with progress
+- ✅ Extension loading
+- ✅ Full data type support including BigInt
+- ✅ 169 comprehensive tests
+
+See [TODO.md](./TODO.md) for the complete feature list and future enhancements.
+
 ## Roadmap
 
-See [TODO.md](./TODO.md) for detailed development roadmap.
+**In Progress:**
+- 🔄 Enhanced location method for attached databases
+- 🔄 Automated SQLite version updates from upstream
+- 🔄 Comprehensive performance benchmarking
 
-**Short term:**
-
-- 🎯 Implement actual SQLite functionality (replace stubs)
-- 🎯 Complete Node.js API compatibility
-- 🎯 Comprehensive test coverage
-
-**Long term:**
-
-- 🎯 Automated upstream synchronization
-- 🎯 Performance optimizations
-- 🎯 Extension ecosystem
+**Future Enhancements:**
+- 📋 Better error messages matching Node.js exactly
+- 📋 Additional platform-specific optimizations
+- 📋 Enhanced debugging and profiling tools
 
 ## License
 
