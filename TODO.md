@@ -48,7 +48,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
     - ✅ `setReturnArrays(returnArrays: boolean)` - Return results as arrays vs objects
     - ✅ `setAllowBareNamedParameters(allow: boolean)` - Parameter binding control
   - ✅ **Statement metadata**: `columns()` method - Get column names and types
-  - [ ] **Database configuration**: `enableDoubleQuotedStringLiterals` option
+  - ✅ **Database configuration**: `enableDoubleQuotedStringLiterals` option
   - [ ] **Extension loading**: `enableLoadExtension()`, `loadExtension()` methods
 
   **MEDIUM PRIORITY - Advanced Features:**
@@ -392,18 +392,22 @@ scripts/
    - ✅ GitHub Actions CI/CD
    - ✅ Automated prebuilds
 
-4. **🚧 Remaining Core Features** (Next Priority)
+4. **✅ Database Configuration** (COMPLETED!)
 
-   - [ ] **Database configuration**: `enableDoubleQuotedStringLiterals` option
+   - ✅ **Database configuration**: `enableDoubleQuotedStringLiterals` option
+   - ✅ **Important Note**: Added documentation about SQLite's quirky double-quote behavior
+
+5. **🚧 Remaining Core Features** (Next Priority)
+
    - [ ] **Extension loading**: `enableLoadExtension()`, `loadExtension()` methods
 
-5. **🚧 Advanced Features** (Medium Priority)
+6. **🚧 Advanced Features** (Medium Priority)
 
    - [ ] **SQLite sessions** (`createSession()`, `applyChangeset()`)
    - [ ] **Backup functionality** (`backup()` function)
    - [ ] **Enhanced location method**: `location(dbName?: string)` for attached databases
 
-6. **🚧 Performance & Compatibility** (Low Priority)
+7. **🚧 Performance & Compatibility** (Low Priority)
    - [ ] Benchmark against alternatives
    - [ ] Node.js compatibility verification
    - [ ] Memory leak testing
@@ -420,7 +424,7 @@ scripts/
 
 - ✅ **Core SQLite operations working** (CREATE, INSERT, SELECT, UPDATE, DELETE)
 - ✅ **Advanced SQLite features working** (user functions, aggregates, and iterators all fully functional)
-- ✅ **106 tests passing** with comprehensive coverage across all features:
+- ✅ **113 tests passing** with comprehensive coverage across all features:
   - ✅ 13 basic database tests
   - ✅ 13 configuration option tests
   - ✅ 8 user-defined function tests
@@ -429,6 +433,7 @@ scripts/
   - ✅ 11 file-based database tests
   - ✅ 25 statement configuration tests
   - ✅ 17 Node.js compatibility tests
+  - ✅ 7 double-quoted string literals tests
 - ✅ **All core data types supported** (INTEGER, REAL, TEXT, BLOB, NULL, BigInt)
 - ✅ **Error handling working** for invalid SQL and operations
 - ✅ **Memory management working** with proper cleanup and N-API references

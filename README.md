@@ -136,6 +136,43 @@ interface StatementOptions {
 }
 ```
 
+### Database Configuration Options
+
+#### Double-Quoted String Literals
+
+SQLite has a quirk where double quotes can be used for both identifiers (column/table names) and string literals, depending on context. By default, SQLite tries to interpret double quotes as identifiers first, but falls back to treating them as string literals if no matching identifier is found.
+
+```javascript
+// Default behavior (enableDoubleQuotedStringLiterals: false)
+const db = new DatabaseSync(":memory:");
+db.exec("CREATE TABLE test (name TEXT)");
+
+// This works - "hello" is treated as a string literal since there's no column named hello
+db.exec('INSERT INTO test (name) VALUES ("hello")');
+
+// This fails - "name" is treated as a column identifier, not a string
+db.exec('SELECT * FROM test WHERE name = "name"'); // Error: no such column: name
+```
+
+To avoid confusion and ensure SQL standard compliance, you can enable strict mode:
+
+```javascript
+// Strict mode (enableDoubleQuotedStringLiterals: true)
+const db = new DatabaseSync(":memory:", {
+  enableDoubleQuotedStringLiterals: true,
+});
+
+// Now double quotes are always treated as string literals
+db.exec("CREATE TABLE test (name TEXT)");
+db.exec('INSERT INTO test (name) VALUES ("hello")'); // Works
+db.exec('SELECT * FROM test WHERE name = "name"'); // Works - finds rows where name='name'
+
+// Use backticks or square brackets for identifiers when needed
+db.exec("SELECT `name`, [order] FROM test");
+```
+
+**Recommendation**: For new projects, consider enabling `enableDoubleQuotedStringLiterals: true` to ensure consistent behavior and SQL standard compliance. For existing projects, be aware that SQLite's default behavior may interpret your double-quoted strings differently depending on context.
+
 ### Utility Functions
 
 ```typescript

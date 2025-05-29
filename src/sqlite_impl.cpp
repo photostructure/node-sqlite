@@ -63,6 +63,10 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo& info)
         if (options.Has("timeout") && options.Get("timeout").IsNumber()) {
           config.set_timeout(options.Get("timeout").As<Napi::Number>().Int32Value());
         }
+        
+        if (options.Has("enableDoubleQuotedStringLiterals") && options.Get("enableDoubleQuotedStringLiterals").IsBoolean()) {
+          config.set_enable_dqs(options.Get("enableDoubleQuotedStringLiterals").As<Napi::Boolean>().Value());
+        }
       }
       
       InternalOpen(config);
@@ -108,6 +112,14 @@ Napi::Value DatabaseSync::Open(const Napi::CallbackInfo& info) {
   
   if (config_obj.Has("enableForeignKeys") && config_obj.Get("enableForeignKeys").IsBoolean()) {
     config.set_enable_foreign_keys(config_obj.Get("enableForeignKeys").As<Napi::Boolean>().Value());
+  }
+  
+  if (config_obj.Has("timeout") && config_obj.Get("timeout").IsNumber()) {
+    config.set_timeout(config_obj.Get("timeout").As<Napi::Number>().Int32Value());
+  }
+  
+  if (config_obj.Has("enableDoubleQuotedStringLiterals") && config_obj.Get("enableDoubleQuotedStringLiterals").IsBoolean()) {
+    config.set_enable_dqs(config_obj.Get("enableDoubleQuotedStringLiterals").As<Napi::Boolean>().Value());
   }
   
   try {
@@ -236,6 +248,26 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
   
   if (config.get_timeout() > 0) {
     sqlite3_busy_timeout(connection_, config.get_timeout());
+  }
+  
+  // Configure double-quoted string literals
+  if (config.get_enable_dqs()) {
+    int dqs_enable = 1;
+    result = sqlite3_db_config(connection_, SQLITE_DBCONFIG_DQS_DML, dqs_enable, nullptr);
+    if (result != SQLITE_OK) {
+      std::string error = sqlite3_errmsg(connection_);
+      sqlite3_close(connection_);
+      connection_ = nullptr;
+      throw std::runtime_error("Failed to configure DQS_DML: " + error);
+    }
+    
+    result = sqlite3_db_config(connection_, SQLITE_DBCONFIG_DQS_DDL, dqs_enable, nullptr);
+    if (result != SQLITE_OK) {
+      std::string error = sqlite3_errmsg(connection_);
+      sqlite3_close(connection_);
+      connection_ = nullptr;
+      throw std::runtime_error("Failed to configure DQS_DDL: " + error);
+    }
   }
 }
 
