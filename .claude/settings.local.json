@@ -12,7 +12,10 @@
       "Bash(npm ls:*)",
       "Bash(npm ls:*)",
       "Bash(npx tsc:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(chmod:*)",
+      "Bash(bash:*)",
+      "Bash(clang-tidy:*)"
     ]
   },
   "enableAllProjectMcpServers": false
