@@ -1,0 +1,21 @@
+# Ignore upstream files synced from Node.js repository
+src/upstream/
+
+# Build outputs
+dist/
+build/
+prebuilds/
+
+# Dependencies
+node_modules/
+vendored/
+
+# Generated files
+*.tsbuildinfo
+coverage/
+.nyc_output/
+
+# SQLite database files
+*.db
+*.sqlite
+*.sqlite3

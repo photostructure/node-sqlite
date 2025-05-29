@@ -19,7 +19,6 @@ namespace sqlite {
 
 using v8::Array;
 using v8::ArrayBuffer;
-using v8::BackingStoreInitializationMode;
 using v8::BigInt;
 using v8::Boolean;
 using v8::ConstructorBehavior;
@@ -104,8 +103,7 @@ using v8::Value;
             static_cast<size_t>(sqlite3_##from##_bytes(__VA_ARGS__));          \
         auto data = reinterpret_cast<const uint8_t*>(                          \
             sqlite3_##from##_blob(__VA_ARGS__));                               \
-        auto store = ArrayBuffer::NewBackingStore(                             \
-            (isolate), size, BackingStoreInitializationMode::kUninitialized);  \
+        auto store = ArrayBuffer::NewBackingStore((isolate), size);            \
         memcpy(store->Data(), data, size);                                     \
         auto ab = ArrayBuffer::New((isolate), std::move(store));               \
         (result) = Uint8Array::New(ab, 0, size);                               \
@@ -375,10 +373,7 @@ class CustomAggregate {
       result = Local<Value>::New(isolate, agg->value);
     }
 
-    if (!result.IsEmpty()) {
-      JSValueToSQLiteResult(isolate, ctx, result);
-    }
-
+    JSValueToSQLiteResult(isolate, ctx, result);
     if (is_final) {
       DestroyAggregateData(ctx);
     }
