@@ -45,9 +45,9 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 
   - ✅ **Statement configuration methods**:
     - ✅ `setReadBigInts(readBigInts: boolean)` - Configure BigInt result handling
-    - ✅ `setReturnArrays(returnArrays: boolean)` - Return results as arrays vs objects
+    - ✅ `setReturnArrays(returnArrays: boolean)` - Return results as arrays vs objects (VALIDATED: 11 tests passing)
     - ✅ `setAllowBareNamedParameters(allow: boolean)` - Parameter binding control
-  - ✅ **Statement metadata**: `columns()` method - Get column names and types
+  - ✅ **Statement metadata**: `columns()` method - Get column names and types (VALIDATED: 4 comprehensive tests passing)
   - ✅ **Database configuration**: `enableDoubleQuotedStringLiterals` option
   - ✅ **Extension loading**: `enableLoadExtension()`, `loadExtension()` methods
 
@@ -417,15 +417,39 @@ scripts/
    - ✅ **Rate parameter** matching Node.js API (negative values supported)
    - ✅ **Comprehensive tests** covering all backup scenarios and metadata preservation
 
-8. **🚧 Advanced Features** (Next Priority)
+8. **✅ API Naming Compatibility** (COMPLETED)
+
+   Our API now matches `node:sqlite` naming for drop-in replacement compatibility:
+
+   **Interface/Type Renames Completed:**
+
+   - ✅ `Database` interface → `DatabaseSyncInstance` (instance type of `DatabaseSync` class)
+   - ✅ `PreparedStatement` interface → `StatementSyncInstance` (instance type of `StatementSync` class)
+   - ✅ `DatabaseOpenConfiguration` → `DatabaseSyncOptions`
+
+   **Option Property Renames Completed:**
+
+   - ✅ `enableForeignKeys` → `enableForeignKeyConstraints` (with backwards compatibility)
+
+   **Method Additions:**
+
+   - ✅ Added `columns()` method to StatementSyncInstance (VALIDATED: fully working with 4 tests)
+   - ✅ Confirmed `setReturnArrays()` is our extension (not in Node.js API) (VALIDATED: fully working with 11 tests)
+
+   **Export Structure:**
+
+   - ✅ Our exported classes match Node.js exactly: `DatabaseSync`, `StatementSync`, `Session`, `constants`
+
+9. **🚧 Advanced Features** (Next Priority)
 
    - [ ] **Enhanced location method**: `location(dbName?: string)` for attached databases
 
-9. **🚧 Performance & Compatibility** (Low Priority)
-   - [ ] Benchmark against alternatives
-   - [ ] Node.js compatibility verification
-   - [ ] Memory leak testing
-   - [ ]
+10. **🚧 Performance & Compatibility** (Low Priority)
+
+- [ ] Benchmark against alternatives
+- [ ] Node.js compatibility verification
+- [ ] Memory leak testing
+- [ ]
 
 ## Priority Levels
 

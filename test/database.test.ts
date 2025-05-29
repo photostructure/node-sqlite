@@ -344,7 +344,7 @@ describe("Database Configuration Tests", () => {
     const db = new DatabaseSync(dbPath, {
       location: dbPath,
       readOnly: false,
-      enableForeignKeys: true,
+      enableForeignKeyConstraints: true,
     });
 
     expect(db.isOpen).toBe(true);
@@ -387,7 +387,7 @@ describe("Database Configuration Tests", () => {
 
   test("can configure foreign key constraints", () => {
     const db = new DatabaseSync(dbPath, {
-      enableForeignKeys: true,
+      enableForeignKeyConstraints: true,
     });
 
     // Create tables with foreign key relationship
@@ -507,7 +507,9 @@ describe("Database Configuration Tests", () => {
 
   test("foreign keys configuration works correctly", () => {
     // Test with foreign keys enabled (default)
-    let db = new DatabaseSync(":memory:", { enableForeignKeys: true });
+    let db = new DatabaseSync(":memory:", {
+      enableForeignKeyConstraints: true,
+    });
 
     db.exec(`
       CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT);
@@ -532,7 +534,7 @@ describe("Database Configuration Tests", () => {
     db.close();
 
     // Test with foreign keys disabled
-    db = new DatabaseSync(":memory:", { enableForeignKeys: false });
+    db = new DatabaseSync(":memory:", { enableForeignKeyConstraints: false });
 
     db.exec(`
       CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT);
@@ -597,7 +599,7 @@ describe("Database Configuration Tests", () => {
     // Open with multiple configuration options
     db = new DatabaseSync(dbPath, {
       readOnly: true,
-      enableForeignKeys: false,
+      enableForeignKeyConstraints: false,
       timeout: 1000,
     });
 
@@ -631,7 +633,7 @@ describe("Database Configuration Tests", () => {
     db.open({
       location: dbPath,
       readOnly: true,
-      enableForeignKeys: false,
+      enableForeignKeyConstraints: false,
       timeout: 500,
     });
 
@@ -673,7 +675,9 @@ describe("Database Configuration Tests", () => {
   });
 
   test("foreign key cascade operations work when enabled", () => {
-    const db = new DatabaseSync(":memory:", { enableForeignKeys: true });
+    const db = new DatabaseSync(":memory:", {
+      enableForeignKeyConstraints: true,
+    });
 
     db.exec(`
       CREATE TABLE parent (

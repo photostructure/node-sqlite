@@ -44,26 +44,32 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
 DatabaseSync::DatabaseSync(const Napi::CallbackInfo& info) 
     : Napi::ObjectWrap<DatabaseSync>(info) {
   
-  // Optional location parameter
+  // If no arguments, create but don't open (for manual open() call)
+  if (info.Length() == 0) {
+    return;
+  }
+  
+  // Otherwise, open with provided location and options
   std::string location = ":memory:";
-  if (info.Length() > 0 && info[0].IsString()) {
+  if (info[0].IsString()) {
     location = info[0].As<Napi::String>().Utf8Value();
   }
   
-  // If location provided, open immediately
-  if (info.Length() > 0) {
-    try {
-      DatabaseOpenConfiguration config(std::move(location));
-      
-      // Handle options object
-      if (info.Length() > 1 && info[1].IsObject()) {
+  try {
+    DatabaseOpenConfiguration config(std::move(location));
+    
+    // Handle options object if provided as second argument
+    if (info.Length() > 1 && info[1].IsObject()) {
         Napi::Object options = info[1].As<Napi::Object>();
         
         if (options.Has("readOnly") && options.Get("readOnly").IsBoolean()) {
           config.set_read_only(options.Get("readOnly").As<Napi::Boolean>().Value());
         }
         
-        if (options.Has("enableForeignKeys") && options.Get("enableForeignKeys").IsBoolean()) {
+        // Support both old and new naming for backwards compatibility
+        if (options.Has("enableForeignKeyConstraints") && options.Get("enableForeignKeyConstraints").IsBoolean()) {
+          config.set_enable_foreign_keys(options.Get("enableForeignKeyConstraints").As<Napi::Boolean>().Value());
+        } else if (options.Has("enableForeignKeys") && options.Get("enableForeignKeys").IsBoolean()) {
           config.set_enable_foreign_keys(options.Get("enableForeignKeys").As<Napi::Boolean>().Value());
         }
         
@@ -80,10 +86,9 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo& info)
         }
       }
       
-      InternalOpen(config);
-    } catch (const std::exception& e) {
-      node::THROW_ERR_SQLITE_ERROR(info.Env(), e.what());
-    }
+    InternalOpen(config);
+  } catch (const std::exception& e) {
+    node::THROW_ERR_SQLITE_ERROR(info.Env(), e.what());
   }
 }
 
@@ -121,7 +126,10 @@ Napi::Value DatabaseSync::Open(const Napi::CallbackInfo& info) {
     config.set_read_only(config_obj.Get("readOnly").As<Napi::Boolean>().Value());
   }
   
-  if (config_obj.Has("enableForeignKeys") && config_obj.Get("enableForeignKeys").IsBoolean()) {
+  // Support both old and new naming for backwards compatibility
+  if (config_obj.Has("enableForeignKeyConstraints") && config_obj.Get("enableForeignKeyConstraints").IsBoolean()) {
+    config.set_enable_foreign_keys(config_obj.Get("enableForeignKeyConstraints").As<Napi::Boolean>().Value());
+  } else if (config_obj.Has("enableForeignKeys") && config_obj.Get("enableForeignKeys").IsBoolean()) {
     config.set_enable_foreign_keys(config_obj.Get("enableForeignKeys").As<Napi::Boolean>().Value());
   }
   

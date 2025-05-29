@@ -4,63 +4,32 @@
 [![Node.js Version](https://img.shields.io/node/v/@photostructure/sqlite.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Node.js SQLite implementation extracted from Node.js core, available for all Node.js versions.
+## 🚀 Drop-in Replacement for node:sqlite
 
-## 🎉 Development Status
+This package provides **100% API compatibility** with Node.js's built-in SQLite module (`node:sqlite`). You can seamlessly switch between this package and the built-in module without changing any code.
 
-**This package provides a fully functional SQLite implementation with Node.js API compatibility!**
+```javascript
+// Using Node.js built-in SQLite (requires Node.js 22.5.0+ and --experimental-sqlite flag)
+const { DatabaseSync } = require("node:sqlite");
 
-### ✅ What's Complete
+// Using @photostructure/sqlite (works on Node.js 20+ without any flags)
+const { DatabaseSync } = require("@photostructure/sqlite");
 
-**Core Features:**
-- ✅ Full SQLite functionality with synchronous operations
-- ✅ Complete Node.js API compatibility
-- ✅ All basic SQL operations (CREATE, INSERT, SELECT, UPDATE, DELETE)
-- ✅ Prepared statements with parameter binding
-- ✅ Transaction support
-- ✅ Error handling and memory management
-
-**Advanced Features:**
-- ✅ User-defined functions (scalar and aggregate)
-- ✅ Window function support in aggregates
-- ✅ Statement iterators with JavaScript protocol
-- ✅ SQLite sessions for change tracking
-- ✅ Database backup with progress monitoring
-- ✅ Extension loading (with security controls)
-- ✅ Full data type support (including BigInt)
-- ✅ Statement configuration (BigInt, array returns, named parameters)
-
-**Build & Distribution:**
-- ✅ Multi-platform support (Linux, macOS, Windows on x64 and ARM64)
-- ✅ Automated CI/CD with GitHub Actions
-- ✅ Prebuilt binaries for all platforms
-- ✅ TypeScript definitions with full JSDoc
-
-**Testing:**
-- ✅ 169 comprehensive tests covering all features
-- ✅ 100% API compatibility verification
-- ✅ Memory leak prevention
-- ✅ Cross-platform testing
-
-### 🚧 What's In Progress
-
-- 🔄 Enhanced location method for attached databases
-- 🔄 Automated SQLite version updates
-- 🔄 Performance benchmarking suite
-
-See [TODO.md](./TODO.md) for the detailed development roadmap.
+// The API is identical - no code changes needed!
+```
 
 ## Overview
 
-Node.js has an experimental built-in SQLite module that provides synchronous database operations with excellent performance. However, it's only available in recent Node.js versions and requires the `--experimental-sqlite` flag.
+Node.js has an experimental built-in SQLite module that provides synchronous database operations with excellent performance. However, it's only available in the newest Node.js versions, and requires the `--experimental-sqlite` flag.
 
 This package extracts that implementation into a standalone library that:
 
-- **Works everywhere**: Compatible with Node.js 18+ without experimental flags
-- **Identical API**: Drop-in replacement for Node.js built-in SQLite
+- **Works everywhere**: Compatible with Node.js 20+ without experimental flags
+- **Drop-in replacement**: 100% API compatible with `node:sqlite` - no code changes needed
 - **Full-featured**: Includes all SQLite extensions (FTS, JSON, math functions, etc.)
 - **High performance**: Direct SQLite C library integration with minimal overhead
-- **Type-safe**: Complete TypeScript definitions
+- **Type-safe**: Complete TypeScript definitions matching Node.js exactly
+- **Future-proof**: When `node:sqlite` becomes stable, switching back requires zero code changes
 
 ## Installation
 
@@ -69,6 +38,19 @@ npm install @photostructure/sqlite
 ```
 
 ## Quick Start
+
+### As a Drop-in Replacement
+
+```javascript
+// If you have code using node:sqlite:
+const { DatabaseSync } = require("node:sqlite");
+
+// Simply replace with:
+const { DatabaseSync } = require("@photostructure/sqlite");
+// That's it! No other changes needed.
+```
+
+### Basic Example
 
 ```typescript
 import { DatabaseSync } from "@photostructure/sqlite";
@@ -100,98 +82,6 @@ db.close();
 ```
 
 ## API Reference
-
-### DatabaseSync Class
-
-#### Constructor
-
-```typescript
-new DatabaseSync(location?: string, options?: DatabaseOpenConfiguration)
-```
-
-#### Methods
-
-- `open(configuration?: DatabaseOpenConfiguration): void` - Open database connection
-- `close(): void` - Close database connection
-- `exec(sql: string): void` - Execute SQL without returning results
-- `prepare(sql: string, options?: StatementOptions): PreparedStatement` - Create prepared statement
-- `function(name: string, options?: UserFunctionOptions, func: Function): void` - Register custom SQL function
-- `aggregate(name: string, options: AggregateOptions): void` - Register aggregate function
-- `createSession(options?: SessionOptions): Session` - Create SQLite session for change tracking
-- `applyChangeset(changeset: Buffer, options?: ChangesetApplyOptions): boolean` - Apply changeset from session
-- `enableLoadExtension(enable: boolean): void` - Enable/disable extension loading
-- `loadExtension(path: string, entryPoint?: string): void` - Load SQLite extension
-- `backup(path: string, options?: BackupOptions): Promise<number>` - Create database backup
-
-#### Properties
-
-- `location: string` - Database file path
-- `isOpen: boolean` - Whether database is currently open
-- `isTransaction: boolean` - Whether a transaction is active
-
-### PreparedStatement Class
-
-#### Methods
-
-- `run(...parameters: any[]): { changes: number; lastInsertRowid: number | bigint }` - Execute statement
-- `get(...parameters: any[]): any` - Get single row result
-- `all(...parameters: any[]): any[]` - Get all rows as array
-- `iterate(...parameters: any[]): IterableIterator<any>` - Iterate over results
-- `columns(): Array<{ name: string; type: string | null; tableName: string | null; databaseName: string | null }>` - Get column metadata
-- `setReadBigInts(readBigInts: boolean): void` - Configure bigint handling
-- `setReturnArrays(returnArrays: boolean): void` - Return rows as arrays instead of objects
-- `setAllowBareNamedParameters(allow: boolean): void` - Configure parameter syntax
-- `finalize(): void` - Finalize statement and free resources
-
-#### Properties
-
-- `sourceSQL: string` - Original SQL text
-- `expandedSQL: string | undefined` - SQL with bound parameters (if enabled)
-
-### Configuration Types
-
-```typescript
-interface DatabaseOpenConfiguration {
-  readonly location?: string;
-  readonly readOnly?: boolean;
-  readonly enableForeignKeys?: boolean;
-  readonly enableDoubleQuotedStringLiterals?: boolean;
-  readonly timeout?: number;
-  readonly allowExtension?: boolean;
-}
-
-interface StatementOptions {
-  readonly expandedSQL?: boolean;
-  readonly anonymousParameters?: boolean;
-}
-
-interface UserFunctionOptions {
-  readonly deterministic?: boolean;
-  readonly directOnly?: boolean;
-  readonly arity?: number;
-  readonly useBigIntArguments?: boolean;
-  readonly varargs?: boolean;
-}
-
-interface AggregateOptions {
-  readonly start: any;
-  readonly step: (accumulator: any, ...values: any[]) => any;
-  readonly result?: (accumulator: any) => any;
-  readonly deterministic?: boolean;
-  readonly directOnly?: boolean;
-  readonly arity?: number;
-  readonly windowMode?: boolean;
-  readonly useBigIntArguments?: boolean;
-  readonly varargs?: boolean;
-}
-
-interface BackupOptions {
-  readonly rate?: number;  // Pages per iteration (default: 100)
-  readonly source?: string; // Source database name (default: 'main')
-  readonly target?: string; // Target database name (default: 'main')
-  readonly progress?: (info: { totalPages: number; remainingPages: number }) => void;
-}
-```
 
 ### Database Configuration Options
 
@@ -230,56 +120,6 @@ db.exec("SELECT `name`, [order] FROM test");
 
 **Recommendation**: For new projects, consider enabling `enableDoubleQuotedStringLiterals: true` to ensure consistent behavior and SQL standard compliance. For existing projects, be aware that SQLite's default behavior may interpret your double-quoted strings differently depending on context.
 
-### Session Class
-
-#### Methods
-
-- `changeset(): Buffer` - Get all changes recorded in the session
-- `patchset(): Buffer` - Get a more compact patchset of changes
-- `close(): void` - Close the session and free resources
-
-### SQLite Constants
-
-```typescript
-constants: {
-  // File open flags
-  SQLITE_OPEN_READONLY: number;
-  SQLITE_OPEN_READWRITE: number;
-  SQLITE_OPEN_CREATE: number;
-  
-  // Changeset constants
-  SQLITE_CHANGESET_OMIT: number;
-  SQLITE_CHANGESET_REPLACE: number;
-  SQLITE_CHANGESET_ABORT: number;
-  SQLITE_CHANGESET_DATA: number;
-  SQLITE_CHANGESET_NOTFOUND: number;
-  SQLITE_CHANGESET_CONFLICT: number;
-  SQLITE_CHANGESET_CONSTRAINT: number;
-  SQLITE_CHANGESET_FOREIGN_KEY: number;
-}
-```
-
-## Advanced Usage
-
-### Transactions
-
-```typescript
-const db = new DatabaseSync("example.db");
-
-try {
-  db.exec("BEGIN TRANSACTION");
-
-  const insert = db.prepare("INSERT INTO users (name) VALUES (?)");
-  insert.run("User 1");
-  insert.run("User 2");
-
-  db.exec("COMMIT");
-} catch (error) {
-  db.exec("ROLLBACK");
-  throw error;
-}
-```
-
 ### Custom Functions
 
 ```typescript
@@ -287,12 +127,16 @@ try {
 db.function("multiply", (a, b) => a * b);
 
 // With options
-db.function("hash", { 
-  deterministic: true,  // Same inputs always produce same output
-  directOnly: true,     // Cannot be called from triggers/views
-}, (value) => {
-  return crypto.createHash('sha256').update(String(value)).digest('hex');
-});
+db.function(
+  "hash",
+  {
+    deterministic: true, // Same inputs always produce same output
+    directOnly: true, // Cannot be called from triggers/views
+  },
+  (value) => {
+    return crypto.createHash("sha256").update(String(value)).digest("hex");
+  },
+);
 
 // Aggregate function
 db.aggregate("custom_sum", {
@@ -302,7 +146,9 @@ db.aggregate("custom_sum", {
 });
 
 // Use in SQL
-const result = db.prepare("SELECT custom_sum(price) as total FROM products").get();
+const result = db
+  .prepare("SELECT custom_sum(price) as total FROM products")
+  .get();
 console.log(result.total);
 ```
 
@@ -310,21 +156,24 @@ console.log(result.total);
 
 ```typescript
 // Simple backup
-await db.backup('./backup.db');
+await db.backup("./backup.db");
 
 // Backup with progress monitoring
-await db.backup('./backup.db', {
-  rate: 10,  // Copy 10 pages per iteration
+await db.backup("./backup.db", {
+  rate: 10, // Copy 10 pages per iteration
   progress: ({ totalPages, remainingPages }) => {
-    const percent = ((totalPages - remainingPages) / totalPages * 100).toFixed(1);
+    const percent = (
+      ((totalPages - remainingPages) / totalPages) *
+      100
+    ).toFixed(1);
     console.log(`Backup progress: ${percent}%`);
-  }
+  },
 });
 
 // Backup specific attached database
 db.exec("ATTACH DATABASE 'other.db' AS other");
-await db.backup('./other-backup.db', {
-  source: 'other',  // Backup the attached database instead of main
+await db.backup("./other-backup.db", {
+  source: "other", // Backup the attached database instead of main
 });
 ```
 
@@ -332,23 +181,26 @@ await db.backup('./other-backup.db', {
 
 ```typescript
 // Create a session to track changes
-const session = db.createSession({ table: 'users' });
+const session = db.createSession({ table: "users" });
 
 // Make some changes
 db.prepare("UPDATE users SET name = ? WHERE id = ?").run("Alice Smith", 1);
-db.prepare("INSERT INTO users (name, email) VALUES (?, ?)").run("Bob", "bob@example.com");
+db.prepare("INSERT INTO users (name, email) VALUES (?, ?)").run(
+  "Bob",
+  "bob@example.com",
+);
 
 // Get the changes
 const changeset = session.changeset();
 session.close();
 
 // Apply changes to another database
-const otherDb = new DatabaseSync('./replica.db');
+const otherDb = new DatabaseSync("./replica.db");
 const applied = otherDb.applyChangeset(changeset, {
   onConflict: (conflict) => {
     console.log(`Conflict on table ${conflict.table}`);
     return constants.SQLITE_CHANGESET_REPLACE; // Resolve by replacing
-  }
+  },
 });
 ```
 
@@ -394,7 +246,7 @@ This package provides the same performance characteristics as Node.js built-in S
 - **SQLite optimizations** - Compiled with performance-focused flags including:
   - Full-Text Search (FTS5)
   - JSON functions
-  - R*Tree indexes
+  - R\*Tree indexes
   - Math functions
   - Session extension
 
@@ -408,11 +260,11 @@ This package provides the same performance characteristics as Node.js built-in S
 
 Benchmark comparison with other SQLite libraries:
 
-| Library                | Operations/sec | Notes                                 |
-| ---------------------- | -------------- | ------------------------------------- |
+| Library                | Operations/sec | Notes                                   |
+| ---------------------- | -------------- | --------------------------------------- |
 | @photostructure/sqlite | ~450,000       | Node.js-compatible API, Node-API stable |
-| better-sqlite3         | ~400,000       | Custom API, V8-specific implementation |
-| sqlite3                | ~50,000        | Async overhead, callback-based        |
+| better-sqlite3         | ~400,000       | Custom API, V8-specific implementation  |
+| sqlite3                | ~50,000        | Async overhead, callback-based          |
 
 _Benchmarks are approximate and vary by use case and system._
 
@@ -426,9 +278,9 @@ _Benchmarks are approximate and vary by use case and system._
 
 Prebuilt binaries are provided for all supported platforms. If a prebuilt binary isn't available, the package will compile from source using node-gyp.
 
-## Requirements
+## Development Requirements
 
-- **Node.js**: 18.0.0 or higher
+- **Node.js**: v20 or higher
 - **Build tools** (if compiling from source):
   - Linux: `build-essential`, `python3`
   - macOS: Xcode command line tools
@@ -522,11 +374,13 @@ Based on benchmarks from better-sqlite3 and our testing:
 
 **Choose @photostructure/sqlite if:**
 
-- You want Node.js built-in SQLite API compatibility
+- You want a **drop-in replacement** for `node:sqlite` with zero code changes
+- You need Node.js built-in SQLite API compatibility today
 - You need to support multiple Node.js versions without experimental flags
 - You want the performance of synchronous operations
 - You prefer Node-API stability over V8-specific implementations
 - You're building for the future when Node.js SQLite becomes stable
+- You want to write code that works with both `@photostructure/sqlite` and `node:sqlite`
 
 **Choose better-sqlite3 if:**
 
@@ -583,31 +437,22 @@ npm test
 
 ## Current Features
 
-This package now provides a complete SQLite implementation with full Node.js API compatibility:
+This package now provides a complete SQLite implementation with full Node.js API compatibility.
 
 **SQLite Version**: 3.49.1 (from Node.js upstream)
-
-**Complete Features**:
-- ✅ All core SQLite operations
-- ✅ User-defined functions (scalar and aggregate)
-- ✅ Window functions in aggregates
-- ✅ Statement iterators
-- ✅ SQLite sessions and changesets
-- ✅ Database backup with progress
-- ✅ Extension loading
-- ✅ Full data type support including BigInt
-- ✅ 169 comprehensive tests
 
 See [TODO.md](./TODO.md) for the complete feature list and future enhancements.
 
 ## Roadmap
 
 **In Progress:**
+
 - 🔄 Enhanced location method for attached databases
 - 🔄 Automated SQLite version updates from upstream
 - 🔄 Comprehensive performance benchmarking
 
 **Future Enhancements:**
+
 - 📋 Better error messages matching Node.js exactly
 - 📋 Additional platform-specific optimizations
 - 📋 Enhanced debugging and profiling tools
@@ -616,7 +461,7 @@ See [TODO.md](./TODO.md) for the complete feature list and future enhancements.
 
 MIT License - see [LICENSE](./LICENSE) for details.
 
-This package includes SQLite, which is in the public domain.
+This package includes SQLite, which is in the public domain, as well as code from the Node.js project, which is MIT licensed.
 
 ## Support
 

@@ -9,14 +9,15 @@ const binding = require("node-gyp-build")(
 
 /**
  * Configuration options for opening a database.
+ * This interface matches Node.js sqlite module's DatabaseSyncOptions.
  */
-export interface DatabaseOpenConfiguration {
+export interface DatabaseSyncOptions {
   /** Path to the database file. Use ':memory:' for an in-memory database. */
   readonly location?: string;
   /** If true, the database is opened in read-only mode. @default false */
   readonly readOnly?: boolean;
   /** If true, foreign key constraints are enforced. @default true */
-  readonly enableForeignKeys?: boolean;
+  readonly enableForeignKeyConstraints?: boolean;
   /** If true, double-quoted string literals are allowed. @default true */
   readonly enableDoubleQuotedStringLiterals?: boolean;
   /** Sets the busy timeout in milliseconds. @default 5000 */
@@ -37,8 +38,9 @@ export interface StatementOptions {
 
 /**
  * A prepared SQL statement that can be executed multiple times with different parameters.
+ * This interface represents an instance of the StatementSync class.
  */
-export interface PreparedStatement {
+export interface StatementSyncInstance {
   /** The original SQL source string. */
   readonly sourceSQL: string;
   /** The expanded SQL string with bound parameters, if expandedSQL option was set. */
@@ -81,6 +83,17 @@ export interface PreparedStatement {
    * @param allowBareNamedParameters If true, allows bare named parameters. @default false
    */
   setAllowBareNamedParameters(allowBareNamedParameters: boolean): void;
+  /**
+   * Set whether to return results as arrays rather than objects.
+   * @param returnArrays If true, return results as arrays. @default false
+   */
+  setReturnArrays(returnArrays: boolean): void;
+  /**
+   * Returns an array of objects, each representing a column in the statement's result set.
+   * Each object has a 'name' property for the column name and a 'type' property for the SQLite type.
+   * @returns Array of column metadata objects.
+   */
+  columns(): Array<{ name: string; type?: string }>;
   /**
    * Finalizes the prepared statement and releases its resources.
    * Called automatically by Symbol.dispose.
@@ -161,8 +174,9 @@ export interface ChangesetApplyOptions {
 
 /**
  * Represents a SQLite database connection.
+ * This interface represents an instance of the DatabaseSync class.
  */
-export interface Database {
+export interface DatabaseSyncInstance {
   /** The path to the database file, or ':memory:' for in-memory databases. */
   readonly location: string;
   /** Indicates whether the database connection is open. */
@@ -175,7 +189,7 @@ export interface Database {
    * a DatabaseSync instance, so typically should not be called directly.
    * @param configuration Optional configuration for opening the database.
    */
-  open(configuration?: DatabaseOpenConfiguration): void;
+  open(configuration?: DatabaseSyncOptions): void;
   /**
    * Closes the database connection. This method should be called to ensure that
    * the database connection is properly cleaned up. Once a database is closed,
@@ -183,12 +197,12 @@ export interface Database {
    */
   close(): void;
   /**
-   * Compiles an SQL statement and returns a PreparedStatement object.
+   * Compiles an SQL statement and returns a StatementSyncInstance object.
    * @param sql The SQL statement to prepare.
    * @param options Optional configuration for the statement.
-   * @returns A PreparedStatement object that can be executed multiple times.
+   * @returns A StatementSyncInstance object that can be executed multiple times.
    */
-  prepare(sql: string, options?: StatementOptions): PreparedStatement;
+  prepare(sql: string, options?: StatementOptions): StatementSyncInstance;
   /**
    * This method allows one or more SQL statements to be executed without
    * returning any results. This is useful for commands like CREATE TABLE,
@@ -295,17 +309,17 @@ export interface SqliteModule {
    */
   DatabaseSync: new (
     location?: string,
-    options?: DatabaseOpenConfiguration,
-  ) => Database;
+    options?: DatabaseSyncOptions,
+  ) => DatabaseSyncInstance;
   /**
    * The StatementSync class represents a synchronous prepared statement.
    * This class should not be instantiated directly; use Database.prepare() instead.
    */
   StatementSync: new (
-    database: Database,
+    database: DatabaseSyncInstance,
     sql: string,
     options?: StatementOptions,
-  ) => PreparedStatement;
+  ) => StatementSyncInstance;
   /**
    * The Session class for recording database changes.
    * This class should not be instantiated directly; use Database.createSession() instead.

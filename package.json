@@ -1,7 +1,7 @@
 {
   "name": "@photostructure/sqlite",
   "version": "0.1.0",
-  "description": "Node.js SQLite implementation extracted from Node.js core",
+  "description": "Drop-in replacement for node:sqlite - Node.js SQLite implementation extracted from Node.js core",
   "homepage": "https://github.com/photostructure/node-sqlite",
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
@@ -53,10 +53,14 @@
   ],
   "keywords": [
     "sqlite",
+    "node:sqlite",
+    "drop-in-replacement",
     "database",
     "sql",
     "native",
     "node-addon",
+    "DatabaseSync",
+    "StatementSync",
     "sync",
     "performance"
   ],

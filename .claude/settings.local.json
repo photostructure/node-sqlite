@@ -8,7 +8,11 @@
       "Bash(npm test:*)",
       "WebFetch(domain:nodejs.org)",
       "Bash(node:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm ls:*)",
+      "Bash(npx tsc:*)",
+      "Bash(ls:*)"
     ]
   },
   "enableAllProjectMcpServers": false

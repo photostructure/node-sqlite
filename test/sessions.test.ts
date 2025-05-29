@@ -1,7 +1,7 @@
 import {
   DatabaseSync,
   constants,
-  type Database,
+  type DatabaseSyncInstance,
   type Session,
 } from "../src/index";
 import * as fs from "fs";
@@ -9,7 +9,7 @@ import * as path from "path";
 import * as os from "os";
 
 describe("SQLite Sessions", () => {
-  let db: Database;
+  let db: DatabaseSyncInstance;
   let testDir: string;
 
   beforeEach(() => {
@@ -412,8 +412,8 @@ describe("SQLite Sessions", () => {
   });
 
   describe("applyChangeset", () => {
-    let sourceDb: Database;
-    let targetDb: Database;
+    let sourceDb: DatabaseSyncInstance;
+    let targetDb: DatabaseSyncInstance;
 
     beforeEach(() => {
       sourceDb = new DatabaseSync(":memory:");
