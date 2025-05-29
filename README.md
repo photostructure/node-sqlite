@@ -421,6 +421,12 @@ npm run build
 
 # Run tests
 npm test
+
+# Run memory tests (Linux only)
+npm run tests:memory
+
+# Run C++ static analysis (Linux/macOS)
+npm run clang-tidy
 ```
 
 ### Project Structure
