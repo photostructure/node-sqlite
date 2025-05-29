@@ -383,7 +383,7 @@ Based on benchmarks from better-sqlite3 and our testing:
 - Performance is your top priority
 - You're building a new application and control the API design
 - You want the most mature synchronous SQLite library
-- You need advanced features like user-defined functions
+- You prefer their specific API design over Node.js compatibility
 
 **Choose sqlite3 if:**
 
