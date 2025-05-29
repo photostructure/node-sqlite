@@ -1,4 +1,6 @@
 #include "sqlite_impl.h"
+#include "user_function.h"
+#include "aggregate_function.h"
 #include <iostream>
 #include <cmath>
 #include <climits>
@@ -17,6 +19,8 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("close", &DatabaseSync::Close),
     InstanceMethod("prepare", &DatabaseSync::Prepare),
     InstanceMethod("exec", &DatabaseSync::Exec),
+    InstanceMethod("function", &DatabaseSync::CustomFunction),
+    InstanceMethod("aggregate", &DatabaseSync::AggregateFunction),
     InstanceAccessor("location", &DatabaseSync::LocationGetter, nullptr),
     InstanceAccessor("isOpen", &DatabaseSync::IsOpenGetter, nullptr),
     InstanceAccessor("isTransaction", &DatabaseSync::IsTransactionGetter, nullptr)
@@ -249,6 +253,224 @@ void DatabaseSync::InternalClose() {
   location_.clear();
 }
 
+Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
+    return env.Undefined();
+  }
+  
+  if (info.Length() < 2) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env, "Expected at least 2 arguments: name and function");
+    return env.Undefined();
+  }
+  
+  if (!info[0].IsString()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env, "Function name must be a string");
+    return env.Undefined();
+  }
+  
+  // Parse arguments: function(name, [options], callback)
+  int fn_index = info.Length() < 3 ? 1 : 2;
+  bool use_bigint_args = false;
+  bool varargs = false;
+  bool deterministic = false;
+  bool direct_only = false;
+  
+  // Parse options object if provided
+  if (fn_index > 1 && info[1].IsObject()) {
+    Napi::Object options = info[1].As<Napi::Object>();
+    
+    if (options.Has("useBigIntArguments") && options.Get("useBigIntArguments").IsBoolean()) {
+      use_bigint_args = options.Get("useBigIntArguments").As<Napi::Boolean>().Value();
+    }
+    
+    if (options.Has("varargs") && options.Get("varargs").IsBoolean()) {
+      varargs = options.Get("varargs").As<Napi::Boolean>().Value();
+    }
+    
+    if (options.Has("deterministic") && options.Get("deterministic").IsBoolean()) {
+      deterministic = options.Get("deterministic").As<Napi::Boolean>().Value();
+    }
+    
+    if (options.Has("directOnly") && options.Get("directOnly").IsBoolean()) {
+      direct_only = options.Get("directOnly").As<Napi::Boolean>().Value();
+    }
+  }
+  
+  if (!info[fn_index].IsFunction()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env, "Callback must be a function");
+    return env.Undefined();
+  }
+  
+  std::string name = info[0].As<Napi::String>().Utf8Value();
+  Napi::Function fn = info[fn_index].As<Napi::Function>();
+  
+  // Determine argument count
+  int argc = -1; // Default to varargs
+  if (!varargs) {
+    // Try to get function.length
+    Napi::Value length_prop = fn.Get("length");
+    if (length_prop.IsNumber()) {
+      argc = length_prop.As<Napi::Number>().Int32Value();
+    }
+  }
+  
+  // Create UserDefinedFunction wrapper
+  UserDefinedFunction* user_data = new UserDefinedFunction(env, fn, this, use_bigint_args);
+  
+  // Set SQLite flags
+  int flags = SQLITE_UTF8;
+  if (deterministic) {
+    flags |= SQLITE_DETERMINISTIC;
+  }
+  if (direct_only) {
+    flags |= SQLITE_DIRECTONLY;
+  }
+  
+  // Register with SQLite
+  int result = sqlite3_create_function_v2(
+    connection_,
+    name.c_str(),
+    argc,
+    flags,
+    user_data,
+    UserDefinedFunction::xFunc,
+    nullptr, // No aggregate step
+    nullptr, // No aggregate final
+    UserDefinedFunction::xDestroy
+  );
+  
+  if (result != SQLITE_OK) {
+    delete user_data; // Clean up on failure
+    std::string error = "Failed to create function: ";
+    error += sqlite3_errmsg(connection_);
+    node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+  }
+  
+  return env.Undefined();
+}
+
+Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
+    return env.Undefined();
+  }
+  
+  if (info.Length() < 2) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env, "Expected at least 2 arguments: name and options");
+    return env.Undefined();
+  }
+  
+  if (!info[0].IsString()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env, "Function name must be a string");
+    return env.Undefined();
+  }
+  
+  if (!info[1].IsObject()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env, "Options must be an object");
+    return env.Undefined();
+  }
+  
+  std::string name = info[0].As<Napi::String>().Utf8Value();
+  Napi::Object options = info[1].As<Napi::Object>();
+  
+  // Parse required options - start can be undefined, will default to null
+  Napi::Value start = env.Null();
+  if (options.Has("start") && !options.Get("start").IsUndefined()) {
+    start = options.Get("start");
+  }
+  
+  if (!options.Has("step") || !options.Get("step").IsFunction()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env, "options.step must be a function");
+    return env.Undefined();
+  }
+  
+  Napi::Function step_fn = options.Get("step").As<Napi::Function>();
+  
+  // Parse optional options
+  Napi::Function inverse_fn;
+  if (options.Has("inverse") && options.Get("inverse").IsFunction()) {
+    inverse_fn = options.Get("inverse").As<Napi::Function>();
+  }
+  
+  Napi::Function result_fn;
+  if (options.Has("result") && options.Get("result").IsFunction()) {
+    result_fn = options.Get("result").As<Napi::Function>();
+  }
+  
+  bool use_bigint_args = false;
+  if (options.Has("useBigIntArguments") && options.Get("useBigIntArguments").IsBoolean()) {
+    use_bigint_args = options.Get("useBigIntArguments").As<Napi::Boolean>().Value();
+  }
+  
+  bool varargs = false;
+  if (options.Has("varargs") && options.Get("varargs").IsBoolean()) {
+    varargs = options.Get("varargs").As<Napi::Boolean>().Value();
+  }
+  
+  bool deterministic = false;
+  if (options.Has("deterministic") && options.Get("deterministic").IsBoolean()) {
+    deterministic = options.Get("deterministic").As<Napi::Boolean>().Value();
+  }
+  
+  bool direct_only = false;
+  if (options.Has("directOnly") && options.Get("directOnly").IsBoolean()) {
+    direct_only = options.Get("directOnly").As<Napi::Boolean>().Value();
+  }
+  
+  // Determine argument count
+  int argc = -1; // Default to varargs
+  if (!varargs) {
+    Napi::Value length_prop = step_fn.Get("length");
+    if (length_prop.IsNumber()) {
+      // Subtract 1 because the first argument is the aggregate value
+      argc = length_prop.As<Napi::Number>().Int32Value() - 1;
+    }
+  }
+  
+  // Set SQLite flags
+  int flags = SQLITE_UTF8;
+  if (deterministic) {
+    flags |= SQLITE_DETERMINISTIC;
+  }
+  if (direct_only) {
+    flags |= SQLITE_DIRECTONLY;
+  }
+  
+  // Create CustomAggregate wrapper
+  CustomAggregate* user_data = new CustomAggregate(env, this, use_bigint_args, start, step_fn, inverse_fn, result_fn);
+  
+  // Register with SQLite as window function (supports both aggregate and window operations)
+  auto xInverse = !inverse_fn.IsEmpty() ? CustomAggregate::xInverse : nullptr;
+  auto xValue = xInverse ? CustomAggregate::xValue : nullptr;
+  
+  int result = sqlite3_create_window_function(
+    connection_,
+    name.c_str(),
+    argc,
+    flags,
+    user_data,
+    CustomAggregate::xStep,
+    CustomAggregate::xFinal,
+    xValue,
+    xInverse,
+    CustomAggregate::xDestroy
+  );
+  
+  if (result != SQLITE_OK) {
+    delete user_data; // Clean up on failure
+    std::string error = "Failed to create aggregate function: ";
+    error += sqlite3_errmsg(connection_);
+    node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+  }
+  
+  return env.Undefined();
+}
+
 // StatementSync Implementation
 Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "StatementSync", {
@@ -397,9 +619,23 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo& info) {
 }
 
 Napi::Value StatementSync::Iterate(const Napi::CallbackInfo& info) {
-  // TODO: Implement iterator
-  node::THROW_ERR_INVALID_STATE(info.Env(), "Iterator not yet implemented");
-  return info.Env().Undefined();
+  if (finalized_) {
+    node::THROW_ERR_INVALID_STATE(info.Env(), "statement has been finalized");
+    return info.Env().Undefined();
+  }
+  
+  // Reset the statement first
+  int r = sqlite3_reset(statement_);
+  if (r != SQLITE_OK) {
+    node::THROW_ERR_SQLITE_ERROR(info.Env(), sqlite3_errmsg(database_->connection()));
+    return info.Env().Undefined();
+  }
+  
+  // Bind parameters if provided
+  BindParameters(info, 0);
+  
+  // Create and return iterator
+  return StatementSyncIterator::Create(info.Env(), this);
 }
 
 Napi::Value StatementSync::FinalizeStatement(const Napi::CallbackInfo& info) {
@@ -434,6 +670,17 @@ void StatementSync::BindParameters(const Napi::CallbackInfo& info, size_t start_
     
     if (param.IsNull() || param.IsUndefined()) {
       sqlite3_bind_null(statement_, param_index);
+    } else if (param.IsBigInt()) {
+      // Handle BigInt before IsNumber since BigInt values should bind as int64
+      bool lossless;
+      int64_t bigint_val = param.As<Napi::BigInt>().Int64Value(&lossless);
+      if (lossless) {
+        sqlite3_bind_int64(statement_, param_index, static_cast<sqlite3_int64>(bigint_val));
+      } else {
+        // BigInt too large, convert to text
+        std::string bigint_str = param.As<Napi::BigInt>().ToString().Utf8Value();
+        sqlite3_bind_text(statement_, param_index, bigint_str.c_str(), -1, SQLITE_TRANSIENT);
+      }
     } else if (param.IsNumber()) {
       double val = param.As<Napi::Number>().DoubleValue();
       if (val == std::floor(val) && val >= INT32_MIN && val <= INT32_MAX) {
@@ -505,6 +752,113 @@ Napi::Value StatementSync::CreateResult() {
 void StatementSync::Reset() {
   sqlite3_reset(statement_);
   sqlite3_clear_bindings(statement_);
+}
+
+// ================================
+// StatementSyncIterator Implementation  
+// ================================
+
+Napi::FunctionReference StatementSyncIterator::constructor_;
+
+Napi::Object StatementSyncIterator::Init(Napi::Env env, Napi::Object exports) {
+  Napi::Function func = DefineClass(env, "StatementSyncIterator", {
+    InstanceMethod("next", &StatementSyncIterator::Next),
+    InstanceMethod("return", &StatementSyncIterator::Return)
+  });
+  
+  // Set up Symbol.iterator on the prototype to make it properly iterable
+  Napi::Object prototype = func.Get("prototype").As<Napi::Object>();
+  Napi::Symbol iteratorSymbol = Napi::Symbol::WellKnown(env, "iterator");
+  
+  // Add [Symbol.iterator]() { return this; } to make it iterable
+  prototype.Set(iteratorSymbol, Napi::Function::New(env, [](const Napi::CallbackInfo& info) {
+    return info.This();
+  }));
+  
+  constructor_ = Napi::Persistent(func);
+  constructor_.SuppressDestruct();
+  
+  exports.Set("StatementSyncIterator", func);
+  return exports;
+}
+
+Napi::Object StatementSyncIterator::Create(Napi::Env env, StatementSync* stmt) {
+  Napi::Object obj = constructor_.New({});
+  StatementSyncIterator* iter = Napi::ObjectWrap<StatementSyncIterator>::Unwrap(obj);
+  iter->SetStatement(stmt);
+  return obj;
+}
+
+StatementSyncIterator::StatementSyncIterator(const Napi::CallbackInfo& info) 
+    : Napi::ObjectWrap<StatementSyncIterator>(info), stmt_(nullptr), done_(false) {
+}
+
+StatementSyncIterator::~StatementSyncIterator() {
+}
+
+void StatementSyncIterator::SetStatement(StatementSync* stmt) {
+  stmt_ = stmt;
+  done_ = false;
+}
+
+Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  
+  if (!stmt_ || stmt_->finalized_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
+    return env.Undefined();
+  }
+  
+  if (done_) {
+    Napi::Object result = Napi::Object::New(env);
+    result.Set("done", true);
+    result.Set("value", env.Null());
+    return result;
+  }
+  
+  int r = sqlite3_step(stmt_->statement_);
+  
+  if (r != SQLITE_ROW) {
+    if (r != SQLITE_DONE) {
+      node::THROW_ERR_SQLITE_ERROR(env, sqlite3_errmsg(stmt_->database_->connection()));
+      return env.Undefined();
+    }
+    
+    // End of results
+    sqlite3_reset(stmt_->statement_);
+    done_ = true;
+    
+    Napi::Object result = Napi::Object::New(env);
+    result.Set("done", true);
+    result.Set("value", env.Null());
+    return result;
+  }
+  
+  // Create row object using existing CreateResult method
+  Napi::Value row_value = stmt_->CreateResult();
+  
+  Napi::Object result = Napi::Object::New(env);
+  result.Set("done", false);
+  result.Set("value", row_value);
+  return result;
+}
+
+Napi::Value StatementSyncIterator::Return(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  
+  if (!stmt_ || stmt_->finalized_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
+    return env.Undefined();
+  }
+  
+  // Reset the statement and mark as done
+  sqlite3_reset(stmt_->statement_);
+  done_ = true;
+  
+  Napi::Object result = Napi::Object::New(env);
+  result.Set("done", true);
+  result.Set("value", env.Null());
+  return result;
 }
 
 } // namespace sqlite

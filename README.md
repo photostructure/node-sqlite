@@ -11,11 +11,13 @@ Node.js SQLite implementation extracted from Node.js core, available for all Nod
 🚧 **This package is currently in active development and not ready for production use.**
 
 **What works:**
+
 - ✅ Package installation and module loading
 - ✅ TypeScript definitions and API surface
 - ✅ Basic class instantiation
 
 **What's missing:**
+
 - ❌ Actual SQLite functionality (currently stub implementation)
 - ❌ Database operations and SQL execution
 - ❌ Complete Node.js API compatibility
@@ -43,10 +45,10 @@ npm install @photostructure/sqlite
 ## Quick Start
 
 ```typescript
-import { DatabaseSync } from '@photostructure/sqlite';
+import { DatabaseSync } from "@photostructure/sqlite";
 
 // Create an in-memory database
-const db = new DatabaseSync(':memory:');
+const db = new DatabaseSync(":memory:");
 
 // Create a table
 db.exec(`
@@ -58,14 +60,14 @@ db.exec(`
 `);
 
 // Insert data
-const insertStmt = db.prepare('INSERT INTO users (name, email) VALUES (?, ?)');
-const result = insertStmt.run('Alice Johnson', 'alice@example.com');
-console.log('Inserted user with ID:', result.lastInsertRowid);
+const insertStmt = db.prepare("INSERT INTO users (name, email) VALUES (?, ?)");
+const result = insertStmt.run("Alice Johnson", "alice@example.com");
+console.log("Inserted user with ID:", result.lastInsertRowid);
 
 // Query data
-const selectStmt = db.prepare('SELECT * FROM users WHERE id = ?');
+const selectStmt = db.prepare("SELECT * FROM users WHERE id = ?");
 const user = selectStmt.get(result.lastInsertRowid);
-console.log('User:', user);
+console.log("User:", user);
 
 // Clean up
 db.close();
@@ -76,13 +78,15 @@ db.close();
 ### DatabaseSync Class
 
 #### Constructor
+
 ```typescript
 new DatabaseSync(location?: string, options?: DatabaseOpenConfiguration)
 ```
 
 #### Methods
+
 - `open(configuration?: DatabaseOpenConfiguration): void` - Open database connection
-- `close(): void` - Close database connection  
+- `close(): void` - Close database connection
 - `exec(sql: string): void` - Execute SQL without returning results
 - `prepare(sql: string, options?: StatementOptions): PreparedStatement` - Create prepared statement
 - `function(name: string, options: any, func: Function): void` - Register custom SQL function
@@ -93,6 +97,7 @@ new DatabaseSync(location?: string, options?: DatabaseOpenConfiguration)
 - `loadExtension(path: string, entryPoint?: string): void` - Load SQLite extension
 
 #### Properties
+
 - `location: string` - Database file path
 - `isOpen: boolean` - Whether database is currently open
 - `isTransaction: boolean` - Whether a transaction is active
@@ -100,6 +105,7 @@ new DatabaseSync(location?: string, options?: DatabaseOpenConfiguration)
 ### PreparedStatement Class
 
 #### Methods
+
 - `run(...parameters: any[]): { changes: number; lastInsertRowid: number | bigint }` - Execute statement
 - `get(...parameters: any[]): any` - Get single row result
 - `all(...parameters: any[]): any[]` - Get all rows as array
@@ -109,6 +115,7 @@ new DatabaseSync(location?: string, options?: DatabaseOpenConfiguration)
 - `finalize(): void` - Finalize statement and free resources
 
 #### Properties
+
 - `sourceSQL: string` - Original SQL text
 - `expandedSQL: string | undefined` - SQL with bound parameters (if enabled)
 
@@ -118,7 +125,7 @@ new DatabaseSync(location?: string, options?: DatabaseOpenConfiguration)
 interface DatabaseOpenConfiguration {
   readonly location: string;
   readonly readOnly?: boolean;
-  readonly enableForeignKeys?: boolean; 
+  readonly enableForeignKeys?: boolean;
   readonly enableDoubleQuotedStringLiterals?: boolean;
   readonly timeout?: number;
 }
@@ -149,18 +156,18 @@ constants: {
 ### Transactions
 
 ```typescript
-const db = new DatabaseSync('example.db');
+const db = new DatabaseSync("example.db");
 
 try {
-  db.exec('BEGIN TRANSACTION');
-  
-  const insert = db.prepare('INSERT INTO users (name) VALUES (?)');
-  insert.run('User 1');
-  insert.run('User 2');
-  
-  db.exec('COMMIT');
+  db.exec("BEGIN TRANSACTION");
+
+  const insert = db.prepare("INSERT INTO users (name) VALUES (?)");
+  insert.run("User 1");
+  insert.run("User 2");
+
+  db.exec("COMMIT");
 } catch (error) {
-  db.exec('ROLLBACK');
+  db.exec("ROLLBACK");
   throw error;
 }
 ```
@@ -169,24 +176,26 @@ try {
 
 ```typescript
 // Register a custom SQL function
-db.function('multiply', { parameters: 2 }, (a, b) => a * b);
+db.function("multiply", { parameters: 2 }, (a, b) => a * b);
 
 // Use in SQL
-const result = db.prepare('SELECT multiply(6, 7) as result').get();
+const result = db.prepare("SELECT multiply(6, 7) as result").get();
 console.log(result.result); // 42
 ```
 
 ### Parameter Binding
 
 ```typescript
-const stmt = db.prepare('SELECT * FROM users WHERE name = ? AND age > ?');
+const stmt = db.prepare("SELECT * FROM users WHERE name = ? AND age > ?");
 
 // Positional parameters
-const users1 = stmt.all('Alice', 25);
+const users1 = stmt.all("Alice", 25);
 
 // Named parameters (with object)
-const stmt2 = db.prepare('SELECT * FROM users WHERE name = $name AND age > $age');
-const users2 = stmt2.all({ name: 'Alice', age: 25 });
+const stmt2 = db.prepare(
+  "SELECT * FROM users WHERE name = $name AND age > $age",
+);
+const users2 = stmt2.all({ name: "Alice", age: 25 });
 ```
 
 ### Using with TypeScript
@@ -199,8 +208,8 @@ interface User {
   created_at: string;
 }
 
-const db = new DatabaseSync('users.db');
-const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
+const db = new DatabaseSync("users.db");
+const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
 
 const user = stmt.get(1) as User;
 console.log(`User: ${user.name} <${user.email}>`);
@@ -211,27 +220,27 @@ console.log(`User: ${user.name} <${user.email}>`);
 This package provides the same performance characteristics as Node.js built-in SQLite:
 
 - **Synchronous operations** - No async/await overhead
-- **Direct C library access** - Minimal JavaScript ↔ native boundary crossings  
+- **Direct C library access** - Minimal JavaScript ↔ native boundary crossings
 - **Prepared statements** - Optimal query planning and parameter binding
 - **SQLite optimizations** - Compiled with performance-focused flags
 
 Benchmark comparison with other SQLite libraries:
 
-| Library | Operations/sec | Notes |
-|---------|---------------|-------|
-| @photostructure/sqlite | ~450,000 | Direct SQLite C integration |
-| better-sqlite3 | ~400,000 | Also synchronous, similar performance |
-| sqlite3 | ~50,000 | Async overhead, callback-based |
+| Library                | Operations/sec | Notes                                 |
+| ---------------------- | -------------- | ------------------------------------- |
+| @photostructure/sqlite | ~450,000       | Direct SQLite C integration           |
+| better-sqlite3         | ~400,000       | Also synchronous, similar performance |
+| sqlite3                | ~50,000        | Async overhead, callback-based        |
 
-*Benchmarks are approximate and vary by use case and system.*
+_Benchmarks are approximate and vary by use case and system._
 
 ## Platform Support
 
-| Platform | x64 | ARM64 | Notes |
-|----------|-----|-------|-------|
-| Linux | ✅ | ✅ | Ubuntu 20.04+ |
-| macOS | ✅ | ✅ | macOS 10.15+ |
-| Windows | ✅ | ✅ | Windows 10+ |
+| Platform | x64 | ARM64 | Notes         |
+| -------- | --- | ----- | ------------- |
+| Linux    | ✅  | ✅    | Ubuntu 20.04+ |
+| macOS    | ✅  | ✅    | macOS 10.15+  |
+| Windows  | ✅  | ✅    | Windows 10+   |
 
 Prebuilt binaries are provided for all supported platforms. If a prebuilt binary isn't available, the package will compile from source using node-gyp.
 
@@ -246,18 +255,21 @@ Prebuilt binaries are provided for all supported platforms. If a prebuilt binary
 ## Comparison with Alternatives
 
 ### vs Node.js Built-in SQLite
+
 - ✅ **Availability**: Works on all Node.js versions, no experimental flag
 - ✅ **API**: Identical interface, drop-in replacement
 - ⚖️ **Performance**: Same (uses identical implementation)
 - ❌ **Bundle size**: Slightly larger (standalone package)
 
 ### vs better-sqlite3
+
 - ✅ **API compatibility**: Closer to Node.js standard
 - ✅ **Future-proof**: Tracks Node.js implementation
 - ⚖️ **Performance**: Similar performance characteristics
 - ❌ **Maturity**: Newer, less battle-tested
 
 ### vs sqlite3
+
 - ✅ **Performance**: Much faster (synchronous operations)
 - ✅ **API**: Simpler, no callback complexity
 - ✅ **Type safety**: Better TypeScript support
@@ -300,11 +312,13 @@ npm test
 See [TODO.md](./TODO.md) for detailed development roadmap.
 
 **Short term:**
+
 - 🎯 Implement actual SQLite functionality (replace stubs)
 - 🎯 Complete Node.js API compatibility
 - 🎯 Comprehensive test coverage
 
-**Long term:**  
+**Long term:**
+
 - 🎯 Automated upstream synchronization
 - 🎯 Performance optimizations
 - 🎯 Extension ecosystem

@@ -8,6 +8,7 @@ namespace sqlite {
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   DatabaseSync::Init(env, exports);
   StatementSync::Init(env, exports);
+  StatementSyncIterator::Init(env, exports);
   
   // Add SQLite constants
   Napi::Object constants = Napi::Object::New(env);

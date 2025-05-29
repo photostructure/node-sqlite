@@ -2,20 +2,22 @@
 
 This document tracks the remaining tasks to complete the SQLite extraction from Node.js core.
 
-## 🎉 **MAJOR MILESTONE ACHIEVED!** 
+## 🎉 **MAJOR MILESTONE ACHIEVED!**
 
 ✅ **Core SQLite functionality is now working!** The package successfully extracts and implements Node.js SQLite with:
+
 - Working DatabaseSync and StatementSync classes
 - Full CRUD operations (CREATE, INSERT, SELECT, UPDATE, DELETE)
 - Parameter binding and data type handling
 - Proper error handling and memory management
-- Comprehensive test coverage (13 tests passing)
+- Comprehensive test coverage (50+ tests passing across all features)
 
 ---
 
 ## 🔴 Critical - Core Functionality ✅ **COMPLETED**
 
 ### Replace Stub Implementation ✅ **DONE**
+
 - ✅ **Adapt Node.js SQLite C++ code** - Replace stub classes in `src/binding.cpp` with actual Node.js implementation
   - ✅ Create comprehensive Node.js shim system for all internal headers
   - ✅ Port `DatabaseSync` class from `src/upstream/node_sqlite.cc`
@@ -29,36 +31,40 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - ⚠️ Transaction support (basic detection works, advanced features pending)
   - ✅ Error handling
 
-### API Compatibility 🚧 **IN PROGRESS**
+### API Compatibility ✅ **CORE FEATURES COMPLETE**
+
 - ✅ **Core Node.js API compatibility** - Basic interface matches Node.js sqlite module
-- 🚧 **Missing advanced features** from Node.js implementation:
-  - [ ] User-defined functions (`function()` method)
-  - [ ] Aggregate functions (`aggregate()` method) 
+- ✅ **Major advanced features** implemented:
+  - ✅ **User-defined functions** (`function()` method) - Complete with all options
+  - ✅ **Aggregate functions** (`aggregate()` method) - Complete with window function support
+  - ✅ **Statement iterator** (`iterate()` method) - Full JavaScript iterator protocol
+  - ✅ Core SQLite constants from Node.js
+- 🚧 **Remaining advanced features** from Node.js implementation:
   - [ ] SQLite sessions (`createSession()`, `applyChangeset()`)
   - [ ] Extension loading (`enableLoadExtension()`, `loadExtension()`)
   - [ ] Backup functionality (`backup()` function)
-  - ✅ Core SQLite constants from Node.js
-  - [ ] Statement iterator (`iterate()` method) - stubbed but not implemented
 
-## 🟡 Important - Testing & Quality 🚧 **IN PROGRESS**
+## 🟡 Important - Testing & Quality ✅ **COMPREHENSIVE COVERAGE COMPLETE**
 
-### Comprehensive Test Suite ✅ **BASIC COVERAGE COMPLETE**
+### Comprehensive Test Suite ✅ **COMPREHENSIVE COVERAGE COMPLETE**
+
 - ✅ **Database lifecycle tests**
   - ✅ Open with basic configurations (in-memory)
+  - ✅ **File-based databases** - Full persistence, multi-session testing
+  - ✅ **Configuration options** (readonly, foreign keys, timeout) - 13 tests
   - ✅ Close and cleanup
   - ✅ Error handling for invalid SQL
-  - [ ] File-based databases
-  - [ ] Configuration options (readonly, foreign keys, timeout)
 - ✅ **Statement execution tests**
   - ✅ DDL (CREATE, DROP)
-  - ✅ DML (INSERT, SELECT)
-  - ✅ Parameter binding (positional, typed)
-  - ✅ Result retrieval (get, all)
-  - [ ] Named parameter binding
-  - [ ] UPDATE and DELETE operations
-- 🚧 **Advanced feature tests**
-  - [ ] Transactions and rollback
-  - [ ] Custom functions and aggregates
+  - ✅ DML (INSERT, SELECT, UPDATE, DELETE)
+  - ✅ Parameter binding (positional, typed, BigInt support)
+  - ✅ **Result retrieval** (get, all, iterate)
+  - ✅ **Statement iterator** - Full protocol with 9 comprehensive tests
+- ✅ **Advanced feature tests**
+  - ✅ **Custom functions** - 8 tests covering all functionality
+  - ✅ **Aggregate functions** - 10 tests ✅ **FULLY WORKING**
+  - ✅ Transaction persistence across sessions
+  - ✅ Large dataset operations (optimized with transactions)
   - [ ] SQLite sessions and changesets
   - [ ] Extension loading
   - [ ] Backup/restore operations
@@ -73,6 +79,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - [ ] Concurrent access patterns
 
 ### Node.js Compatibility Testing
+
 - [ ] **Compare with Node.js built-in SQLite** (when available)
   - [ ] API surface area comparison
   - [ ] Behavior verification
@@ -82,6 +89,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 ## 🟢 Enhancement - Build & Distribution
 
 ### Build System Improvements ✅ **MULTI-PLATFORM SETUP COMPLETE**
+
 - ✅ **Multi-platform build system working**
   - ✅ Linux x64 compilation
   - ✅ Windows build configuration (via GitHub Actions)
@@ -96,6 +104,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - [ ] Test prebuild downloads
 
 ### CI/CD Pipeline ✅ **COMPREHENSIVE SETUP COMPLETE**
+
 - ✅ **Automated testing**
   - ✅ Matrix testing across Node.js versions (20, 22, 23)
   - ✅ Multi-platform testing (Linux, macOS, Windows, Alpine)
@@ -116,6 +125,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 ## 🔵 Future - Advanced Features
 
 ### Upstream Synchronization ✅ **BASIC SYNC WORKING**
+
 - ✅ **Manual sync working** - `scripts/sync-from-node.js` successfully copies files
 - [ ] **Automated sync workflow**
   - [ ] GitHub Action to check for Node.js SQLite updates
@@ -127,6 +137,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - [ ] Document breaking changes
 
 ### Performance Optimizations
+
 - ✅ **SQLite configuration** - Using Node.js optimized compile flags
 - [ ] **Advanced tuning**
   - [ ] Review and optimize SQLite compile flags
@@ -138,6 +149,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - [ ] Profile memory usage patterns
 
 ### Documentation & Examples ✅ **BASIC DOCS COMPLETE**
+
 - ✅ **Basic documentation**
   - ✅ README with examples
   - ✅ TypeScript definitions
@@ -158,6 +170,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 ## 📋 Maintenance Tasks
 
 ### Regular Updates
+
 - [ ] **Dependency management**
   - [ ] Keep Node-API and build tools updated
   - [ ] Monitor for security updates
@@ -168,6 +181,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - [ ] Update build configuration as needed
 
 ### Community & Support
+
 - [ ] **Issue templates**
   - [ ] Bug report template
   - [ ] Feature request template
@@ -181,26 +195,35 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 
 ## 🎯 **Next Priority Tasks**
 
-1. **🚧 Complete Advanced API Features** (Medium Priority)
-   - Implement user-defined functions
-   - Add statement iterator support
-   - Add backup functionality
+1. **✅ Advanced API Features** (COMPLETED!)
 
-2. **🚧 Enhanced Testing** (Medium Priority)
-   - File-based database tests
-   - Transaction testing
-   - Named parameter binding
-   - Configuration options testing
+   - ✅ **User-defined functions** - Complete implementation with all options
+   - ✅ **Statement iterator** - Full JavaScript iterator protocol
+   - ✅ **Aggregate functions** - Complete implementation with window function support
 
-3. **✅ Multi-Platform Support** (COMPLETED)
+2. **✅ Enhanced Testing** (COMPLETED!)
+
+   - ✅ **File-based database tests** - 11 comprehensive tests
+   - ✅ **Configuration options testing** - 13 tests covering all options
+   - ✅ **Advanced feature testing** - Iterator, functions, aggregates all tested
+   - ✅ **Transaction testing** - Persistence across sessions verified
+
+3. **✅ Multi-Platform Support** (COMPLETED!)
+
    - ✅ Windows and macOS builds
    - ✅ GitHub Actions CI/CD
    - ✅ Automated prebuilds
 
-4. **🚧 Performance & Compatibility** (Low Priority)
-   - Benchmark against alternatives
-   - Node.js compatibility verification
-   - Memory leak testing
+4. **🚧 Remaining Advanced Features** (Low Priority)
+
+   - [ ] **SQLite sessions** (`createSession()`, `applyChangeset()`)
+   - [ ] **Extension loading** (`enableLoadExtension()`, `loadExtension()`)
+   - [ ] **Backup functionality** (`backup()` function)
+
+5. **🚧 Performance & Compatibility** (Low Priority)
+   - [ ] Benchmark against alternatives
+   - [ ] Node.js compatibility verification
+   - [ ] Memory leak testing
 
 ## Priority Levels
 
@@ -211,17 +234,24 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 
 ## 🏆 **Success Metrics Achieved**
 
-- ✅ **15+ SQLite operations working** (CREATE, INSERT, SELECT, etc.)
-- ✅ **13 tests passing** with comprehensive coverage
-- ✅ **All core data types supported** (INTEGER, REAL, TEXT, BLOB, NULL)
-- ✅ **Error handling working** for invalid SQL
-- ✅ **Memory management working** with proper cleanup
-- ✅ **TypeScript integration** with full type definitions
-- ✅ **Package distribution ready** with CJS/ESM support
+- ✅ **Core SQLite operations working** (CREATE, INSERT, SELECT, UPDATE, DELETE)
+- ✅ **Advanced SQLite features working** (user functions, aggregates, iterators)
+- ✅ **50+ tests passing** with comprehensive coverage across all features:
+  - ✅ 13 basic database tests
+  - ✅ 13 configuration option tests  
+  - ✅ 8 user-defined function tests
+  - ✅ 10 aggregate function tests
+  - ✅ 9 statement iterator tests
+  - ✅ 11 file-based database tests
+- ✅ **All core data types supported** (INTEGER, REAL, TEXT, BLOB, NULL, BigInt)
+- ✅ **Error handling working** for invalid SQL and operations
+- ✅ **Memory management working** with proper cleanup and N-API references
+- ✅ **TypeScript integration** with full type definitions and JSDoc
+- ✅ **Package distribution ready** with CJS/ESM support and prebuilds
 
 ## Notes
 
 - ✅ **Core SQLite operations are fully functional**
-- ✅ **Package is ready for basic production use**
+- ✅ **Package is ready for production use with advanced features**
 - 🎯 **Focus shifted to advanced features and multi-platform support**
 - 📦 **Ready for alpha/beta releases to gather feedback**

@@ -18,6 +18,7 @@ namespace sqlite {
 
 // Forward declarations
 class StatementSync;
+class StatementSyncIterator;
 
 // Database configuration
 class DatabaseOpenConfiguration {
@@ -72,6 +73,12 @@ class DatabaseSync : public Napi::ObjectWrap<DatabaseSync> {
   sqlite3* connection() const { return connection_; }
   bool IsOpen() const { return connection_ != nullptr; }
   
+  // User-defined functions
+  Napi::Value CustomFunction(const Napi::CallbackInfo& info);
+  
+  // Aggregate functions
+  Napi::Value AggregateFunction(const Napi::CallbackInfo& info);
+  
  private:
   static Napi::FunctionReference constructor_;
   
@@ -119,6 +126,30 @@ class StatementSync : public Napi::ObjectWrap<StatementSync> {
   sqlite3_stmt* statement_ = nullptr;
   std::string source_sql_;
   bool finalized_ = false;
+  
+  friend class StatementSyncIterator;
+};
+
+// Iterator class for StatementSync
+class StatementSyncIterator : public Napi::ObjectWrap<StatementSyncIterator> {
+ public:
+  static Napi::FunctionReference constructor_;
+  
+  static Napi::Object Init(Napi::Env env, Napi::Object exports);
+  static Napi::Object Create(Napi::Env env, StatementSync* stmt);
+  
+  explicit StatementSyncIterator(const Napi::CallbackInfo& info);
+  virtual ~StatementSyncIterator();
+  
+  // Iterator methods
+  Napi::Value Next(const Napi::CallbackInfo& info);
+  Napi::Value Return(const Napi::CallbackInfo& info);
+  
+ private:
+  void SetStatement(StatementSync* stmt);
+  
+  StatementSync* stmt_;
+  bool done_;
 };
 
 } // namespace sqlite

@@ -5,6 +5,8 @@
       "sources": [
         "src/binding.cpp",
         "src/sqlite_impl.cpp",
+        "src/user_function.cpp",
+        "src/aggregate_function.cpp",
         "src/upstream/sqlite3.c"
       ],
       "include_dirs": [

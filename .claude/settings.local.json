@@ -1,3 +1,14 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(find:*)",
+      "Bash(rg:*)",
+      "Bash(npm run:*)",
+      "Bash(npm test:*)",
+      "WebFetch(domain:nodejs.org)",
+      "Bash(node:*)"
+    ]
+  },
   "enableAllProjectMcpServers": false
 }
