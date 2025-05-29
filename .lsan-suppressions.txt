@@ -1,0 +1,81 @@
+# LeakSanitizer suppressions for node-sqlite
+# Suppress known leaks in V8, Node.js, and system libraries
+
+# V8 internal allocations
+leak:v8::internal::
+leak:v8::base::
+leak:v8::platform::
+
+# Node.js internals
+leak:node::
+leak:node::loader::
+leak:node::binding::
+leak:node::options_parser::
+leak:node::per_process::
+leak:node::InitializeOncePerProcess
+leak:node::InitializeNodeWithArgs
+leak:node::CreateEnvironment
+leak:node::LoadEnvironment
+
+# N-API and node-addon-api
+leak:napi_
+leak:Napi::
+
+# pthread and thread-local storage
+leak:pthread_create
+leak:pthread_setspecific
+leak:pthread_key_create
+leak:__pthread_once
+leak:__pthread_key_create
+
+# Dynamic loading
+leak:dlopen
+leak:dlsym
+leak:_dl_init
+leak:_dl_open
+leak:_dl_catch_error
+
+# libc internals
+leak:__libc_start_main
+leak:__static_initialization_and_destruction
+leak:__cxa_atexit
+leak:__new_exitfn
+
+# libuv
+leak:uv_
+leak:uv__
+
+# OpenSSL
+leak:CRYPTO_
+leak:OPENSSL_
+leak:SSL_
+leak:ERR_
+leak:EVP_
+
+# ICU
+leak:icu::
+leak:icu_
+leak:ucnv_
+leak:u_init
+
+# GLib/GIO (for Linux systems)
+leak:g_type_init
+leak:g_type_register
+leak:g_io_module_load
+leak:g_object_new
+leak:g_slice_alloc
+leak:g_malloc
+leak:g_thread_pool_new
+
+# DBus (for Linux systems)
+leak:dbus_
+leak:_dbus_
+
+# SQLite global initialization (if any)
+leak:sqlite3_initialize
+leak:sqlite3_config
+
+# System libraries
+leak:libstdc++
+leak:libgcc_s.so
+leak:ld-linux

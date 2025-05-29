@@ -1,0 +1,69 @@
+---
+# Clang-tidy configuration for node-sqlite
+# Focus on C++ best practices and common issues
+
+Checks: '
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-branch-clone,
+  cert-*,
+  -cert-err58-cpp,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-union-access,
+  -cppcoreguidelines-special-member-functions,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  google-*,
+  -google-build-using-namespace,
+  -google-readability-casting,
+  -google-runtime-references,
+  hicpp-*,
+  -hicpp-special-member-functions,
+  -hicpp-signed-bitwise,
+  misc-*,
+  -misc-non-private-member-variables-in-classes,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  performance-*,
+  readability-*,
+  -readability-else-after-return,
+  -readability-magic-numbers,
+  -readability-named-parameter,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+'
+
+# Treat warnings as errors for CI
+WarningsAsErrors: ''
+
+# Header filter - only check our headers, not system/node headers
+HeaderFilterRegex: '^((?!node_modules|vendored|upstream|shims).)*\.(h|hpp)$'
+
+# Format style
+FormatStyle: google
+
+# Check options
+CheckOptions:
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.MemberCase
+    value: lower_case_
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: performance-move-const-arg.CheckTriviallyCopyableMove
+    value: false
+  - key: modernize-use-override.IgnoreDestructors
+    value: true

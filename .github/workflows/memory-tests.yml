@@ -1,0 +1,92 @@
+name: Memory Tests (Comprehensive)
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Run comprehensive memory tests weekly on Monday at 3 AM UTC
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+jobs:
+  memory-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind gcc g++ clang clang-tidy
+      
+      - name: Install Node dependencies
+        run: npm ci
+      
+      - name: Build project
+        run: npm run build
+      
+      - name: Run JavaScript memory tests
+        run: npm run test:memory
+      
+      - name: Run valgrind tests
+        run: bash scripts/valgrind.sh
+          
+      - name: Run AddressSanitizer tests
+        run: npm run asan
+        continue-on-error: true
+          
+      - name: Upload ASAN output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: asan-output
+          path: asan-output.log
+          if-no-files-found: ignore
+      
+      - name: Run clang-tidy
+        run: npm run clang-tidy
+
+  memory-tests-full:
+    # Run more comprehensive memory tests on main branch only
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind gcc g++ clang clang-tidy clang-tools
+      
+      - name: Install Node dependencies
+        run: npm ci
+      
+      - name: Build project
+        run: npm run build
+      
+      - name: Run full memory test suite
+        run: npm run tests:memory
+      
+      - name: Run ASAN with full test suite
+        run: |
+          ENABLE_ASAN=1 npm run tests:memory
+          
+      - name: Upload memory test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-test-results
+          path: |
+            asan-output.log
+            valgrind-*.log
+          if-no-files-found: ignore

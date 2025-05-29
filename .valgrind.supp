@@ -1,0 +1,149 @@
+# Valgrind suppressions for node-sqlite
+# These suppress known issues in V8, Node.js, and system libraries
+
+# V8 uninitialized memory in GC
+{
+   V8_GC_Uninitialized_1
+   Memcheck:Cond
+   ...
+   fun:_ZN2v88internal*
+}
+
+{
+   V8_GC_Uninitialized_2
+   Memcheck:Value8
+   ...
+   fun:_ZN2v88internal*
+}
+
+# V8 compiler uninitialized memory
+{
+   V8_Compiler_Uninitialized
+   Memcheck:Cond
+   ...
+   fun:_ZN2v88internal8compiler*
+}
+
+# Node.js platform reachable memory
+{
+   Node_Platform_Reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_ZN4node*Platform*
+}
+
+# Node.js worker threads
+{
+   Node_Worker_Threads
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_ZN4node6worker*
+}
+
+# ICU library reachable memory
+{
+   ICU_Reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   obj:*/libicuuc.so*
+}
+
+{
+   ICU_Data_Reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   obj:*/libicudata.so*
+}
+
+# OpenSSL initialization
+{
+   OpenSSL_Init
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   obj:*/libcrypto.so*
+}
+
+# pthread thread-local storage
+{
+   pthread_TLS
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:pthread_*
+}
+
+# dlopen and dynamic loading
+{
+   dlopen_Reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:dlopen*
+}
+
+# GLib/GIO for Linux systems
+{
+   GLib_Type_Init
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:g_type_init*
+}
+
+{
+   GIO_Module_Load
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:g_io_module_load*
+}
+
+# DBus for Linux systems  
+{
+   DBus_Connection
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   obj:*/libdbus-1.so*
+}
+
+# V8 API callbacks
+{
+   V8_API_Callback
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_ZN2v88internal12_GLOBAL__N_116InstallFunctions*
+}
+
+# Node.js module loading
+{
+   Node_Module_Load
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_ZN4node6loader*
+}
+
+# SQLite internal allocations (if any are intentionally leaked)
+{
+   SQLite_Global_Init
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:sqlite3_initialize
+}
+
+# N-API reference counting
+{
+   NAPI_Reference
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:napi_create_reference
+}

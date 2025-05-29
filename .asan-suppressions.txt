@@ -1,0 +1,11 @@
+# AddressSanitizer suppressions for node-sqlite
+# Suppress interceptor issues with pthread and dynamic loading
+
+interceptor_via_fun:pthread_create
+interceptor_via_fun:pthread_join
+interceptor_via_fun:pthread_detach
+interceptor_via_fun:pthread_exit
+interceptor_via_fun:dlopen
+interceptor_via_fun:dlsym
+interceptor_via_fun:dlclose
+interceptor_via_fun:__tls_get_addr
