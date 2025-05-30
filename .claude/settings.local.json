@@ -24,7 +24,9 @@
       "Bash(tsx:*)",
       "Bash(npx tsx:*)",
       "Bash(npm rebuild:*)",
-      "Bash(valgrind:*)"
+      "Bash(valgrind:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:google.github.io)"
     ]
   },
   "enableAllProjectMcpServers": false

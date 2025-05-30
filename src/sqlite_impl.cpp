@@ -1161,6 +1161,10 @@ StatementSync::StatementSync(const Napi::CallbackInfo &info)
 
 void StatementSync::InitStatement(DatabaseSync *database,
                                   const std::string &sql) {
+  if (!database || !database->IsOpen()) {
+    throw std::runtime_error("Database is not open");
+  }
+
   database_ = database;
   source_sql_ = sql;
 
@@ -1186,6 +1190,11 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
 
   if (finalized_) {
     node::THROW_ERR_INVALID_STATE(env, "Statement has been finalized");
+    return env.Undefined();
+  }
+
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
     return env.Undefined();
   }
 
@@ -1232,6 +1241,11 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
   try {
     Reset();
     BindParameters(info);
@@ -1258,6 +1272,11 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
 
   if (finalized_) {
     node::THROW_ERR_INVALID_STATE(env, "Statement has been finalized");
+    return env.Undefined();
+  }
+
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
     return env.Undefined();
   }
 
@@ -1295,6 +1314,11 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
     return info.Env().Undefined();
   }
 
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(info.Env(), "Database connection is closed");
+    return info.Env().Undefined();
+  }
+
   // Reset the statement first
   int r = sqlite3_reset(statement_);
   if (r != SQLITE_OK) {
@@ -1312,6 +1336,8 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
 
 Napi::Value StatementSync::FinalizeStatement(const Napi::CallbackInfo &info) {
   if (statement_ && !finalized_) {
+    // It's safe to finalize even if database is closed
+    // SQLite handles this gracefully
     sqlite3_finalize(statement_);
     statement_ = nullptr;
     finalized_ = true;
@@ -1324,6 +1350,16 @@ Napi::Value StatementSync::SourceSQLGetter(const Napi::CallbackInfo &info) {
 }
 
 Napi::Value StatementSync::ExpandedSQLGetter(const Napi::CallbackInfo &info) {
+  if (finalized_) {
+    node::THROW_ERR_INVALID_STATE(info.Env(), "Statement has been finalized");
+    return info.Env().Undefined();
+  }
+
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(info.Env(), "Database connection is closed");
+    return info.Env().Undefined();
+  }
+
   if (statement_) {
     char *expanded = sqlite3_expanded_sql(statement_);
     if (expanded) {
@@ -1343,6 +1379,11 @@ Napi::Value StatementSync::SetReadBigInts(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
   if (info.Length() < 1 || !info[0].IsBoolean()) {
     node::THROW_ERR_INVALID_ARG_TYPE(
         env, "The \"readBigInts\" argument must be a boolean.");
@@ -1358,6 +1399,11 @@ Napi::Value StatementSync::SetReturnArrays(const Napi::CallbackInfo &info) {
 
   if (finalized_) {
     node::THROW_ERR_INVALID_STATE(env, "The statement has been finalized");
+    return env.Undefined();
+  }
+
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
     return env.Undefined();
   }
 
@@ -1380,6 +1426,11 @@ StatementSync::SetAllowBareNamedParameters(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
   if (info.Length() < 1 || !info[0].IsBoolean()) {
     node::THROW_ERR_INVALID_ARG_TYPE(
         env, "The \"allowBareNamedParameters\" argument must be a boolean.");
@@ -1395,6 +1446,11 @@ Napi::Value StatementSync::Columns(const Napi::CallbackInfo &info) {
 
   if (finalized_) {
     node::THROW_ERR_INVALID_STATE(env, "The statement has been finalized");
+    return env.Undefined();
+  }
+
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
     return env.Undefined();
   }
 
@@ -1453,6 +1509,17 @@ Napi::Value StatementSync::Columns(const Napi::CallbackInfo &info) {
 void StatementSync::BindParameters(const Napi::CallbackInfo &info,
                                    size_t start_index) {
   Napi::Env env = info.Env();
+
+  // Safety checks
+  if (finalized_) {
+    node::THROW_ERR_INVALID_STATE(env, "Statement has been finalized");
+    return;
+  }
+
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return;
+  }
 
   // Check if we have a single object for named parameters
   if (info.Length() == start_index + 1 && info[start_index].IsObject() &&
@@ -1524,6 +1591,11 @@ void StatementSync::BindParameters(const Napi::CallbackInfo &info,
 }
 
 void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
+  // Safety check - statement_ should be valid if we got here
+  if (!statement_ || finalized_) {
+    return; // Silent return since error was already thrown by caller
+  }
+
   if (param.IsNull() || param.IsUndefined()) {
     sqlite3_bind_null(statement_, param_index);
   } else if (param.IsBigInt()) {
@@ -1564,6 +1636,18 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
 
 Napi::Value StatementSync::CreateResult() {
   Napi::Env env = Env();
+
+  // Safety checks
+  if (!statement_ || finalized_) {
+    node::THROW_ERR_INVALID_STATE(env, "Statement has been finalized");
+    return env.Undefined();
+  }
+
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
   int column_count = sqlite3_column_count(statement_);
 
   if (return_arrays_) {
@@ -1670,6 +1754,11 @@ Napi::Value StatementSync::CreateResult() {
 }
 
 void StatementSync::Reset() {
+  // Safety check
+  if (!statement_ || finalized_) {
+    return; // Silent return, error should have been caught earlier
+  }
+
   sqlite3_reset(statement_);
   sqlite3_clear_bindings(statement_);
 }
@@ -1728,6 +1817,11 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (!stmt_->database_ || !stmt_->database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
   if (done_) {
     Napi::Object result = Napi::Object::New(env);
     result.Set("done", true);
@@ -1768,6 +1862,11 @@ Napi::Value StatementSyncIterator::Return(const Napi::CallbackInfo &info) {
 
   if (!stmt_ || stmt_->finalized_) {
     node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
+    return env.Undefined();
+  }
+
+  if (!stmt_->database_ || !stmt_->database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
     return env.Undefined();
   }
 

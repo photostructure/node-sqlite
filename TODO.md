@@ -56,7 +56,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - ✅ Constraint violations - 10 comprehensive tests including CASCADE, deferred, CONFLICT clauses
   - ✅ STRICT tables - 17 comprehensive tests for type enforcement and constraints
   - [ ] Resource limits
-  - ✅ Invalid operations - 23 tests covering edge cases and error scenarios
+  - ✅ Invalid operations - 35 tests covering edge cases, error scenarios, and potential segfault conditions
 - ✅ **Memory and performance tests**
   - ✅ Large dataset handling (multiple memory tests for bulk operations)
   - ✅ Memory leak detection (valgrind, ASAN, JavaScript memory tests)
@@ -285,7 +285,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 
 - ✅ **Core SQLite operations working** (CREATE, INSERT, SELECT, UPDATE, DELETE)
 - ✅ **Advanced SQLite features working** (user functions, aggregates, iterators, sessions, backup, and enhanced location method all fully functional)
-- ✅ **268 tests passing** with comprehensive coverage across all features:
+- ✅ **280 tests passing** with comprehensive coverage across all features:
   - ✅ 13 basic database tests
   - ✅ 13 configuration option tests
   - ✅ 8 user-defined function tests
@@ -301,7 +301,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - ✅ 10 enhanced location method tests (with attached database support)
   - ✅ 26 error handling tests (with constraint violations and recovery)
   - ✅ 17 STRICT tables tests (with type enforcement and constraints)
-  - ✅ 23 invalid operations tests (with edge cases and error scenarios)
+  - ✅ 35 invalid operations tests (with edge cases, error scenarios, and potential segfault conditions)
 - ✅ **All core data types supported** (INTEGER, REAL, TEXT, BLOB, NULL, BigInt)
 - ✅ **Error handling working** for invalid SQL and operations
 - ✅ **Memory management working** with proper cleanup and N-API references
@@ -311,59 +311,32 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 ## 🚧 Remaining Tasks
 
 ### High Priority
+
 - [ ] **Upload prebuilds to GitHub releases** - Enable automatic distribution
 - [ ] **Test prebuild downloads** - Verify installation works correctly
 
-### Medium Priority  
+### Medium Priority
+
 - [ ] **Resource limits testing** - Test SQLite resource limit handling
-- [x] **Invalid operations testing** - ✅ Comprehensive tests for error scenarios (23 tests)
+- ✅ **Invalid operations testing** - Comprehensive tests for error scenarios (35 tests)
 - [ ] **Concurrent access patterns** - Test multi-process/thread scenarios
-- [ ] **Fix segmentation faults** - Handle gracefully instead of crashing:
-  - [ ] Using statements after closing database (test/invalid-operations.test.ts line 155)
-  - [ ] Using iterators after finalizing statements (test/invalid-operations.test.ts line 515)
-  - [ ] Statement memory after database close (test/invalid-operations.test.ts line 455)
+- ✅ **Fix segmentation faults** - All use-after-free cases now handled gracefully:
+  - ✅ Using statements after closing database - throws "Database connection is closed"
+  - ✅ Using iterators after finalizing statements - throws "statement has been finalized"
+  - ✅ Statement memory after database close - throws "Database connection is closed"
 
 ### Low Priority
+
 - [ ] **Error message compatibility** - Match Node.js error formatting exactly
 - [ ] **Enhanced memory tracking** - Node.js-style memory management
 
 ### Future Enhancements
+
 - [ ] **Automated upstream sync workflow** - GitHub Action for Node.js updates
 - [ ] **Compare with Node.js built-in SQLite** - When it becomes stable
 - [ ] **Migration guides** - From other SQLite libraries
 - [ ] **Performance tuning guide** - Advanced optimization tips
 - [ ] **Example applications repository** - Real-world usage examples
-
-## ⚠️ Known Issues - Segmentation Faults
-
-The following operations cause segmentation faults and should be fixed to throw proper errors instead:
-
-1. **Using statements after closing database**
-   ```javascript
-   const db = new DatabaseSync(":memory:");
-   const stmt = db.prepare("SELECT 1");
-   db.close();
-   stmt.run(); // SEGFAULT - should throw "Database closed" error
-   ```
-
-2. **Using iterators after finalizing statements**
-   ```javascript
-   const db = new DatabaseSync(":memory:");
-   const stmt = db.prepare("SELECT 1");
-   const iterator = stmt.iterate();
-   stmt.finalize();
-   iterator.next(); // SEGFAULT - should throw "Statement finalized" error
-   ```
-
-3. **Statement memory after database close**
-   ```javascript
-   const db = new DatabaseSync(":memory:");
-   const stmt = db.prepare("SELECT ?");
-   db.close();
-   stmt.run("test"); // SEGFAULT - should throw "Database closed" error
-   ```
-
-These are documented in `test/invalid-operations.test.ts` with `.skip` tests.
 
 ## Notes
 
