@@ -31,8 +31,8 @@ describe("Enhanced location() method tests", () => {
 
   test("location() returns main database path by default", () => {
     const db = new DatabaseSync(dbPath);
-    expect(db.location()).toBe(dbPath);
-    expect(db.location("main")).toBe(dbPath);
+    expect(db.location()).toBe(fs.realpathSync(dbPath));
+    expect(db.location("main")).toBe(fs.realpathSync(dbPath));
     db.close();
   });
 
@@ -50,11 +50,11 @@ describe("Enhanced location() method tests", () => {
     db.exec(`ATTACH DATABASE '${attachedDbPath}' AS attached_db`);
 
     // Main database should still return the main path
-    expect(db.location()).toBe(dbPath);
-    expect(db.location("main")).toBe(dbPath);
+    expect(db.location()).toBe(fs.realpathSync(dbPath));
+    expect(db.location("main")).toBe(fs.realpathSync(dbPath));
 
     // Attached database should return its path
-    expect(db.location("attached_db")).toBe(attachedDbPath);
+    expect(db.location("attached_db")).toBe(fs.realpathSync(attachedDbPath));
 
     db.close();
   });
@@ -78,8 +78,8 @@ describe("Enhanced location() method tests", () => {
       db.exec(`ATTACH DATABASE '${secondAttachedPath}' AS second_attached`);
 
       // Test all database locations
-      expect(db.location()).toBe(dbPath);
-      expect(db.location("main")).toBe(dbPath);
+      expect(db.location()).toBe(fs.realpathSync(dbPath));
+      expect(db.location("main")).toBe(fs.realpathSync(dbPath));
       expect(db.location("first_attached")).toBe(attachedDbPath);
       expect(db.location("second_attached")).toBe(secondAttachedPath);
 
@@ -123,13 +123,13 @@ describe("Enhanced location() method tests", () => {
 
     // Attach and then detach a database
     db.exec(`ATTACH DATABASE '${attachedDbPath}' AS temp_db`);
-    expect(db.location("temp_db")).toBe(attachedDbPath);
+    expect(db.location("temp_db")).toBe(fs.realpathSync(attachedDbPath));
 
     db.exec("DETACH DATABASE temp_db");
     expect(db.location("temp_db")).toBeNull();
 
     // Main database should still work
-    expect(db.location()).toBe(dbPath);
+    expect(db.location()).toBe(fs.realpathSync(dbPath));
 
     db.close();
   });
@@ -157,7 +157,7 @@ describe("Enhanced location() method tests", () => {
     const specialPath = path.join(tempDir, "special-db_123.db");
     db.exec(`ATTACH DATABASE '${specialPath}' AS "special_db_123"`);
 
-    expect(db.location("special_db_123")).toBe(specialPath);
+    expect(db.location("special_db_123")).toBe(fs.realpathSync(specialPath));
 
     db.close();
 

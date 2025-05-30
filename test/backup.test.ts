@@ -62,7 +62,7 @@ describe("Backup functionality", () => {
         retryDelay: 500,
       });
     }
-  });
+  }, 10000); // Increase timeout to 10 seconds
 
   it("should create a backup of the database", async () => {
     // Perform backup

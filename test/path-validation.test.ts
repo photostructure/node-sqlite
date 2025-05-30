@@ -12,8 +12,18 @@ describe("Path Validation", () => {
   });
 
   afterEach(async () => {
+    // Wait for Windows file handles to be released
+    if (process.platform === "win32") {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
     if (tmpDir) {
-      await rm(tmpDir, { recursive: true, force: true });
+      await rm(tmpDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 500,
+      });
     }
   });
 
@@ -138,6 +148,7 @@ describe("Path Validation", () => {
 
   describe("Backup path validation", () => {
     let sourceDb: DatabaseSyncInstance;
+    const openDbs: DatabaseSyncInstance[] = [];
 
     beforeEach(() => {
       sourceDb = new DatabaseSync(":memory:");
@@ -145,9 +156,26 @@ describe("Path Validation", () => {
       sourceDb.exec("INSERT INTO test VALUES (1, 'test')");
     });
 
-    afterEach(() => {
-      if (sourceDb.isOpen) {
+    afterEach(async () => {
+      // Close all databases opened during tests
+      for (const db of openDbs) {
+        try {
+          if (db.isOpen) {
+            db.close();
+          }
+        } catch {
+          // Ignore close errors
+        }
+      }
+      openDbs.length = 0;
+
+      if (sourceDb?.isOpen) {
         sourceDb.close();
+      }
+
+      // Wait for Windows file handles to be released
+      if (process.platform === "win32") {
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
     });
 
@@ -157,6 +185,7 @@ describe("Path Validation", () => {
 
       // Verify backup was created
       const verifyDb = new DatabaseSync(destPath);
+      openDbs.push(verifyDb);
       const result = verifyDb.prepare("SELECT * FROM test").get();
       expect(result).toEqual({ id: 1, value: "test" });
       verifyDb.close();
@@ -169,6 +198,7 @@ describe("Path Validation", () => {
 
       // Verify backup was created
       const verifyDb = new DatabaseSync(destPath);
+      openDbs.push(verifyDb);
       const result = verifyDb.prepare("SELECT * FROM test").get();
       expect(result).toEqual({ id: 1, value: "test" });
       verifyDb.close();
@@ -181,6 +211,7 @@ describe("Path Validation", () => {
 
       // Verify backup was created
       const verifyDb = new DatabaseSync(destPath);
+      openDbs.push(verifyDb);
       const result = verifyDb.prepare("SELECT * FROM test").get();
       expect(result).toEqual({ id: 1, value: "test" });
       verifyDb.close();

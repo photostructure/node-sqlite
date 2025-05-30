@@ -181,7 +181,7 @@ describe("File-based Database Tests", () => {
 
     expect(db).toBeInstanceOf(DatabaseSync);
     expect(db.isOpen).toBe(true);
-    expect(db.location()).toBe(dbPath);
+    expect(db.location()).toBe(fs.realpathSync(dbPath));
     expect(fs.existsSync(dbPath)).toBe(true);
 
     db.close();
@@ -292,7 +292,7 @@ describe("File-based Database Tests", () => {
   test("database location property reflects actual path", () => {
     const db = new DatabaseSync(dbPath);
 
-    expect(db.location()).toBe(dbPath);
+    expect(db.location()).toBe(fs.realpathSync(dbPath));
 
     db.close();
   });
@@ -348,7 +348,7 @@ describe("Database Configuration Tests", () => {
     });
 
     expect(db.isOpen).toBe(true);
-    expect(db.location()).toBe(dbPath);
+    expect(db.location()).toBe(fs.realpathSync(dbPath));
 
     // Test that we can create tables (not readonly)
     expect(() => {
@@ -426,7 +426,7 @@ describe("Database Configuration Tests", () => {
     const db = new DatabaseSync(dbPath);
 
     expect(db.isOpen).toBe(true);
-    expect(db.location()).toBe(dbPath);
+    expect(db.location()).toBe(fs.realpathSync(dbPath));
 
     // Should be able to create and modify data (not readonly by default)
     db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY)");
@@ -607,7 +607,7 @@ describe("Database Configuration Tests", () => {
     });
 
     expect(db.isOpen).toBe(true);
-    expect(db.location()).toBe(dbPath);
+    expect(db.location()).toBe(fs.realpathSync(dbPath));
 
     // Should be able to read data
     const stmt = db.prepare("SELECT * FROM child WHERE id = ?");
@@ -641,7 +641,7 @@ describe("Database Configuration Tests", () => {
     });
 
     expect(db.isOpen).toBe(true);
-    expect(db.location()).toBe(dbPath);
+    expect(db.location()).toBe(fs.realpathSync(dbPath));
 
     // Should be readonly
     expect(() => {
