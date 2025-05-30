@@ -1,6 +1,7 @@
 #include "sqlite_impl.h"
 
 #include <algorithm>
+#include <cctype>
 #include <climits>
 #include <cmath>
 #include <iostream>
@@ -43,10 +44,168 @@ std::optional<std::string> ValidateDatabasePath(Napi::Env env, Napi::Value path,
         if (!has_null_bytes(location)) {
           // Check if it's a file:// URL
           if (location.compare(0, 7, "file://") == 0) {
-            // Convert file:// URL to file path
-            // Remove file:// prefix and return the path part
+            // Convert file:// URL to file path with proper validation
             std::string file_path = location.substr(7);
-            return file_path;
+
+            // Enhanced URL decoding with security checks
+            std::string decoded_path;
+            decoded_path.reserve(file_path.length());
+
+            // Maximum path length check (platform-specific, but 4096 is
+            // reasonable)
+            const size_t MAX_PATH_LENGTH = 4096;
+            if (file_path.length() > MAX_PATH_LENGTH) {
+              node::THROW_ERR_INVALID_ARG_TYPE(
+                  env,
+                  ("The \"" + field_name + "\" path is too long.").c_str());
+              return std::nullopt;
+            }
+
+            // URL decode with multiple passes to prevent double-encoding bypass
+            int decode_passes = 0;
+            const int MAX_DECODE_PASSES = 5; // Prevent infinite decoding loops
+            std::string current_path = file_path;
+            std::string next_path;
+
+            while (decode_passes < MAX_DECODE_PASSES) {
+              bool found_encoding = false;
+              next_path.clear();
+              next_path.reserve(current_path.length());
+
+              for (size_t i = 0; i < current_path.length(); ++i) {
+                if (current_path[i] == '%' && i + 2 < current_path.length()) {
+                  // Validate hex characters
+                  if (std::isxdigit(current_path[i + 1]) &&
+                      std::isxdigit(current_path[i + 2])) {
+                    char hex_str[3] = {current_path[i + 1], current_path[i + 2],
+                                       '\0'};
+                    long val = std::strtol(hex_str, nullptr, 16);
+
+                    // Special handling for control characters and dangerous
+                    // sequences
+                    if (val == 0) {
+                      node::THROW_ERR_INVALID_ARG_TYPE(
+                          env, ("The \"" + field_name +
+                                "\" contains encoded null bytes.")
+                                   .c_str());
+                      return std::nullopt;
+                    }
+
+                    next_path += static_cast<char>(val);
+                    i += 2;
+                    found_encoding = true;
+                  } else {
+                    // Invalid hex sequence, reject
+                    node::THROW_ERR_INVALID_ARG_TYPE(
+                        env, ("The \"" + field_name +
+                              "\" contains invalid percent encoding.")
+                                 .c_str());
+                    return std::nullopt;
+                  }
+                } else {
+                  next_path += current_path[i];
+                }
+              }
+
+              if (!found_encoding) {
+                decoded_path = current_path;
+                break;
+              }
+
+              current_path = next_path;
+              decode_passes++;
+            }
+
+            if (decode_passes >= MAX_DECODE_PASSES) {
+              node::THROW_ERR_INVALID_ARG_TYPE(
+                  env, ("The \"" + field_name +
+                        "\" contains too many levels of percent encoding.")
+                           .c_str());
+              return std::nullopt;
+            }
+
+            // Security: Check for null bytes after all decoding
+            if (has_null_bytes(decoded_path)) {
+              node::THROW_ERR_INVALID_ARG_TYPE(
+                  env, ("The \"" + field_name +
+                        "\" argument contains null bytes after URL decoding.")
+                           .c_str());
+              return std::nullopt;
+            }
+
+            // Security: Normalize path components to detect traversal attempts
+            // This includes various representations of ".."
+            std::vector<std::string> dangerous_patterns = {
+                "..", "/..", "../", "\\..", "..\\",
+                // Windows alternate stream syntax (but allow single colon for
+                // drive letters)
+                "::", "::$",
+                // Zero-width characters that might hide dangerous sequences
+                "\u200B", "\u200C", "\u200D", "\uFEFF"};
+
+            // Check each component after splitting by directory separators
+            std::string normalized_path = decoded_path;
+            std::replace(normalized_path.begin(), normalized_path.end(), '\\',
+                         '/');
+
+            // Split path and check each component
+            size_t start = 0;
+            size_t end = normalized_path.find('/');
+
+            while (end != std::string::npos) {
+              std::string component =
+                  normalized_path.substr(start, end - start);
+
+              // Check for dangerous patterns in component
+              if (component == "..") {
+                // Always reject ..
+                node::THROW_ERR_INVALID_ARG_TYPE(
+                    env, ("The \"" + field_name +
+                          "\" argument contains path traversal sequences.")
+                             .c_str());
+                return std::nullopt;
+              }
+
+              // Check for other dangerous patterns
+              for (const auto &pattern : dangerous_patterns) {
+                if (component.find(pattern) != std::string::npos) {
+                  node::THROW_ERR_INVALID_ARG_TYPE(
+                      env, ("The \"" + field_name +
+                            "\" argument contains dangerous sequences.")
+                               .c_str());
+                  return std::nullopt;
+                }
+              }
+
+              start = end + 1;
+              end = normalized_path.find('/', start);
+            }
+
+            // Check last component
+            if (start < normalized_path.length()) {
+              std::string component = normalized_path.substr(start);
+              if (component == "..") {
+                // Always reject ..
+                node::THROW_ERR_INVALID_ARG_TYPE(
+                    env, ("The \"" + field_name +
+                          "\" argument contains path traversal sequences.")
+                             .c_str());
+                return std::nullopt;
+              }
+
+              // Check for other dangerous patterns
+              for (const auto &pattern : dangerous_patterns) {
+                if (component.find(pattern) != std::string::npos) {
+                  node::THROW_ERR_INVALID_ARG_TYPE(
+                      env, ("The \"" + field_name +
+                            "\" argument contains dangerous sequences.")
+                               .c_str());
+                  return std::nullopt;
+                }
+              }
+            }
+
+            return decoded_path;
           } else {
             node::THROW_ERR_INVALID_URL_SCHEME(env);
             return std::nullopt;
@@ -838,30 +997,33 @@ Napi::Value DatabaseSync::CreateSession(const Napi::CallbackInfo &info) {
   return Session::Create(env, this, pSession);
 }
 
-// Static callbacks for changeset apply
-// Note: These need to be static because SQLite requires function pointers
-// TODO: Consider thread-safety implications
-static std::function<int(int)> g_conflictCallback;
-static std::function<bool(std::string)> g_filterCallback;
+// Context structure for changeset callbacks to avoid global state
+struct ChangesetCallbacks {
+  std::function<int(int)> conflictCallback;
+  std::function<bool(std::string)> filterCallback;
+  Napi::Env env;
+};
 
 static int xConflict(void *pCtx, int eConflict, sqlite3_changeset_iter *pIter) {
-  if (!g_conflictCallback)
+  if (!pCtx)
     return SQLITE_CHANGESET_OMIT;
-  return g_conflictCallback(eConflict);
+  ChangesetCallbacks *callbacks = static_cast<ChangesetCallbacks *>(pCtx);
+  if (!callbacks->conflictCallback)
+    return SQLITE_CHANGESET_OMIT;
+  return callbacks->conflictCallback(eConflict);
 }
 
 static int xFilter(void *pCtx, const char *zTab) {
-  if (!g_filterCallback)
+  if (!pCtx)
     return 1;
-  return g_filterCallback(zTab) ? 1 : 0;
+  ChangesetCallbacks *callbacks = static_cast<ChangesetCallbacks *>(pCtx);
+  if (!callbacks->filterCallback)
+    return 1;
+  return callbacks->filterCallback(zTab) ? 1 : 0;
 }
 
 Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
-
-  // Reset global callbacks
-  g_conflictCallback = nullptr;
-  g_filterCallback = nullptr;
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
@@ -873,6 +1035,9 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
         env, "The \"changeset\" argument must be a Buffer.");
     return env.Undefined();
   }
+
+  // Create callback context to avoid global state
+  ChangesetCallbacks callbacks{nullptr, nullptr, env};
 
   // Parse options if provided
   if (info.Length() > 1 && !info[1].IsUndefined()) {
@@ -895,7 +1060,8 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
         }
 
         Napi::Function conflictFunc = conflictValue.As<Napi::Function>();
-        g_conflictCallback = [env, conflictFunc](int conflictType) -> int {
+        callbacks.conflictCallback = [env,
+                                      conflictFunc](int conflictType) -> int {
           Napi::HandleScope scope(env);
           Napi::Value result =
               conflictFunc.Call({Napi::Number::New(env, conflictType)});
@@ -924,7 +1090,8 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
       }
 
       Napi::Function filterFunc = filterValue.As<Napi::Function>();
-      g_filterCallback = [env, filterFunc](std::string tableName) -> bool {
+      callbacks.filterCallback = [env,
+                                  filterFunc](std::string tableName) -> bool {
         Napi::HandleScope scope(env);
         Napi::Value result =
             filterFunc.Call({Napi::String::New(env, tableName)});
@@ -942,13 +1109,9 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
   // Get the changeset buffer
   Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
 
-  // Apply the changeset
+  // Apply the changeset with context instead of global state
   int r = sqlite3changeset_apply(connection_, buffer.Length(), buffer.Data(),
-                                 xFilter, xConflict, nullptr);
-
-  // Clean up callbacks
-  g_conflictCallback = nullptr;
-  g_filterCallback = nullptr;
+                                 xFilter, xConflict, &callbacks);
 
   if (r == SQLITE_OK) {
     return Napi::Boolean::New(env, true);
