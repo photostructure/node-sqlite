@@ -31,6 +31,14 @@ class Session;
 std::optional<std::string> ValidateDatabasePath(Napi::Env env, Napi::Value path,
                                                 const std::string &field_name);
 
+// Safe integer cast with bounds checking
+inline int SafeCastToInt(size_t value) {
+  if (value > static_cast<size_t>(INT_MAX)) {
+    throw std::overflow_error("Value too large to safely cast to int");
+  }
+  return static_cast<int>(value);
+}
+
 // Database configuration
 class DatabaseOpenConfiguration {
 public:
