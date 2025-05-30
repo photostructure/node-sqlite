@@ -4,10 +4,12 @@
 #include <napi.h>
 #include <sqlite3.h>
 
+#include <climits>
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 
 // Include our shims
