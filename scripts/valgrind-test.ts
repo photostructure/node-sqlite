@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "../dist/index.js";
+import { DatabaseSync } from "../src/index";
 
 console.log("Starting valgrind memory test for node-sqlite...");
 
