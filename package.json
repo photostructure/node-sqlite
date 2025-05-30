@@ -37,7 +37,7 @@
     "precommit:memory": "node -e \"if(process.platform!=='linux')process.exit(1)\" && npm run test:memory || echo 'Skipping memory tests (Linux only)'",
     "lint": "run-p lint:*",
     "lint:eslint": "eslint src/ test/",
-    "lint:api": "tsc --noEmit src/api-compatibility.test.ts",
+    "lint:api": "tsx scripts/check-api-compat.ts",
     "lint:scripts": "tsc --noEmit --module esnext --target es2022 --moduleResolution node --project scripts/tsconfig.json",
     "fmt": "run-p fmt:*",
     "fmt:prettier": "prettier --write \"**/*.{ts,js,mjs,json,md}\"",

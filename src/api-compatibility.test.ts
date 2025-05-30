@@ -1,10 +1,16 @@
 /**
  * This file uses TypeScript's type system to ensure our API is compatible with node:sqlite.
  * It maps our interface names to node:sqlite names and checks compatibility.
+ *
+ * Note: This file only performs type checking on Node.js 24 or later where node:sqlite is available.
+ * On earlier versions, the type imports will fail and this file should be excluded from compilation.
  */
 
-import * as NodeSqlite from "node:sqlite";
 import * as OurSqlite from "./index";
+
+// Only import node:sqlite types on Node.js 24+
+// @ts-ignore - This import may fail on older Node versions
+import * as NodeSqlite from "node:sqlite";
 
 // Type assertion helpers
 type _Equals<X, Y> =

@@ -7,13 +7,25 @@ import {
 let NodeSqlite: any = null;
 let nodeAvailable = false;
 
-try {
-  // Node.js SQLite requires the --experimental-sqlite flag
-  NodeSqlite = require("node:sqlite");
-  nodeAvailable = true;
-} catch {
+// Check Node.js version - only run on Node.js 24 (latest version with stable API)
+const nodeVersion = process.version;
+const majorVersion = parseInt(nodeVersion.split(".")[0].substring(1), 10);
+const isNode24 = majorVersion === 24;
+
+if (isNode24) {
+  try {
+    // Node.js SQLite requires the --experimental-sqlite flag
+    NodeSqlite = require("node:sqlite");
+    nodeAvailable = true;
+  } catch {
+    console.log(
+      "Node.js built-in SQLite not available - this is expected on most systems",
+    );
+    nodeAvailable = false;
+  }
+} else {
   console.log(
-    "Node.js built-in SQLite not available - this is expected on most systems",
+    `Skipping node:sqlite compatibility tests - requires Node.js 24 (current: ${nodeVersion})`,
   );
   nodeAvailable = false;
 }
@@ -97,7 +109,10 @@ describe("Node.js API Compatibility Tests", () => {
 
   describeNodeTests("Behavior Comparison with Node.js Built-in", () => {
     test("basic database operations match Node.js behavior", () => {
-      if (!nodeAvailable) return;
+      if (!nodeAvailable || !NodeSqlite || !NodeSqlite.DatabaseSync) {
+        console.log("Skipping test - Node.js SQLite not available");
+        return;
+      }
 
       // Create databases with both implementations
       const ourDb = new OurDatabaseSync(":memory:");
@@ -167,7 +182,10 @@ describe("Node.js API Compatibility Tests", () => {
     });
 
     test("error handling matches Node.js behavior", () => {
-      if (!nodeAvailable) return;
+      if (!nodeAvailable || !NodeSqlite || !NodeSqlite.DatabaseSync) {
+        console.log("Skipping test - Node.js SQLite not available");
+        return;
+      }
 
       const ourDb = new OurDatabaseSync(":memory:");
       const nodeDb = new NodeSqlite.DatabaseSync(":memory:");
@@ -203,7 +221,10 @@ describe("Node.js API Compatibility Tests", () => {
     });
 
     test("transaction behavior matches Node.js", () => {
-      if (!nodeAvailable) return;
+      if (!nodeAvailable || !NodeSqlite || !NodeSqlite.DatabaseSync) {
+        console.log("Skipping test - Node.js SQLite not available");
+        return;
+      }
 
       const ourDb = new OurDatabaseSync(":memory:");
       const nodeDb = new NodeSqlite.DatabaseSync(":memory:");
@@ -252,7 +273,10 @@ describe("Node.js API Compatibility Tests", () => {
     });
 
     test("prepared statement behavior matches Node.js", () => {
-      if (!nodeAvailable) return;
+      if (!nodeAvailable || !NodeSqlite || !NodeSqlite.DatabaseSync) {
+        console.log("Skipping test - Node.js SQLite not available");
+        return;
+      }
 
       const ourDb = new OurDatabaseSync(":memory:");
       const nodeDb = new NodeSqlite.DatabaseSync(":memory:");
@@ -311,7 +335,10 @@ describe("Node.js API Compatibility Tests", () => {
     });
 
     test("constants match Node.js values", () => {
-      if (!nodeAvailable) return;
+      if (!nodeAvailable || !NodeSqlite || !NodeSqlite.constants) {
+        console.log("Skipping test - Node.js SQLite not available");
+        return;
+      }
 
       const nodeConstants = NodeSqlite.constants;
 
