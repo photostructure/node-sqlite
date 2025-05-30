@@ -15,7 +15,11 @@
       "Bash(ls:*)",
       "Bash(chmod:*)",
       "Bash(bash:*)",
-      "Bash(clang-tidy:*)"
+      "Bash(clang-tidy:*)",
+      "Bash(sed:*)",
+      "WebFetch(domain:sqlite.org)",
+      "Bash(cp:*)",
+      "Bash(TEST_MEMORY=1 node --expose-gc ./node_modules/.bin/jest test/memory.test.ts --testNamePattern=\"large text data\")"
     ]
   },
   "enableAllProjectMcpServers": false
