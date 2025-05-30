@@ -20,7 +20,20 @@ on:
 run-name: ${{ github.event_name == 'workflow_dispatch' && format('Release - {0}', github.event.inputs.version) || format('Build - {0}', github.event.head_commit.message || github.event.pull_request.title) }}
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "npm"
+      - run: npm ci
+      - name: Run linters
+        run: npm run lint
+
   prebuild-mac-win:
+    needs: [lint]
     strategy:
       fail-fast: false
       matrix:
@@ -33,7 +46,6 @@ jobs:
           node-version: 20
           cache: "npm"
       - run: npm ci
-      - run: npm run lint
       - run: npm run prebuild
       - uses: actions/upload-artifact@v4
         with:
@@ -41,6 +53,7 @@ jobs:
           path: prebuilds/
 
   prebuild-ubuntu:
+    needs: [lint]
     strategy:
       fail-fast: false
       matrix:
@@ -65,6 +78,7 @@ jobs:
           path: prebuilds/
 
   prebuild-alpine:
+    needs: [lint]
     strategy:
       fail-fast: false
       matrix:
