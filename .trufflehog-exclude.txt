@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+vendored/
+prebuilds/
+\.min\.js$
+\.map$
+package-lock\.json
+benchmark/node_modules/
+coverage/
+\.git/
+\.(jpg|jpeg|png|gif|ico|svg|webp)$
+\.(woff|woff2|ttf|eot)$

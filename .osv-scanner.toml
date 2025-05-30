@@ -1,0 +1,15 @@
+# OSV Scanner Configuration
+# https://google.github.io/osv-scanner/configuration/
+
+[[IgnoredVulns]]
+# Add any false positives or accepted risks here
+# id = "GHSA-xxx"
+# reason = "This vulnerability doesn't affect our usage"
+
+[PackageOverrides]
+# Override package information if needed
+# [[PackageOverrides.entry]]
+# name = "package-name"
+# ecosystem = "npm"
+# ignore = true
+# reason = "Dev dependency only"

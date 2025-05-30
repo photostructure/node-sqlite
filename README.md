@@ -138,6 +138,8 @@ await db.backup("./other-backup.db", {
 
 ### Session-based Change Tracking
 
+SQLite's session extension allows you to record changes and apply them to other databases - perfect for synchronization, replication, or undo/redo functionality. This feature is available in both `node:sqlite` and `@photostructure/sqlite`, but not in better-sqlite3.
+
 ```typescript
 // Create a session to track changes
 const session = db.createSession({ table: "users" });
@@ -149,7 +151,7 @@ db.prepare("INSERT INTO users (name, email) VALUES (?, ?)").run(
   "bob@example.com",
 );
 
-// Get the changes
+// Get the changes as a changeset
 const changeset = session.changeset();
 session.close();
 
@@ -201,7 +203,7 @@ This package provides performance comparable to Node.js's built-in SQLite and be
 
 - **Synchronous operations** - No async/await overhead
 - **Direct C library access** - Minimal JavaScript ↔ native boundary crossings
-- **Full SQLite features** - FTS5, JSON functions, R\*Tree indexes, math functions, session extension
+- **Full SQLite features** - FTS5, JSON functions, R\*Tree indexes, math functions, session extension (including changesets)
 
 Performance is quite similar to node:sqlite and better-sqlite3, while significantly faster than async sqlite3 due to synchronous operations.
 
@@ -236,7 +238,7 @@ _The official SQLite module included with Node.js 22.5.0+ (experimental)_
 - **Zero dependencies** — Built directly into Node.js
 - **Official support** — Maintained by the Node.js core team
 - **Clean synchronous API** — Simple, predictable blocking operations
-- **Full SQLite power** — FTS5, JSON functions, R\*Tree, and more
+- **Full SQLite power** — FTS5, JSON functions, R\*Tree, sessions/changesets, and more
 
 **⚠️ Cons:**
 
@@ -259,6 +261,7 @@ _The most popular high-performance synchronous SQLite library_
 - **Blazing fast** — 2-15x faster than async alternatives
 - **Rock-solid stability** — Battle-tested in thousands of production apps
 - **Rich feature set** — User functions, aggregates, virtual tables, extensions
+- **Extensive community** — Large ecosystem with many resources
 
 **⚠️ Cons:**
 
@@ -266,6 +269,7 @@ _The most popular high-performance synchronous SQLite library_
 - **V8-specific** — Requires separate builds for each Node.js version
 - **Synchronous only** — No async operations (usually a feature, not a bug)
 - **Migration effort** — Switching from other libraries requires code changes
+- **No session support** — Doesn't expose SQLite's session/changeset functionality
 
 **🎯 Best for:** High-performance applications where you want maximum speed and control over the API.
 
@@ -306,6 +310,7 @@ _The original asynchronous SQLite binding for Node.js_
 - ✅ **Synchronous performance** with a clean, official API
 - ✅ **Node-API stability** — one build works across Node.js versions
 - ✅ **Zero migration path** when `node:sqlite` becomes stable
+- ✅ **Session/changeset support** for replication and synchronization
 
 ### Choose **`better-sqlite3`** when you want:
 
@@ -351,6 +356,31 @@ See [TODO.md](./TODO.md) for the complete feature list and future enhancements.
 - 📋 Better error messages matching Node.js exactly
 - 📋 Additional platform-specific optimizations
 - 📋 Enhanced debugging and profiling tools
+
+## Security
+
+This project takes security seriously and employs multiple layers of protection:
+
+- **Automated scanning**: npm audit, Snyk, OSV Scanner, CodeQL (JS/TS and C++), and TruffleHog
+- **Weekly security scans**: Automated checks for new vulnerabilities
+- **Rapid patching**: Security fixes are prioritized and released quickly
+- **Memory safety**: Validated through ASAN, valgrind, and comprehensive testing
+
+### Running Security Scans Locally
+
+```bash
+# Install security tools (OSV Scanner, better-npm-audit, etc.)
+npm run security:setup
+
+# Run all security scans
+npm run security
+
+# Run individual scans
+npm run security:audit  # npm audit
+npm run security:osv    # OSV Scanner (requires Go)
+```
+
+For details, see our [Security Policy](./SECURITY.md). To report vulnerabilities, please email security@photostructure.com.
 
 ## License
 
