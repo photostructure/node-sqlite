@@ -58,6 +58,13 @@ private:
     AggregateData()
         : value_type(TYPE_NULL), number_val(0.0), initialized(false),
           is_window(false), first_call(false) {}
+
+    // Destructor to properly clean up Napi::Reference
+    ~AggregateData() {
+      if (value_type == TYPE_OBJECT && !object_ref.IsEmpty()) {
+        object_ref.Reset();
+      }
+    }
   };
 
   // Helper methods
