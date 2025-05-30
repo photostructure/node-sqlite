@@ -25,8 +25,13 @@ UserDefinedFunction::~UserDefinedFunction() {
 
 void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
                                 sqlite3_value **argv) {
-  UserDefinedFunction *self =
-      static_cast<UserDefinedFunction *>(sqlite3_user_data(ctx));
+  void *user_data = sqlite3_user_data(ctx);
+  if (!user_data) {
+    sqlite3_result_error(ctx, "Invalid user data in function callback", -1);
+    return;
+  }
+
+  UserDefinedFunction *self = static_cast<UserDefinedFunction *>(user_data);
 
   try {
     Napi::Function fn = self->fn_.Value();
@@ -49,8 +54,12 @@ void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
   } catch (const Napi::Error &e) {
     // Handle JavaScript exceptions
     std::string error_msg = e.Message();
-    sqlite3_result_error(ctx, error_msg.c_str(),
-                         static_cast<int>(error_msg.length()));
+    try {
+      sqlite3_result_error(ctx, error_msg.c_str(),
+                           SafeCastToInt(error_msg.length()));
+    } catch (const std::overflow_error &) {
+      sqlite3_result_error(ctx, "Error message too long", -1);
+    }
   } catch (const std::exception &e) {
     sqlite3_result_error(ctx, e.what(), -1);
   } catch (...) {
@@ -59,7 +68,9 @@ void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
 }
 
 void UserDefinedFunction::xDestroy(void *self) {
-  delete static_cast<UserDefinedFunction *>(self);
+  if (self) {
+    delete static_cast<UserDefinedFunction *>(self);
+  }
 }
 
 Napi::Value UserDefinedFunction::SqliteValueToJS(sqlite3_value *value) {
@@ -125,9 +136,13 @@ void UserDefinedFunction::JSValueToSqliteResult(sqlite3_context *ctx,
     } else {
       // BigInt too large, convert to text representation
       std::string bigint_str = value.As<Napi::BigInt>().ToString().Utf8Value();
-      sqlite3_result_text(ctx, bigint_str.c_str(),
-                          static_cast<int>(bigint_str.length()),
-                          SQLITE_TRANSIENT);
+      try {
+        sqlite3_result_text(ctx, bigint_str.c_str(),
+                            SafeCastToInt(bigint_str.length()),
+                            SQLITE_TRANSIENT);
+      } catch (const std::overflow_error &) {
+        sqlite3_result_error(ctx, "BigInt string representation too long", -1);
+      }
     }
   } else if (value.IsNumber()) {
     double num_val = value.As<Napi::Number>().DoubleValue();
@@ -141,17 +156,29 @@ void UserDefinedFunction::JSValueToSqliteResult(sqlite3_context *ctx,
     }
   } else if (value.IsString()) {
     std::string str_val = value.As<Napi::String>().Utf8Value();
-    sqlite3_result_text(ctx, str_val.c_str(),
-                        static_cast<int>(str_val.length()), SQLITE_TRANSIENT);
+    try {
+      sqlite3_result_text(ctx, str_val.c_str(), SafeCastToInt(str_val.length()),
+                          SQLITE_TRANSIENT);
+    } catch (const std::overflow_error &) {
+      sqlite3_result_error(ctx, "String value too long", -1);
+    }
   } else if (value.IsBuffer()) {
     Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
-    sqlite3_result_blob(ctx, buffer.Data(), static_cast<int>(buffer.Length()),
-                        SQLITE_TRANSIENT);
+    try {
+      sqlite3_result_blob(ctx, buffer.Data(), SafeCastToInt(buffer.Length()),
+                          SQLITE_TRANSIENT);
+    } catch (const std::overflow_error &) {
+      sqlite3_result_error(ctx, "Buffer too large", -1);
+    }
   } else {
     // For any other type, convert to string
     std::string str_val = value.ToString().Utf8Value();
-    sqlite3_result_text(ctx, str_val.c_str(),
-                        static_cast<int>(str_val.length()), SQLITE_TRANSIENT);
+    try {
+      sqlite3_result_text(ctx, str_val.c_str(), SafeCastToInt(str_val.length()),
+                          SQLITE_TRANSIENT);
+    } catch (const std::overflow_error &) {
+      sqlite3_result_error(ctx, "Converted string value too long", -1);
+    }
   }
 }
 
