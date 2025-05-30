@@ -121,27 +121,26 @@ The benchmark outputs clean markdown tables that can be directly copied into doc
 
 ### 📈 Summary
 
-| Scenario | @photostructure/sqlite | better-sqlite3 | node:sqlite | sqlite3 |
-|---|---:|---:|---:|---:|
-| SELECT by Primary Key | 150,000 ops/s | 150,000 ops/s | 140,000 ops/s | 24,000 ops/s |
-| SELECT Range | 13,000 ops/s | 14,000 ops/s | 13,000 ops/s | 5,600 ops/s |
-| SELECT with Iterator | 710 ops/s | 860 ops/s | 750 ops/s | 610 ops/s |
-| INSERT Single Row | 720 ops/s | 720 ops/s | 740 ops/s | 710 ops/s |
-| INSERT in Transaction | 340 ops/s | 350 ops/s | 350 ops/s | 38 ops/s |
-| SELECT with JOIN | 1,800 ops/s | 2,000 ops/s | 1,800 ops/s | 1,600 ops/s |
-| INSERT with BLOB | 640 ops/s | 660 ops/s | 650 ops/s | 590 ops/s |
-| UPDATE with Index | 750 ops/s | 720 ops/s | 740 ops/s | 720 ops/s |
-| DELETE Bulk | 89 ops/s | 90 ops/s | 83 ops/s | 25 ops/s |
-
+| Scenario              | @photostructure/sqlite | better-sqlite3 |   node:sqlite |      sqlite3 |
+| --------------------- | ---------------------: | -------------: | ------------: | -----------: |
+| SELECT by Primary Key |          150,000 ops/s |  150,000 ops/s | 140,000 ops/s | 24,000 ops/s |
+| SELECT Range          |           13,000 ops/s |   14,000 ops/s |  13,000 ops/s |  5,600 ops/s |
+| SELECT with Iterator  |              710 ops/s |      860 ops/s |     750 ops/s |    610 ops/s |
+| INSERT Single Row     |              720 ops/s |      720 ops/s |     740 ops/s |    710 ops/s |
+| INSERT in Transaction |              340 ops/s |      350 ops/s |     350 ops/s |     38 ops/s |
+| SELECT with JOIN      |            1,800 ops/s |    2,000 ops/s |   1,800 ops/s |  1,600 ops/s |
+| INSERT with BLOB      |              640 ops/s |      660 ops/s |     650 ops/s |    590 ops/s |
+| UPDATE with Index     |              750 ops/s |      720 ops/s |     740 ops/s |    720 ops/s |
+| DELETE Bulk           |               89 ops/s |       90 ops/s |      83 ops/s |     25 ops/s |
 
 ### 🏆 Overall Performance Ranking
 
-| Rank | Driver | Score |
-|---:|---|---:|
-| 1 🥇 | better-sqlite3 | 99% |
-| 2 🥈 | @photostructure/sqlite | 94% |
-| 3 🥉 | node:sqlite | 94% |
-| 4 🐌 | sqlite3 | 58% |
+| Rank | Driver                 | Score |
+| ---: | ---------------------- | ----: |
+| 1 🥇 | better-sqlite3         |   99% |
+| 2 🥈 | @photostructure/sqlite |   94% |
+| 3 🥉 | node:sqlite            |   94% |
+| 4 🐌 | sqlite3                |   58% |
 
 Key features:
 
