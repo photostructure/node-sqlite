@@ -1,12 +1,12 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import {
   DatabaseSync,
   constants,
   type DatabaseSyncInstance,
   type Session,
 } from "../src/index";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
 
 describe("SQLite Sessions", () => {
   let db: DatabaseSyncInstance;

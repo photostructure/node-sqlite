@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import { DatabaseSync } from "../src";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
-import * as fsp from "fs/promises";
 
 describe("Backup functionality", () => {
   let sourceDb: InstanceType<typeof DatabaseSync>;

@@ -1,7 +1,7 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { DatabaseSync } from "../src";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
 
 describe("Concurrent Access Patterns Tests", () => {
   let tempDir: string;

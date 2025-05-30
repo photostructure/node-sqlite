@@ -1,7 +1,7 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DatabaseSync } from "../src/index";
-import { mkdtempSync, rmSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
 
 // TypeScript already has gc declaration in @types/node, no need to redeclare
 
@@ -236,7 +236,8 @@ describeMemoryTests("Memory Tests", () => {
       const select = db.prepare("SELECT data FROM large_text WHERE id = ?");
 
       for (let i = 0; i < 20; i++) {
-        const result = insert.run(largeText + i);
+        const testData = largeText + "y";
+        const result = insert.run(testData);
         if (!result.lastInsertRowid) {
           throw new Error("No lastInsertRowid returned");
         }
