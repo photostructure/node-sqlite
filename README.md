@@ -136,6 +136,26 @@ await db.backup("./other-backup.db", {
 });
 ```
 
+### Database Restoration
+
+```typescript
+// Restore from a backup file
+import * as fs from "fs";
+
+// Close the current database
+db.close();
+
+// Copy the backup file over the current database file
+fs.copyFileSync("./backup.db", "./mydata.db");
+
+// Reopen the database with the restored data
+const restoredDb = new DatabaseSync("./mydata.db");
+
+// Verify restoration
+const count = restoredDb.prepare("SELECT COUNT(*) as count FROM users").get();
+console.log(`Restored database has ${count.count} users`);
+```
+
 ### Session-based Change Tracking
 
 SQLite's session extension allows you to record changes and apply them to other databases - perfect for synchronization, replication, or undo/redo functionality. This feature is available in both `node:sqlite` and `@photostructure/sqlite`, but not in better-sqlite3.

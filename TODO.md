@@ -240,6 +240,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
    - ✅ **Progress callbacks** for monitoring backup progress
    - ✅ **Rate parameter** matching Node.js API (negative values supported)
    - ✅ **Comprehensive tests** covering all backup scenarios and metadata preservation
+   - ✅ **Backup restoration tests** - 7 comprehensive tests covering restoration scenarios
 
 8. **✅ API Naming Compatibility** (COMPLETED)
 
@@ -285,7 +286,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 
 - ✅ **Core SQLite operations working** (CREATE, INSERT, SELECT, UPDATE, DELETE)
 - ✅ **Advanced SQLite features working** (user functions, aggregates, iterators, sessions, backup, and enhanced location method all fully functional)
-- ✅ **280 tests passing** with comprehensive coverage across all features:
+- ✅ **287 tests passing** with comprehensive coverage across all features:
   - ✅ 13 basic database tests
   - ✅ 13 configuration option tests
   - ✅ 8 user-defined function tests
@@ -298,6 +299,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - ✅ 14 extension loading tests
   - ✅ 28 SQLite session tests (with changeset content verification!)
   - ✅ 14 backup functionality tests (with Node.js API compatibility and rate validation)
+  - ✅ 7 backup restoration tests (with schema, triggers, and pragma preservation)
   - ✅ 10 enhanced location method tests (with attached database support)
   - ✅ 26 error handling tests (with constraint violations and recovery)
   - ✅ 17 STRICT tables tests (with type enforcement and constraints)
