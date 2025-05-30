@@ -19,7 +19,12 @@
       "Bash(sed:*)",
       "WebFetch(domain:sqlite.org)",
       "Bash(cp:*)",
-      "Bash(TEST_MEMORY=1 node --expose-gc ./node_modules/.bin/jest test/memory.test.ts --testNamePattern=\"large text data\")"
+      "Bash(TEST_MEMORY=1 node --expose-gc ./node_modules/.bin/jest test/memory.test.ts --testNamePattern=\"large text data\")",
+      "Bash(mkdir:*)",
+      "Bash(tsx:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npm rebuild:*)",
+      "Bash(valgrind:*)"
     ]
   },
   "enableAllProjectMcpServers": false
