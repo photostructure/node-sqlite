@@ -9,7 +9,6 @@
 import * as OurSqlite from "./index";
 
 // Only import node:sqlite types on Node.js 24+
-// @ts-ignore - This import may fail on older Node versions
 import * as NodeSqlite from "node:sqlite";
 
 // Type assertion helpers
