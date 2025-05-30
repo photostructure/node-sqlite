@@ -1,3 +1,5 @@
+# We _want_ tests/, src/, scripts/, and benchmark/ to be formatted, but...
+
 # Ignore upstream files synced from Node.js repository
 src/upstream/
 
@@ -9,13 +11,3 @@ prebuilds/
 # Dependencies
 node_modules/
 vendored/
-
-# Generated files
-*.tsbuildinfo
-coverage/
-.nyc_output/
-
-# SQLite database files
-*.db
-*.sqlite
-*.sqlite3
