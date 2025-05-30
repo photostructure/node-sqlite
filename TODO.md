@@ -53,7 +53,8 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - [ ] Backup/restore operations
 - ✅ **Error handling tests**
   - ✅ SQL syntax errors
-  - [ ] Constraint violations
+  - ✅ Constraint violations - 10 comprehensive tests including CASCADE, deferred, CONFLICT clauses
+  - ✅ STRICT tables - 17 comprehensive tests for type enforcement and constraints
   - [ ] Resource limits
   - [ ] Invalid operations
 - ✅ **Memory and performance tests**
@@ -281,7 +282,7 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
 
 - ✅ **Core SQLite operations working** (CREATE, INSERT, SELECT, UPDATE, DELETE)
 - ✅ **Advanced SQLite features working** (user functions, aggregates, iterators, sessions, backup, and enhanced location method all fully functional)
-- ✅ **179 tests passing** with comprehensive coverage across all features:
+- ✅ **222 tests passing** with comprehensive coverage across all features:
   - ✅ 13 basic database tests
   - ✅ 13 configuration option tests
   - ✅ 8 user-defined function tests
@@ -295,6 +296,8 @@ This document tracks the remaining tasks to complete the SQLite extraction from 
   - ✅ 28 SQLite session tests (with changeset content verification!)
   - ✅ 14 backup functionality tests (with Node.js API compatibility and rate validation)
   - ✅ 10 enhanced location method tests (with attached database support)
+  - ✅ 26 error handling tests (with constraint violations and recovery)
+  - ✅ 17 STRICT tables tests (with type enforcement and constraints)
 - ✅ **All core data types supported** (INTEGER, REAL, TEXT, BLOB, NULL, BigInt)
 - ✅ **Error handling working** for invalid SQL and operations
 - ✅ **Memory management working** with proper cleanup and N-API references

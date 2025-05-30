@@ -135,6 +135,358 @@ describe("Error Handling Tests - Safe Edition", () => {
 
       db.close();
     });
+
+    test("handles AUTOINCREMENT constraint on non-INTEGER columns", () => {
+      const db = new DatabaseSync(":memory:");
+
+      // AUTOINCREMENT can only be used with INTEGER PRIMARY KEY
+      // Using it with TEXT should throw an error
+      expect(() => {
+        db.exec(`
+          CREATE TABLE invalid_table (
+            id TEXT PRIMARY KEY AUTOINCREMENT,
+            name TEXT
+          )
+        `);
+      }).toThrow(/AUTOINCREMENT.*only.*INTEGER PRIMARY KEY/i);
+
+      // AUTOINCREMENT on non-primary key should also fail
+      expect(() => {
+        db.exec(`
+          CREATE TABLE invalid_table2 (
+            id INTEGER AUTOINCREMENT,
+            name TEXT
+          )
+        `);
+      }).toThrow(/syntax error|AUTOINCREMENT/i);
+
+      // AUTOINCREMENT with composite primary key should fail
+      expect(() => {
+        db.exec(`
+          CREATE TABLE invalid_table3 (
+            id1 INTEGER,
+            id2 INTEGER,
+            name TEXT,
+            PRIMARY KEY (id1, id2) AUTOINCREMENT
+          )
+        `);
+      }).toThrow(/syntax error|near.*AUTOINCREMENT/i);
+
+      // Valid AUTOINCREMENT usage should work
+      expect(() => {
+        db.exec(`
+          CREATE TABLE valid_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT
+          )
+        `);
+      }).not.toThrow();
+
+      db.close();
+    });
+
+    test("handles DEFAULT constraint violations", () => {
+      const db = new DatabaseSync(":memory:");
+
+      db.exec(`
+        CREATE TABLE test_defaults (
+          id INTEGER PRIMARY KEY,
+          status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+          created_at INTEGER DEFAULT (unixepoch()) NOT NULL
+        )
+      `);
+
+      // Valid insert with defaults
+      const result = db
+        .prepare("INSERT INTO test_defaults (id) VALUES (?)")
+        .run(1);
+      expect(result.changes).toBe(1);
+
+      // Verify defaults were applied
+      const row = db.prepare("SELECT * FROM test_defaults WHERE id = 1").get();
+      expect(row.status).toBe("active");
+      expect(row.created_at).toBeGreaterThan(0);
+
+      // Explicit NULL should override DEFAULT but fail NOT NULL
+      expect(() => {
+        db.prepare(
+          "INSERT INTO test_defaults (id, created_at) VALUES (?, ?)",
+        ).run(2, null);
+      }).toThrow(/NOT NULL constraint failed/);
+
+      db.close();
+    });
+
+    test("handles multiple constraint violations on same column", () => {
+      const db = new DatabaseSync(":memory:");
+
+      db.exec(`
+        CREATE TABLE complex_constraints (
+          id INTEGER PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL CHECK (email LIKE '%@%'),
+          age INTEGER NOT NULL CHECK (age >= 18 AND age <= 120)
+        )
+      `);
+
+      // Valid insert
+      db.prepare(
+        "INSERT INTO complex_constraints (email, age) VALUES (?, ?)",
+      ).run("user@example.com", 25);
+
+      // NULL email violates NOT NULL (checked before UNIQUE or CHECK)
+      expect(() => {
+        db.prepare(
+          "INSERT INTO complex_constraints (email, age) VALUES (?, ?)",
+        ).run(null, 25);
+      }).toThrow(/NOT NULL constraint failed/);
+
+      // Invalid email format violates CHECK
+      expect(() => {
+        db.prepare(
+          "INSERT INTO complex_constraints (email, age) VALUES (?, ?)",
+        ).run("invalid-email", 25);
+      }).toThrow(/CHECK constraint failed/);
+
+      // Duplicate email violates UNIQUE
+      expect(() => {
+        db.prepare(
+          "INSERT INTO complex_constraints (email, age) VALUES (?, ?)",
+        ).run("user@example.com", 30);
+      }).toThrow(/UNIQUE constraint failed/);
+
+      // Age out of range violates CHECK
+      expect(() => {
+        db.prepare(
+          "INSERT INTO complex_constraints (email, age) VALUES (?, ?)",
+        ).run("another@example.com", 150);
+      }).toThrow(/CHECK constraint failed/);
+
+      db.close();
+    });
+
+    test("handles CASCADE constraint actions", () => {
+      const db = new DatabaseSync(":memory:", {
+        enableForeignKeyConstraints: true,
+      });
+
+      db.exec(`
+        CREATE TABLE authors (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL
+        );
+
+        CREATE TABLE books (
+          id INTEGER PRIMARY KEY,
+          title TEXT NOT NULL,
+          author_id INTEGER NOT NULL,
+          FOREIGN KEY (author_id) REFERENCES authors(id) ON DELETE CASCADE ON UPDATE CASCADE
+        );
+
+        CREATE TABLE reviews (
+          id INTEGER PRIMARY KEY,
+          book_id INTEGER NOT NULL,
+          rating INTEGER NOT NULL,
+          FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE RESTRICT
+        );
+      `);
+
+      // Insert test data
+      db.prepare(
+        "INSERT INTO authors (id, name) VALUES (1, 'Author One')",
+      ).run();
+      db.prepare(
+        "INSERT INTO books (id, title, author_id) VALUES (1, 'Book One', 1)",
+      ).run();
+      db.prepare(
+        "INSERT INTO reviews (id, book_id, rating) VALUES (1, 1, 5)",
+      ).run();
+
+      // CASCADE UPDATE should work
+      const updateResult = db
+        .prepare("UPDATE authors SET id = 2 WHERE id = 1")
+        .run();
+      expect(updateResult.changes).toBe(1);
+
+      // Verify book was updated
+      const book = db.prepare("SELECT author_id FROM books WHERE id = 1").get();
+      expect(book.author_id).toBe(2);
+
+      // RESTRICT DELETE should fail when referenced
+      expect(() => {
+        db.prepare("DELETE FROM books WHERE id = 1").run();
+      }).toThrow(/FOREIGN KEY constraint failed/);
+
+      // Delete review first
+      db.prepare("DELETE FROM reviews WHERE id = 1").run();
+
+      // CASCADE DELETE should work now
+      const deleteResult = db.prepare("DELETE FROM authors WHERE id = 2").run();
+      expect(deleteResult.changes).toBe(1);
+
+      // Verify book was deleted
+      const bookCount = db.prepare("SELECT COUNT(*) as count FROM books").get();
+      expect(bookCount.count).toBe(0);
+
+      db.close();
+    });
+
+    test("handles deferred constraint checking", () => {
+      const db = new DatabaseSync(":memory:", {
+        enableForeignKeyConstraints: true,
+      });
+
+      // CHECK constraints are always immediate in SQLite, not deferrable
+      // But FOREIGN KEY constraints can be deferred
+      db.exec(`
+        CREATE TABLE parent (id INTEGER PRIMARY KEY);
+        CREATE TABLE child (
+          id INTEGER PRIMARY KEY,
+          parent_id INTEGER,
+          FOREIGN KEY (parent_id) REFERENCES parent(id) DEFERRABLE INITIALLY DEFERRED
+        );
+      `);
+
+      db.exec("BEGIN");
+      // Insert child before parent (normally would fail with immediate constraint)
+      db.prepare("INSERT INTO child (id, parent_id) VALUES (1, 1)").run();
+      // Insert parent to satisfy constraint
+      db.prepare("INSERT INTO parent (id) VALUES (1)").run();
+      // Commit succeeds because constraint is satisfied at commit time
+      expect(() => db.exec("COMMIT")).not.toThrow();
+
+      // Test that immediate foreign key constraints fail right away
+      db.exec(`
+        CREATE TABLE parent2 (id INTEGER PRIMARY KEY);
+        CREATE TABLE child2 (
+          id INTEGER PRIMARY KEY,
+          parent_id INTEGER,
+          FOREIGN KEY (parent_id) REFERENCES parent2(id) -- Not deferred
+        );
+      `);
+
+      db.exec("BEGIN");
+      // This should fail immediately
+      expect(() => {
+        db.prepare("INSERT INTO child2 (id, parent_id) VALUES (1, 1)").run();
+      }).toThrow(/FOREIGN KEY constraint failed/);
+      db.exec("ROLLBACK");
+
+      db.close();
+    });
+
+    test("handles CONFLICT clauses", () => {
+      const db = new DatabaseSync(":memory:");
+
+      db.exec(`
+        CREATE TABLE conflict_test (
+          id INTEGER PRIMARY KEY,
+          email TEXT UNIQUE ON CONFLICT IGNORE,
+          username TEXT UNIQUE ON CONFLICT REPLACE,
+          status TEXT DEFAULT 'active'
+        )
+      `);
+
+      // Insert initial data
+      db.prepare(
+        "INSERT INTO conflict_test (id, email, username) VALUES (1, 'user@example.com', 'user1')",
+      ).run();
+
+      // IGNORE conflict - insert is silently ignored
+      const ignoreResult = db
+        .prepare(
+          "INSERT INTO conflict_test (id, email, username) VALUES (2, 'user@example.com', 'user2')",
+        )
+        .run();
+      expect(ignoreResult.changes).toBe(0); // No rows inserted
+
+      // REPLACE conflict - existing row is replaced
+      const replaceResult = db
+        .prepare(
+          "INSERT INTO conflict_test (id, email, username) VALUES (3, 'new@example.com', 'user1')",
+        )
+        .run();
+      expect(replaceResult.changes).toBe(1);
+
+      // Verify the replacement happened
+      const rows = db.prepare("SELECT * FROM conflict_test ORDER BY id").all();
+      expect(rows.length).toBe(1); // Only one row remains
+      expect(rows[0].id).toBe(3); // New id
+      expect(rows[0].username).toBe("user1"); // Same username
+      expect(rows[0].email).toBe("new@example.com"); // New email
+
+      db.close();
+    });
+
+    test("handles partial indexes and constraints", () => {
+      const db = new DatabaseSync(":memory:");
+
+      db.exec(`
+        CREATE TABLE users (
+          id INTEGER PRIMARY KEY,
+          email TEXT,
+          is_active INTEGER DEFAULT 1
+        );
+
+        -- Unique constraint only for active users
+        CREATE UNIQUE INDEX idx_active_email ON users(email) WHERE is_active = 1;
+      `);
+
+      // Insert active user
+      db.prepare(
+        "INSERT INTO users (email, is_active) VALUES ('user@example.com', 1)",
+      ).run();
+
+      // Same email for inactive user is allowed
+      const result = db
+        .prepare(
+          "INSERT INTO users (email, is_active) VALUES ('user@example.com', 0)",
+        )
+        .run();
+      expect(result.changes).toBe(1);
+
+      // But duplicate active user email fails
+      expect(() => {
+        db.prepare(
+          "INSERT INTO users (email, is_active) VALUES ('user@example.com', 1)",
+        ).run();
+      }).toThrow(/UNIQUE constraint failed/);
+
+      db.close();
+    });
+
+    test("handles generated columns constraints", () => {
+      const db = new DatabaseSync(":memory:");
+
+      db.exec(`
+        CREATE TABLE products (
+          id INTEGER PRIMARY KEY,
+          price REAL NOT NULL CHECK (price > 0),
+          tax_rate REAL NOT NULL DEFAULT 0.1 CHECK (tax_rate >= 0 AND tax_rate <= 1),
+          total_price REAL GENERATED ALWAYS AS (price * (1 + tax_rate)) STORED
+        )
+      `);
+
+      // Valid insert
+      const result = db
+        .prepare("INSERT INTO products (price, tax_rate) VALUES (100, 0.2)")
+        .run();
+      expect(result.changes).toBe(1);
+
+      // Verify generated column
+      const product = db
+        .prepare("SELECT * FROM products WHERE id = ?")
+        .get(result.lastInsertRowid);
+      expect(product.total_price).toBeCloseTo(120, 2);
+
+      // Cannot directly set generated column
+      expect(() => {
+        db.prepare(
+          "INSERT INTO products (price, tax_rate, total_price) VALUES (100, 0.1, 999)",
+        ).run();
+      }).toThrow(/cannot INSERT into generated column/);
+
+      db.close();
+    });
   });
 
   describe("SQL Syntax and Logic Errors", () => {
