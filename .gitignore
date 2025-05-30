@@ -70,6 +70,9 @@ Thumbs.db
 test-results/
 coverage/
 
+# Generated documentation
+docs/
+
 # third-party libraries for reference
 vendored/
 

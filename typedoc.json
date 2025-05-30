@@ -1,0 +1,14 @@
+{
+  "entryPoints": ["src/index.ts"],
+  "out": "docs",
+  "name": "@photostructure/sqlite",
+  "includeVersion": false,
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "readme": "README.md",
+  "githubPages": true,
+  "navigationLinks": {
+    "GitHub": "https://github.com/photostructure/node-sqlite",
+    "NPM": "https://www.npmjs.com/package/@photostructure/sqlite"
+  }
+}

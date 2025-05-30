@@ -366,7 +366,7 @@ Based on benchmarks from better-sqlite3 and our testing:
 
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+Contributions are welcome! This project maintains 100% API compatibility with Node.js's built-in SQLite module. Please run tests with `npm test` and ensure code passes linting with `npm run lint` before submitting changes. When adding new features, include corresponding tests and ensure they match Node.js SQLite behavior exactly.
 
 ## Current Features
 
@@ -392,9 +392,13 @@ MIT License - see [LICENSE](./LICENSE) for details.
 
 This package includes SQLite, which is in the public domain, as well as code from the Node.js project, which is MIT licensed.
 
+## Documentation
+
+- 📖 **API Reference**: [TypeDoc Documentation](https://photostructure.github.io/node-sqlite/)
+- 📋 **Examples**: See [README.md](https://github.com/photostructure/node-sqlite#quick-start) and [test files](https://github.com/photostructure/node-sqlite/tree/main/test)
+
 ## Support
 
-- 📖 **Documentation**: See [API documentation](https://photostructure.github.io/node-sqlite/)
 - 🐛 **Bug reports**: [GitHub Issues](https://github.com/photostructure/node-sqlite/issues)
 - 💬 **Questions**: [GitHub Discussions](https://github.com/photostructure/node-sqlite/discussions)
 - 📧 **Security issues**: security@photostructure.com
