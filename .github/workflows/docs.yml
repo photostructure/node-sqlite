@@ -22,12 +22,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # Install system dependencies for building native modules
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential python3
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -37,11 +31,11 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies (skip native build)
+        run: npm ci --ignore-scripts
 
-      - name: Build native addon
-        run: npm run node-gyp-rebuild
+      - name: Install TypeScript dependencies only
+        run: npm install typescript typedoc tsup --no-save
 
       - name: Generate documentation
         run: npm run docs
