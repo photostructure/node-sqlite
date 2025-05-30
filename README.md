@@ -1,5 +1,3 @@
-# @photostructure/sqlite
-
 ## 🚀 Drop-in Replacement for node:sqlite
 
 This package provides **100% API compatibility** with Node.js's built-in SQLite module (`node:sqlite`). You can seamlessly switch between this package and the built-in module without changing any code.
