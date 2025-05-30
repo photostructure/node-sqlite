@@ -81,41 +81,6 @@ db.close();
 
 ### Database Configuration Options
 
-#### Double-Quoted String Literals
-
-SQLite has a quirk where double quotes can be used for both identifiers (column/table names) and string literals, depending on context. By default, SQLite tries to interpret double quotes as identifiers first, but falls back to treating them as string literals if no matching identifier is found.
-
-```javascript
-// Default behavior (enableDoubleQuotedStringLiterals: false)
-const db = new DatabaseSync(":memory:");
-db.exec("CREATE TABLE test (name TEXT)");
-
-// This works - "hello" is treated as a string literal since there's no column named hello
-db.exec('INSERT INTO test (name) VALUES ("hello")');
-
-// This fails - "name" is treated as a column identifier, not a string
-db.exec('SELECT * FROM test WHERE name = "name"'); // Error: no such column: name
-```
-
-To avoid confusion and ensure SQL standard compliance, you can enable strict mode:
-
-```javascript
-// Strict mode (enableDoubleQuotedStringLiterals: true)
-const db = new DatabaseSync(":memory:", {
-  enableDoubleQuotedStringLiterals: true,
-});
-
-// Now double quotes are always treated as string literals
-db.exec("CREATE TABLE test (name TEXT)");
-db.exec('INSERT INTO test (name) VALUES ("hello")'); // Works
-db.exec('SELECT * FROM test WHERE name = "name"'); // Works - finds rows where name='name'
-
-// Use backticks or square brackets for identifiers when needed
-db.exec("SELECT `name`, [order] FROM test");
-```
-
-**Recommendation**: For new projects, consider enabling `enableDoubleQuotedStringLiterals: true` to ensure consistent behavior and SQL standard compliance. For existing projects, be aware that SQLite's default behavior may interpret your double-quoted strings differently depending on context.
-
 ### Custom Functions
 
 ```typescript
@@ -403,45 +368,9 @@ Based on benchmarks from better-sqlite3 and our testing:
 
 Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
-### Development Setup
-
-```bash
-# Clone repository
-git clone https://github.com/photostructure/node-sqlite.git
-cd node-sqlite/sqlite
-
-# Install dependencies
-npm install
-
-# Sync latest Node.js SQLite implementation
-npm run sync
-
-# Build native addon
-npm run build
-
-# Run tests
-npm test
-
-# Run memory tests (Linux only)
-npm run tests:memory
-
-# Run C++ static analysis (Linux/macOS)
-npm run clang-tidy
-```
-
-### Project Structure
-
-- `src/index.ts` - Main TypeScript interface
-- `src/binding.cpp` - Native addon entry point
-- `src/upstream/` - Node.js SQLite implementation (auto-synced)
-- `src/shims/` - Node.js internal API compatibility layer
-- `scripts/sync-from-node.js` - Automated sync from Node.js repo
-
 ## Current Features
 
 This package now provides a complete SQLite implementation with full Node.js API compatibility.
-
-**SQLite Version**: 3.49.1 (from Node.js upstream)
 
 See [TODO.md](./TODO.md) for the complete feature list and future enhancements.
 
@@ -449,8 +378,6 @@ See [TODO.md](./TODO.md) for the complete feature list and future enhancements.
 
 **In Progress:**
 
-- 🔄 Enhanced location method for attached databases
-- 🔄 Automated SQLite version updates from upstream
 - 🔄 Comprehensive performance benchmarking
 
 **Future Enhancements:**
