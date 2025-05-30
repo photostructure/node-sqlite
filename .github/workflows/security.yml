@@ -43,7 +43,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=medium
+          args: --severity-threshold=medium --sarif-file-output=snyk.sarif
         continue-on-error: true # Don't fail the build if vulnerabilities are found
 
       - name: Upload Snyk results
@@ -54,16 +54,15 @@ jobs:
 
   osv-scanner:
     name: OSV Scanner
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run OSV Scanner
-        uses: google/osv-scanner-action@v1.8.3
-        with:
-          scan-args: |-
-            --recursive
-            .
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.0.2
+    permissions:
+      actions: read
+      security-events: write
+      contents: read
+    with:
+      scan-args: |-
+        -r
+        ./
 
   codeql-javascript:
     name: CodeQL JavaScript/TypeScript Analysis
