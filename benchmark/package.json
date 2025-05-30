@@ -1,0 +1,37 @@
+{
+  "name": "@photostructure/sqlite-benchmark",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Performance benchmarks for @photostructure/sqlite compared to other SQLite libraries",
+  "type": "module",
+  "scripts": {
+    "prebench": "tsc --noEmit",
+    "bench": "tsx index.ts",
+    "bench:select": "tsx index.ts select",
+    "bench:insert": "tsx index.ts insert",
+    "bench:transaction": "tsx index.ts transaction",
+    "bench:memory": "tsx --expose-gc memory-benchmark.ts"
+  },
+  "dependencies": {
+    "@photostructure/sqlite": "file:..",
+    "better-sqlite3": "^11.10.0",
+    "sqlite3": "^5.1.7",
+    "@types/benchmark": "^2.1.5",
+    "benchmark": "^2.1.4",
+    "chalk": "^5.4.1",
+    "deasync": "^0.1.30"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.27",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/deasync": "^0.1.5",
+    "tsx": "4.19.4",
+    "typescript": "^5.8.3"
+  },
+  "optionalDependencies": {
+    "sqlite": "^5.1.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
