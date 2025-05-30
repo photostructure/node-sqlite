@@ -90,13 +90,20 @@ void CustomAggregate::xFinal(sqlite3_context *ctx) { xValueBase(ctx, true); }
 void CustomAggregate::xValue(sqlite3_context *ctx) { xValueBase(ctx, false); }
 
 void CustomAggregate::xDestroy(void *self) {
-  delete static_cast<CustomAggregate *>(self);
+  if (self) {
+    delete static_cast<CustomAggregate *>(self);
+  }
 }
 
 void CustomAggregate::xStepBase(sqlite3_context *ctx, int argc,
                                 sqlite3_value **argv, bool use_inverse) {
-  CustomAggregate *self =
-      static_cast<CustomAggregate *>(sqlite3_user_data(ctx));
+  void *user_data = sqlite3_user_data(ctx);
+  if (!user_data) {
+    sqlite3_result_error(ctx, "Invalid user data in aggregate function", -1);
+    return;
+  }
+
+  CustomAggregate *self = static_cast<CustomAggregate *>(user_data);
   if (!self) {
     sqlite3_result_error(ctx, "No user data", -1);
     return;
@@ -180,8 +187,14 @@ void CustomAggregate::xStepBase(sqlite3_context *ctx, int argc,
 }
 
 void CustomAggregate::xValueBase(sqlite3_context *ctx, bool finalize) {
-  CustomAggregate *self =
-      static_cast<CustomAggregate *>(sqlite3_user_data(ctx));
+  void *user_data = sqlite3_user_data(ctx);
+  if (!user_data) {
+    sqlite3_result_error(ctx, "Invalid user data in aggregate value function",
+                         -1);
+    return;
+  }
+
+  CustomAggregate *self = static_cast<CustomAggregate *>(user_data);
 
   // Create HandleScope and CallbackScope for this operation
   Napi::HandleScope scope(self->env_);
@@ -207,11 +220,9 @@ void CustomAggregate::xValueBase(sqlite3_context *ctx, bool finalize) {
 
     // Clean up if this is finalization
     if (finalize) {
-      // Clean up object references if needed
-      if (agg->value_type == AggregateData::TYPE_OBJECT &&
-          !agg->object_ref.IsEmpty()) {
-        agg->object_ref.Reset();
-      }
+      // Properly destroy the C++ object constructed with placement new
+      // This will call the destructor for Napi::Reference members
+      agg->~AggregateData();
     }
 
   } catch (const Napi::Error &e) {
