@@ -1,10 +1,6 @@
-/**
- * @photostructure/sqlite - Node.js SQLite implementation extracted from Node.js core
- */
-
 // Load the native binding
 const binding = require("node-gyp-build")(
-  require("path").join(__dirname, ".."),
+  require("node:path").join(__dirname, ".."),
 );
 
 /**
@@ -18,9 +14,23 @@ export interface DatabaseSyncOptions {
   readonly readOnly?: boolean;
   /** If true, foreign key constraints are enforced. @default true */
   readonly enableForeignKeyConstraints?: boolean;
-  /** If true, double-quoted string literals are allowed. @default true */
+  /** 
+   * If true, double-quoted string literals are allowed. 
+   *
+   * If enabled, double quotes can be misinterpreted as identifiers instead of
+   * string literals, leading to confusing errors. 
+   *
+   * **The SQLite documentation strongly recommends avoiding double-quoted
+   * strings entirely.**
+
+   * @see https://sqlite.org/quirks.html#dblquote
+   * @default false 
+   */
   readonly enableDoubleQuotedStringLiterals?: boolean;
-  /** Sets the busy timeout in milliseconds. @default 5000 */
+  /**
+   * Sets the busy timeout in milliseconds.
+   * @default 5000
+   */
   readonly timeout?: number;
   /** If true, enables loading of SQLite extensions. @default false */
   readonly allowExtension?: boolean;
@@ -177,8 +187,6 @@ export interface ChangesetApplyOptions {
  * This interface represents an instance of the DatabaseSync class.
  */
 export interface DatabaseSyncInstance {
-  /** The path to the database file, or ':memory:' for in-memory databases. */
-  readonly location: string;
   /** Indicates whether the database connection is open. */
   readonly isOpen: boolean;
   /** Indicates whether a transaction is currently active. */
@@ -196,6 +204,13 @@ export interface DatabaseSyncInstance {
    * it cannot be used again.
    */
   close(): void;
+  /**
+   * Returns the location of the database file. For attached databases, you can specify
+   * the database name. Returns null for in-memory databases.
+   * @param dbName The name of the database. Defaults to 'main' (the primary database).
+   * @returns The file path of the database, or null for in-memory databases.
+   */
+  location(dbName?: string): string | null;
   /**
    * Compiles an SQL statement and returns a StatementSyncInstance object.
    * @param sql The SQL statement to prepare.
@@ -286,7 +301,7 @@ export interface DatabaseSyncInstance {
    * });
    */
   backup(
-    path: string,
+    path: string | Buffer | URL,
     options?: {
       rate?: number;
       source?: string;
@@ -308,7 +323,7 @@ export interface SqliteModule {
    * All operations are performed synchronously, blocking until completion.
    */
   DatabaseSync: new (
-    location?: string,
+    location?: string | Buffer | URL,
     options?: DatabaseSyncOptions,
   ) => DatabaseSyncInstance;
   /**
