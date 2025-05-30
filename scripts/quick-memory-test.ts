@@ -1,7 +1,5 @@
-#!/usr/bin/env node
-
-import { platform } from "os";
 import { execSync } from "child_process";
+import { platform } from "node:os";
 
 // Only run on Linux
 if (platform() !== "linux") {

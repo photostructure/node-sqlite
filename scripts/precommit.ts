@@ -1,12 +1,10 @@
-#!/usr/bin/env node
-
-import { execSync } from "child_process";
-import { platform } from "os";
+import { execSync } from "node:child_process";
+import { platform } from "node:os";
 
 const isLinux = platform() === "linux";
 const isMacOS = platform() === "darwin";
 
-function run(command, description) {
+function run(command: string, description: string) {
   console.log(`\n▶ ${description || command}`);
   try {
     execSync(command, { stdio: "inherit" });
@@ -17,7 +15,8 @@ function run(command, description) {
 }
 
 // Always run these
-run("npm run sync", "Fetching latest SQLite code from Node.js upstream");
+run("npm run sync:node", "Fetching upstream from Node.js");
+run("npm run sync:sqlite", "Fetching upstream from SQLite.org");
 run("npm run fmt", "Formatting code");
 run("npm run lint", "Running ESLint");
 run("npm run build", "Building project");

@@ -1,10 +1,8 @@
-#!/usr/bin/env node
-
-import { execSync, spawn } from "child_process";
-import { readFileSync, existsSync } from "fs";
-import { join, dirname, relative } from "path";
-import { fileURLToPath } from "url";
-import { platform } from "os";
+import { execSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { platform } from "node:os";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..");
@@ -20,11 +18,11 @@ const colors = {
   dim: isWindows ? "" : "\x1b[2m",
 };
 
-function log(message, color = "") {
+function log(message: string, color: string = "") {
   console.log(`${color}${message}${colors.reset}`);
 }
 
-function execCommand(command, options = {}) {
+function execCommand(command: string, options: any = {}) {
   try {
     return execSync(command, {
       encoding: "utf8",
@@ -32,15 +30,21 @@ function execCommand(command, options = {}) {
       cwd: projectRoot,
       ...options,
     });
-  } catch (error) {
+  } catch (error: any) {
     throw new Error(`Command failed: ${command}\n${error.message}`);
   }
 }
 
 function findClangTidy() {
   // Try to find clang-tidy
-  const possibleNames = ["clang-tidy", "clang-tidy-18", "clang-tidy-17", "clang-tidy-16", "clang-tidy-15"];
-  
+  const possibleNames = [
+    "clang-tidy",
+    "clang-tidy-18",
+    "clang-tidy-17",
+    "clang-tidy-16",
+    "clang-tidy-15",
+  ];
+
   for (const name of possibleNames) {
     try {
       const version = execCommand(`${name} --version`);
@@ -52,65 +56,71 @@ function findClangTidy() {
       // Continue to next
     }
   }
-  
+
   return null;
 }
 
 function getCompileCommands() {
   // Generate compile_commands.json if it doesn't exist
-  const compileCommandsPath = join(projectRoot, "build", "compile_commands.json");
-  
+  const compileCommandsPath = join(
+    projectRoot,
+    "build",
+    "compile_commands.json",
+  );
+
   if (!existsSync(compileCommandsPath)) {
     log("Generating compile_commands.json...", colors.dim);
-    
+
     // Use node-gyp to generate with compile_commands.json
-    execCommand("node-gyp configure -- -f gyp.generator.compile_commands_json.py");
+    execCommand(
+      "node-gyp configure -- -f gyp.generator.compile_commands_json.py",
+    );
   }
-  
+
   return compileCommandsPath;
 }
 
 function getCppFiles() {
   // Get list of C++ files to check
-  const files = [];
-  
+  const files: string[] = [];
+
   // Add main source files
   files.push(
     join(projectRoot, "src", "binding.cpp"),
     join(projectRoot, "src", "sqlite_impl.cpp"),
     join(projectRoot, "src", "user_function.cpp"),
-    join(projectRoot, "src", "aggregate_function.cpp")
+    join(projectRoot, "src", "aggregate_function.cpp"),
   );
-  
+
   // Filter out non-existent files
   return files.filter(existsSync);
 }
 
-async function runClangTidy(clangTidy, files) {
+async function runClangTidy(clangTidy: string, files: string[]) {
   const compileCommandsPath = getCompileCommands();
-  
+
   log("\n=== Running clang-tidy ===", colors.blue);
   log(`Checking ${files.length} files...`, colors.dim);
-  
+
   let hasErrors = false;
   let errorCount = 0;
   let warningCount = 0;
-  
+
   for (const file of files) {
     const relPath = relative(projectRoot, file);
     log(`\nChecking: ${relPath}`, colors.dim);
-    
+
     try {
       // Run clang-tidy on the file
       const output = execCommand(
         `${clangTidy} -p="${compileCommandsPath}" "${file}" 2>&1`,
-        { stdio: "pipe" }
+        { stdio: "pipe" },
       );
-      
+
       // Parse output for errors and warnings
       const lines = output.split("\n");
       let fileHasIssues = false;
-      
+
       for (const line of lines) {
         if (line.includes(" warning:")) {
           warningCount++;
@@ -123,15 +133,15 @@ async function runClangTidy(clangTidy, files) {
           console.log(`  ${colors.red}✗${colors.reset} ${line.trim()}`);
         }
       }
-      
+
       if (!fileHasIssues) {
         log(`  ${colors.green}✓${colors.reset} No issues found`, colors.green);
       }
-    } catch (error) {
+    } catch (error: any) {
       // clang-tidy returns non-zero exit code if there are errors
       const output = error.stdout || error.stderr || error.message;
       const lines = output.split("\n");
-      
+
       for (const line of lines) {
         if (line.includes(" warning:")) {
           warningCount++;
@@ -144,7 +154,7 @@ async function runClangTidy(clangTidy, files) {
       }
     }
   }
-  
+
   // Summary
   log("\n=== Summary ===", colors.blue);
   if (errorCount > 0) {
@@ -156,7 +166,7 @@ async function runClangTidy(clangTidy, files) {
   if (errorCount === 0 && warningCount === 0) {
     log("✓ No issues found", colors.green);
   }
-  
+
   return hasErrors;
 }
 
@@ -165,7 +175,7 @@ async function main() {
     log("clang-tidy is only supported on Linux and macOS", colors.yellow);
     process.exit(0);
   }
-  
+
   // Find clang-tidy
   const clangTidy = findClangTidy();
   if (!clangTidy) {
@@ -174,17 +184,17 @@ async function main() {
     log("  macOS: brew install llvm", colors.dim);
     process.exit(1);
   }
-  
+
   // Get files to check
   const files = getCppFiles();
   if (files.length === 0) {
     log("No C++ files found to check", colors.yellow);
     process.exit(0);
   }
-  
+
   // Run clang-tidy
   const hasErrors = await runClangTidy(clangTidy, files);
-  
+
   // Exit with appropriate code
   process.exit(hasErrors ? 1 : 0);
 }
