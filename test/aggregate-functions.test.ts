@@ -117,8 +117,8 @@ describe("Aggregate Functions Tests", () => {
 
   test("aggregate with null handling", () => {
     // Insert some null values
-    db.exec('INSERT INTO test_data (value, category) VALUES (NULL, "C")');
-    db.exec('INSERT INTO test_data (value, category) VALUES (NULL, "C")');
+    db.exec("INSERT INTO test_data (value, category) VALUES (NULL, 'C')");
+    db.exec("INSERT INTO test_data (value, category) VALUES (NULL, 'C')");
 
     // Create a null-safe sum
     db.aggregate("null_safe_sum", {

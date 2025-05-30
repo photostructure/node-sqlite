@@ -66,7 +66,7 @@ describe("Node.js API Compatibility Tests", () => {
 
       // Check properties
       expect(typeof db.isOpen).toBe("boolean");
-      expect(typeof db.location).toBe("string");
+      expect(typeof db.location).toBe("function");
       expect(typeof db.isTransaction).toBe("boolean");
 
       db.close();

@@ -1,7 +1,7 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { DatabaseSync } from "../src";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
 
 describe("File-based Database Tests", () => {
   let tempDir: string;
@@ -44,7 +44,7 @@ describe("File-based Database Tests", () => {
     expect(fs.existsSync(dbPath)).toBe(false);
 
     const db = new DatabaseSync(dbPath);
-    expect(db.location).toBe(dbPath);
+    expect(db.location()).toBe(dbPath);
     expect(db.isOpen).toBe(true);
 
     // File should be created
@@ -91,7 +91,7 @@ describe("File-based Database Tests", () => {
     // First create a database with some data
     const dbWrite = new DatabaseSync(dbPath);
     dbWrite.exec("CREATE TABLE test (id INTEGER, value TEXT)");
-    dbWrite.exec('INSERT INTO test VALUES (1, "initial")');
+    dbWrite.exec("INSERT INTO test VALUES (1, 'initial')");
     dbWrite.close();
 
     // Open in readonly mode
@@ -102,10 +102,10 @@ describe("File-based Database Tests", () => {
     expect(result).toEqual({ id: 1, value: "initial" });
 
     // Should not be able to write data
-    expect(() => dbRead.exec('INSERT INTO test VALUES (2, "new")')).toThrow(
+    expect(() => dbRead.exec("INSERT INTO test VALUES (2, 'new')")).toThrow(
       /readonly/i,
     );
-    expect(() => dbRead.exec('UPDATE test SET value = "updated"')).toThrow(
+    expect(() => dbRead.exec("UPDATE test SET value = 'updated'")).toThrow(
       /readonly/i,
     );
     expect(() => dbRead.exec("DELETE FROM test")).toThrow(/readonly/i);
@@ -135,8 +135,10 @@ describe("File-based Database Tests", () => {
     const absolutePath = path.resolve(dbPath);
     const db = new DatabaseSync(absolutePath);
 
-    expect(db.location).toBe(absolutePath);
-    expect(path.isAbsolute(db.location)).toBe(true);
+    expect(db.location()).toBe(absolutePath);
+    const location = db.location();
+    expect(location).not.toBeNull();
+    expect(path.isAbsolute(location!)).toBe(true);
 
     db.exec("CREATE TABLE test (id INTEGER)");
     db.close();
@@ -153,7 +155,10 @@ describe("File-based Database Tests", () => {
       const relativePath = "relative-test.db";
       const db = new DatabaseSync(relativePath);
 
-      expect(db.location).toBe(relativePath);
+      // SQLite normalizes the path to absolute, so check that it ends with the relative path
+      const location = db.location();
+      expect(location).not.toBeNull();
+      expect(location!.endsWith(relativePath)).toBe(true);
 
       db.exec("CREATE TABLE test (id INTEGER)");
       db.close();
@@ -168,7 +173,7 @@ describe("File-based Database Tests", () => {
     // Create and populate database
     const db1 = new DatabaseSync(dbPath);
     db1.exec("CREATE TABLE test (id INTEGER, value TEXT)");
-    db1.exec('INSERT INTO test VALUES (1, "first")');
+    db1.exec("INSERT INTO test VALUES (1, 'first')");
     db1.close();
 
     // Reopen and verify data persists
@@ -177,7 +182,7 @@ describe("File-based Database Tests", () => {
     expect(result).toEqual({ id: 1, value: "first" });
 
     // Add more data
-    db2.exec('INSERT INTO test VALUES (2, "second")');
+    db2.exec("INSERT INTO test VALUES (2, 'second')");
     db2.close();
 
     // Open again and verify all data exists
@@ -297,7 +302,7 @@ describe("File-based Database Tests", () => {
     db1.exec("CREATE TABLE txn_test (id INTEGER, value TEXT)");
 
     db1.exec("BEGIN TRANSACTION");
-    db1.exec('INSERT INTO txn_test VALUES (1, "committed")');
+    db1.exec("INSERT INTO txn_test VALUES (1, 'committed')");
     db1.exec("COMMIT");
     db1.close();
 
@@ -308,7 +313,7 @@ describe("File-based Database Tests", () => {
 
     // Third session: transaction with rollback
     db2.exec("BEGIN TRANSACTION");
-    db2.exec('INSERT INTO txn_test VALUES (2, "rollback")');
+    db2.exec("INSERT INTO txn_test VALUES (2, 'rollback')");
     db2.exec("ROLLBACK");
     db2.close();
 

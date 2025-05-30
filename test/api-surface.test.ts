@@ -2,7 +2,7 @@
  * Runtime tests to verify our API surface matches node:sqlite exactly
  */
 
-import { DatabaseSync, StatementSync, Session, constants } from "../src";
+import { DatabaseSync, Session, StatementSync, constants } from "../src";
 
 describe("API Surface Tests", () => {
   describe("DatabaseSync class", () => {
@@ -16,18 +16,18 @@ describe("API Surface Tests", () => {
       const db1 = new DatabaseSync();
       expect(db1.isOpen).toBe(false);
       db1.open({ location: ":memory:" });
-      expect(db1.location).toBe(":memory:");
+      expect(db1.location()).toBeNull(); // in-memory database should return null
       db1.close();
 
       // Path only
       const db2 = new DatabaseSync(":memory:");
-      expect(db2.location).toBe(":memory:");
+      expect(db2.location()).toBeNull(); // in-memory database should return null
       expect(db2.isOpen).toBe(true);
       db2.close();
 
       // Path with options
       const db3 = new DatabaseSync(":memory:", { readOnly: false });
-      expect(db3.location).toBe(":memory:");
+      expect(db3.location()).toBeNull(); // in-memory database should return null
       expect(db3.isOpen).toBe(true);
       db3.close();
     });
@@ -64,7 +64,7 @@ describe("API Surface Tests", () => {
 
       expect(typeof db.isOpen).toBe("boolean");
       expect(typeof db.isTransaction).toBe("boolean");
-      expect(typeof db.location).toBe("string");
+      expect(typeof db.location).toBe("function");
 
       db.close();
     });

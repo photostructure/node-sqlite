@@ -78,7 +78,7 @@ function _checkDatabaseMethodsExist() {
   // Properties
   const _isOpen: boolean = db.isOpen;
   const _isTransaction: boolean = db.isTransaction;
-  const _location: string = db.location;
+  const _location: string | null = db.location();
 
   // Session support
   const _createSession: (

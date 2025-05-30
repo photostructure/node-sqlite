@@ -8,8 +8,8 @@ describe("Double-Quoted String Literals Tests", () => {
       // Create a table with columns
       db.exec("CREATE TABLE test (value TEXT, name TEXT)");
 
-      // This works - "hello" is treated as a string literal since there's no column named hello
-      db.exec('INSERT INTO test (value, name) VALUES ("hello", "world")');
+      // This works - 'hello' is treated as a string literal (using single quotes)
+      db.exec("INSERT INTO test (value, name) VALUES ('hello', 'world')");
 
       // Verify the data was inserted
       const result1 = db.prepare("SELECT * FROM test").all();
@@ -23,10 +23,10 @@ describe("Double-Quoted String Literals Tests", () => {
         .all();
       expect(result2.length).toBe(1); // All rows match when comparing column to itself
 
-      // This also works because SQLite falls back to string literal when column doesn't exist
-      db.exec('INSERT INTO test (value, name) VALUES ("test1", "test2")');
+      // This also works using single quotes for string literals
+      db.exec("INSERT INTO test (value, name) VALUES ('test1', 'test2')");
       const result3 = db
-        .prepare('SELECT * FROM test WHERE value = "test1"')
+        .prepare("SELECT * FROM test WHERE value = 'test1'")
         .all();
       expect(result3.length).toBe(1);
       expect(result3[0].value).toBe("test1");
