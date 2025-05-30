@@ -7,8 +7,8 @@ namespace node {
 
 // Environment stubs
 class Environment {
- public:
-  static Environment* GetCurrent(Napi::Env env) {
+public:
+  static Environment *GetCurrent(Napi::Env env) {
     static Environment instance;
     return &instance;
   }

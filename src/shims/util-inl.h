@@ -5,11 +5,11 @@
 
 namespace node {
 
-inline void THROW_ERR_INVALID_ARG_TYPE(Napi::Env env, const char* message) {
+inline void THROW_ERR_INVALID_ARG_TYPE(Napi::Env env, const char *message) {
   Napi::TypeError::New(env, message).ThrowAsJavaScriptException();
 }
 
-inline void THROW_ERR_OUT_OF_RANGE(Napi::Env env, const char* message) {
+inline void THROW_ERR_OUT_OF_RANGE(Napi::Env env, const char *message) {
   Napi::RangeError::New(env, message).ThrowAsJavaScriptException();
 }
 

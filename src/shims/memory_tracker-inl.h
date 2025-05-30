@@ -5,12 +5,11 @@ namespace node {
 
 // Memory tracking stubs
 class MemoryTracker {
- public:
-  template<typename T>
-  void TrackField(const char*, const T&) {}
-  
-  template<typename T>
-  void TrackFieldWithSize(const char*, const T&, size_t) {}
+public:
+  template <typename T> void TrackField(const char *, const T &) {}
+
+  template <typename T>
+  void TrackFieldWithSize(const char *, const T &, size_t) {}
 };
 
 } // namespace node

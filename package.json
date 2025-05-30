@@ -36,6 +36,8 @@
     "lint:api": "tsc --noEmit src/api-compatibility.test.ts",
     "lint:fix": "eslint --fix src/ test/",
     "fmt": "prettier --write \"**/*.{ts,js,json,md}\"",
+    "// fmt:clang": "on ubuntu: `sudo apt install clang-format`. NOTE: we don't reformat src/upstream!",
+    "fmt:clang": "clang-format --style=LLVM -i src/shims/*.h src/*.cpp src/*.h || true",
     "build": "run-s compile bundle",
     "precommit": "node scripts/precommit.mjs",
     "prepare-release": "npm run build",

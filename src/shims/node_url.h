@@ -8,12 +8,12 @@ namespace url {
 
 // URL utilities - minimal implementation
 class URL {
- public:
-  explicit URL(const std::string& input) : href_(input) {}
-  
-  const std::string& href() const { return href_; }
-  
- private:
+public:
+  explicit URL(const std::string &input) : href_(input) {}
+
+  const std::string &href() const { return href_; }
+
+private:
   std::string href_;
 };
 
