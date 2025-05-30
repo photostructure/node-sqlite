@@ -330,6 +330,7 @@ _The original asynchronous SQLite binding for Node.js_
 Contributions are welcome! This project maintains 100% API compatibility with Node.js's built-in SQLite module. Please run tests with `npm test` and ensure code passes linting with `npm run lint` before submitting changes. When adding new features, include corresponding tests and ensure they match Node.js SQLite behavior exactly.
 
 The project includes automated sync scripts to keep up-to-date with:
+
 - **Node.js SQLite implementation** via `npm run sync:node`
 - **SQLite library updates** via `npm run sync:sqlite`
 
