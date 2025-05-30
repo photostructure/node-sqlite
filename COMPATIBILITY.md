@@ -72,45 +72,45 @@ Our implementation is feature-complete with Node.js's SQLite module. All documen
 
 ### DatabaseSync Methods
 
-| Method                  | Our Status  | Node.js Equivalent | Notes                              |
-| ----------------------- | ----------- | ------------------ | ---------------------------------- |
+| Method                  | Our Status  | Node.js Equivalent | Notes                                 |
+| ----------------------- | ----------- | ------------------ | ------------------------------------- |
 | `constructor()`         | ✅ Complete | ✅                 | Full path support (string/Buffer/URL) |
-| `open()`                | ✅ Complete | ✅                 | All configuration options          |
-| `close()`               | ✅ Complete | ✅                 | Proper cleanup                     |
-| `prepare()`             | ✅ Complete | ✅                 | Statement preparation              |
-| `exec()`                | ✅ Complete | ✅                 | Direct SQL execution               |
-| `function()`            | ✅ Complete | ✅                 | User function registration         |
-| `aggregate()`           | ✅ Complete | ✅                 | Aggregate function registration    |
-| `backup()`              | ✅ Complete | ✅                 | Async with progress callbacks      |
-| `createSession()`       | ✅ Complete | ✅                 | Session tracking                   |
-| `applyChangeset()`      | ✅ Complete | ✅                 | Change application                 |
-| `enableLoadExtension()` | ✅ Complete | ✅                 | Extension loading control          |
-| `loadExtension()`       | ✅ Complete | ✅                 | Extension loading                  |
-| `location(dbName?)`     | ✅ Complete | ✅                 | Enhanced with attached DB support  |
+| `open()`                | ✅ Complete | ✅                 | All configuration options             |
+| `close()`               | ✅ Complete | ✅                 | Proper cleanup                        |
+| `prepare()`             | ✅ Complete | ✅                 | Statement preparation                 |
+| `exec()`                | ✅ Complete | ✅                 | Direct SQL execution                  |
+| `function()`            | ✅ Complete | ✅                 | User function registration            |
+| `aggregate()`           | ✅ Complete | ✅                 | Aggregate function registration       |
+| `backup()`              | ✅ Complete | ✅                 | Async with progress callbacks         |
+| `createSession()`       | ✅ Complete | ✅                 | Session tracking                      |
+| `applyChangeset()`      | ✅ Complete | ✅                 | Change application                    |
+| `enableLoadExtension()` | ✅ Complete | ✅                 | Extension loading control             |
+| `loadExtension()`       | ✅ Complete | ✅                 | Extension loading                     |
+| `location(dbName?)`     | ✅ Complete | ✅                 | Enhanced with attached DB support     |
 
 ### StatementSync Methods
 
-| Method                          | Our Status  | Node.js Equivalent | Notes                     |
-| ------------------------------- | ----------- | ------------------ | ------------------------- |
-| `run()`                         | ✅ Complete | ✅                 | Statement execution       |
-| `get()`                         | ✅ Complete | ✅                 | Single row query          |
-| `all()`                         | ✅ Complete | ✅                 | Multi-row query           |
-| `iterate()`                     | ✅ Complete | ✅                 | Iterator interface        |
-| `finalize()`                    | ✅ Complete | ✅                 | Statement cleanup         |
-| `setReadBigInts()`              | ✅ Complete | ✅                 | BigInt reading control    |
-| `setAllowBareNamedParameters()` | ✅ Complete | ✅                 | Parameter binding control |
+| Method                          | Our Status  | Node.js Equivalent | Notes                         |
+| ------------------------------- | ----------- | ------------------ | ----------------------------- |
+| `run()`                         | ✅ Complete | ✅                 | Statement execution           |
+| `get()`                         | ✅ Complete | ✅                 | Single row query              |
+| `all()`                         | ✅ Complete | ✅                 | Multi-row query               |
+| `iterate()`                     | ✅ Complete | ✅                 | Iterator interface            |
+| `finalize()`                    | ✅ Complete | ✅                 | Statement cleanup             |
+| `setReadBigInts()`              | ✅ Complete | ✅                 | BigInt reading control        |
+| `setAllowBareNamedParameters()` | ✅ Complete | ✅                 | Parameter binding control     |
 | `setReturnArrays()`             | ✅ Complete | Extension          | Our extension, not in Node.js |
-| `columns()`                     | ✅ Complete | ✅                 | Column metadata           |
+| `columns()`                     | ✅ Complete | ✅                 | Column metadata               |
 
 ### Configuration Options
 
-| Option                             | Our Status  | Node.js Equivalent | Notes                   |
-| ---------------------------------- | ----------- | ------------------ | ----------------------- |
+| Option                             | Our Status  | Node.js Equivalent | Notes                     |
+| ---------------------------------- | ----------- | ------------------ | ------------------------- |
 | `location`                         | ✅ Complete | ✅                 | String/Buffer/URL support |
-| `readOnly`                         | ✅ Complete | ✅                 | Read-only mode          |
-| `enableForeignKeyConstraints`      | ✅ Complete | ✅                 | Foreign key enforcement |
-| `timeout`                          | ✅ Complete | ✅                 | Busy timeout            |
-| `enableDoubleQuotedStringLiterals` | ✅ Complete | ✅                 | DQS configuration       |
+| `readOnly`                         | ✅ Complete | ✅                 | Read-only mode            |
+| `enableForeignKeyConstraints`      | ✅ Complete | ✅                 | Foreign key enforcement   |
+| `timeout`                          | ✅ Complete | ✅                 | Busy timeout              |
+| `enableDoubleQuotedStringLiterals` | ✅ Complete | ✅                 | DQS configuration         |
 
 ## Test Coverage
 
@@ -200,6 +200,7 @@ export { DatabaseSync, StatementSync, Session, constants };
 Our implementation provides complete compatibility with Node.js's SQLite module. All documented APIs are fully implemented.
 
 **Key Achievements:**
+
 - All core and advanced SQLite features implemented
 - Full API compatibility with Node.js
 - Enhanced with `setReturnArrays()` method not in Node.js

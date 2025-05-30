@@ -53,6 +53,7 @@ This project employs multiple layers of automated security scanning:
 5. **TruffleHog** - Secrets detection in code
 
 These scans run automatically on:
+
 - Every push to the main branch
 - Every pull request
 - Weekly scheduled scans
@@ -82,15 +83,15 @@ The following SQLite security features are available:
 
 ```javascript
 // Restrict file access to read-only
-const db = new DatabaseSync('database.db', { 
-  readonly: true 
+const db = new DatabaseSync("database.db", {
+  readonly: true,
 });
 
 // Disable extension loading by default
 // Extensions must be explicitly enabled
 db.allowExtension(); // Required first
 db.enableLoadExtension(true); // Then enable
-db.loadExtension('path/to/extension');
+db.loadExtension("path/to/extension");
 ```
 
 ### Best Practices

@@ -1,9 +1,9 @@
 ---
 name: Security Vulnerability Report
 about: Report a security vulnerability (for non-sensitive issues only)
-title: '[SECURITY] '
+title: "[SECURITY] "
 labels: security
-assignees: ''
+assignees: ""
 ---
 
 <!--
