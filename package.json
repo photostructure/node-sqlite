@@ -83,9 +83,9 @@
     "node-gyp-build": "^4.8.4"
   },
   "devDependencies": {
-    "@eslint/js": "^9.27.0",
+    "@eslint/js": "^9.28.0",
     "@types/jest": "^29.5.14",
-    "@types/node": "^22.15.27",
+    "@types/node": "^22.15.29",
     "@typescript-eslint/eslint-plugin": "^8.33.0",
     "@typescript-eslint/parser": "^8.33.0",
     "cross-env": "^7.0.3",
