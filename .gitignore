@@ -72,3 +72,6 @@ coverage/
 
 # third-party libraries for reference
 vendored/
+
+# Temporary directories
+.temp-sqlite-download/
