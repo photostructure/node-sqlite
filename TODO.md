@@ -9,18 +9,31 @@ This document tracks the remaining tasks before releasing v1.0.0.
   - Each worker thread gets its own isolated environment
   - 100% test success rate (was ~85% before fix)
   - No special initialization required
+- ✅ **Hybrid ESM/CJS package** - Full dual-package support implemented
+  - tsup configuration for modern build pipeline
+  - Package.json exports field for proper module resolution
+  - Tests run in both CJS and ESM modes
+  - Simplified TypeScript configuration (from 6+ files to 3)
 
 ## 🚧 Remaining Tasks
 
 ### High Priority
 
-- [ ] **Upload prebuilds to GitHub releases** - Enable automatic distribution
+- [x] **Upload prebuilds to GitHub releases** - Enable automatic distribution
+  - ✅ Added .release-it.json configuration
+  - ✅ GitHub Actions workflow already includes release automation
+  - ✅ Prebuild naming includes libc tags (e.g., .glibc.node, .musl.node)
+  - ✅ Added Node.js 24 to test matrix
 - [ ] **Test prebuild downloads** - Verify installation works correctly
 
 ### Medium Priority
 
 - [ ] **Resource limits testing** - Test SQLite resource limit handling
-- [ ] **Concurrent access patterns** - Test multi-process scenarios
+- [x] **Concurrent access patterns** - Test multi-process scenarios
+  - ✅ Created comprehensive concurrent access tests (test/concurrent-access.test.ts)
+  - ✅ Created multi-process tests with child processes (test/multi-process-simple.test.ts)
+  - ✅ Tested database locking, WAL mode, transaction isolation
+  - ✅ Verified SQLite handles concurrent operations correctly
 
 ### Testing
 

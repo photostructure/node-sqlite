@@ -35,7 +35,11 @@
       "Bash(done)",
       "Bash(TEST_ESM=0 npm run test:cjs -- --listTests)",
       "Bash(TEST_ESM=0 npx jest test/basic.test.ts --no-coverage)",
-      "Bash(npx jest test:*)"
+      "Bash(npx jest test:*)",
+      "WebFetch(domain:jestjs.io)",
+      "Bash(npx eslint:*)",
+      "Bash(npx prettier:*)",
+      "Bash(./scripts/valgrind.sh:*)"
     ]
   },
   "enableAllProjectMcpServers": false
