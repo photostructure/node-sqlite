@@ -1,6 +1,40 @@
+import { execSync } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
 import { DatabaseSync } from "../src";
 
 describe("Extension Loading Tests", () => {
+  // Build the test extension before running tests
+  let testExtensionPath: string;
+
+  beforeAll(() => {
+    const extensionDir = path.join(__dirname, "fixtures", "test-extension");
+
+    // Build the extension
+    try {
+      execSync("node build.js", { cwd: extensionDir, stdio: "inherit" });
+    } catch (error) {
+      console.error("Failed to build test extension:", error);
+      throw new Error("Test extension build failed");
+    }
+
+    // SQLite automatically adds the platform-specific extension, so we just provide the base name
+    testExtensionPath = path.join(extensionDir, "test_extension");
+
+    // Verify the extension was built - check with actual file extension
+    let actualExtensionPath: string;
+    if (process.platform === "win32") {
+      actualExtensionPath = testExtensionPath + ".dll";
+    } else if (process.platform === "darwin") {
+      actualExtensionPath = testExtensionPath + ".dylib";
+    } else {
+      actualExtensionPath = testExtensionPath + ".so";
+    }
+
+    if (!fs.existsSync(actualExtensionPath)) {
+      throw new Error(`Test extension not found at ${actualExtensionPath}`);
+    }
+  });
   describe("allowExtension option", () => {
     test("extension loading is disabled by default", () => {
       const db = new DatabaseSync(":memory:");
@@ -201,6 +235,159 @@ describe("Extension Loading Tests", () => {
       }).toThrow(/Failed to load extension/); // Fails because file doesn't exist, not because of permissions
 
       db.close();
+    });
+  });
+
+  describe("loading real extension", () => {
+    test("can load test extension and use its functions", () => {
+      const db = new DatabaseSync(":memory:", { allowExtension: true });
+      db.enableLoadExtension(true);
+
+      // Load the test extension
+      expect(() => {
+        db.loadExtension(testExtensionPath);
+      }).not.toThrow();
+
+      // Test the version function
+      const version = db.prepare("SELECT test_extension_version()").get();
+      expect(version).toEqual({
+        "test_extension_version()": "test-extension-1.0.0",
+      });
+
+      // Test the add function
+      const sum = db.prepare("SELECT test_extension_add(?, ?)").get(5, 3);
+      expect(sum).toEqual({ "test_extension_add(?, ?)": 8 });
+
+      // Test the reverse function
+      const reversed = db
+        .prepare("SELECT test_extension_reverse(?)")
+        .get("hello");
+      expect(reversed).toEqual({ "test_extension_reverse(?)": "olleh" });
+
+      db.close();
+    });
+
+    test("can load extension with explicit entry point", () => {
+      const db = new DatabaseSync(":memory:", { allowExtension: true });
+      db.enableLoadExtension(true);
+
+      // Load with explicit entry point
+      expect(() => {
+        db.loadExtension(testExtensionPath, "sqlite3_testextension_init");
+      }).not.toThrow();
+
+      // Verify it loaded
+      const version = db.prepare("SELECT test_extension_version()").get();
+      expect(version).toEqual({
+        "test_extension_version()": "test-extension-1.0.0",
+      });
+
+      db.close();
+    });
+
+    test("extension functions persist after disabling extension loading", () => {
+      const db = new DatabaseSync(":memory:", { allowExtension: true });
+      db.enableLoadExtension(true);
+
+      // Load extension
+      db.loadExtension(testExtensionPath);
+
+      // Disable extension loading
+      db.enableLoadExtension(false);
+
+      // Functions should still work
+      const result = db.prepare("SELECT test_extension_add(10, 20)").get();
+      expect(result).toEqual({ "test_extension_add(10, 20)": 30 });
+
+      // But can't load new extensions
+      expect(() => {
+        db.loadExtension(testExtensionPath);
+      }).toThrow(/Extension loading is not enabled/);
+
+      db.close();
+    });
+
+    test("extension functions work with various data types", () => {
+      const db = new DatabaseSync(":memory:", { allowExtension: true });
+      db.enableLoadExtension(true);
+      db.loadExtension(testExtensionPath);
+
+      // Test with integers
+      const intResult = db.prepare("SELECT test_extension_add(42, 8)").get();
+      expect(intResult).toEqual({ "test_extension_add(42, 8)": 50 });
+
+      // Test with floats
+      const floatResult = db
+        .prepare("SELECT test_extension_add(3.14, 2.86)")
+        .get();
+      expect(floatResult).toEqual({ "test_extension_add(3.14, 2.86)": 6 });
+
+      // Test with null
+      const nullResult = db
+        .prepare("SELECT test_extension_reverse(NULL)")
+        .get();
+      expect(nullResult).toEqual({ "test_extension_reverse(NULL)": null });
+
+      // Test with empty string
+      const emptyResult = db.prepare("SELECT test_extension_reverse('')").get();
+      expect(emptyResult).toEqual({ "test_extension_reverse('')": "" });
+
+      // Test with ASCII string (Unicode reversal is complex)
+      const asciiResult = db
+        .prepare("SELECT test_extension_reverse(?)")
+        .get("abc123");
+      expect(asciiResult).toEqual({ "test_extension_reverse(?)": "321cba" });
+
+      db.close();
+    });
+
+    test("extension function errors are properly handled", () => {
+      const db = new DatabaseSync(":memory:", { allowExtension: true });
+      db.enableLoadExtension(true);
+      db.loadExtension(testExtensionPath);
+
+      // Wrong number of arguments for add
+      expect(() => {
+        db.prepare("SELECT test_extension_add(1)").get();
+      }).toThrow(/wrong number of arguments/);
+
+      // Wrong number of arguments for reverse
+      expect(() => {
+        db.prepare("SELECT test_extension_reverse()").get();
+      }).toThrow(/wrong number of arguments/);
+
+      db.close();
+    });
+
+    test("can load extension in file-based database", () => {
+      const dbPath = path.join(__dirname, "test-extension.db");
+
+      // Clean up any existing file
+      if (fs.existsSync(dbPath)) {
+        fs.unlinkSync(dbPath);
+      }
+
+      const db = new DatabaseSync(dbPath, { allowExtension: true });
+      db.enableLoadExtension(true);
+
+      // Load extension
+      db.loadExtension(testExtensionPath);
+
+      // Create a table and use extension function
+      db.exec("CREATE TABLE test (input TEXT, output TEXT)");
+      db.exec(
+        "INSERT INTO test VALUES ('world', test_extension_reverse('world'))",
+      );
+
+      const result = db.prepare("SELECT * FROM test").get();
+      expect(result).toEqual({ input: "world", output: "dlrow" });
+
+      db.close();
+
+      // Clean up
+      if (fs.existsSync(dbPath)) {
+        fs.unlinkSync(dbPath);
+      }
     });
   });
 });
