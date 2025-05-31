@@ -22,6 +22,20 @@ void CleanupAddonData(napi_env env, void *finalize_data, void *finalize_hint) {
     addon_data->databases.clear();
   }
 
+  // Clean up persistent references to prevent memory leaks
+  if (!addon_data->databaseSyncConstructor.IsEmpty()) {
+    addon_data->databaseSyncConstructor.Reset();
+  }
+  if (!addon_data->statementSyncConstructor.IsEmpty()) {
+    addon_data->statementSyncConstructor.Reset();
+  }
+  if (!addon_data->statementSyncIteratorConstructor.IsEmpty()) {
+    addon_data->statementSyncIteratorConstructor.Reset();
+  }
+  if (!addon_data->sessionConstructor.IsEmpty()) {
+    addon_data->sessionConstructor.Reset();
+  }
+
   delete addon_data;
 }
 
