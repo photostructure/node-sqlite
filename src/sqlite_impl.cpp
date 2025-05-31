@@ -2123,7 +2123,7 @@ BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
       source_db_(source_db), dest_db_(dest_db), pages_(pages),
       deferred_(Napi::Promise::Deferred::New(env)) {
   if (!progress_func.IsEmpty() && !progress_func.IsUndefined()) {
-    progress_func_ = Napi::Persistent(progress_func);
+    progress_func_ = Napi::Reference<Napi::Function>::New(progress_func);
   }
 }
 
