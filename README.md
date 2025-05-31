@@ -371,15 +371,11 @@ This project takes security seriously and employs multiple layers of protection:
 ### Running Security Scans Locally
 
 ```bash
-# Install security tools (OSV Scanner, better-npm-audit, etc.)
-npm run security:setup
+# Install security tools (OSV Scanner, etc.)
+./scripts/setup-security-tools.sh
 
 # Run all security scans
 npm run security
-
-# Run individual scans
-npm run security:audit  # npm audit
-npm run security:osv    # OSV Scanner (requires Go)
 ```
 
 For details, see our [Security Policy](./SECURITY.md). To report vulnerabilities, please email security@photostructure.com.
