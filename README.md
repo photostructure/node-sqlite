@@ -418,7 +418,7 @@ Note that all changes are human-reviewed before merging.
 - **Multi-platform CI/CD** with automated builds
 - **Security scanning** and memory leak detection
 - **Automated sync** from Node.js and SQLite upstream
-- **Robust [benchmarking suite](./benchmark/README.md)** including all popular Node.js SQLite libraries 
+- **Robust [benchmarking suite](./benchmark/README.md)** including all popular Node.js SQLite libraries
 
 ### Development Cost
 
