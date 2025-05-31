@@ -1198,6 +1198,11 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (!statement_) {
+    node::THROW_ERR_INVALID_STATE(env, "Statement is not properly initialized");
+    return env.Undefined();
+  }
+
   try {
     Reset();
     BindParameters(info);
@@ -1246,6 +1251,11 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (!statement_) {
+    node::THROW_ERR_INVALID_STATE(env, "Statement is not properly initialized");
+    return env.Undefined();
+  }
+
   try {
     Reset();
     BindParameters(info);
@@ -1277,6 +1287,11 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
 
   if (!database_ || !database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
+  if (!statement_) {
+    node::THROW_ERR_INVALID_STATE(env, "Statement is not properly initialized");
     return env.Undefined();
   }
 
@@ -1316,6 +1331,12 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
 
   if (!database_ || !database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(info.Env(), "Database connection is closed");
+    return info.Env().Undefined();
+  }
+
+  if (!statement_) {
+    node::THROW_ERR_INVALID_STATE(info.Env(),
+                                  "Statement is not properly initialized");
     return info.Env().Undefined();
   }
 
@@ -1454,6 +1475,11 @@ Napi::Value StatementSync::Columns(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (!statement_) {
+    node::THROW_ERR_INVALID_STATE(env, "Statement is not properly initialized");
+    return env.Undefined();
+  }
+
   int column_count = sqlite3_column_count(statement_);
   Napi::Array columns = Napi::Array::New(env, column_count);
 
@@ -1521,6 +1547,11 @@ void StatementSync::BindParameters(const Napi::CallbackInfo &info,
     return;
   }
 
+  if (!statement_) {
+    node::THROW_ERR_INVALID_STATE(env, "Statement is not properly initialized");
+    return;
+  }
+
   // Check if we have a single object for named parameters
   if (info.Length() == start_index + 1 && info[start_index].IsObject() &&
       !info[start_index].IsBuffer() && !info[start_index].IsArray()) {
@@ -1578,14 +1609,30 @@ void StatementSync::BindParameters(const Napi::CallbackInfo &info,
 
       if (param_index > 0) {
         Napi::Value value = obj.Get(key_str);
-        BindSingleParameter(param_index, value);
+        try {
+          BindSingleParameter(param_index, value);
+        } catch (const Napi::Error &e) {
+          // Re-throw with parameter info
+          std::string msg =
+              "Error binding parameter '" + key_str + "': " + e.Message();
+          node::THROW_ERR_INVALID_ARG_VALUE(env, msg.c_str());
+          return;
+        }
       }
     }
   } else {
     // Positional parameters binding
     for (size_t i = start_index; i < info.Length(); i++) {
       int param_index = static_cast<int>(i - start_index + 1);
-      BindSingleParameter(param_index, info[i]);
+      try {
+        BindSingleParameter(param_index, info[i]);
+      } catch (const Napi::Error &e) {
+        // Re-throw with parameter info
+        std::string msg = "Error binding parameter " +
+                          std::to_string(param_index) + ": " + e.Message();
+        node::THROW_ERR_INVALID_ARG_VALUE(env, msg.c_str());
+        return;
+      }
     }
   }
 }
@@ -1596,41 +1643,62 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
     return; // Silent return since error was already thrown by caller
   }
 
-  if (param.IsNull() || param.IsUndefined()) {
-    sqlite3_bind_null(statement_, param_index);
-  } else if (param.IsBigInt()) {
-    // Handle BigInt before IsNumber since BigInt values should bind as int64
-    bool lossless;
-    int64_t bigint_val = param.As<Napi::BigInt>().Int64Value(&lossless);
-    if (lossless) {
-      sqlite3_bind_int64(statement_, param_index,
-                         static_cast<sqlite3_int64>(bigint_val));
-    } else {
-      // BigInt too large, convert to text
-      std::string bigint_str = param.As<Napi::BigInt>().ToString().Utf8Value();
-      sqlite3_bind_text(statement_, param_index, bigint_str.c_str(), -1,
+  try {
+    if (param.IsNull() || param.IsUndefined()) {
+      sqlite3_bind_null(statement_, param_index);
+    } else if (param.IsBigInt()) {
+      // Handle BigInt before IsNumber since BigInt values should bind as int64
+      bool lossless;
+      int64_t bigint_val = param.As<Napi::BigInt>().Int64Value(&lossless);
+      if (lossless) {
+        sqlite3_bind_int64(statement_, param_index,
+                           static_cast<sqlite3_int64>(bigint_val));
+      } else {
+        // BigInt too large, convert to text
+        std::string bigint_str =
+            param.As<Napi::BigInt>().ToString().Utf8Value();
+        sqlite3_bind_text(statement_, param_index, bigint_str.c_str(), -1,
+                          SQLITE_TRANSIENT);
+      }
+    } else if (param.IsNumber()) {
+      double val = param.As<Napi::Number>().DoubleValue();
+      if (val == std::floor(val) && val >= INT32_MIN && val <= INT32_MAX) {
+        sqlite3_bind_int(statement_, param_index,
+                         param.As<Napi::Number>().Int32Value());
+      } else {
+        sqlite3_bind_double(statement_, param_index,
+                            param.As<Napi::Number>().DoubleValue());
+      }
+    } else if (param.IsString()) {
+      std::string str = param.As<Napi::String>().Utf8Value();
+      sqlite3_bind_text(statement_, param_index, str.c_str(), -1,
                         SQLITE_TRANSIENT);
-    }
-  } else if (param.IsNumber()) {
-    double val = param.As<Napi::Number>().DoubleValue();
-    if (val == std::floor(val) && val >= INT32_MIN && val <= INT32_MAX) {
+    } else if (param.IsBoolean()) {
       sqlite3_bind_int(statement_, param_index,
-                       param.As<Napi::Number>().Int32Value());
+                       param.As<Napi::Boolean>().Value() ? 1 : 0);
+    } else if (param.IsBuffer()) {
+      Napi::Buffer<uint8_t> buffer = param.As<Napi::Buffer<uint8_t>>();
+      sqlite3_bind_blob(statement_, param_index, buffer.Data(),
+                        static_cast<int>(buffer.Length()), SQLITE_TRANSIENT);
+    } else if (param.IsFunction()) {
+      // Functions cannot be stored in SQLite - bind as NULL
+      sqlite3_bind_null(statement_, param_index);
+    } else if (param.IsObject()) {
+      // Try to convert object to string
+      Napi::String str_value = param.ToString();
+      std::string str = str_value.Utf8Value();
+      sqlite3_bind_text(statement_, param_index, str.c_str(), -1,
+                        SQLITE_TRANSIENT);
     } else {
-      sqlite3_bind_double(statement_, param_index,
-                          param.As<Napi::Number>().DoubleValue());
+      // For any other type, bind as NULL
+      sqlite3_bind_null(statement_, param_index);
     }
-  } else if (param.IsString()) {
-    std::string str = param.As<Napi::String>().Utf8Value();
-    sqlite3_bind_text(statement_, param_index, str.c_str(), -1,
-                      SQLITE_TRANSIENT);
-  } else if (param.IsBoolean()) {
-    sqlite3_bind_int(statement_, param_index,
-                     param.As<Napi::Boolean>().Value() ? 1 : 0);
-  } else if (param.IsBuffer()) {
-    Napi::Buffer<uint8_t> buffer = param.As<Napi::Buffer<uint8_t>>();
-    sqlite3_bind_blob(statement_, param_index, buffer.Data(),
-                      static_cast<int>(buffer.Length()), SQLITE_TRANSIENT);
+  } catch (const Napi::Error &e) {
+    // Re-throw Napi errors
+    throw;
+  } catch (const std::exception &e) {
+    // Convert standard exceptions to Napi errors
+    throw Napi::Error::New(Env(), e.what());
   }
 }
 

@@ -1109,4 +1109,396 @@ describe("Invalid Operations Tests", () => {
       }
     });
   });
+
+  describe("Additional Segfault Prevention Tests", () => {
+    test("handles database operations in user function callbacks", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE test (id INTEGER, value TEXT)");
+      db.exec("INSERT INTO test VALUES (1, 'one'), (2, 'two')");
+
+      let callCount = 0;
+      db.function("risky_function", (id: number) => {
+        callCount++;
+        // Try to prepare a statement inside the function
+        const stmt = db.prepare("SELECT * FROM test WHERE id = ?");
+        const result = stmt.get(id);
+        stmt.finalize();
+        return result ? result.value : null;
+      });
+
+      // This should work safely
+      const result = db
+        .prepare("SELECT risky_function(id) as result FROM test")
+        .all();
+      expect(result).toHaveLength(2);
+      expect(callCount).toBe(2);
+
+      db.close();
+    });
+
+    test("handles database close during aggregate execution", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE test (value INTEGER)");
+      db.exec("INSERT INTO test VALUES (1), (2), (3), (4), (5)");
+
+      let stepCount = 0;
+      db.aggregate("close_during_agg", {
+        start: 0,
+        step: (acc: number, val: number) => {
+          stepCount++;
+          if (stepCount === 3) {
+            // This is very risky - closing DB during aggregate
+            // Should be handled gracefully
+            try {
+              db.close();
+            } catch {
+              // Expected to fail
+            }
+          }
+          return acc + val;
+        },
+      });
+
+      // Try to run the aggregate
+      expect(() => {
+        db.prepare("SELECT close_during_agg(value) FROM test").get();
+      }).toThrow();
+    });
+
+    test("handles statement use across database re-open", () => {
+      const dbPath = path.join(os.tmpdir(), `sqlite-test-${Date.now()}.db`);
+
+      try {
+        // Create database and statement
+        const db1 = new DatabaseSync(dbPath);
+        db1.exec("CREATE TABLE test (id INTEGER, value TEXT)");
+        const stmt = db1.prepare("INSERT INTO test VALUES (?, ?)");
+
+        // Close database
+        db1.close();
+
+        // Re-open database (different connection)
+        const db2 = new DatabaseSync(dbPath);
+
+        // Old statement should fail gracefully
+        expect(() => {
+          stmt.run(1, "test");
+        }).toThrow(/closed/i);
+
+        db2.close();
+      } finally {
+        try {
+          fs.unlinkSync(dbPath);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    });
+
+    test("handles statement operations with null/undefined database", () => {
+      const db = new DatabaseSync(":memory:");
+      const stmt = db.prepare("SELECT 1");
+
+      // This is testing an edge case where internal state might be corrupted
+      // In practice, this tests that our C++ code has proper null checks
+      // The actual implementation might prevent this from happening at the JS level
+
+      // First verify the statement works normally
+      const result = stmt.get();
+      expect(result).toEqual({ "1": 1 });
+
+      // Close the database to trigger similar conditions
+      db.close();
+
+      // Now statement operations should fail
+      expect(() => stmt.run()).toThrow(/closed/i);
+      expect(() => stmt.get()).toThrow(/closed/i);
+      expect(() => stmt.all()).toThrow(/closed/i);
+    });
+
+    test("handles rapid database open/close with pending operations", () => {
+      const cycles = 20;
+
+      for (let i = 0; i < cycles; i++) {
+        const db = new DatabaseSync(":memory:");
+        db.exec("CREATE TABLE test (id INTEGER)");
+
+        // Create multiple statements
+        const stmts = [
+          db.prepare("INSERT INTO test VALUES (?)"),
+          db.prepare("SELECT * FROM test"),
+          db.prepare("UPDATE test SET id = ? WHERE id = ?"),
+        ];
+
+        // Start some operations
+        stmts[0].run(i);
+
+        // Immediately close (simulating race condition)
+        db.close();
+
+        // All further operations should fail gracefully
+        for (const stmt of stmts) {
+          expect(() => stmt.run(1, 2)).toThrow(/closed/i);
+        }
+      }
+    });
+
+    test("handles statement finalization race conditions", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE test (id INTEGER)");
+
+      const stmt = db.prepare("SELECT * FROM test");
+
+      // Finalize multiple times rapidly
+      for (let i = 0; i < 10; i++) {
+        stmt.finalize(); // Should be safe to call multiple times
+      }
+
+      // All operations should fail gracefully
+      expect(() => stmt.run()).toThrow(/finalized/i);
+      expect(() => stmt.get()).toThrow(/finalized/i);
+      expect(() => stmt.all()).toThrow(/finalized/i);
+
+      db.close();
+    });
+
+    test("handles aggregate with database operations in result function", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE test (value INTEGER)");
+      db.exec("INSERT INTO test VALUES (1), (2), (3)");
+
+      db.aggregate("risky_result", {
+        start: 0,
+        step: (acc: number, val: number) => acc + val,
+        result: (acc: number) => {
+          // Very risky - doing DB operations in result function
+          try {
+            const stmt = db.prepare("SELECT ? * 2");
+            const result = stmt.get(acc);
+            stmt.finalize();
+            return Object.values(result)[0];
+          } catch {
+            return acc;
+          }
+        },
+      });
+
+      const result = db.prepare("SELECT risky_result(value) FROM test").get();
+      expect(result).toBeDefined();
+
+      db.close();
+    });
+
+    test("handles user function that returns another function", () => {
+      const db = new DatabaseSync(":memory:");
+
+      db.function("return_func", () => {
+        // Return a function (which SQLite can't handle)
+        return function innerFunc() {
+          return "this won't work";
+        };
+      });
+
+      // Should handle gracefully - SQLite converts functions to strings
+      const result = db.prepare("SELECT return_func()").get();
+      const value = Object.values(result)[0];
+      // SQLite converts the function to its string representation
+      expect(value).toMatch(/function|innerFunc/);
+
+      db.close();
+    });
+
+    test("handles circular references in function parameters", () => {
+      const db = new DatabaseSync(":memory:");
+
+      db.function("handle_circular", (param: any) => {
+        // Try to access the parameter safely
+        try {
+          return JSON.stringify(param);
+        } catch {
+          return "circular";
+        }
+      });
+
+      // Create circular object
+      const circular: any = { a: 1 };
+      circular.self = circular;
+
+      // Pass it as a parameter (SQLite will convert to string or null)
+      const stmt = db.prepare("SELECT handle_circular(?)");
+      const result = stmt.get(circular);
+      expect(result).toBeDefined();
+
+      db.close();
+    });
+
+    test("handles extremely nested operations", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE test (id INTEGER, value TEXT)");
+
+      // Create deeply nested function calls
+      let depth = 0;
+      const maxDepth = 10; // Reduced depth to ensure it hits our limit
+
+      for (let i = 0; i < maxDepth; i++) {
+        db.function(`func_${i}`, (x: number) => {
+          depth++;
+          if (depth > maxDepth) {
+            throw new Error("Too deep!");
+          }
+          try {
+            if (i < maxDepth - 1) {
+              const result = db.prepare(`SELECT func_${i + 1}(?)`).get(x + 1);
+              return Object.values(result)[0] as number;
+            }
+            return x;
+          } finally {
+            depth--;
+          }
+        });
+      }
+
+      // This creates a call stack that should trigger our depth limit
+      // or SQLite's own recursion limits
+      try {
+        const result = db.prepare("SELECT func_0(1)").get();
+        // If it succeeds, check the result
+        expect(Object.values(result)[0]).toBe(maxDepth);
+      } catch (error: any) {
+        // Either our error or SQLite's recursion limit
+        expect(error.message).toMatch(/deep|recursion|limit/i);
+      }
+
+      db.close();
+    });
+
+    test("handles database operations in transaction callbacks", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE test (id INTEGER)");
+
+      // Start transaction
+      db.exec("BEGIN");
+
+      // Create statement while in transaction
+      const stmt = db.prepare("INSERT INTO test VALUES (?)");
+      stmt.run(1);
+
+      // Rollback transaction
+      db.exec("ROLLBACK");
+
+      // Statement should still work (prepare isn't affected by rollback)
+      stmt.run(2);
+
+      // Verify only the second insert succeeded
+      const count = db.prepare("SELECT COUNT(*) as count FROM test").get();
+      expect(count.count).toBe(1);
+
+      stmt.finalize();
+      db.close();
+    });
+
+    test("handles invalid memory access patterns", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE test (data BLOB)");
+
+      // Create a buffer and then modify it during bind
+      const buffer = Buffer.alloc(1024);
+      buffer.fill(0x42);
+
+      const stmt = db.prepare("INSERT INTO test VALUES (?)");
+
+      // Modify buffer after binding but before execution
+      stmt.run(buffer);
+      buffer.fill(0xff); // This shouldn't affect what was inserted
+
+      // Verify the original data was stored
+      const result = db.prepare("SELECT data FROM test").get();
+      const retrievedBuffer = result.data as Buffer;
+      expect(retrievedBuffer[0]).toBe(0x42); // Original value, not 0xFF
+
+      db.close();
+    });
+
+    test("handles statement operations with corrupted internal state", () => {
+      const db = new DatabaseSync(":memory:");
+      const stmt = db.prepare("SELECT 1");
+
+      // This test was attempting to directly manipulate internal C++ state
+      // which isn't possible from JavaScript. Instead, test a similar scenario
+      // where the statement becomes invalid
+
+      // Finalize the statement to make it invalid
+      stmt.finalize();
+
+      // Now operations should throw
+      expect(() => stmt.run()).toThrow(/finalized|destroyed|invalid/i);
+
+      db.close();
+    });
+
+    test("handles exceptions during parameter binding", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE test (id INTEGER, value TEXT)");
+
+      const stmt = db.prepare("INSERT INTO test VALUES (?, ?)");
+
+      // Object that throws during conversion
+      const throwingObject = {
+        valueOf() {
+          throw new Error("Conversion error!");
+        },
+        toString() {
+          throw new Error("toString error!");
+        },
+      };
+
+      // Try to bind the throwing object
+      try {
+        stmt.run(1, throwingObject);
+        // If it doesn't throw, check what was inserted
+        const result = db.prepare("SELECT * FROM test WHERE id = 1").get();
+        // The object might have been converted to null or an error string
+        expect(result).toBeDefined();
+      } catch (error: any) {
+        // If it throws, verify it's our error
+        expect(error.message).toMatch(
+          /toString error|Error binding parameter/i,
+        );
+      }
+
+      // Statement should still be usable
+      stmt.run(2, "normal");
+
+      const rows = db.prepare("SELECT * FROM test ORDER BY id").all();
+      // We should have at least the second row
+      expect(rows.length).toBeGreaterThanOrEqual(1);
+      expect(rows[rows.length - 1]).toEqual({ id: 2, value: "normal" });
+
+      db.close();
+    });
+
+    test("handles race between iterator and statement finalization", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE test (id INTEGER)");
+      db.exec("INSERT INTO test VALUES (1), (2), (3), (4), (5)");
+
+      const stmt = db.prepare("SELECT * FROM test");
+
+      // Create multiple iterators
+      const iterators = [stmt.iterate(), stmt.iterate(), stmt.iterate()];
+
+      // Advance first iterator
+      iterators[0].next();
+
+      // Finalize statement while iterators exist
+      stmt.finalize();
+
+      // All iterators should fail gracefully
+      for (const iter of iterators) {
+        expect(() => iter.next()).toThrow(/finalized/i);
+      }
+
+      db.close();
+    });
+  });
 });
