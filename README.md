@@ -359,24 +359,6 @@ The project includes automated sync scripts to keep up-to-date with:
 - **Node.js SQLite implementation** via `npm run sync:node`
 - **SQLite library updates** via `npm run sync:sqlite`
 
-## Current Features
-
-This package now provides a complete SQLite implementation with full Node.js API compatibility.
-
-See [TODO.md](./TODO.md) for the complete feature list and future enhancements.
-
-## Roadmap
-
-**In Progress:**
-
-- 🔄 Comprehensive performance benchmarking
-
-**Future Enhancements:**
-
-- 📋 Better error messages matching Node.js exactly
-- 📋 Additional platform-specific optimizations
-- 📋 Enhanced debugging and profiling tools
-
 ## Security
 
 This project takes security seriously and employs multiple layers of protection:
@@ -408,16 +390,46 @@ MIT License - see [LICENSE](./LICENSE) for details.
 
 This package includes SQLite, which is in the public domain, as well as code from the Node.js project, which is MIT licensed.
 
-## Documentation
-
-- 📖 **API Reference**: [TypeDoc Documentation](https://photostructure.github.io/node-sqlite/)
-- 📋 **Examples**: See [README.md](https://github.com/photostructure/node-sqlite#quick-start) and [test files](https://github.com/photostructure/node-sqlite/tree/main/test)
-
 ## Support
 
 - 🐛 **Bug reports**: [GitHub Issues](https://github.com/photostructure/node-sqlite/issues)
 - 💬 **Questions**: [GitHub Discussions](https://github.com/photostructure/node-sqlite/discussions)
-- 📧 **Security issues**: security@photostructure.com
+- 📧 **Security issues**: see [SECURITY.md](./SECURITY.md)
+
+## Known Limitations
+
+- Worker threads are not currently supported due to V8 isolate handling complexities in native addons. Use separate processes or the main thread for concurrent database access.
+- SQLite sessions/changesets and backup functionality are still in development.
+- Extension loading is not yet implemented.
+
+For concurrent access within the same process, multiple database connections work well with WAL mode enabled.
+
+---
+
+## Development
+
+This project was built with substantial assistance from [Claude Code](https://claude.ai/referral/gM3vgw7pfA), an AI coding assistant.
+
+Note that all changes are human-reviewed before merging.
+
+### Project Timeline
+
+**Conception to v1.0: 3 days** ⚡
+
+- **3,900 lines** of C++ implementation
+- **11,000 lines** of comprehensive TypeScript tests
+- **337 tests** with full API compliance
+- **Multi-platform CI/CD** with automated builds
+- **Security scanning** and memory leak detection
+- **Automated sync** from Node.js and SQLite upstream
+
+### Development Cost
+
+- **API usage**: ~$380 in Claude tokens
+- **Actual cost**: $100/month with Anthropic MAX plan
+- **Time saved**: Weeks of manual porting work
+
+This project demonstrates how AI-assisted development can accelerate complex system programming while maintaining high code quality through comprehensive testing and human oversight.
 
 ---
 
