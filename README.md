@@ -488,7 +488,7 @@ Note that all changes are human-reviewed before merging.
 
 ### Project Timeline
 
-**Conception to v1.0: 3 days** ⚡
+**Conception to v1.0: 4 days** ⚡
 
 - **3,900 lines** of C++ implementation
 - **11,000 lines** of comprehensive TypeScript tests
@@ -500,7 +500,7 @@ Note that all changes are human-reviewed before merging.
 
 ### Development Cost
 
-- **API usage**: ~$390 in Claude tokens
+- **API usage**: ~$500 in Claude tokens
 - **Actual cost**: $100/month Anthropic MAX plan subscription
 - **Time saved**: Weeks of manual porting work
 
