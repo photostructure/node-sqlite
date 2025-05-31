@@ -190,17 +190,8 @@ async function main() {
       );
 
       if (!process.argv.includes("--force")) {
-        const answer = await new Promise((resolve) => {
-          process.stdout.write("Continue anyway? (y/N) ");
-          process.stdin.once("data", (data) =>
-            resolve(data.toString().trim().toLowerCase()),
-          );
-        });
-
-        if (answer !== "y" && answer !== "yes") {
-          console.log("Aborted.");
-          process.exit(0);
-        }
+        console.log("Use --force to proceed anyway.");
+        process.exit(0);
       }
     }
   }
