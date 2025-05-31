@@ -167,6 +167,69 @@ function ensureDir(filePath: string) {
   }
 }
 
+async function checkRemoteFileChanged(
+  url: string,
+  localPath: string,
+): Promise<boolean> {
+  try {
+    // Check if local file exists
+    if (!fs.existsSync(localPath)) {
+      return true; // File doesn't exist locally, need to download
+    }
+
+    // Get local file stats
+    const localStats = fs.statSync(localPath);
+
+    // Make HEAD request to check remote file info
+    const headResponse = await fetch(url, { method: "HEAD" });
+    if (!headResponse.ok) {
+      return true; // Can't check, assume changed
+    }
+
+    // Check ETag if available
+    const etag = headResponse.headers.get("etag");
+    if (etag) {
+      // Store ETags in a simple cache file
+      const cacheFile = path.join(packageRoot, ".sync-cache.json");
+      let cache: Record<string, string> = {};
+
+      try {
+        if (fs.existsSync(cacheFile)) {
+          cache = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+        }
+      } catch {
+        // Ignore cache errors
+      }
+
+      const cachedEtag = cache[url];
+      if (cachedEtag === etag) {
+        return false; // ETags match, no change
+      }
+
+      // Update cache with new ETag
+      cache[url] = etag;
+      try {
+        fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2));
+      } catch {
+        // Ignore cache write errors
+      }
+    }
+
+    // Check Last-Modified if available
+    const lastModified = headResponse.headers.get("last-modified");
+    if (lastModified) {
+      const remoteDate = new Date(lastModified);
+      if (remoteDate <= localStats.mtime) {
+        return false; // Local file is newer or same
+      }
+    }
+
+    return true; // Assume changed if we can't determine
+  } catch {
+    return true; // On error, assume file changed
+  }
+}
+
 async function downloadFile(
   url: string,
   destPath: string,
@@ -325,6 +388,15 @@ async function main() {
       console.log(`  ${url} -> ${destPath}`);
       successCount++;
     } else {
+      // Check if file has changed before downloading
+      const hasChanged = await checkRemoteFileChanged(url, destPath);
+      if (!hasChanged && !args.force) {
+        console.log(`Skipping: ${file.description} (no changes detected)`);
+        skippedCount++;
+        console.log();
+        continue;
+      }
+
       const result = await downloadFile(url, destPath, file.description);
       if (result.success) {
         successCount++;
