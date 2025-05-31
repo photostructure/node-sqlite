@@ -274,4 +274,13 @@ function _checkAggregateOptions() {
   };
 }
 
+// Add a simple test to satisfy Jest
+describe("API Compatibility", () => {
+  it("type checks pass at compile time", () => {
+    // This test file is primarily for TypeScript compile-time checks
+    // The actual testing happens during TypeScript compilation
+    expect(true).toBe(true);
+  });
+});
+
 export {}; // Make this a module
