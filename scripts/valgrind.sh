@@ -22,7 +22,7 @@ valgrind \
     --track-origins=yes \
     --suppressions="$PROJECT_ROOT/.valgrind.supp" \
     --log-file="$VALGRIND_LOG" \
-    node "$SCRIPT_DIR/valgrind-simple-test.js"
+    node "$SCRIPT_DIR/valgrind-simple-test.mjs"
 
 # Check the exit code
 EXIT_CODE=$?

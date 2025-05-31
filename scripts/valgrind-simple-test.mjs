@@ -1,4 +1,4 @@
-const { DatabaseSync } = require("../dist/index.js");
+import { DatabaseSync } from "../dist/index.mjs";
 
 console.log("Starting simple valgrind test...");
 
