@@ -1,32 +1,15 @@
 import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import { DatabaseSync } from "../src/index";
+import { useTempDir } from "./test-utils";
 
 describe("Enhanced location() method tests", () => {
-  let tempDir: string;
+  const { getDbPath } = useTempDir("node-sqlite-location-");
   let dbPath: string;
   let attachedDbPath: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "node-sqlite-location-"));
-    dbPath = path.join(tempDir, "main.db");
-    attachedDbPath = path.join(tempDir, "attached.db");
-  });
-
-  afterEach(() => {
-    // Clean up temp files
-    try {
-      if (fs.existsSync(attachedDbPath)) {
-        fs.unlinkSync(attachedDbPath);
-      }
-      if (fs.existsSync(dbPath)) {
-        fs.unlinkSync(dbPath);
-      }
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
+    dbPath = getDbPath("main.db");
+    attachedDbPath = getDbPath("attached.db");
   });
 
   test("location() returns main database path by default", () => {
@@ -70,7 +53,7 @@ describe("Enhanced location() method tests", () => {
 
   test("location() works with multiple attached databases", () => {
     const db = new DatabaseSync(dbPath);
-    const secondAttachedPath = path.join(tempDir, "second_attached.db");
+    const secondAttachedPath = getDbPath("second_attached.db");
 
     try {
       // Attach multiple databases
@@ -85,14 +68,7 @@ describe("Enhanced location() method tests", () => {
 
       db.close();
     } finally {
-      // Clean up second attached database
-      try {
-        if (fs.existsSync(secondAttachedPath)) {
-          fs.unlinkSync(secondAttachedPath);
-        }
-      } catch {
-        // Ignore cleanup errors
-      }
+      // No need for manual cleanup with test-utils
     }
   });
 
@@ -154,20 +130,12 @@ describe("Enhanced location() method tests", () => {
     const db = new DatabaseSync(dbPath);
 
     // Attach database with special characters (within SQLite identifier rules)
-    const specialPath = path.join(tempDir, "special-db_123.db");
+    const specialPath = getDbPath("special-db_123.db");
     db.exec(`ATTACH DATABASE '${specialPath}' AS "special_db_123"`);
 
     expect(db.location("special_db_123")).toBe(fs.realpathSync(specialPath));
 
     db.close();
-
-    // Clean up
-    try {
-      if (fs.existsSync(specialPath)) {
-        fs.unlinkSync(specialPath);
-      }
-    } catch {
-      // Ignore cleanup errors
-    }
+    // No need for manual cleanup with test-utils
   });
 });

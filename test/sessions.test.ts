@@ -1,31 +1,21 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import {
   DatabaseSync,
   constants,
   type DatabaseSyncInstance,
   type Session,
 } from "../src/index";
+import { useTempDir } from "./test-utils";
 
 describe("SQLite Sessions", () => {
+  const { getDbPath, closeDatabases } = useTempDir("sqlite-session-test-");
   let db: DatabaseSyncInstance;
-  let testDir: string;
 
   beforeEach(() => {
-    // Create a temporary directory for test databases
-    testDir = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-session-test-"));
     db = new DatabaseSync();
   });
 
   afterEach(() => {
-    if (db && db.isOpen) {
-      db.close();
-    }
-    // Clean up temp directory
-    if (testDir && fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    closeDatabases(db);
   });
 
   describe("createSession", () => {
@@ -86,7 +76,7 @@ describe("SQLite Sessions", () => {
 
     it("should support custom database name", () => {
       // Attach another database
-      const attachPath = path.join(testDir, "attached.db");
+      const attachPath = getDbPath("attached.db");
       db.exec(`ATTACH DATABASE '${attachPath}' AS other`);
       db.exec("CREATE TABLE other.data (id INTEGER PRIMARY KEY, value TEXT)");
 

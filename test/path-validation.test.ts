@@ -1,30 +1,10 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { URL } from "node:url";
 import { DatabaseSync, type DatabaseSyncInstance } from "../src";
+import { useTempDir } from "./test-utils";
 
 describe("Path Validation", () => {
-  let tmpDir: string;
-
-  beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "sqlite-path-test-"));
-  });
-
-  afterEach(async () => {
-    // Wait for Windows file handles to be released
-    if (process.platform === "win32") {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    if (tmpDir) {
-      await rm(tmpDir, {
-        recursive: true,
-        force: true,
-        maxRetries: 3,
-        retryDelay: 500,
-      });
-    }
+  const { getDbPath } = useTempDir("sqlite-path-test-", {
+    waitForWindows: true,
   });
 
   describe("String paths", () => {
@@ -35,7 +15,7 @@ describe("Path Validation", () => {
     });
 
     it("should accept file paths as strings", () => {
-      const filePath = join(tmpDir, "test.db");
+      const filePath = getDbPath("test.db");
       const db = new DatabaseSync(filePath);
       expect(db.isOpen).toBe(true);
       expect(db.location()).toBe(filePath);
@@ -51,7 +31,7 @@ describe("Path Validation", () => {
 
   describe("Buffer paths", () => {
     it("should accept valid Buffer paths", () => {
-      const filePath = join(tmpDir, "buffer-test.db");
+      const filePath = getDbPath("buffer-test.db");
       const buffer = Buffer.from(filePath, "utf8");
       const db = new DatabaseSync(buffer);
       expect(db.isOpen).toBe(true);
@@ -78,7 +58,7 @@ describe("Path Validation", () => {
 
   describe("URL paths", () => {
     it("should accept file:// URLs", () => {
-      const filePath = join(tmpDir, "url-test.db");
+      const filePath = getDbPath("url-test.db");
       const fileUrl = new URL(`file://${filePath}`);
       const db = new DatabaseSync(fileUrl);
       expect(db.isOpen).toBe(true);
@@ -88,7 +68,7 @@ describe("Path Validation", () => {
     });
 
     it("should accept file:// URL strings", () => {
-      const filePath = join(tmpDir, "url-string-test.db");
+      const filePath = getDbPath("url-string-test.db");
       const fileUrlString = `file://${filePath}`;
       const urlObj = { href: fileUrlString };
       const db = new DatabaseSync(urlObj as any);
@@ -180,7 +160,7 @@ describe("Path Validation", () => {
     });
 
     it("should accept string destination paths", async () => {
-      const destPath = join(tmpDir, "backup-string.db");
+      const destPath = getDbPath("backup-string.db");
       await sourceDb.backup(destPath);
 
       // Verify backup was created
@@ -192,7 +172,7 @@ describe("Path Validation", () => {
     });
 
     it("should accept Buffer destination paths", async () => {
-      const destPath = join(tmpDir, "backup-buffer.db");
+      const destPath = getDbPath("backup-buffer.db");
       const buffer = Buffer.from(destPath, "utf8");
       await sourceDb.backup(buffer);
 
@@ -205,7 +185,7 @@ describe("Path Validation", () => {
     });
 
     it("should accept file:// URL destination paths", async () => {
-      const destPath = join(tmpDir, "backup-url.db");
+      const destPath = getDbPath("backup-url.db");
       const fileUrl = new URL(`file://${destPath}`);
       await sourceDb.backup(fileUrl);
 

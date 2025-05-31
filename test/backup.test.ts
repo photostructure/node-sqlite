@@ -1,25 +1,25 @@
-import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import { describe, expect, it } from "@jest/globals";
 import * as fs from "node:fs";
-import * as fsp from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
 import { DatabaseSync } from "../src";
+import { createTestDb, useTempDir } from "./test-utils";
 
 describe("Backup functionality", () => {
+  const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-", {
+    waitForWindows: true,
+  });
+
   let sourceDb: InstanceType<typeof DatabaseSync>;
-  let tmpDir: string;
   let sourcePath: string;
   let destPath: string;
 
   beforeEach(() => {
-    // Create temporary directory for test databases
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-backup-test-"));
-    sourcePath = path.join(tmpDir, "source.db");
-    destPath = path.join(tmpDir, "destination.db");
+    sourcePath = getDbPath("source.db");
+    destPath = getDbPath("destination.db");
 
     // Create and populate source database
-    sourceDb = new DatabaseSync(sourcePath);
-    sourceDb.exec(`
+    sourceDb = createTestDb(
+      sourcePath,
+      `
       CREATE TABLE users (
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
@@ -39,30 +39,13 @@ describe("Backup functionality", () => {
         ('Widget', 9.99),
         ('Gadget', 19.99),
         ('Doohickey', 29.99);
-    `);
+    `,
+    );
   });
 
-  afterEach(async () => {
-    try {
-      sourceDb?.close();
-    } catch {
-      // Ignore close errors during cleanup
-    }
-
-    // Wait a bit for Windows file handles to be released
-    if (process.platform === "win32") {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    if (fs.existsSync(tmpDir)) {
-      await fsp.rm(tmpDir, {
-        recursive: true,
-        force: true,
-        maxRetries: 3,
-        retryDelay: 500,
-      });
-    }
-  }, 10000); // Increase timeout to 10 seconds
+  afterEach(() => {
+    closeDatabases(sourceDb);
+  });
 
   it("should create a backup of the database", async () => {
     // Perform backup
@@ -163,7 +146,7 @@ describe("Backup functionality", () => {
 
   it("should handle backup with attached databases", async () => {
     // Attach another database
-    const attachedPath = path.join(tmpDir, "attached.db");
+    const attachedPath = getDbPath("attached.db");
     sourceDb.exec(`ATTACH DATABASE '${attachedPath}' AS attached`);
     sourceDb.exec(`
       CREATE TABLE attached.extra_data (
@@ -215,7 +198,7 @@ describe("Backup functionality", () => {
   });
 
   it("should handle concurrent backups", async () => {
-    const destPath2 = path.join(tmpDir, "destination2.db");
+    const destPath2 = getDbPath("destination2.db");
 
     // Start two backups concurrently
     const [pages1, pages2] = await Promise.all([
@@ -285,7 +268,7 @@ describe("Backup functionality", () => {
     `);
 
     // Perform backup
-    const backupPath = path.join(tmpDir, "full_backup.db");
+    const backupPath = getDbPath("full_backup.db");
     const totalPages = await sourceDb.backup(backupPath);
     expect(totalPages).toBeGreaterThan(0);
 
@@ -463,7 +446,7 @@ describe("Backup functionality", () => {
     };
 
     // Perform backup
-    const backupPath = path.join(tmpDir, "pragma_backup.db");
+    const backupPath = getDbPath("pragma_backup.db");
     await sourceDb.backup(backupPath);
     sourceDb.close();
 
@@ -536,7 +519,7 @@ describe("Backup functionality", () => {
       timestamp: number;
     }> = [];
 
-    const backupPath = path.join(tmpDir, "pages_test.db");
+    const backupPath = getDbPath("pages_test.db");
     const startTime = Date.now();
 
     // Use a small rate to ensure multiple iterations
@@ -614,7 +597,7 @@ describe("Backup functionality", () => {
 
   it("should handle incremental backup simulation", async () => {
     // Create initial backup
-    const backup1Path = path.join(tmpDir, "backup1.db");
+    const backup1Path = getDbPath("backup1.db");
     await sourceDb.backup(backup1Path);
 
     // Add more data
@@ -624,7 +607,7 @@ describe("Backup functionality", () => {
     `);
 
     // Create second backup
-    const backup2Path = path.join(tmpDir, "backup2.db");
+    const backup2Path = getDbPath("backup2.db");
     await sourceDb.backup(backup2Path);
 
     // Don't close sourceDb here - let afterEach handle it
@@ -679,7 +662,7 @@ describe("Backup functionality", () => {
     }
 
     // Test 1: Backup with rate = -1 (all at once)
-    const backup1Path = path.join(tmpDir, "all_at_once.db");
+    const backup1Path = getDbPath("all_at_once.db");
     let callbackCount1 = 0;
 
     await sourceDb.backup(backup1Path, {
@@ -690,7 +673,7 @@ describe("Backup functionality", () => {
     });
 
     // Test 2: Backup with rate = 1 (one page at a time)
-    const backup2Path = path.join(tmpDir, "one_page.db");
+    const backup2Path = getDbPath("one_page.db");
     let callbackCount2 = 0;
     const progressInfo2: Array<{ remaining: number }> = [];
 
@@ -703,7 +686,7 @@ describe("Backup functionality", () => {
     });
 
     // Test 3: Backup with rate = 5
-    const backup3Path = path.join(tmpDir, "five_pages.db");
+    const backup3Path = getDbPath("five_pages.db");
     let callbackCount3 = 0;
     const progressInfo3: Array<{ remaining: number }> = [];
 

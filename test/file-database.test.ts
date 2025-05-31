@@ -1,43 +1,15 @@
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { DatabaseSync } from "../src";
+import { uniqueDbName, useTempDirSuite } from "./test-utils";
 
 describe("File-based Database Tests", () => {
-  let tempDir: string;
+  const { tempDir, getDbPath } = useTempDirSuite("sqlite-test-");
   let dbPath: string;
-
-  beforeAll(() => {
-    // Create a temporary directory for test databases
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-test-"));
-  });
-
-  afterAll(() => {
-    // Clean up temporary directory
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
-  });
 
   beforeEach(() => {
     // Generate unique database file for each test
-    dbPath = path.join(
-      tempDir,
-      `test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
-    );
-  });
-
-  afterEach(() => {
-    // Clean up test database file
-    try {
-      if (fs.existsSync(dbPath)) {
-        fs.unlinkSync(dbPath);
-      }
-    } catch {
-      // Ignore cleanup errors
-    }
+    dbPath = getDbPath(uniqueDbName());
   });
 
   test("create and open file-based database", () => {
@@ -147,26 +119,32 @@ describe("File-based Database Tests", () => {
   });
 
   test("database with relative path", () => {
-    const originalCwd = process.cwd();
-    try {
-      // Change to temp directory
-      process.chdir(tempDir);
+    // Test that SQLite resolves relative paths from the current working directory
+    const relativePath = `relative-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
 
-      const relativePath = "relative-test.db";
-      const db = new DatabaseSync(relativePath);
+    // When we pass a relative path to SQLite, it resolves it from process.cwd()
+    const expectedAbsolutePath = path.resolve(process.cwd(), relativePath);
 
-      // SQLite normalizes the path to absolute, so check that it ends with the relative path
-      const location = db.location();
-      expect(location).not.toBeNull();
-      expect(location!.endsWith(relativePath)).toBe(true);
-
-      db.exec("CREATE TABLE test (id INTEGER)");
-      db.close();
-
-      expect(fs.existsSync(path.join(tempDir, relativePath))).toBe(true);
-    } finally {
-      process.chdir(originalCwd);
+    // Ensure the file doesn't exist before we start
+    if (fs.existsSync(expectedAbsolutePath)) {
+      fs.unlinkSync(expectedAbsolutePath);
     }
+
+    const db = new DatabaseSync(relativePath);
+
+    // SQLite normalizes the path to absolute based on current working directory
+    const location = db.location();
+    expect(location).not.toBeNull();
+    expect(location).toBe(expectedAbsolutePath);
+
+    db.exec("CREATE TABLE test (id INTEGER)");
+    db.close();
+
+    // Verify the file was created at the expected location
+    expect(fs.existsSync(expectedAbsolutePath)).toBe(true);
+
+    // Clean up the file from the current working directory
+    fs.unlinkSync(expectedAbsolutePath);
   });
 
   test("sequential database access to same file", () => {
@@ -196,7 +174,7 @@ describe("File-based Database Tests", () => {
   });
 
   test("database backup and restore", () => {
-    const backupPath = path.join(tempDir, "backup.db");
+    const backupPath = getDbPath("backup.db");
 
     // Create source database with data
     const sourceDb = new DatabaseSync(dbPath);
@@ -274,14 +252,16 @@ describe("File-based Database Tests", () => {
 
   test("database file error handling", () => {
     // Test opening database in non-existent directory
-    const invalidPath = path.join("/nonexistent/directory/test.db");
+    const invalidPath = "/nonexistent/directory/test.db";
     expect(() => new DatabaseSync(invalidPath)).toThrow();
 
-    // Test opening directory as database file
-    expect(() => new DatabaseSync(tempDir)).toThrow();
+    // Create a fresh directory to test opening directory as database file
+    const testDir = path.join(tempDir, "test-directory");
+    fs.mkdirSync(testDir, { recursive: true });
+    expect(() => new DatabaseSync(testDir)).toThrow();
 
     // Test corrupted database file - create a file that definitely isn't SQLite
-    const corruptedPath = path.join(tempDir, "corrupted.db");
+    const corruptedPath = getDbPath("corrupted.db");
     fs.writeFileSync(corruptedPath, "This is not a SQLite database file");
 
     // SQLite might auto-repair or create new database, so test operations instead

@@ -1,35 +1,30 @@
-import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
-import * as fs from "fs";
-import * as os from "os";
+import { describe, expect, it } from "@jest/globals";
 import * as path from "path";
 import { Worker } from "worker_threads";
-import { DatabaseSync } from "../src";
+import { createTestDb, getDirname, useTempDir } from "./test-utils";
 
 describe("Simple Worker Thread Test", () => {
-  let tempDir: string;
+  const { getDbPath, writeWorkerScript } = useTempDir("sqlite-worker-simple-");
   let dbPath: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-worker-simple-"));
-    dbPath = path.join(tempDir, "test.db");
+    dbPath = getDbPath("test.db");
 
     // Initialize a simple database
-    const db = new DatabaseSync(dbPath);
-    db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)");
-    db.exec("INSERT INTO test (value) VALUES ('hello'), ('world')");
+    const db = createTestDb(
+      dbPath,
+      `
+      CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);
+      INSERT INTO test (value) VALUES ('hello'), ('world');
+    `,
+    );
     db.close();
-  });
-
-  afterEach(() => {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
   });
 
   it("should read from database in worker thread", async () => {
     const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(__dirname, "../dist/index.js")}');
+const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
 
 try {
   const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
@@ -44,8 +39,7 @@ try {
 }
 `;
 
-    const workerPath = path.join(tempDir, "simple-worker.js");
-    fs.writeFileSync(workerPath, workerCode);
+    const workerPath = writeWorkerScript("simple-worker.js", workerCode);
 
     const worker = new Worker(workerPath, {
       workerData: { dbPath },
@@ -68,7 +62,7 @@ try {
   it("should handle two concurrent workers", async () => {
     const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(__dirname, "../dist/index.js")}');
+const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
 
 try {
   const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
@@ -83,8 +77,7 @@ try {
 }
 `;
 
-    const workerPath = path.join(tempDir, "count-worker.js");
-    fs.writeFileSync(workerPath, workerCode);
+    const workerPath = writeWorkerScript("count-worker.js", workerCode);
 
     const workers = [
       new Worker(workerPath, { workerData: { dbPath, threadId: 1 } }),

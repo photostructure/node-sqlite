@@ -1,29 +1,23 @@
 import { expect } from "@jest/globals";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
+import * as fs from "node:fs";
 import { DatabaseSync } from "../src/index";
+import { useTempDir } from "./test-utils";
 
 describe("Backup Restoration", () => {
-  let tmpDir: string;
+  const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-");
+
   let sourceDb: InstanceType<typeof DatabaseSync>;
   let sourceFile: string;
   let backupFile: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-backup-test-"));
-    sourceFile = path.join(tmpDir, "source.db");
-    backupFile = path.join(tmpDir, "backup.db");
+    sourceFile = getDbPath("source.db");
+    backupFile = getDbPath("backup.db");
     sourceDb = new DatabaseSync(sourceFile);
   });
 
   afterEach(() => {
-    try {
-      if (sourceDb) sourceDb.close();
-    } catch {
-      // Ignore errors when closing
-    }
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    closeDatabases(sourceDb);
   });
 
   it("should restore data correctly from backup", async () => {
@@ -232,7 +226,7 @@ describe("Backup Restoration", () => {
     `);
 
     // First backup
-    const backup1 = path.join(tmpDir, "backup1.db");
+    const backup1 = getDbPath("backup1.db");
     await sourceDb.backup(backup1);
 
     // Add more data
@@ -241,7 +235,7 @@ describe("Backup Restoration", () => {
     );
 
     // Second backup
-    const backup2 = path.join(tmpDir, "backup2.db");
+    const backup2 = getDbPath("backup2.db");
     await sourceDb.backup(backup2);
 
     // Add final data

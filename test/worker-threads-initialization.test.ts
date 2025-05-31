@@ -1,29 +1,25 @@
-import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
-import * as fs from "fs";
-import * as os from "os";
+import { describe, expect, it } from "@jest/globals";
 import * as path from "path";
 import { Worker } from "worker_threads";
 import { DatabaseSync } from "../src";
+import { createTestDb, getDirname, useTempDir } from "./test-utils";
 
 describe("Worker Thread Initialization Test", () => {
-  let tempDir: string;
+  const { getDbPath, writeWorkerScript } = useTempDir("sqlite-worker-init-");
   let dbPath: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-worker-init-"));
-    dbPath = path.join(tempDir, "test.db");
+    dbPath = getDbPath("test.db");
 
     // Initialize a simple database
-    const db = new DatabaseSync(dbPath);
-    db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)");
-    db.exec("INSERT INTO test (value) VALUES ('hello'), ('world')");
+    const db = createTestDb(
+      dbPath,
+      `
+      CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);
+      INSERT INTO test (value) VALUES ('hello'), ('world');
+    `,
+    );
     db.close();
-  });
-
-  afterEach(() => {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
   });
 
   it("should work reliably when main thread initializes module first", async () => {
@@ -34,14 +30,13 @@ describe("Worker Thread Initialization Test", () => {
     mainDb.close();
     console.log("Main thread initialization complete");
 
-    const results = [];
     const numWorkers = 10; // Test multiple workers
 
     // Run multiple workers concurrently after main thread initialization
     const workerPromises = Array.from({ length: numWorkers }, (_, i) => {
       const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(__dirname, "../dist/index.js")}');
+const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
 
 try {
   console.log('Worker ${i} starting...');
@@ -67,8 +62,7 @@ try {
 }
 `;
 
-      const workerPath = path.join(tempDir, `init-worker-${i}.js`);
-      fs.writeFileSync(workerPath, workerCode);
+      const workerPath = writeWorkerScript(`init-worker-${i}.js`, workerCode);
 
       const worker = new Worker(workerPath, {
         workerData: { dbPath, workerId: i },
@@ -106,7 +100,7 @@ try {
     for (let i = 0; i < 20; i++) {
       const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(__dirname, "../dist/index.js")}');
+const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
 
 try {
   const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
@@ -129,8 +123,7 @@ try {
 }
 `;
 
-      const workerPath = path.join(tempDir, `seq-worker-${i}.js`);
-      fs.writeFileSync(workerPath, workerCode);
+      const workerPath = writeWorkerScript(`seq-worker-${i}.js`, workerCode);
 
       const worker = new Worker(workerPath, {
         workerData: { dbPath, workerId: i },
@@ -163,7 +156,7 @@ try {
       try {
         const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(__dirname, "../dist/index.js")}');
+const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
 
 try {
   const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
@@ -186,14 +179,16 @@ try {
 }
 `;
 
-        const workerPath = path.join(tempDir, `control-worker-${i}.js`);
-        fs.writeFileSync(workerPath, workerCode);
+        const workerPath = writeWorkerScript(
+          `control-worker-${i}.js`,
+          workerCode,
+        );
 
         const worker = new Worker(workerPath, {
           workerData: { dbPath, workerId: i },
         });
 
-        const result = await new Promise<any>((resolve, reject) => {
+        const result = await new Promise<any>((resolve, _reject) => {
           worker.on("message", resolve);
           worker.on("error", (error) => {
             resolve({ success: false, error: error.message, workerId: i });

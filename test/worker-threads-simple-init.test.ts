@@ -1,31 +1,27 @@
-import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
-import * as fs from "fs";
-import * as os from "os";
+import { describe, expect, it } from "@jest/globals";
 import * as path from "path";
 import { Worker } from "worker_threads";
 import { DatabaseSync } from "../src";
+import { createTestDb, getDirname, useTempDir } from "./test-utils";
 
 describe("Simple Worker Thread Init Test", () => {
-  let tempDir: string;
+  const { getDbPath, writeWorkerScript } = useTempDir(
+    "sqlite-worker-simple-init-",
+  );
   let dbPath: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "sqlite-worker-simple-init-"),
-    );
-    dbPath = path.join(tempDir, "test.db");
+    dbPath = getDbPath("test.db");
 
     // Initialize a simple database
-    const db = new DatabaseSync(dbPath);
-    db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)");
-    db.exec("INSERT INTO test (value) VALUES ('hello'), ('world')");
+    const db = createTestDb(
+      dbPath,
+      `
+      CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);
+      INSERT INTO test (value) VALUES ('hello'), ('world');
+    `,
+    );
     db.close();
-  });
-
-  afterEach(() => {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
   });
 
   it("should test with main thread module initialization", async () => {
@@ -39,7 +35,7 @@ describe("Simple Worker Thread Init Test", () => {
     // Now test a single worker
     const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(__dirname, "../dist/index.js")}');
+const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
 
 try {
   console.log('Worker starting with pre-initialized module...');
@@ -60,8 +56,7 @@ try {
 }
 `;
 
-    const workerPath = path.join(tempDir, "simple-init-worker.js");
-    fs.writeFileSync(workerPath, workerCode);
+    const workerPath = writeWorkerScript("simple-init-worker.js", workerCode);
 
     const worker = new Worker(workerPath, {
       workerData: { dbPath },
@@ -85,7 +80,7 @@ try {
 
     const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(__dirname, "../dist/index.js")}');
+const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
 
 try {
   console.log('Worker starting without pre-initialization...');
@@ -106,14 +101,16 @@ try {
 }
 `;
 
-    const workerPath = path.join(tempDir, "simple-control-worker.js");
-    fs.writeFileSync(workerPath, workerCode);
+    const workerPath = writeWorkerScript(
+      "simple-control-worker.js",
+      workerCode,
+    );
 
     const worker = new Worker(workerPath, {
       workerData: { dbPath },
     });
 
-    const result = await new Promise<any>((resolve, reject) => {
+    const result = await new Promise<any>((resolve, _reject) => {
       worker.on("message", resolve);
       worker.on("error", (error) => {
         // Handle HandleScope errors gracefully

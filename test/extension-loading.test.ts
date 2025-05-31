@@ -2,13 +2,14 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { DatabaseSync } from "../src";
+import { getDirname } from "./test-utils";
 
 describe("Extension Loading Tests", () => {
   // Build the test extension before running tests
   let testExtensionPath: string;
 
   beforeAll(() => {
-    const extensionDir = path.join(__dirname, "fixtures", "test-extension");
+    const extensionDir = path.join(getDirname(), "fixtures", "test-extension");
 
     // Build the extension
     try {
@@ -360,7 +361,7 @@ describe("Extension Loading Tests", () => {
     });
 
     test("can load extension in file-based database", () => {
-      const dbPath = path.join(__dirname, "test-extension.db");
+      const dbPath = path.join(getDirname(), "test-extension.db");
 
       // Clean up any existing file
       if (fs.existsSync(dbPath)) {

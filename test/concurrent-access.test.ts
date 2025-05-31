@@ -1,24 +1,12 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import { DatabaseSync } from "../src";
+import { useTempDir } from "./test-utils";
 
 describe("Concurrent Access Patterns Tests", () => {
-  let tempDir: string;
+  const { getDbPath } = useTempDir("sqlite-concurrent-test-");
   let dbPath: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-concurrent-test-"));
-    dbPath = path.join(tempDir, "concurrent.db");
-  });
-
-  afterEach(() => {
-    try {
-      if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
-      fs.rmdirSync(tempDir);
-    } catch {
-      // Ignore cleanup errors
-    }
+    dbPath = getDbPath("concurrent.db");
   });
 
   describe("Multiple Reader Pattern", () => {
