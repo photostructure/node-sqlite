@@ -26,7 +26,16 @@
       "Bash(npm rebuild:*)",
       "Bash(valgrind:*)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:google.github.io)"
+      "WebFetch(domain:google.github.io)",
+      "Bash(/usr/bin/rg:*)",
+      "Bash(true)",
+      "Bash(timeout:*)",
+      "Bash(for i in {1..10})",
+      "Bash(do echo \"=== Test run $i ===\")",
+      "Bash(done)",
+      "Bash(TEST_ESM=0 npm run test:cjs -- --listTests)",
+      "Bash(TEST_ESM=0 npx jest test/basic.test.ts --no-coverage)",
+      "Bash(npx jest test:*)"
     ]
   },
   "enableAllProjectMcpServers": false

@@ -15,7 +15,7 @@ if (majorVersion !== 24) {
 
 // Run the TypeScript compiler on the API compatibility test
 try {
-  execSync("tsc --noEmit src/api-compatibility.test.ts", { stdio: "inherit" });
+  execSync("tsc -p scripts/tsconfig.api-check.json", { stdio: "inherit" });
   console.log("API compatibility check passed");
 } catch (error) {
   console.error("API compatibility check failed");

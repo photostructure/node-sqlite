@@ -4,8 +4,21 @@
   "description": "Drop-in replacement for node:sqlite",
   "homepage": "https://photostructure.github.io/node-sqlite/",
   "types": "./dist/index.d.ts",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
   "repository": {
     "type": "git",
     "url": "git+ssh://git@github.com/photostructure/node-sqlite.git"
@@ -21,12 +34,15 @@
     "sync:sqlite": "tsx scripts/sync-from-sqlite.ts",
     "node-gyp-rebuild": "node-gyp rebuild",
     "prebuild": "prebuildify --napi --tag-libc --strip",
-    "compile": "tsc --noEmit",
-    "bundle": "tsup src/index.ts --format cjs,esm --dts",
-    "test": "jest",
-    "test:unit": "jest --testPathPattern=src/",
-    "test:integration": "jest --testPathPattern=test/",
+    "compile": "tsc -p tsconfig.build.json --noEmit",
+    "bundle": "tsup && node scripts/post-build.mjs",
+    "test": "npm run test:cjs -- --no-coverage",
+    "test:cjs": "TEST_ESM=0 jest",
+    "test:esm": "TEST_ESM=1 node --experimental-vm-modules --no-warnings node_modules/jest/bin/jest.js",
+    "test:all": "run-s \"test:cjs -- {@}\" \"test:esm -- {@}\" --",
+    "test:build-extension": "cd test/fixtures/test-extension && node build.js",
     "test:memory": "cross-env TEST_MEMORY=1 node --expose-gc node_modules/jest/bin/jest.js --no-coverage test/memory.test.ts",
+    "tests": "run-s compile lint test:cjs test:esm tests:memory",
     "tests:memory": "tsx scripts/check-memory.ts",
     "benchmark": "cd benchmark && npm install && npm run bench",
     "benchmark:memory": "cd benchmark && npm install && npm run bench:memory",
@@ -42,9 +58,9 @@
     "fmt": "run-p fmt:*",
     "fmt:prettier": "prettier --write \"**/*.{ts,js,mjs,json,md}\"",
     "// fmt:clang": "on ubuntu: `sudo apt install clang-format`. NOTE: we don't reformat src/upstream!",
-    "fmt:clang": "clang-format --style=LLVM -i src/shims/*.h src/*.cpp src/*.h || true",
+    "fmt:clang": "clang-format --style=LLVM -i src/shims/*.h src/*.cpp src/*.h test/fixtures/test-extension/*.c || true",
     "docs": "typedoc",
-    "build": "run-s compile bundle",
+    "build": "npm run bundle",
     "precommit": "tsx scripts/precommit.ts",
     "prepare-release": "npm run build",
     "release": "release-it",
@@ -52,7 +68,7 @@
     "security:audit": "npm audit --production",
     "security:audit-fix": "npm audit fix --force",
     "security:osv": "osv-scanner scan source --recursive . || echo 'OSV Scanner not installed. Install with: go install github.com/google/osv-scanner/cmd/osv-scanner@latest'",
-    "security:snyk": "snyk test --all-projects --severity-threshold=high"
+    "xsecurity:snyk": "snyk test"
   },
   "gypfile": true,
   "publishConfig": {
@@ -114,7 +130,7 @@
     "typescript-eslint": "^8.33.0"
   },
   "versions": {
-    "nodejs": "v24.1.1@9f46cda",
+    "nodejs": "v24.1.1@8d2ba38",
     "sqlite": "3.50.0"
   }
 }

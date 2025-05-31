@@ -18,10 +18,12 @@ function run(command: string, description: string) {
 run("npm run sync:node", "Fetching upstream from Node.js");
 run("npm run sync:sqlite", "Fetching upstream from SQLite.org");
 run("npm run fmt", "Formatting code");
+run("npm run compile", "Type checking with TypeScript");
 run("npm run lint", "Running ESLint");
 run("npm run security", "Running security checks");
-run("npm run build", "Building project");
-run("npm test", "Running tests");
+run("npm run bundle", "Building project");
+run("npm run test:cjs", "Running tests in CJS mode");
+run("npm run test:esm", "Running tests in ESM mode");
 
 // Platform-specific checks
 if (isLinux || isMacOS) {

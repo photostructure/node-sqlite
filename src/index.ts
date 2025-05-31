@@ -1,7 +1,10 @@
-// Load the native binding
-const binding = require("node-gyp-build")(
-  require("node:path").join(__dirname, ".."),
-);
+// Load the native binding with support for both CJS and ESM
+import nodeGypBuild from "node-gyp-build";
+import { join } from "node:path";
+import { _dirname } from "./dirname";
+
+// Use _dirname() helper that works in both CJS/ESM and Jest
+const binding = nodeGypBuild(join(_dirname(), ".."));
 
 /**
  * Configuration options for opening a database.

@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": ["node", "jest"]
+  },
+  "include": ["../src/api-compatibility.test.ts", "../src/**/*.ts"],
+  "exclude": ["../node_modules", "../src/upstream"]
+}
