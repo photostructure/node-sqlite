@@ -11,6 +11,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 // Include our shims
 #include "shims/base_object.h"
@@ -28,6 +29,24 @@ class DatabaseSync;
 class StatementSync;
 class StatementSyncIterator;
 class Session;
+
+// Per-worker instance data
+struct AddonData {
+  std::mutex mutex;
+  // Track all database instances for proper cleanup
+  std::set<DatabaseSync *> databases;
+
+  // Store constructors per-instance instead of globally
+  Napi::FunctionReference databaseSyncConstructor;
+  Napi::FunctionReference statementSyncConstructor;
+  Napi::FunctionReference statementSyncIteratorConstructor;
+  Napi::FunctionReference sessionConstructor;
+};
+
+// Worker thread support functions
+void RegisterDatabaseInstance(Napi::Env env, DatabaseSync *database);
+void UnregisterDatabaseInstance(Napi::Env env, DatabaseSync *database);
+AddonData *GetAddonData(napi_env env);
 
 // Path validation function
 std::optional<std::string> ValidateDatabasePath(Napi::Env env, Napi::Value path,
@@ -112,8 +131,6 @@ public:
   Napi::Value Backup(const Napi::CallbackInfo &info);
 
 private:
-  static Napi::FunctionReference constructor_;
-
   void InternalOpen(DatabaseOpenConfiguration config);
   void InternalClose();
 
@@ -124,7 +141,10 @@ private:
   bool enable_load_extension_ = false;
   std::map<std::string, std::unique_ptr<StatementSync>> prepared_statements_;
   std::set<sqlite3_session *> sessions_;
+  std::thread::id creation_thread_;
+  napi_env env_; // Store for cleanup purposes
 
+  bool ValidateThread(Napi::Env env) const;
   friend class Session;
 };
 
@@ -132,7 +152,6 @@ private:
 class StatementSync : public Napi::ObjectWrap<StatementSync> {
 public:
   static constexpr int kInternalFieldCount = 1;
-  static Napi::FunctionReference constructor_;
 
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
@@ -171,6 +190,7 @@ private:
   sqlite3_stmt *statement_ = nullptr;
   std::string source_sql_;
   bool finalized_ = false;
+  std::thread::id creation_thread_;
 
   // Configuration options
   bool use_big_ints_ = false;
@@ -180,14 +200,13 @@ private:
   // Bare named parameters mapping (bare name -> full name with prefix)
   std::optional<std::map<std::string, std::string>> bare_named_params_;
 
+  bool ValidateThread(Napi::Env env) const;
   friend class StatementSyncIterator;
 };
 
 // Iterator class for StatementSync
 class StatementSyncIterator : public Napi::ObjectWrap<StatementSyncIterator> {
 public:
-  static Napi::FunctionReference constructor_;
-
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   static Napi::Object Create(Napi::Env env, StatementSync *stmt);
 
@@ -208,8 +227,6 @@ private:
 // Session class for SQLite changesets
 class Session : public Napi::ObjectWrap<Session> {
 public:
-  static Napi::FunctionReference constructor_;
-
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   static Napi::Object Create(Napi::Env env, DatabaseSync *db,
                              sqlite3_session *session);

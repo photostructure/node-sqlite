@@ -23,6 +23,7 @@ This package extracts that implementation into a standalone library that:
 - **Full-featured**: Includes all SQLite extensions (FTS, JSON, math functions, etc.)
 - **High performance**: Direct SQLite C library integration with minimal overhead
 - **Type-safe**: Complete TypeScript definitions matching Node.js exactly
+- **Worker thread support**: Full support for Node.js worker threads with proper isolation
 - **Future-proof**: When `node:sqlite` becomes stable, switching back requires zero code changes
 
 ## Installation
@@ -154,6 +155,73 @@ const restoredDb = new DatabaseSync("./mydata.db");
 // Verify restoration
 const count = restoredDb.prepare("SELECT COUNT(*) as count FROM users").get();
 console.log(`Restored database has ${count.count} users`);
+```
+
+### Worker Thread Support
+
+This package has full support for Node.js worker threads. Each worker thread gets its own isolated SQLite environment.
+
+```javascript
+// main.js
+const { Worker } = require("worker_threads");
+
+// Spawn multiple workers to handle database operations
+const worker1 = new Worker("./db-worker.js");
+const worker2 = new Worker("./db-worker.js");
+
+// Send queries to workers
+worker1.postMessage({
+  sql: "SELECT * FROM users WHERE active = ?",
+  params: [true],
+});
+
+// db-worker.js
+const { parentPort } = require("worker_threads");
+const { DatabaseSync } = require("@photostructure/sqlite");
+
+// Each worker creates its own database connection
+const db = new DatabaseSync("./app.db");
+
+parentPort.on("message", ({ sql, params }) => {
+  try {
+    const stmt = db.prepare(sql);
+    const results = stmt.all(...params);
+    stmt.finalize();
+    parentPort.postMessage({ success: true, results });
+  } catch (error) {
+    parentPort.postMessage({ success: false, error: error.message });
+  }
+});
+```
+
+Key points:
+
+- Each worker thread must create its own `DatabaseSync` instance
+- Database connections cannot be shared between threads
+- SQLite's built-in thread safety (multi-thread mode) ensures data integrity
+- No special initialization required - just use normally in each worker
+
+### Extension Loading
+
+SQLite extensions can be loaded to add custom functionality. Extension loading requires explicit permission for security.
+
+```javascript
+// Enable extension loading at database creation
+const db = new DatabaseSync("./mydb.sqlite", {
+  allowExtension: true,
+});
+
+// Enable extension loading (required before loading)
+db.enableLoadExtension(true);
+
+// Load an extension
+db.loadExtension("./extensions/vector.so");
+
+// Optionally specify an entry point
+db.loadExtension("./extensions/custom.so", "sqlite3_custom_init");
+
+// Disable extension loading when done for security
+db.enableLoadExtension(false);
 ```
 
 ### Session-based Change Tracking
@@ -392,11 +460,21 @@ This package includes SQLite, which is in the public domain, as well as code fro
 - 💬 **Questions**: [GitHub Discussions](https://github.com/photostructure/node-sqlite/discussions)
 - 📧 **Security issues**: see [SECURITY.md](./SECURITY.md)
 
-## Known Limitations
+## Current Implementation Status
 
-- Worker threads are not currently supported due to V8 isolate handling complexities in native addons. Use separate processes or the main thread for concurrent database access.
-- SQLite sessions/changesets and backup functionality are still in development.
-- Extension loading is not yet implemented.
+✅ **Fully Supported:**
+
+- Core SQLite operations (all database and statement methods)
+- User-defined functions and aggregate functions
+- SQLite sessions/changesets for change tracking
+- Database backup and restoration
+- Worker thread support with proper isolation
+- Extension loading with security controls
+- All SQLite data types including BigInt
+- Statement iterators
+- Transaction control
+
+All features of Node.js's built-in SQLite module are now fully implemented!
 
 For concurrent access within the same process, multiple database connections work well with WAL mode enabled.
 

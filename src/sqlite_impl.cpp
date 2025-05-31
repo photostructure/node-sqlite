@@ -222,11 +222,11 @@ std::optional<std::string> ValidateDatabasePath(Napi::Env env, Napi::Value path,
   return std::nullopt;
 }
 
-// Static member initialization
-Napi::FunctionReference DatabaseSync::constructor_;
-Napi::FunctionReference StatementSync::constructor_;
-Napi::FunctionReference StatementSyncIterator::constructor_;
-Napi::FunctionReference Session::constructor_;
+// Note: Static constructors removed to fix worker thread issues
+// Constructors are now stored in per-instance AddonData
+
+// Forward declarations for addon data access
+extern AddonData *GetAddonData(napi_env env);
 
 // DatabaseSync Implementation
 Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
@@ -249,15 +249,23 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceAccessor("isTransaction", &DatabaseSync::IsTransactionGetter,
                         nullptr)});
 
-  constructor_ = Napi::Persistent(func);
-  constructor_.SuppressDestruct();
+  // Store constructor in per-instance addon data instead of static variable
+  AddonData *addon_data = GetAddonData(env);
+  if (addon_data) {
+    addon_data->databaseSyncConstructor = Napi::Persistent(func);
+    addon_data->databaseSyncConstructor.SuppressDestruct();
+  }
 
   exports.Set("DatabaseSync", func);
   return exports;
 }
 
 DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
-    : Napi::ObjectWrap<DatabaseSync>(info) {
+    : Napi::ObjectWrap<DatabaseSync>(info),
+      creation_thread_(std::this_thread::get_id()), env_(info.Env()) {
+  // Register this instance for cleanup tracking
+  RegisterDatabaseInstance(info.Env(), this);
+
   // If no arguments, create but don't open (for manual open() call)
   if (info.Length() == 0) {
     return;
@@ -321,6 +329,9 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
 }
 
 DatabaseSync::~DatabaseSync() {
+  // Unregister this instance
+  UnregisterDatabaseInstance(env_, this);
+
   if (connection_) {
     InternalClose();
   }
@@ -399,6 +410,10 @@ Napi::Value DatabaseSync::Open(const Napi::CallbackInfo &info) {
 Napi::Value DatabaseSync::Close(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
+  if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
+
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "Database is not open");
     return env.Undefined();
@@ -416,6 +431,10 @@ Napi::Value DatabaseSync::Close(const Napi::CallbackInfo &info) {
 Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
+  if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
+
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "Database is not open");
     return env.Undefined();
@@ -429,9 +448,15 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
   std::string sql = info[0].As<Napi::String>().Utf8Value();
 
   try {
-    // Create new StatementSync instance
+    // Create new StatementSync instance using addon data constructor
+    AddonData *addon_data = GetAddonData(env);
+    if (!addon_data || addon_data->statementSyncConstructor.IsEmpty()) {
+      node::THROW_ERR_INVALID_STATE(
+          env, "StatementSync constructor not initialized");
+      return env.Undefined();
+    }
     Napi::Object stmt_obj =
-        StatementSync::constructor_.New({}).As<Napi::Object>();
+        addon_data->statementSyncConstructor.New({}).As<Napi::Object>();
 
     // Initialize the statement
     StatementSync *stmt = StatementSync::Unwrap(stmt_obj);
@@ -446,6 +471,10 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
 
 Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
+
+  if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "Database is not open");
@@ -1147,15 +1176,20 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceAccessor("expandedSQL", &StatementSync::ExpandedSQLGetter,
                         nullptr)});
 
-  constructor_ = Napi::Persistent(func);
-  constructor_.SuppressDestruct();
+  // Store constructor in per-instance addon data instead of static variable
+  AddonData *addon_data = GetAddonData(env);
+  if (addon_data) {
+    addon_data->statementSyncConstructor = Napi::Persistent(func);
+    addon_data->statementSyncConstructor.SuppressDestruct();
+  }
 
   exports.Set("StatementSync", func);
   return exports;
 }
 
 StatementSync::StatementSync(const Napi::CallbackInfo &info)
-    : Napi::ObjectWrap<StatementSync>(info) {
+    : Napi::ObjectWrap<StatementSync>(info),
+      creation_thread_(std::this_thread::get_id()) {
   // Constructor - initialization happens in InitStatement
 }
 
@@ -1187,6 +1221,10 @@ StatementSync::~StatementSync() {
 
 Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
+
+  if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
 
   if (finalized_) {
     node::THROW_ERR_INVALID_STATE(env, "Statement has been finalized");
@@ -1240,6 +1278,10 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
 
 Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
+
+  if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
 
   if (finalized_) {
     node::THROW_ERR_INVALID_STATE(env, "Statement has been finalized");
@@ -1851,15 +1893,25 @@ Napi::Object StatementSyncIterator::Init(Napi::Env env, Napi::Object exports) {
                   return info.This();
                 }));
 
-  constructor_ = Napi::Persistent(func);
-  constructor_.SuppressDestruct();
+  // Store constructor in per-instance addon data instead of static variable
+  AddonData *addon_data = GetAddonData(env);
+  if (addon_data) {
+    addon_data->statementSyncIteratorConstructor = Napi::Persistent(func);
+    addon_data->statementSyncIteratorConstructor.SuppressDestruct();
+  }
 
   exports.Set("StatementSyncIterator", func);
   return exports;
 }
 
 Napi::Object StatementSyncIterator::Create(Napi::Env env, StatementSync *stmt) {
-  Napi::Object obj = constructor_.New({});
+  AddonData *addon_data = GetAddonData(env);
+  if (!addon_data || addon_data->statementSyncIteratorConstructor.IsEmpty()) {
+    Napi::Error::New(env, "StatementSyncIterator constructor not initialized")
+        .ThrowAsJavaScriptException();
+    return Napi::Object::New(env);
+  }
+  Napi::Object obj = addon_data->statementSyncIteratorConstructor.New({});
   StatementSyncIterator *iter =
       Napi::ObjectWrap<StatementSyncIterator>::Unwrap(obj);
   iter->SetStatement(stmt);
@@ -1956,8 +2008,12 @@ Napi::Object Session::Init(Napi::Env env, Napi::Object exports) {
                    InstanceMethod("patchset", &Session::Patchset),
                    InstanceMethod("close", &Session::Close)});
 
-  constructor_ = Napi::Persistent(func);
-  constructor_.SuppressDestruct();
+  // Store constructor in per-instance addon data instead of static variable
+  AddonData *addon_data = GetAddonData(env);
+  if (addon_data) {
+    addon_data->sessionConstructor = Napi::Persistent(func);
+    addon_data->sessionConstructor.SuppressDestruct();
+  }
 
   exports.Set("Session", func);
   return exports;
@@ -1965,7 +2021,13 @@ Napi::Object Session::Init(Napi::Env env, Napi::Object exports) {
 
 Napi::Object Session::Create(Napi::Env env, DatabaseSync *db,
                              sqlite3_session *session) {
-  Napi::Object obj = constructor_.New({});
+  AddonData *addon_data = GetAddonData(env);
+  if (!addon_data || addon_data->sessionConstructor.IsEmpty()) {
+    Napi::Error::New(env, "Session constructor not initialized")
+        .ThrowAsJavaScriptException();
+    return Napi::Object::New(env);
+  }
+  Napi::Object obj = addon_data->sessionConstructor.New({});
   Session *sess = Napi::ObjectWrap<Session>::Unwrap(obj);
   sess->SetSession(db, session);
   return obj;
@@ -2271,6 +2333,25 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
   job->ScheduleBackup();
 
   return promise;
+}
+
+// Thread validation implementations
+bool DatabaseSync::ValidateThread(Napi::Env env) const {
+  if (std::this_thread::get_id() != creation_thread_) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "Database connection cannot be used from different thread");
+    return false;
+  }
+  return true;
+}
+
+bool StatementSync::ValidateThread(Napi::Env env) const {
+  if (std::this_thread::get_id() != creation_thread_) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "Statement cannot be used from different thread");
+    return false;
+  }
+  return true;
 }
 
 } // namespace sqlite

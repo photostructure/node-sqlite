@@ -1,12 +1,71 @@
+#include <memory>
+#include <mutex>
 #include <napi.h>
+#include <set>
 
 #include "sqlite_impl.h"
 
 namespace photostructure {
 namespace sqlite {
 
+// Cleanup function for worker termination
+void CleanupAddonData(napi_env env, void *finalize_data, void *finalize_hint) {
+  AddonData *addon_data = static_cast<AddonData *>(finalize_data);
+
+  // Clean up any remaining database connections
+  {
+    std::lock_guard<std::mutex> lock(addon_data->mutex);
+    for (auto *db : addon_data->databases) {
+      // Database destructors will handle cleanup
+      // This is just to ensure proper lifecycle management
+    }
+    addon_data->databases.clear();
+  }
+
+  delete addon_data;
+}
+
+// Helper to get addon data for current environment
+AddonData *GetAddonData(napi_env env) {
+  void *data = nullptr;
+  napi_status status = napi_get_instance_data(env, &data);
+  if (status != napi_ok || data == nullptr) {
+    return nullptr;
+  }
+  return static_cast<AddonData *>(data);
+}
+
+// Register a database instance for cleanup tracking
+void RegisterDatabaseInstance(Napi::Env env, DatabaseSync *database) {
+  AddonData *addon_data = GetAddonData(env);
+  if (addon_data) {
+    std::lock_guard<std::mutex> lock(addon_data->mutex);
+    addon_data->databases.insert(database);
+  }
+}
+
+// Unregister a database instance
+void UnregisterDatabaseInstance(Napi::Env env, DatabaseSync *database) {
+  AddonData *addon_data = GetAddonData(env);
+  if (addon_data) {
+    std::lock_guard<std::mutex> lock(addon_data->mutex);
+    addon_data->databases.erase(database);
+  }
+}
+
 // Initialize the SQLite module
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
+  // Set up per-worker instance data
+  AddonData *addon_data = new AddonData();
+  napi_status status =
+      napi_set_instance_data(env, addon_data, CleanupAddonData, nullptr);
+  if (status != napi_ok) {
+    delete addon_data;
+    Napi::Error::New(env, "Failed to set instance data")
+        .ThrowAsJavaScriptException();
+    return exports;
+  }
+
   DatabaseSync::Init(env, exports);
   StatementSync::Init(env, exports);
   StatementSyncIterator::Init(env, exports);
