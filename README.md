@@ -500,7 +500,7 @@ Note that all changes are human-reviewed before merging.
 
 ### Development Cost
 
-- **API usage**: ~$500 in Claude tokens
+- **API usage**: ~$550 in Claude tokens
 - **Actual cost**: $100/month Anthropic MAX plan subscription
 - **Time saved**: Weeks of manual porting work
 
