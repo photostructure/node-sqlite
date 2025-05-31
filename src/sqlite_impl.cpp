@@ -252,7 +252,8 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
   // Store constructor in per-instance addon data instead of static variable
   AddonData *addon_data = GetAddonData(env);
   if (addon_data) {
-    addon_data->databaseSyncConstructor = Napi::Persistent(func);
+    addon_data->databaseSyncConstructor =
+        Napi::Reference<Napi::Function>::New(func);
   }
 
   exports.Set("DatabaseSync", func);
@@ -1178,7 +1179,8 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
   // Store constructor in per-instance addon data instead of static variable
   AddonData *addon_data = GetAddonData(env);
   if (addon_data) {
-    addon_data->statementSyncConstructor = Napi::Persistent(func);
+    addon_data->statementSyncConstructor =
+        Napi::Reference<Napi::Function>::New(func);
   }
 
   exports.Set("StatementSync", func);
@@ -1894,7 +1896,8 @@ Napi::Object StatementSyncIterator::Init(Napi::Env env, Napi::Object exports) {
   // Store constructor in per-instance addon data instead of static variable
   AddonData *addon_data = GetAddonData(env);
   if (addon_data) {
-    addon_data->statementSyncIteratorConstructor = Napi::Persistent(func);
+    addon_data->statementSyncIteratorConstructor =
+        Napi::Reference<Napi::Function>::New(func);
   }
 
   exports.Set("StatementSyncIterator", func);
@@ -2008,7 +2011,7 @@ Napi::Object Session::Init(Napi::Env env, Napi::Object exports) {
   // Store constructor in per-instance addon data instead of static variable
   AddonData *addon_data = GetAddonData(env);
   if (addon_data) {
-    addon_data->sessionConstructor = Napi::Persistent(func);
+    addon_data->sessionConstructor = Napi::Reference<Napi::Function>::New(func);
   }
 
   exports.Set("Session", func);
