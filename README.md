@@ -422,11 +422,12 @@ Note that all changes are human-reviewed before merging.
 - **Multi-platform CI/CD** with automated builds
 - **Security scanning** and memory leak detection
 - **Automated sync** from Node.js and SQLite upstream
+- **Robust [benchmarking suite](./benchmark/README.md)** including all popular Node.js SQLite libraries 
 
 ### Development Cost
 
-- **API usage**: ~$380 in Claude tokens
-- **Actual cost**: $100/month with Anthropic MAX plan
+- **API usage**: ~$390 in Claude tokens
+- **Actual cost**: $100/month Anthropic MAX plan subscription
 - **Time saved**: Weeks of manual porting work
 
 This project demonstrates how AI-assisted development can accelerate complex system programming while maintaining high code quality through comprehensive testing and human oversight.
