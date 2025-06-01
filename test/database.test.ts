@@ -256,7 +256,7 @@ describe("File-based Database Tests", () => {
     db.exec("CREATE TABLE test (id INTEGER)");
 
     expect(fs.existsSync(subDbPath)).toBe(true);
-    expect(db.location()).toBe(subDbPath);
+    expect(db.location()).toBe(fs.realpathSync(subDbPath));
 
     db.close();
   });
@@ -462,7 +462,7 @@ describe("Database Configuration Tests", () => {
       location: customPath,
     });
 
-    expect(db.location()).toBe(customPath);
+    expect(db.location()).toBe(fs.realpathSync(customPath));
     expect(fs.existsSync(customPath)).toBe(true);
 
     db.close();
