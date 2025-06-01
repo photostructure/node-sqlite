@@ -28,7 +28,7 @@ buildProcess.on("close", (code) => {
     sourceFile = path.join(buildDir, "test_extension.dll");
     targetFile = path.join(targetDir, "test_extension.dll");
   } else if (process.platform === "darwin") {
-    sourceFile = path.join(buildDir, "test_extension.so");
+    sourceFile = path.join(buildDir, "test_extension.dylib");
     targetFile = path.join(targetDir, "test_extension.dylib");
   } else {
     sourceFile = path.join(buildDir, "test_extension.so");
