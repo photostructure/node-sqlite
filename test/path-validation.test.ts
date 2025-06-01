@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import { URL } from "node:url";
 import { DatabaseSync, type DatabaseSyncInstance } from "../src";
 import { useTempDir } from "./test-utils";
@@ -18,7 +19,7 @@ describe("Path Validation", () => {
       const filePath = getDbPath("test.db");
       const db = new DatabaseSync(filePath);
       expect(db.isOpen).toBe(true);
-      expect(db.location()).toBe(filePath);
+      expect(db.location()).toBe(fs.realpathSync(filePath));
       db.close();
     });
 
@@ -35,7 +36,7 @@ describe("Path Validation", () => {
       const buffer = Buffer.from(filePath, "utf8");
       const db = new DatabaseSync(buffer);
       expect(db.isOpen).toBe(true);
-      expect(db.location()).toBe(filePath);
+      expect(db.location()).toBe(fs.realpathSync(filePath));
       db.close();
     });
 
@@ -74,7 +75,7 @@ describe("Path Validation", () => {
       const db = new DatabaseSync(urlObj as any);
       expect(db.isOpen).toBe(true);
       // SQLite returns the converted file path, not the original URL
-      expect(db.location()).toBe(filePath);
+      expect(db.location()).toBe(fs.realpathSync(filePath));
       db.close();
     });
 
