@@ -28,7 +28,11 @@ This document tracks the remaining tasks before releasing v1.0.0.
 
 ### Medium Priority
 
-- [ ] **Resource limits testing** - Test SQLite resource limit handling
+- [x] **Resource limits testing** - Test SQLite resource limit handling
+  - ✅ Created comprehensive resource limits tests (test/resource-limits.test.ts)
+  - ✅ Tested SQL statement length, column counts, attached databases
+  - ✅ Tested expression depth, JOIN complexity, LIKE patterns
+  - ✅ Verified SQLite's built-in constraints are properly enforced
 - [x] **Concurrent access patterns** - Test multi-process scenarios
   - ✅ Created comprehensive concurrent access tests (test/concurrent-access.test.ts)
   - ✅ Created multi-process tests with child processes (test/multi-process-simple.test.ts)
