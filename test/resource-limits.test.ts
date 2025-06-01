@@ -1,7 +1,7 @@
+import { existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DatabaseSync } from "../src/index";
-import { existsSync, rmSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
 
 describe("SQLite Resource Limits", () => {
   let db: InstanceType<typeof DatabaseSync>;
@@ -21,7 +21,7 @@ describe("SQLite Resource Limits", () => {
       // Test with a reasonable number of columns
       const columnCount = 100;
       const longSQL = `SELECT ${Array(columnCount).fill("1").join(", ")}`;
-      
+
       expect(() => {
         db.exec(longSQL);
       }).not.toThrow();
@@ -32,7 +32,7 @@ describe("SQLite Resource Limits", () => {
       // That's too large to test practically, so let's just verify we can handle large statements
       const largeString = "x".repeat(1024 * 1024); // 1MB string
       const largeSQL = `SELECT '${largeString}' as data`;
-      
+
       // This should work fine since it's well under the limit
       expect(() => {
         const result = db.prepare(largeSQL).get() as { data: string };
@@ -53,7 +53,7 @@ describe("SQLite Resource Limits", () => {
         .fill(null)
         .map((_, i) => `col${i} TEXT`)
         .join(", ");
-      
+
       expect(() => {
         db.exec(`CREATE TABLE many_cols (${columns})`);
       }).not.toThrow();
@@ -66,7 +66,7 @@ describe("SQLite Resource Limits", () => {
         .fill(null)
         .map((_, i) => `col${i} TEXT`)
         .join(", ");
-      
+
       expect(() => {
         db.exec(`CREATE TABLE too_many_cols (${columns})`);
       }).toThrow();
@@ -74,9 +74,9 @@ describe("SQLite Resource Limits", () => {
 
     test("should enforce compound SELECT column limit", () => {
       // SQLite has a limit on the number of result columns
-      const columnCount = 2001;  // Exceeds the 2000 column limit
+      const columnCount = 2001; // Exceeds the 2000 column limit
       const select = Array(columnCount).fill("1").join(", ");
-      
+
       expect(() => {
         db.exec(`SELECT ${select}`);
       }).toThrow(/too many columns/i);
@@ -105,12 +105,12 @@ describe("SQLite Resource Limits", () => {
       for (let i = 0; i < 5; i++) {
         const tempFile = join(tmpdir(), `test-attach-${Date.now()}-${i}.db`);
         tempFiles.push(tempFile);
-        
+
         // Create a database file
         const tempDb = new DatabaseSync(tempFile);
         tempDb.exec(`CREATE TABLE test${i} (id INTEGER)`);
         tempDb.close();
-        
+
         // Attach it to main database
         expect(() => {
           db.exec(`ATTACH DATABASE '${tempFile}' AS db${i}`);
@@ -121,27 +121,30 @@ describe("SQLite Resource Limits", () => {
     test("should enforce attached database limit", () => {
       // SQLite's default max attached databases is 10 (plus main = 11 total)
       const attachLimit = 10;
-      
+
       // Attach databases up to the limit
       for (let i = 0; i < attachLimit; i++) {
-        const tempFile = join(tmpdir(), `test-attach-limit-${Date.now()}-${i}.db`);
+        const tempFile = join(
+          tmpdir(),
+          `test-attach-limit-${Date.now()}-${i}.db`,
+        );
         tempFiles.push(tempFile);
-        
+
         const tempDb = new DatabaseSync(tempFile);
         tempDb.exec(`CREATE TABLE test${i} (id INTEGER)`);
         tempDb.close();
-        
+
         db.exec(`ATTACH DATABASE '${tempFile}' AS db${i}`);
       }
-      
+
       // Try to attach one more (should fail)
       const extraFile = join(tmpdir(), `test-attach-extra-${Date.now()}.db`);
       tempFiles.push(extraFile);
-      
+
       const extraDb = new DatabaseSync(extraFile);
       extraDb.exec("CREATE TABLE test (id INTEGER)");
       extraDb.close();
-      
+
       expect(() => {
         db.exec(`ATTACH DATABASE '${extraFile}' AS db_extra`);
       }).toThrow(/too many attached databases/i);
@@ -156,7 +159,7 @@ describe("SQLite Resource Limits", () => {
     test("should handle nested subqueries", () => {
       db.exec("CREATE TABLE test (id INTEGER, value TEXT)");
       db.exec("INSERT INTO test VALUES (1, 'a'), (2, 'b'), (3, 'c')");
-      
+
       // Create a moderately nested query
       const nestedQuery = `
         SELECT * FROM (
@@ -167,7 +170,7 @@ describe("SQLite Resource Limits", () => {
           )
         )
       `;
-      
+
       expect(() => {
         db.prepare(nestedQuery).all();
       }).not.toThrow();
@@ -179,7 +182,7 @@ describe("SQLite Resource Limits", () => {
       for (let i = 0; i < 1001; i++) {
         deepExpression = `(${deepExpression} + 1)`;
       }
-      
+
       expect(() => {
         db.exec(`SELECT ${deepExpression}`);
       }).toThrow();
@@ -192,13 +195,15 @@ describe("SQLite Resource Limits", () => {
     });
 
     test("should handle tables with many indexes", () => {
-      db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, a INT, b INT, c INT, d INT)");
-      
+      db.exec(
+        "CREATE TABLE test (id INTEGER PRIMARY KEY, a INT, b INT, c INT, d INT)",
+      );
+
       // Create multiple indexes
       for (let i = 0; i < 10; i++) {
         db.exec(`CREATE INDEX idx${i} ON test (a, b)`);
       }
-      
+
       // Should work fine
       expect(() => {
         db.exec("INSERT INTO test VALUES (1, 1, 2, 3, 4)");
@@ -210,17 +215,17 @@ describe("SQLite Resource Limits", () => {
       for (let i = 0; i < 20; i++) {
         db.exec(`CREATE TABLE t${i} (id INTEGER)`);
       }
-      
+
       // SQLite has limits on JOIN complexity (default 64 tables)
       // Building a query with many JOINs
       let joinQuery = "SELECT t0.id FROM t0";
       for (let i = 1; i < 65; i++) {
         joinQuery += ` CROSS JOIN t${i % 20} AS t${i}`;
       }
-      
+
       expect(() => {
         db.prepare(joinQuery);
-      }).toThrow();  // Should throw some error about too many joins/tables
+      }).toThrow(); // Should throw some error about too many joins/tables
     });
   });
 
@@ -231,10 +236,10 @@ describe("SQLite Resource Limits", () => {
 
     test("should handle large INSERT operations", () => {
       db.exec("CREATE TABLE test (id INTEGER, data TEXT)");
-      
+
       const stmt = db.prepare("INSERT INTO test VALUES (?, ?)");
       const largeString = "x".repeat(1000);
-      
+
       // Insert many rows
       expect(() => {
         for (let i = 0; i < 1000; i++) {
@@ -246,18 +251,18 @@ describe("SQLite Resource Limits", () => {
     test("should handle LIKE pattern length limits", () => {
       db.exec("CREATE TABLE test (id INTEGER, data TEXT)");
       db.exec("INSERT INTO test VALUES (1, 'test data')");
-      
+
       // Test with a reasonable LIKE pattern
       const normalPattern = "%test%";
-      
+
       expect(() => {
         db.prepare("SELECT * FROM test WHERE data LIKE ?").all(normalPattern);
       }).not.toThrow();
-      
+
       // SQLite's LIKE pattern limit is quite high (default 50000)
       // The actual limit may vary based on compile options
       const veryLongPattern = "%" + "x".repeat(100000) + "%";
-      
+
       expect(() => {
         db.prepare("SELECT * FROM test WHERE data LIKE ?").all(veryLongPattern);
       }).toThrow(/LIKE or GLOB pattern too complex/i);
@@ -272,7 +277,7 @@ describe("SQLite Resource Limits", () => {
     test("should handle multiple triggers on a table", () => {
       db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)");
       db.exec("CREATE TABLE audit (action TEXT, timestamp INTEGER)");
-      
+
       // Create multiple triggers
       db.exec(`
         CREATE TRIGGER tr_insert AFTER INSERT ON test
@@ -280,34 +285,38 @@ describe("SQLite Resource Limits", () => {
           INSERT INTO audit VALUES ('INSERT', strftime('%s', 'now'));
         END;
       `);
-      
+
       db.exec(`
         CREATE TRIGGER tr_update AFTER UPDATE ON test
         BEGIN
           INSERT INTO audit VALUES ('UPDATE', strftime('%s', 'now'));
         END;
       `);
-      
+
       db.exec(`
         CREATE TRIGGER tr_delete AFTER DELETE ON test
         BEGIN
           INSERT INTO audit VALUES ('DELETE', strftime('%s', 'now'));
         END;
       `);
-      
+
       // Test triggers work
       db.exec("INSERT INTO test VALUES (1, 'test')");
       db.exec("UPDATE test SET value = 'updated' WHERE id = 1");
       db.exec("DELETE FROM test WHERE id = 1");
-      
-      const auditCount = db.prepare("SELECT COUNT(*) as count FROM audit").get() as { count: number };
+
+      const auditCount = db
+        .prepare("SELECT COUNT(*) as count FROM audit")
+        .get() as { count: number };
       expect(auditCount.count).toBe(3);
     });
 
     test("should handle complex view definitions", () => {
       db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
-      db.exec("CREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER, total REAL)");
-      
+      db.exec(
+        "CREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER, total REAL)",
+      );
+
       // Create a complex view
       db.exec(`
         CREATE VIEW user_order_summary AS
@@ -323,11 +332,13 @@ describe("SQLite Resource Limits", () => {
         LEFT JOIN orders o ON u.id = o.user_id
         GROUP BY u.id, u.name
       `);
-      
+
       // Insert test data
       db.exec("INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob')");
-      db.exec("INSERT INTO orders VALUES (1, 1, 100.0), (2, 1, 200.0), (3, 2, 150.0)");
-      
+      db.exec(
+        "INSERT INTO orders VALUES (1, 1, 100.0), (2, 1, 200.0), (3, 2, 150.0)",
+      );
+
       // Query the view
       const results = db.prepare("SELECT * FROM user_order_summary").all();
       expect(results).toHaveLength(2);
