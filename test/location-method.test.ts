@@ -63,8 +63,12 @@ describe("Enhanced location() method tests", () => {
       // Test all database locations
       expect(db.location()).toBe(fs.realpathSync(dbPath));
       expect(db.location("main")).toBe(fs.realpathSync(dbPath));
-      expect(db.location("first_attached")).toBe(attachedDbPath);
-      expect(db.location("second_attached")).toBe(secondAttachedPath);
+      expect(db.location("first_attached")).toBe(
+        fs.realpathSync(attachedDbPath),
+      );
+      expect(db.location("second_attached")).toBe(
+        fs.realpathSync(secondAttachedPath),
+      );
 
       db.close();
     } finally {
@@ -88,8 +92,8 @@ describe("Enhanced location() method tests", () => {
 
     // Case sensitivity test (SQLite database names are case insensitive)
     db.exec(`ATTACH DATABASE '${attachedDbPath}' AS TestDB`);
-    expect(db.location("TestDB")).toBe(attachedDbPath);
-    expect(db.location("testdb")).toBe(attachedDbPath); // SQLite is case insensitive for database names
+    expect(db.location("TestDB")).toBe(fs.realpathSync(attachedDbPath));
+    expect(db.location("testdb")).toBe(fs.realpathSync(attachedDbPath)); // SQLite is case insensitive for database names
 
     db.close();
   });
