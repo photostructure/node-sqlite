@@ -135,7 +135,7 @@ describe("File-based Database Tests", () => {
     // SQLite normalizes the path to absolute based on current working directory
     const location = db.location();
     expect(location).not.toBeNull();
-    expect(location).toBe(expectedAbsolutePath);
+    expect(location).toBe(fs.realpathSync(expectedAbsolutePath));
 
     db.exec("CREATE TABLE test (id INTEGER)");
     db.close();
