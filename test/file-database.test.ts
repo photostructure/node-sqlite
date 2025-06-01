@@ -16,7 +16,7 @@ describe("File-based Database Tests", () => {
     expect(fs.existsSync(dbPath)).toBe(false);
 
     const db = new DatabaseSync(dbPath);
-    expect(db.location()).toBe(dbPath);
+    expect(db.location()).toBe(fs.realpathSync(dbPath));
     expect(db.isOpen).toBe(true);
 
     // File should be created
@@ -107,7 +107,7 @@ describe("File-based Database Tests", () => {
     const absolutePath = path.resolve(dbPath);
     const db = new DatabaseSync(absolutePath);
 
-    expect(db.location()).toBe(absolutePath);
+    expect(db.location()).toBe(fs.realpathSync(absolutePath));
     const location = db.location();
     expect(location).not.toBeNull();
     expect(path.isAbsolute(location!)).toBe(true);
