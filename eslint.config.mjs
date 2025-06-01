@@ -16,7 +16,7 @@ export default [
   },
   // Additional configuration for CommonJS test files
   {
-    files: ["test/**/*.js"],
+    files: ["test/**/*.js", "test/**/*.cjs"],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -33,7 +33,6 @@ export default [
       "dist",
       "docs",
       "*.cts",
-      "*.cjs",
       "prebuilds",
       "node_modules",
       "src/upstream/**", // Ignore upstream Node.js files
