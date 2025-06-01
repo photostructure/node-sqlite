@@ -10,6 +10,8 @@ const isESM =
 const config = {
   displayName: `@photostructure/sqlite (${isESM ? "ESM" : "CJS"})`,
   testEnvironment: "jest-environment-node",
+  // Increase timeout for slower CI environments, especially Windows
+  testTimeout: process.env.CI ? 30000 : 10000,
   roots: ["<rootDir>/src", "<rootDir>/test"],
   coverageProvider: "v8",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
