@@ -15,10 +15,6 @@ void CleanupAddonData(napi_env env, void *finalize_data, void *finalize_hint) {
   // Clean up any remaining database connections
   {
     std::lock_guard<std::mutex> lock(addon_data->mutex);
-    for (auto *db : addon_data->databases) {
-      // Database destructors will handle cleanup
-      // This is just to ensure proper lifecycle management
-    }
     addon_data->databases.clear();
   }
 

@@ -50,9 +50,13 @@
         "SQLITE_SOUNDEX",
         "SQLITE_THREADSAFE=2"
       ],
+      # cflags apply only to C files (not C++), so -Wno-implicit-fallthrough
+      # suppresses SQLite's intentional switch fallthrough warnings without
+      # affecting our C++ code
       "cflags": [
         "-fvisibility=hidden",
-        "-fPIC"
+        "-fPIC",
+        "-Wno-implicit-fallthrough"
       ],
       "cflags_cc": [
         "-fexceptions",
