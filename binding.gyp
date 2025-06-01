@@ -24,7 +24,7 @@
         "HAVE_USLEEP=1",
         "SQLITE_DEFAULT_CACHE_SIZE=-16000",
         "SQLITE_DEFAULT_FOREIGN_KEYS=1",
-        "SQLITE_DEFAULT_MEMSTATUS=0",
+        # "SQLITE_DEFAULT_MEMSTATUS=0", https://www.sqlite.org/forum/forumpost/c1cc8b057a
         "SQLITE_DEFAULT_WAL_SYNCHRONOUS=1",
         "SQLITE_DQS=0",
         "SQLITE_ENABLE_COLUMN_METADATA",
