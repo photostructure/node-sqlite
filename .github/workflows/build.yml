@@ -119,6 +119,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
       - run: npm ci
+      - run: npm run build
       - run: npm test
 
   test-ubuntu:
@@ -143,6 +144,7 @@ jobs:
           path: ./prebuilds
           merge-multiple: true
       - run: npm ci
+      - run: npm run build
       - run: npm test
 
   test-alpine:
@@ -166,6 +168,7 @@ jobs:
           docker run --rm -v $(pwd):/tmp/project --entrypoint /bin/sh --platform linux/${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} node:${{ matrix.node-version }}-alpine -c "\
           cd /tmp/project && \
           npm ci && \
+          npm run build && \
           npm test"
 
   publish:
