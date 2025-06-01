@@ -171,10 +171,26 @@ jobs:
           npm run build && \
           npm test"
 
+  test-api-compatibility:
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+      - name: Check API compatibility types
+        run: npm run lint:api-compat
+      - name: Run API compatibility tests
+        run: npm run test:api-compat
+
   publish:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
-    needs: [test-mac-win, test-ubuntu, test-alpine]
+    needs: [test-mac-win, test-ubuntu, test-alpine, test-api-compatibility]
     permissions:
       contents: write
       packages: write

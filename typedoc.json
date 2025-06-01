@@ -7,7 +7,12 @@
   "excludeInternal": true,
   "readme": "README.md",
   "githubPages": true,
-  "exclude": ["**/*.test.ts", "**/*.spec.ts", "**/test/**", "**/api-compatibility.test.ts"],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/test/**",
+    "**/api-compatibility.test.ts"
+  ],
   "tsconfig": "tsconfig.build.json",
   "navigationLinks": {
     "GitHub": "https://github.com/photostructure/node-sqlite",

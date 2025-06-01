@@ -63,6 +63,8 @@ const config = {
         "^(\\.{1,2}/.*)\\.js$": "$1",
       }
     : {},
+  // Exclude api-compatibility test from main test suite (runs separately)
+  testPathIgnorePatterns: ["/node_modules/", "api-compatibility\\.test\\.ts"],
 };
 
 module.exports = config;

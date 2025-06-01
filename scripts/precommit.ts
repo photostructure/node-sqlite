@@ -25,6 +25,16 @@ run("npm run bundle", "Building project");
 run("npm run test:cjs", "Running tests in CJS mode");
 run("npm run test:esm", "Running tests in ESM mode");
 
+// Check Node.js version for API compatibility tests
+const nodeVersion = process.version;
+const majorVersion = parseInt(nodeVersion.split(".")[0].substring(1), 10);
+if (majorVersion >= 22) {
+  run("npm run lint:api-compat", "Checking API compatibility types");
+  run("npm run test:api-compat", "Running API compatibility tests");
+} else {
+  console.log("\n⚠ Skipping API compatibility checks (requires Node.js 22+)");
+}
+
 // Platform-specific checks
 if (isLinux || isMacOS) {
   run("npm run clang-tidy", "Running clang-tidy");
