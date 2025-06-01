@@ -359,7 +359,7 @@ describe("Multi-Process Database Access", () => {
           db.exec("COMMIT");
           db.close();
           console.log("LOCK_RELEASED");
-        }, 500);
+        }, 1000); // Increased lock time for CI reliability
       `;
 
       // Script that tries to write while locked
@@ -381,7 +381,7 @@ describe("Multi-Process Database Access", () => {
           } finally {
             db.close();
           }
-        }, 100);
+        }, 200); // Increased delay for CI reliability
       `;
 
       // Start lock holder process
