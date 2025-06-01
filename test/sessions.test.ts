@@ -7,7 +7,10 @@ import {
 import { useTempDir } from "./test-utils";
 
 describe("SQLite Sessions", () => {
-  const { getDbPath, closeDatabases } = useTempDir("sqlite-session-test-");
+  const { getDbPath, closeDatabases } = useTempDir("sqlite-session-test-", {
+    waitForWindows: true,
+    cleanupWalFiles: true,
+  });
   let db: DatabaseSyncInstance;
 
   beforeEach(() => {

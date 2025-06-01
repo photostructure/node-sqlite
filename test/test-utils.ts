@@ -138,7 +138,7 @@ export function useTempDir(
 
     // Wait a bit for Windows file handles to be released if requested
     if (options?.waitForWindows && process.platform === "win32") {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     if (fs.existsSync(context.tempDir)) {
