@@ -43,6 +43,7 @@
     "test:all": "run-s \"test:cjs -- {@}\" \"test:esm -- {@}\" --",
     "// test:api-compat": "run by the api compability CI workflow",
     "test:api-compat": "jest --config jest.config.api-compat.cjs",
+    "test:node-compat": "NODE_OPTIONS=\"--experimental-sqlite --no-warnings\" npm run test:cjs -- --no-coverage test/node-compatibility.test.ts",
     "test:build-extension": "cd test/fixtures/test-extension && node build.js",
     "test:memory": "cross-env TEST_MEMORY=1 node --expose-gc node_modules/jest/bin/jest.js --no-coverage test/memory.test.ts",
     "tests": "run-s compile lint test:cjs test:esm tests:memory",
@@ -111,8 +112,8 @@
     "@eslint/js": "^9.28.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.15.29",
-    "@typescript-eslint/eslint-plugin": "^8.33.0",
-    "@typescript-eslint/parser": "^8.33.0",
+    "@typescript-eslint/eslint-plugin": "^8.33.1",
+    "@typescript-eslint/parser": "^8.33.1",
     "cross-env": "^7.0.3",
     "del-cli": "^6.0.0",
     "eslint": "^9.28.0",
@@ -131,7 +132,7 @@
     "tsx": "^4.19.4",
     "typedoc": "^0.28.5",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.33.0"
+    "typescript-eslint": "^8.33.1"
   },
   "versions": {
     "nodejs": "v24.1.1@8a1eaea",
