@@ -51,7 +51,7 @@ describe("Simple Multi-Process Tests", () => {
 
     // Read from child process
     const { stdout } = await execFile("node", [
-      path.join(getDirname(), "multi-process-helper.js"),
+      path.join(getDirname(), "multi-process-helper.cjs"),
       "read",
       dbPath,
     ]);
@@ -83,7 +83,7 @@ describe("Simple Multi-Process Tests", () => {
     for (let i = 0; i < 3; i++) {
       promises.push(
         execFile("node", [
-          path.join(getDirname(), "multi-process-helper.js"),
+          path.join(getDirname(), "multi-process-helper.cjs"),
           "increment",
           dbPath,
           i.toString(),
