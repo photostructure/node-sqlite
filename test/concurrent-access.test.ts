@@ -1,8 +1,16 @@
 import { DatabaseSync } from "../src";
 import { useTempDir } from "./test-utils";
 
+// Increase timeout for concurrent tests on Windows CI
+if (process.platform === "win32" && process.env.CI) {
+  jest.setTimeout(60000);
+}
+
 describe("Concurrent Access Patterns Tests", () => {
-  const { getDbPath } = useTempDir("sqlite-concurrent-test-");
+  const { getDbPath } = useTempDir("sqlite-concurrent-test-", {
+    waitForWindows: true,
+    cleanupWalFiles: true,
+  });
   let dbPath: string;
 
   beforeEach(() => {
