@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "../src";
 import { getTestTimeout } from "./test-timeout-config.cjs";
 
+export { getTestTimeout };
+
 /**
  * Helper to get __dirname in both CJS and ESM environments
  * Call it without arguments and it will auto-detect the environment
