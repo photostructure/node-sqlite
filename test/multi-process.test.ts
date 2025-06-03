@@ -334,6 +334,10 @@ describe("Multi-Process Database Access", () => {
 
   describe("File Locking and Error Handling", () => {
     test("handles database locked errors gracefully", async () => {
+      // Use longer timeouts on slower CI platforms
+      const isSlowCI = process.platform === 'darwin' || process.platform === 'win32';
+      const lockHoldTime = isSlowCI ? 5000 : 1000;
+      const writerDelay = isSlowCI ? 2000 : 200;
       const setupDb = new DatabaseSync(dbPath);
       setupDb.exec(`
         CREATE TABLE lock_test (
@@ -359,7 +363,7 @@ describe("Multi-Process Database Access", () => {
           db.exec("COMMIT");
           db.close();
           console.log("LOCK_RELEASED");
-        }, 1000); // Increased lock time for CI reliability
+        }, ${lockHoldTime}); // Platform-specific lock time
       `;
 
       // Script that tries to write while locked
@@ -381,7 +385,7 @@ describe("Multi-Process Database Access", () => {
           } finally {
             db.close();
           }
-        }, 200); // Increased delay for CI reliability
+        }, ${writerDelay}); // Platform-specific delay
       `;
 
       // Start lock holder process
