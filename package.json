@@ -37,7 +37,7 @@
     "compile": "tsc -p tsconfig.build.json --noEmit",
     "bundle": "tsup && node scripts/post-build.mjs",
     "test": "npm run test:cjs -- --no-coverage",
-    "test:cjs": "cross-env TEST_ESM=0 jest",
+    "test:cjs": "jest",
     "test:esm": "cross-env TEST_ESM=1 node --experimental-vm-modules --no-warnings node_modules/jest/bin/jest.js",
     "test:serial": "npm run test:cjs -- --runInBand --no-coverage",
     "test:all": "run-s \"test:cjs -- {@}\" \"test:esm -- {@}\" --",
