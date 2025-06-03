@@ -4,12 +4,12 @@
  * This test file compares our implementation with Node.js's built-in node:sqlite module.
  *
  * IMPORTANT:
- * - These tests require Node.js 22+ with the --experimental-sqlite flag
+ * - These tests require Node.js 24+ with the --experimental-sqlite flag
  * - The node:sqlite comparison tests only work in CommonJS mode (not ESM)
  * - Run with: NODE_OPTIONS="--experimental-sqlite" npm run test:cjs -- test/node-compatibility.test.ts
  *
  * The tests will automatically skip node:sqlite comparisons if:
- * - Running on Node.js < 22
+ * - Running on Node.js < 24
  * - The --experimental-sqlite flag is not set
  * - Running in ESM mode
  */
@@ -23,10 +23,10 @@ import {
 let NodeSqlite: any = null;
 let nodeAvailable = false;
 
-// Check Node.js version - only run on Node.js 22+ where node:sqlite is available
+// Check Node.js version - only run on Node.js 24+ where node:sqlite is available
 const nodeVersion = process.version;
 const majorVersion = parseInt(nodeVersion.split(".")[0].substring(1), 10);
-const hasNodeSqlite = majorVersion >= 22;
+const hasNodeSqlite = majorVersion >= 24;
 
 if (hasNodeSqlite) {
   try {
@@ -50,7 +50,7 @@ if (hasNodeSqlite) {
   }
 } else {
   console.log(
-    `Skipping node:sqlite compatibility tests - requires Node.js 22+ (current: ${nodeVersion})`,
+    `Skipping node:sqlite compatibility tests - requires Node.js 24+ (current: ${nodeVersion})`,
   );
   nodeAvailable = false;
 }
