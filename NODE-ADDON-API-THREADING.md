@@ -201,12 +201,14 @@ Based on this analysis, the current BackupJob implementation has several issues:
 ### Why Detached Threads Are Problematic
 
 The current implementation uses `std::thread(...).detach()` which means:
+
 - The thread cannot be joined
 - The process cannot wait for the thread to complete
 - Jest must force-exit because it cannot wait for detached threads
 - This is fundamentally incompatible with clean shutdown
 
 **Anti-pattern Example:**
+
 ```cpp
 std::thread([work]() {
   // Do work
@@ -214,6 +216,7 @@ std::thread([work]() {
 ```
 
 **Correct Pattern:**
+
 ```cpp
 // Store thread handle and join in destructor/finalizer
 std::thread worker([work]() {
