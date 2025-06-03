@@ -4,6 +4,26 @@
  *
  * Note: This file only performs type checking on Node.js 24 or later where node:sqlite is available.
  * On earlier versions, the type imports will fail and this file should be excluded from compilation.
+ *
+ * All "unused" variables and types in this file are intentional - they exist solely to perform
+ * compile-time type checking to ensure API compatibility.
+ *
+ * @fileoverview
+ * ⚠️ DO NOT "FIX" UNUSED VARIABLES IN THIS FILE! ⚠️
+ * 
+ * This is a compile-time type compatibility test. All variables prefixed with underscore (_)
+ * are intentionally unused. They exist to force TypeScript to check type compatibility.
+ * 
+ * DO NOT:
+ * - Add @ts-nocheck (defeats the purpose)
+ * - Add @ts-ignore or @ts-expect-error comments
+ * - Try to "use" the variables
+ * - Add eslint-disable comments (they're not needed)
+ * 
+ * This file is:
+ * - Excluded from main tsconfig.json to avoid unused variable errors
+ * - Checked separately via scripts/tsconfig.api-check.json with noUnusedLocals: false
+ * - Run by npm run lint:api-compat which is called during precommit checks
  */
 
 import * as OurSqlite from "./index";
