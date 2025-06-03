@@ -5,6 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "../src";
+import { getTestTimeout } from "./test-timeout-config.cjs";
 
 /**
  * Helper to get __dirname in both CJS and ESM environments
@@ -152,7 +153,7 @@ export function useTempDir(
 
     // Clear additional files set
     additionalFiles.clear();
-  }, options?.timeout || 10000); // Default 10 second timeout
+  }, options?.timeout ?? getTestTimeout()); // Use environment-aware timeout
 
   return context;
 }
@@ -223,7 +224,7 @@ export function useTempDirSuite(
     } catch {
       // Ignore cleanup errors
     }
-  }, options?.timeout || 10000);
+  }, options?.timeout ?? getTestTimeout());
 
   return context;
 }
