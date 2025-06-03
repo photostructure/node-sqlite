@@ -34,7 +34,9 @@
       "WebFetch(domain:jestjs.io)",
       "WebFetch(domain:nodejs.org)",
       "WebFetch(domain:sqlite.org)",
-      "WebFetch(domain:www.sqlite.org)"
+      "WebFetch(domain:www.sqlite.org)",
+      "Bash(NODE_OPTIONS=\"--experimental-sqlite\" npx jest test/node-compatibility.test.ts -t \"transaction behavior\" --verbose)",
+      "Bash(NODE_OPTIONS=\"--experimental-sqlite\" npx jest test/node-compatibility.test.ts --no-coverage)"
     ]
   },
   "enableAllProjectMcpServers": false

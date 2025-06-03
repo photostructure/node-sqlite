@@ -335,7 +335,8 @@ describe("Multi-Process Database Access", () => {
   describe("File Locking and Error Handling", () => {
     test("handles database locked errors gracefully", async () => {
       // Use longer timeouts on slower CI platforms
-      const isSlowCI = process.platform === 'darwin' || process.platform === 'win32';
+      const isSlowCI =
+        process.platform === "darwin" || process.platform === "win32";
       const lockHoldTime = isSlowCI ? 5000 : 1000;
       const writerDelay = isSlowCI ? 2000 : 200;
       const setupDb = new DatabaseSync(dbPath);
