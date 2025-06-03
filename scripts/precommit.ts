@@ -29,8 +29,18 @@ run("npm run test:esm", "Running tests in ESM mode");
 const nodeVersion = process.version;
 const majorVersion = parseInt(nodeVersion.split(".")[0].substring(1), 10);
 if (majorVersion >= 22) {
-  run("npm run lint:api-compat", "Checking API compatibility types");
-  run("npm run test:api-compat", "Running API compatibility tests");
+  run(
+    "npm run lint:api-compat",
+    "Check API compatibility types (TypeScript compile-time validation)",
+  );
+  run(
+    "npm run test:api-compat",
+    "Run API type compatibility tests (ensures our TypeScript types match node:sqlite)",
+  );
+  run(
+    "npm run test:node-compat",
+    "Run behavioral compatibility tests (validates runtime behavior matches node:sqlite)",
+  );
 } else {
   console.log("\n⚠ Skipping API compatibility checks (requires Node.js 22+)");
 }
