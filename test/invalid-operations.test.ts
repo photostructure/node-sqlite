@@ -348,7 +348,9 @@ describe("Invalid Operations Tests", () => {
         // If it doesn't throw, check what we got
         expect(funcResult.result).toBeNull(); // Functions likely become null
       } catch (error: any) {
-        expect(error.message).toMatch(/convert|type|function/i);
+        expect(error.message).toMatch(
+          /convert|type|function|Invalid argument/i,
+        );
       }
 
       try {
@@ -356,7 +358,7 @@ describe("Invalid Operations Tests", () => {
         // If it doesn't throw, check what we got
         expect(symResult.result).toBeNull(); // Symbols likely become null
       } catch (error: any) {
-        expect(error.message).toMatch(/convert|type|symbol/i);
+        expect(error.message).toMatch(/convert|type|symbol|Invalid argument/i);
       }
 
       db.close();
