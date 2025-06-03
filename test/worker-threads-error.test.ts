@@ -73,7 +73,7 @@ try {
   it("should work when creating new database in worker thread", async () => {
     const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
+const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
 
 try {
   // Create a NEW database connection in the worker thread
@@ -118,7 +118,7 @@ try {
     // Test that methods throw errors when called from worker thread
     const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
+const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
 
 try {
   // Create a database in worker thread  

@@ -24,7 +24,7 @@ describe("Simple Worker Thread Test", () => {
   it("should read from database in worker thread", async () => {
     const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
+const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
 
 try {
   const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
@@ -62,7 +62,7 @@ try {
   it("should handle two concurrent workers", async () => {
     const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
+const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
 
 try {
   const db = new DatabaseSync(workerData.dbPath, { readOnly: true });

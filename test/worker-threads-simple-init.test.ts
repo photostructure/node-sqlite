@@ -35,7 +35,7 @@ describe("Simple Worker Thread Init Test", () => {
     // Now test a single worker
     const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
+const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
 
 try {
   console.log('Worker starting with pre-initialized module...');
@@ -80,7 +80,7 @@ try {
 
     const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
+const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
 
 try {
   console.log('Worker starting without pre-initialization...');

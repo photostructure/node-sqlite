@@ -36,7 +36,7 @@ describe("Worker Thread Initialization Test", () => {
     const workerPromises = Array.from({ length: numWorkers }, (_, i) => {
       const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
+const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
 
 try {
   console.log('Worker ${i} starting...');
@@ -100,7 +100,7 @@ try {
     for (let i = 0; i < 20; i++) {
       const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
+const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
 
 try {
   const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
@@ -156,7 +156,7 @@ try {
       try {
         const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require('${path.resolve(getDirname(), "../dist/index.cjs")}');
+const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
 
 try {
   const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
