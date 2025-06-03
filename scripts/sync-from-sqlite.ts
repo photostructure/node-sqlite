@@ -15,18 +15,27 @@ const execAsync = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Configuration
-const SQLITE_VERSION_URL =
-  "https://raw.githubusercontent.com/sqlite/sqlite/master/VERSION";
+const SQLITE_TAGS_URL = "https://api.github.com/repos/sqlite/sqlite/tags";
 const UPSTREAM_DIR = path.join(__dirname, "../src/upstream");
 const TEMP_DIR = path.join(__dirname, "../.temp-sqlite-download");
 
 /**
  * Fetch a URL and return its content
  */
-async function fetchUrl(url: string): Promise<string> {
+async function fetchUrl(
+  url: string,
+  headers: Record<string, string> = {},
+): Promise<string> {
   return new Promise<string>((resolve, reject) => {
+    const options = {
+      headers: {
+        "User-Agent": "node-sqlite-sync-script",
+        ...headers,
+      },
+    };
+
     https
-      .get(url, (res) => {
+      .get(url, options, (res) => {
         if (res.statusCode !== 200) {
           reject(new Error(`HTTP ${res.statusCode}: ${url}`));
           return;
@@ -38,6 +47,58 @@ async function fetchUrl(url: string): Promise<string> {
       })
       .on("error", reject);
   });
+}
+
+/**
+ * Get the latest release version from GitHub tags
+ */
+async function getLatestReleaseVersion(): Promise<{
+  version: string;
+  semver: string;
+} | null> {
+  try {
+    console.log("Fetching SQLite tags from GitHub...");
+    const tagsJson = await fetchUrl(SQLITE_TAGS_URL);
+    const tags = JSON.parse(tagsJson);
+
+    // Filter for version tags (e.g., "version-3.50.0")
+    const versionTags = tags
+      .filter((tag: any) => tag.name.startsWith("version-"))
+      .map((tag: any) => {
+        const match = tag.name.match(/version-(\d+)\.(\d+)\.(\d+)/);
+        if (match) {
+          return {
+            name: tag.name,
+            major: parseInt(match[1]),
+            minor: parseInt(match[2]),
+            patch: parseInt(match[3]),
+            semver: `${match[1]}.${match[2]}.${match[3]}`,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    if (versionTags.length === 0) {
+      return null;
+    }
+
+    // Sort by version (major, minor, patch) in descending order
+    versionTags.sort((a: any, b: any) => {
+      if (a.major !== b.major) return b.major - a.major;
+      if (a.minor !== b.minor) return b.minor - a.minor;
+      return b.patch - a.patch;
+    });
+
+    const latest = versionTags[0];
+    return {
+      version: getSqliteVersionNumber(latest.semver),
+      semver: latest.semver,
+    };
+  } catch (err) {
+    console.error("Failed to fetch tags:", err);
+    return null;
+  }
 }
 
 /**
@@ -157,13 +218,17 @@ async function main() {
     process.exit(0);
   }
 
-  console.log("Fetching SQLite version...");
-  const versionText = await fetchUrl(SQLITE_VERSION_URL);
-  const semver = versionText.trim();
+  // Get the latest release version from GitHub tags
+  const latestRelease = await getLatestReleaseVersion();
+  if (!latestRelease) {
+    throw new Error(
+      "Could not determine latest SQLite release version from GitHub tags",
+    );
+  }
 
-  console.log(`SQLite version: ${semver}`);
+  console.log(`Latest SQLite release: ${latestRelease.semver}`);
 
-  const version = getSqliteVersionNumber(semver);
+  const version = latestRelease.version;
   const versionInfo = parseVersion(version);
 
   console.log(`Amalgamation version: ${versionInfo.formatted}`);
