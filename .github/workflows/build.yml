@@ -172,14 +172,20 @@ jobs:
           npm run build && \
           npm test"
 
+  # Node.js compatibility tests require --experimental-sqlite flag and Node 22+
+  # We test only on Node 24 as the experimental SQLite API may change between versions
   test-api-compatibility:
     needs: [lint]
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [24]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: ${{ matrix.node-version }}
           cache: "npm"
       - run: npm ci
       - name: Check API compatibility types (TypeScript compile-time validation)
