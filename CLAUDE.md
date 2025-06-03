@@ -356,11 +356,13 @@ if (global.gc) {
 ```
 
 **Why these are problematic:**
+
 1. **Arbitrary timeouts** are race conditions waiting to happen. They might work on fast machines but fail on slower CI runners.
 2. **Forcing GC** should never be required for correct behavior. If your code depends on GC for correctness, it has a fundamental design flaw.
 3. These approaches mask the real problem instead of fixing it.
 
 **Note**: This is different from legitimate uses of timeouts, such as:
+
 - Waiting for time to pass to test timestamp changes
 - Rate limiting or throttling tests
 - Testing timeout behavior itself
@@ -370,6 +372,7 @@ The anti-pattern is using timeouts to "fix" async cleanup issues.
 **Root Cause**: The current BackupJob implementation uses detached threads that cannot be joined. When Jest tries to exit, these threads are still running, causing the "worker process has failed to exit gracefully" warning.
 
 **Proper Solutions**:
+
 1. Use Node.js's built-in AsyncWorker pattern instead of custom ThreadPoolWork
 2. Implement proper thread joining in the finalizer
 3. Track all async operations and ensure they complete before process exit
