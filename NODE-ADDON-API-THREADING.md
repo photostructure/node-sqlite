@@ -114,6 +114,76 @@ deferred.Reject(error);
 2. Ensure proper synchronization between threads
 3. Join threads in finalizers when possible
 
+## AsyncWorker Pattern
+
+### Key Concepts
+
+1. **Purpose**: Provides a clean abstraction for running CPU-intensive tasks on worker threads
+2. **Thread Management**: Automatically handles thread creation, joining, and cleanup
+3. **Lifecycle**:
+   - `Execute()`: Runs on worker thread (no Node.js API access)
+   - `OnOK()`: Called on main thread when work completes successfully
+   - `OnError()`: Called on main thread if an error occurs
+   - Destructor automatically handles cleanup
+
+### Basic AsyncWorker Example
+
+```cpp
+class MyWorker : public Napi::AsyncWorker {
+public:
+  MyWorker(Napi::Function& callback, std::string data)
+    : AsyncWorker(callback), data_(data) {}
+
+  void Execute() override {
+    // This runs on a worker thread
+    // Do NOT use any Napi:: methods here
+    result_ = ProcessData(data_);
+  }
+
+  void OnOK() override {
+    // This runs on the main thread
+    Callback().Call({Env().Null(), String::New(Env(), result_)});
+  }
+
+  void OnError(const Napi::Error& error) override {
+    // This runs on the main thread
+    Callback().Call({error.Value()});
+  }
+
+private:
+  std::string data_;
+  std::string result_;
+};
+```
+
+### AsyncProgressWorker for Progress Updates
+
+```cpp
+class ProgressWorker : public Napi::AsyncProgressWorker<int> {
+public:
+  ProgressWorker(Napi::Function& callback, Napi::Function& progress)
+    : AsyncProgressWorker(callback), progress_callback_(Napi::Persistent(progress)) {}
+
+  void Execute(const ExecutionProgress& progress) override {
+    for (int i = 0; i < 100; i++) {
+      // Send progress update
+      progress.Send(&i, 1);
+      // Do work...
+    }
+  }
+
+  void OnProgress(const int* data, size_t count) override {
+    // Called on main thread with progress data
+    if (!progress_callback_.IsEmpty()) {
+      progress_callback_.Call({Napi::Number::New(Env(), *data)});
+    }
+  }
+
+private:
+  Napi::FunctionReference progress_callback_;
+};
+```
+
 ## Recommendations for SQLite Backup Implementation
 
 Based on this analysis, the current BackupJob implementation has several issues:
@@ -124,9 +194,9 @@ Based on this analysis, the current BackupJob implementation has several issues:
 
 ### Proposed Fixes:
 
-1. Add a finalizer to ThreadSafeFunction that ensures the BackupJob is properly cleaned up
-2. Track active BackupJobs to ensure promises are resolved/rejected during shutdown
-3. Consider using AsyncWorker pattern instead of custom ThreadPoolWork implementation
+1. Replace ThreadPoolWork with AsyncProgressWorker for automatic thread management
+2. Use AsyncProgressWorker's built-in progress reporting instead of manual ThreadSafeFunction
+3. Let AsyncWorker handle thread lifecycle and promise resolution
 
 ### Why Detached Threads Are Problematic
 
