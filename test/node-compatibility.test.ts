@@ -1,3 +1,8 @@
+import {
+  DatabaseSync as OurDatabaseSync,
+  constants as ourConstants,
+} from "../src";
+
 /**
  * Node.js Compatibility Tests
  *
@@ -13,11 +18,6 @@
  * - The --experimental-sqlite flag is not set
  * - Running in ESM mode
  */
-
-import {
-  DatabaseSync as OurDatabaseSync,
-  constants as ourConstants,
-} from "../src";
 
 // Try to import Node.js built-in SQLite if available
 let NodeSqlite: any = null;
@@ -509,7 +509,7 @@ describe("Node.js API Compatibility Tests", () => {
       db.close();
     });
 
-    test("backup functionality exists", () => {
+    test("backup functionality exists", async () => {
       const db = new OurDatabaseSync(":memory:");
 
       db.exec("CREATE TABLE test (id INTEGER, data TEXT)");
@@ -519,11 +519,7 @@ describe("Node.js API Compatibility Tests", () => {
       expect(typeof db.backup).toBe("function");
 
       // For in-memory databases, backup may have limitations
-      try {
-        db.backup(":memory:");
-      } catch {
-        // Some backup operations may not be supported for in-memory databases
-      }
+      await db.backup(":memory:");
 
       db.close();
     });
@@ -544,6 +540,7 @@ describe("Node.js API Compatibility Tests", () => {
       const changeset = session.changeset();
       expect(Buffer.isBuffer(changeset)).toBe(true);
 
+      session.close();
       db.close();
     });
   });

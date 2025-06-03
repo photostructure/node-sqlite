@@ -4,9 +4,11 @@
 #include <napi.h>
 #include <sqlite3.h>
 
+#include <atomic>
 #include <climits>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -18,7 +20,7 @@
 #include "shims/napi_extensions.h"
 #include "shims/node_errors.h"
 #include "shims/promise_resolver.h"
-#include "shims/threadpoolwork-inl.h"
+// Removed threadpoolwork-inl.h - using Napi::AsyncWorker instead
 #include "shims/util.h"
 
 namespace photostructure {
@@ -130,6 +132,11 @@ public:
   // Backup support
   Napi::Value Backup(const Napi::CallbackInfo &info);
 
+  // Session management
+  void AddSession(Session *session);
+  void RemoveSession(Session *session);
+  void DeleteAllSessions();
+
 private:
   void InternalOpen(DatabaseOpenConfiguration config);
   void InternalClose();
@@ -140,7 +147,8 @@ private:
   bool allow_load_extension_ = false;
   bool enable_load_extension_ = false;
   std::map<std::string, std::unique_ptr<StatementSync>> prepared_statements_;
-  std::set<sqlite3_session *> sessions_;
+  std::set<Session *> sessions_;      // Track all active sessions
+  mutable std::mutex sessions_mutex_; // Protect sessions_ for thread safety
   std::thread::id creation_thread_;
   napi_env env_; // Store for cleanup purposes
 
@@ -228,7 +236,7 @@ private:
 class Session : public Napi::ObjectWrap<Session> {
 public:
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
-  static Napi::Object Create(Napi::Env env, DatabaseSync *db,
+  static Napi::Object Create(Napi::Env env, DatabaseSync *database,
                              sqlite3_session *session);
 
   explicit Session(const Napi::CallbackInfo &info);
@@ -239,32 +247,45 @@ public:
   Napi::Value Patchset(const Napi::CallbackInfo &info);
   Napi::Value Close(const Napi::CallbackInfo &info);
 
+  // Get the underlying SQLite session
+  sqlite3_session *GetSession() const { return session_; }
+
 private:
-  void SetSession(DatabaseSync *db, sqlite3_session *session);
+  void SetSession(DatabaseSync *database, sqlite3_session *session);
   void Delete();
 
   template <int (*sqliteChangesetFunc)(sqlite3_session *, int *, void **)>
   Napi::Value GenericChangeset(const Napi::CallbackInfo &info);
 
   sqlite3_session *session_ = nullptr;
-  DatabaseSync *database_ = nullptr;
+  DatabaseSync *database_ = nullptr; // Direct pointer to database
+
+  friend class DatabaseSync;
+};
+
+// Progress data structure for backup progress updates
+struct BackupProgress {
+  int current;
+  int total;
 };
 
 // Backup job for asynchronous database backup
-class BackupJob : public node::ThreadPoolWork<BackupJob> {
+class BackupJob : public Napi::AsyncProgressWorker<BackupProgress> {
 public:
   BackupJob(Napi::Env env, DatabaseSync *source,
             const std::string &destination_path, const std::string &source_db,
-            const std::string &dest_db, int pages,
-            Napi::Function progress_func);
+            const std::string &dest_db, int pages, Napi::Function progress_func,
+            Napi::Promise::Deferred deferred);
+  ~BackupJob();
 
-  void ScheduleBackup();
-  void DoThreadPoolWork() override;
-  void AfterThreadPoolWork(int status) override;
+  void Execute(const ExecutionProgress &progress) override;
+  void OnOK() override;
+  void OnError(const Napi::Error &error) override;
+  void OnProgress(const BackupProgress *data, size_t count) override;
+
   Napi::Promise GetPromise() { return deferred_.Promise(); }
 
 private:
-  void HandleBackupError(const std::string &message);
   void Cleanup();
 
   DatabaseSync *source_;
@@ -272,12 +293,19 @@ private:
   std::string source_db_;
   std::string dest_db_;
   int pages_;
+
+  // These are only accessed in Execute() on worker thread
   int backup_status_ = SQLITE_OK;
   sqlite3 *dest_ = nullptr;
   sqlite3_backup *backup_ = nullptr;
+  int total_pages_ = 0;
 
   Napi::FunctionReference progress_func_;
   Napi::Promise::Deferred deferred_;
+
+  static std::atomic<int> active_jobs_;
+  static std::mutex active_jobs_mutex_;
+  static std::set<BackupJob *> active_job_instances_;
 };
 
 } // namespace sqlite

@@ -10,16 +10,16 @@
  *
  * @fileoverview
  * ⚠️ DO NOT "FIX" UNUSED VARIABLES IN THIS FILE! ⚠️
- * 
+ *
  * This is a compile-time type compatibility test. All variables prefixed with underscore (_)
  * are intentionally unused. They exist to force TypeScript to check type compatibility.
- * 
+ *
  * DO NOT:
  * - Add @ts-nocheck (defeats the purpose)
  * - Add @ts-ignore or @ts-expect-error comments
  * - Try to "use" the variables
  * - Add eslint-disable comments (they're not needed)
- * 
+ *
  * This file is:
  * - Excluded from main tsconfig.json to avoid unused variable errors
  * - Checked separately via scripts/tsconfig.api-check.json with noUnusedLocals: false

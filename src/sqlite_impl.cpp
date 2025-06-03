@@ -490,7 +490,7 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
 
   char *error_msg = nullptr;
   int result =
-      sqlite3_exec(connection_, sql.c_str(), nullptr, nullptr, &error_msg);
+      sqlite3_exec(connection(), sql.c_str(), nullptr, nullptr, &error_msg);
 
   if (result != SQLITE_OK) {
     std::string error = error_msg ? error_msg : "Unknown SQLite error";
@@ -517,7 +517,7 @@ Napi::Value DatabaseSync::LocationMethod(const Napi::CallbackInfo &info) {
   }
 
   // Use sqlite3_db_filename() to get the database file path
-  const char *filename = sqlite3_db_filename(connection_, db_name.c_str());
+  const char *filename = sqlite3_db_filename(connection(), db_name.c_str());
 
   // Return null for in-memory databases, non-existent databases, or if database
   // not found
@@ -534,7 +534,7 @@ Napi::Value DatabaseSync::IsOpenGetter(const Napi::CallbackInfo &info) {
 
 Napi::Value DatabaseSync::IsTransactionGetter(const Napi::CallbackInfo &info) {
   // Check if we're in a transaction
-  bool in_transaction = IsOpen() && !sqlite3_get_autocommit(connection_);
+  bool in_transaction = IsOpen() && !sqlite3_get_autocommit(connection());
   return Napi::Boolean::New(info.Env(), in_transaction);
 }
 
@@ -562,30 +562,30 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
 
   // Configure database
   if (config.get_enable_foreign_keys()) {
-    sqlite3_exec(connection_, "PRAGMA foreign_keys = ON", nullptr, nullptr,
+    sqlite3_exec(connection(), "PRAGMA foreign_keys = ON", nullptr, nullptr,
                  nullptr);
   }
 
   if (config.get_timeout() > 0) {
-    sqlite3_busy_timeout(connection_, config.get_timeout());
+    sqlite3_busy_timeout(connection(), config.get_timeout());
   }
 
   // Configure double-quoted string literals
   if (config.get_enable_dqs()) {
     int dqs_enable = 1;
-    result = sqlite3_db_config(connection_, SQLITE_DBCONFIG_DQS_DML, dqs_enable,
-                               nullptr);
+    result = sqlite3_db_config(connection(), SQLITE_DBCONFIG_DQS_DML,
+                               dqs_enable, nullptr);
     if (result != SQLITE_OK) {
-      std::string error = sqlite3_errmsg(connection_);
+      std::string error = sqlite3_errmsg(connection());
       sqlite3_close(connection_);
       connection_ = nullptr;
       throw std::runtime_error("Failed to configure DQS_DML: " + error);
     }
 
-    result = sqlite3_db_config(connection_, SQLITE_DBCONFIG_DQS_DDL, dqs_enable,
-                               nullptr);
+    result = sqlite3_db_config(connection(), SQLITE_DBCONFIG_DQS_DDL,
+                               dqs_enable, nullptr);
     if (result != SQLITE_OK) {
-      std::string error = sqlite3_errmsg(connection_);
+      std::string error = sqlite3_errmsg(connection());
       sqlite3_close(connection_);
       connection_ = nullptr;
       throw std::runtime_error("Failed to configure DQS_DDL: " + error);
@@ -598,12 +598,11 @@ void DatabaseSync::InternalClose() {
     // Finalize all prepared statements
     prepared_statements_.clear();
 
-    // Delete all sessions
-    for (auto *session : sessions_) {
-      sqlite3session_delete(session);
-    }
-    sessions_.clear();
+    // Delete all sessions before closing the database
+    // This is required by SQLite to avoid undefined behavior
+    DeleteAllSessions();
 
+    // Close the database connection
     int result = sqlite3_close(connection_);
     if (result != SQLITE_OK) {
       // Force close even if there are outstanding statements
@@ -698,7 +697,7 @@ Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo &info) {
 
   // Register with SQLite
   int result =
-      sqlite3_create_function_v2(connection_, name.c_str(), argc, flags,
+      sqlite3_create_function_v2(connection(), name.c_str(), argc, flags,
                                  user_data, UserDefinedFunction::xFunc,
                                  nullptr, // No aggregate step
                                  nullptr, // No aggregate final
@@ -707,7 +706,7 @@ Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo &info) {
   if (result != SQLITE_OK) {
     delete user_data; // Clean up on failure
     std::string error = "Failed to create function: ";
-    error += sqlite3_errmsg(connection_);
+    error += sqlite3_errmsg(connection());
     node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
   }
 
@@ -836,15 +835,16 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo &info) {
   auto xInverse = !inverse_fn.IsEmpty() ? CustomAggregate::xInverse : nullptr;
   auto xValue = xInverse ? CustomAggregate::xValue : nullptr;
   int result = sqlite3_create_window_function(
-      connection_, name.c_str(), argc, flags, user_data, CustomAggregate::xStep,
-      CustomAggregate::xFinal, xValue, xInverse, CustomAggregate::xDestroy);
+      connection(), name.c_str(), argc, flags, user_data,
+      CustomAggregate::xStep, CustomAggregate::xFinal, xValue, xInverse,
+      CustomAggregate::xDestroy);
 
   if (result != SQLITE_OK) {
     delete user_data; // Clean up on failure
     std::string error = "Failed to create aggregate function '";
     error += name;
     error += "': ";
-    error += sqlite3_errmsg(connection_);
+    error += sqlite3_errmsg(connection());
     error += " (SQLite error code: ";
     error += std::to_string(result);
     error += ")";
@@ -882,12 +882,12 @@ Napi::Value DatabaseSync::EnableLoadExtension(const Napi::CallbackInfo &info) {
 
   // Configure SQLite to enable/disable extension loading
   int result =
-      sqlite3_db_config(connection_, SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION,
+      sqlite3_db_config(connection(), SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION,
                         enable ? 1 : 0, nullptr);
 
   if (result != SQLITE_OK) {
     std::string error = "Failed to configure extension loading: ";
-    error += sqlite3_errmsg(connection_);
+    error += sqlite3_errmsg(connection());
     node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
   }
 
@@ -931,7 +931,7 @@ Napi::Value DatabaseSync::LoadExtension(const Napi::CallbackInfo &info) {
   // Load the extension
   char *errmsg = nullptr;
   int result =
-      sqlite3_load_extension(connection_, path.c_str(), entry_point, &errmsg);
+      sqlite3_load_extension(connection(), path.c_str(), entry_point, &errmsg);
 
   if (result != SQLITE_OK) {
     std::string error = "Failed to load extension '";
@@ -941,7 +941,7 @@ Napi::Value DatabaseSync::LoadExtension(const Napi::CallbackInfo &info) {
       error += errmsg;
       sqlite3_free(errmsg);
     } else {
-      error += sqlite3_errmsg(connection_);
+      error += sqlite3_errmsg(connection());
     }
     node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
     return env.Undefined();
@@ -998,32 +998,56 @@ Napi::Value DatabaseSync::CreateSession(const Napi::CallbackInfo &info) {
 
   // Create the session
   sqlite3_session *pSession;
-  int r = sqlite3session_create(connection_, db_name.c_str(), &pSession);
+  int r = sqlite3session_create(connection(), db_name.c_str(), &pSession);
 
   if (r != SQLITE_OK) {
     std::string error = "Failed to create session: ";
-    error += sqlite3_errmsg(connection_);
+    error += sqlite3_errmsg(connection());
     node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
     return env.Undefined();
   }
-
-  // Track the session
-  sessions_.insert(pSession);
 
   // Attach table if specified
   r = sqlite3session_attach(pSession, table.empty() ? nullptr : table.c_str());
 
   if (r != SQLITE_OK) {
     sqlite3session_delete(pSession);
-    sessions_.erase(pSession);
     std::string error = "Failed to attach table to session: ";
-    error += sqlite3_errmsg(connection_);
+    error += sqlite3_errmsg(connection());
     node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
     return env.Undefined();
   }
 
   // Create and return the Session object
   return Session::Create(env, this, pSession);
+}
+
+void DatabaseSync::AddSession(Session *session) {
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  sessions_.insert(session);
+}
+
+void DatabaseSync::RemoveSession(Session *session) {
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  sessions_.erase(session);
+}
+
+void DatabaseSync::DeleteAllSessions() {
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  // Copy the set to avoid iterator invalidation
+  std::set<Session *> sessions_copy = sessions_;
+  sessions_.clear(); // Clear first to prevent re-entrance
+
+  // Now delete each session
+  for (auto *session : sessions_copy) {
+    // Direct SQLite cleanup since we're in database destruction
+    if (session->GetSession()) {
+      sqlite3session_delete(session->GetSession());
+      // Clear the session's internal pointers
+      session->session_ = nullptr;
+      session->database_ = nullptr;
+    }
+  }
 }
 
 // Context structure for changeset callbacks to avoid global state
@@ -1139,7 +1163,7 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
   Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
 
   // Apply the changeset with context instead of global state
-  int r = sqlite3changeset_apply(connection_, buffer.Length(), buffer.Data(),
+  int r = sqlite3changeset_apply(connection(), buffer.Length(), buffer.Data(),
                                  xFilter, xConflict, &callbacks);
 
   if (r == SQLITE_OK) {
@@ -1153,7 +1177,7 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
 
   // Other errors
   std::string error = "Failed to apply changeset: ";
-  error += sqlite3_errmsg(connection_);
+  error += sqlite3_errmsg(connection());
   node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
   return env.Undefined();
 }
@@ -2018,7 +2042,7 @@ Napi::Object Session::Init(Napi::Env env, Napi::Object exports) {
   return exports;
 }
 
-Napi::Object Session::Create(Napi::Env env, DatabaseSync *db,
+Napi::Object Session::Create(Napi::Env env, DatabaseSync *database,
                              sqlite3_session *session) {
   AddonData *addon_data = GetAddonData(env);
   if (!addon_data || addon_data->sessionConstructor.IsEmpty()) {
@@ -2028,41 +2052,56 @@ Napi::Object Session::Create(Napi::Env env, DatabaseSync *db,
   }
   Napi::Object obj = addon_data->sessionConstructor.New({});
   Session *sess = Napi::ObjectWrap<Session>::Unwrap(obj);
-  sess->SetSession(db, session);
+  sess->SetSession(database, session);
   return obj;
 }
 
 Session::Session(const Napi::CallbackInfo &info)
-    : Napi::ObjectWrap<Session>(info), session_(nullptr), database_(nullptr) {}
+    : Napi::ObjectWrap<Session>(info), session_(nullptr) {}
 
 Session::~Session() { Delete(); }
 
-void Session::SetSession(DatabaseSync *db, sqlite3_session *session) {
-  database_ = db;
+void Session::SetSession(DatabaseSync *database, sqlite3_session *session) {
+  database_ = database;
   session_ = session;
+  if (database_) {
+    database_->AddSession(this);
+  }
 }
 
 void Session::Delete() {
-  if (!database_ || !database_->connection() || session_ == nullptr)
+  if (session_ == nullptr)
     return;
-  sqlite3session_delete(session_);
-  if (database_) {
-    database_->sessions_.erase(session_);
-  }
+
+  // Store the session pointer and clear our member immediately
+  // to prevent double-delete
+  sqlite3_session *session_to_delete = session_;
   session_ = nullptr;
+
+  // Remove ourselves from the database's session list BEFORE deleting
+  // to avoid any potential issues with the database trying to access us
+  DatabaseSync *database = database_;
+  database_ = nullptr;
+
+  if (database) {
+    database->RemoveSession(this);
+  }
+
+  // Now it's safe to delete the SQLite session
+  sqlite3session_delete(session_to_delete);
 }
 
 template <int (*sqliteChangesetFunc)(sqlite3_session *, int *, void **)>
 Napi::Value Session::GenericChangeset(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  if (!database_ || !database_->IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+  if (session_ == nullptr) {
+    node::THROW_ERR_INVALID_STATE(env, "session is not open");
     return env.Undefined();
   }
 
-  if (session_ == nullptr) {
-    node::THROW_ERR_INVALID_STATE(env, "session is not open");
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 
@@ -2099,11 +2138,6 @@ Napi::Value Session::Patchset(const Napi::CallbackInfo &info) {
 Napi::Value Session::Close(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  if (!database_ || !database_->IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "database is not open");
-    return env.Undefined();
-  }
-
   if (session_ == nullptr) {
     node::THROW_ERR_INVALID_STATE(env, "session is not open");
     return env.Undefined();
@@ -2113,111 +2147,152 @@ Napi::Value Session::Close(const Napi::CallbackInfo &info) {
   return env.Undefined();
 }
 
+// Static members for tracking active jobs
+std::atomic<int> BackupJob::active_jobs_(0);
+std::mutex BackupJob::active_jobs_mutex_;
+std::set<BackupJob *> BackupJob::active_job_instances_;
+
 // BackupJob Implementation
 BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
                      const std::string &destination_path,
                      const std::string &source_db, const std::string &dest_db,
-                     int pages, Napi::Function progress_func)
-    : node::ThreadPoolWork<BackupJob>(env, "node_sqlite3.BackupJob"),
+                     int pages, Napi::Function progress_func,
+                     Napi::Promise::Deferred deferred)
+    : Napi::AsyncProgressWorker<BackupProgress>(
+          !progress_func.IsEmpty() && !progress_func.IsUndefined()
+              ? progress_func
+              : Napi::Function::New(env, [](const Napi::CallbackInfo &) {})),
       source_(source), destination_path_(destination_path),
       source_db_(source_db), dest_db_(dest_db), pages_(pages),
-      deferred_(Napi::Promise::Deferred::New(env)) {
+      deferred_(deferred) {
   if (!progress_func.IsEmpty() && !progress_func.IsUndefined()) {
     progress_func_ = Napi::Reference<Napi::Function>::New(progress_func);
   }
+  active_jobs_++;
 }
 
-void BackupJob::ScheduleBackup() {
+BackupJob::~BackupJob() { active_jobs_--; }
+
+void BackupJob::Execute(const ExecutionProgress &progress) {
+  // This method is executed on a worker thread, not the main thread
+  // Note: SQLite backup operations are thread-safe when the source database
+  // is only being read. The backup API creates its own read transaction
+  // and can safely operate across threads.
+
   backup_status_ = sqlite3_open_v2(
       destination_path_.c_str(), &dest_,
       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, nullptr);
 
   if (backup_status_ != SQLITE_OK) {
-    HandleBackupError("Failed to open destination database");
+    SetError("Failed to open destination database");
     return;
   }
 
+  // Initialize backup
   backup_ = sqlite3_backup_init(dest_, dest_db_.c_str(), source_->connection(),
                                 source_db_.c_str());
 
-  if (backup_ == nullptr) {
-    HandleBackupError("Failed to initialize backup");
+  if (!backup_) {
+    SetError("Failed to initialize backup");
     return;
   }
 
-  // Schedule the work
-  ScheduleWork();
-}
-
-void BackupJob::DoThreadPoolWork() {
-  // If pages_ is negative, use -1 to copy all remaining pages
-  int pages_to_copy = pages_ < 0 ? -1 : pages_;
-  backup_status_ = sqlite3_backup_step(backup_, pages_to_copy);
-}
-
-void BackupJob::AfterThreadPoolWork(int status) {
-  Napi::Env env = env_;
-  Napi::HandleScope scope(env);
-
-  if (!(backup_status_ == SQLITE_OK || backup_status_ == SQLITE_DONE ||
-        backup_status_ == SQLITE_BUSY || backup_status_ == SQLITE_LOCKED)) {
-    HandleBackupError(sqlite3_errmsg(dest_));
-    return;
-  }
-
-  int total_pages = sqlite3_backup_pagecount(backup_);
+  // Initial page count may be 0 until first step
   int remaining_pages = sqlite3_backup_remaining(backup_);
+  total_pages_ = 0; // Will be updated after first step
 
-  if (remaining_pages != 0) {
-    // Call progress callback if provided
-    if (!progress_func_.IsEmpty()) {
-      Napi::Function progress_fn = progress_func_.Value();
-      Napi::Object progress_info = Napi::Object::New(env);
-      progress_info.Set("totalPages", Napi::Number::New(env, total_pages));
-      progress_info.Set("remainingPages",
-                        Napi::Number::New(env, remaining_pages));
+  while ((remaining_pages > 0 || total_pages_ == 0) &&
+         backup_status_ == SQLITE_OK) {
+    // If pages_ is negative, use -1 to copy all remaining pages
+    int pages_to_copy = pages_ < 0 ? -1 : pages_;
+    backup_status_ = sqlite3_backup_step(backup_, pages_to_copy);
 
-      try {
-        progress_fn.Call(env.Null(), {progress_info});
-      } catch (const Napi::Error &e) {
-        Cleanup();
-        deferred_.Reject(e.Value());
-        delete this;
-        return;
-      }
+    // Update total pages after first step (when SQLite knows the actual count)
+    if (total_pages_ == 0) {
+      total_pages_ = sqlite3_backup_pagecount(backup_);
     }
 
-    // More work to do
-    ScheduleWork();
-    return;
+    if (backup_status_ == SQLITE_OK || backup_status_ == SQLITE_DONE) {
+      remaining_pages = sqlite3_backup_remaining(backup_);
+      int current_page = total_pages_ - remaining_pages;
+
+      // Send progress update to main thread
+      if (!progress_func_.IsEmpty() && total_pages_ > 0) {
+        BackupProgress prog = {current_page, total_pages_};
+        progress.Send(&prog, 1);
+      }
+
+      // Check if we're done
+      if (backup_status_ == SQLITE_DONE) {
+        break;
+      }
+    } else if (backup_status_ == SQLITE_BUSY ||
+               backup_status_ == SQLITE_LOCKED) {
+      // These are retryable errors - continue
+      backup_status_ = SQLITE_OK;
+    } else {
+      // Fatal error
+      break;
+    }
   }
 
+  // Store final status for use in OnOK/OnError
   if (backup_status_ != SQLITE_DONE) {
-    HandleBackupError("Backup did not complete successfully");
-    return;
+    std::string error = "Backup failed with SQLite error: ";
+    error += sqlite3_errmsg(dest_);
+    SetError(error);
   }
-
-  // Success!
-  Cleanup();
-  deferred_.Resolve(Napi::Number::New(env, total_pages));
-  delete this;
 }
 
-void BackupJob::HandleBackupError(const std::string &message) {
-  Napi::Env env = env_;
-  Napi::HandleScope scope(env);
+void BackupJob::OnProgress(const BackupProgress *data, size_t count) {
+  // This runs on the main thread
+  if (!progress_func_.IsEmpty() && count > 0) {
+    Napi::HandleScope scope(Env());
+    Napi::Function progress_fn = progress_func_.Value();
+    Napi::Object progress_info = Napi::Object::New(Env());
+    progress_info.Set("totalPages", Napi::Number::New(Env(), data->total));
+    progress_info.Set("remainingPages",
+                      Napi::Number::New(Env(), data->total - data->current));
 
+    try {
+      progress_fn.Call(Env().Null(), {progress_info});
+    } catch (...) {
+      // Ignore errors in progress callback
+    }
+  }
+}
+
+void BackupJob::OnOK() {
+  // This runs on the main thread after Execute completes successfully
+  Napi::HandleScope scope(Env());
+
+  // Cleanup SQLite resources
   Cleanup();
 
-  Napi::Error error = Napi::Error::New(env, message);
-  if (dest_) {
-    error.Set("code", Napi::String::New(env, sqlite3_errstr(backup_status_)));
-    error.Set("errno", Napi::Number::New(env, backup_status_));
-  }
-
-  deferred_.Reject(error.Value());
-  delete this;
+  // Resolve the promise with the total number of pages
+  deferred_.Resolve(Napi::Number::New(Env(), total_pages_));
 }
+
+void BackupJob::OnError(const Napi::Error &error) {
+  // This runs on the main thread if Execute encounters an error
+  Napi::HandleScope scope(Env());
+
+  // Cleanup SQLite resources
+  Cleanup();
+
+  // Create a more detailed error if we have SQLite error info
+  if (dest_ && backup_status_ != SQLITE_OK) {
+    Napi::Error detailed_error = Napi::Error::New(Env(), error.Message());
+    detailed_error.Set(
+        "code", Napi::String::New(Env(), sqlite3_errstr(backup_status_)));
+    detailed_error.Set("errno", Napi::Number::New(Env(), backup_status_));
+    deferred_.Reject(detailed_error.Value());
+  } else {
+    deferred_.Reject(error.Value());
+  }
+}
+
+// HandleBackupError method removed - error handling now done in OnError
 
 void BackupJob::Cleanup() {
   if (backup_) {
@@ -2327,11 +2402,12 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
 
   // Create and schedule backup job
   BackupJob *job = new BackupJob(env, this, destination_path.value(), source_db,
-                                 target_db, rate, progress_func);
-  Napi::Promise promise = job->GetPromise();
-  job->ScheduleBackup();
+                                 target_db, rate, progress_func, deferred);
 
-  return promise;
+  // Queue the async work - AsyncWorker will delete itself when complete
+  job->Queue();
+
+  return deferred.Promise();
 }
 
 // Thread validation implementations
