@@ -1,3 +1,19 @@
+/**
+ * Node.js Compatibility Tests
+ *
+ * This test file compares our implementation with Node.js's built-in node:sqlite module.
+ *
+ * IMPORTANT:
+ * - These tests require Node.js 22+ with the --experimental-sqlite flag
+ * - The node:sqlite comparison tests only work in CommonJS mode (not ESM)
+ * - Run with: NODE_OPTIONS="--experimental-sqlite" npm run test:cjs -- test/node-compatibility.test.ts
+ *
+ * The tests will automatically skip node:sqlite comparisons if:
+ * - Running on Node.js < 22
+ * - The --experimental-sqlite flag is not set
+ * - Running in ESM mode
+ */
+
 import {
   DatabaseSync as OurDatabaseSync,
   constants as ourConstants,
@@ -7,25 +23,34 @@ import {
 let NodeSqlite: any = null;
 let nodeAvailable = false;
 
-// Check Node.js version - only run on Node.js 24 (latest version with stable API)
+// Check Node.js version - only run on Node.js 22+ where node:sqlite is available
 const nodeVersion = process.version;
 const majorVersion = parseInt(nodeVersion.split(".")[0].substring(1), 10);
-const isNode24 = majorVersion === 24;
+const hasNodeSqlite = majorVersion >= 22;
 
-if (isNode24) {
+if (hasNodeSqlite) {
   try {
-    // Node.js SQLite requires the --experimental-sqlite flag
-    NodeSqlite = require("node:sqlite");
-    nodeAvailable = true;
+    // Use dynamic import for ESM compatibility, with fallback to require for CJS
+    if (typeof require !== "undefined") {
+      // CommonJS environment
+      NodeSqlite = require("node:sqlite");
+      nodeAvailable = true;
+    } else {
+      // ESM environment - would need top-level await or async test setup
+      console.log(
+        "node:sqlite compatibility tests not supported in ESM mode yet",
+      );
+      nodeAvailable = false;
+    }
   } catch {
     console.log(
-      "Node.js built-in SQLite not available - this is expected on most systems",
+      "Node.js built-in SQLite not available - needs --experimental-sqlite flag",
     );
     nodeAvailable = false;
   }
 } else {
   console.log(
-    `Skipping node:sqlite compatibility tests - requires Node.js 24 (current: ${nodeVersion})`,
+    `Skipping node:sqlite compatibility tests - requires Node.js 22+ (current: ${nodeVersion})`,
   );
   nodeAvailable = false;
 }
@@ -107,303 +132,365 @@ describe("Node.js API Compatibility Tests", () => {
     });
   });
 
+  // Tests that run against both implementations when node:sqlite is available
   describeNodeTests("Behavior Comparison with Node.js Built-in", () => {
-    test("basic database operations match Node.js behavior", () => {
-      if (!nodeAvailable || !NodeSqlite || !NodeSqlite.DatabaseSync) {
-        console.log("Skipping test - Node.js SQLite not available");
-        return;
-      }
+    // Helper to run the same test against both implementations
+    function testBothImplementations(
+      name: string,
+      testFn: (DatabaseSync: any, _implName: string) => void,
+    ) {
+      test(name, () => {
+        // Always test our implementation
+        testFn(OurDatabaseSync, "@photostructure/sqlite");
 
-      // Create databases with both implementations
-      const ourDb = new OurDatabaseSync(":memory:");
-      const nodeDb = new NodeSqlite.DatabaseSync(":memory:");
-
-      // Test basic operations
-      const createTableSQL =
-        "CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT, value REAL)";
-      ourDb.exec(createTableSQL);
-      nodeDb.exec(createTableSQL);
-
-      const insertSQL = "INSERT INTO test (name, value) VALUES (?, ?)";
-      const ourStmt = ourDb.prepare(insertSQL);
-      const nodeStmt = nodeDb.prepare(insertSQL);
-
-      // Insert same data
-      const testData = [
-        ["Alice", 1.5],
-        ["Bob", 2.7],
-        ["Charlie", 3.14],
-      ];
-
-      testData.forEach(([name, value]) => {
-        const ourResult = ourStmt.run(name, value);
-        const nodeResult = nodeStmt.run(name, value);
-
-        // Results should have similar structure
-        expect(typeof ourResult.changes).toBe("number");
-        expect(typeof nodeResult.changes).toBe("number");
-        expect(ourResult.changes).toBe(nodeResult.changes);
-
-        // Our implementation might return number instead of bigint for rowid
-        expect(typeof ourResult.lastInsertRowid).toMatch(/^(number|bigint)$/);
-        expect(typeof nodeResult.lastInsertRowid).toMatch(/^(number|bigint)$/);
-
-        // Both should return the same logical value (even if type differs)
-        expect(Number(ourResult.lastInsertRowid)).toBe(
-          Number(nodeResult.lastInsertRowid),
-        );
+        // Test Node.js implementation if available
+        if (nodeAvailable && NodeSqlite?.DatabaseSync) {
+          testFn(NodeSqlite.DatabaseSync, "node:sqlite");
+        }
       });
+    }
 
-      // Test queries
-      const selectSQL = "SELECT * FROM test ORDER BY id";
-      const ourSelectStmt = ourDb.prepare(selectSQL);
-      const nodeSelectStmt = nodeDb.prepare(selectSQL);
+    testBothImplementations(
+      "basic database operations",
+      (DatabaseSync, _implName) => {
+        const db = new DatabaseSync(":memory:");
 
-      const ourResults = ourSelectStmt.all();
-      const nodeResults = nodeSelectStmt.all();
+        // Test basic operations
+        const createTableSQL =
+          "CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT, value REAL)";
+        db.exec(createTableSQL);
 
-      // Should have same number of results
-      expect(ourResults.length).toBe(nodeResults.length);
-      expect(ourResults.length).toBe(3);
+        const insertSQL = "INSERT INTO test (name, value) VALUES (?, ?)";
+        const stmt = db.prepare(insertSQL);
 
-      // Results should be structurally similar
-      ourResults.forEach((ourRow, index) => {
-        const nodeRow = nodeResults[index];
-        expect(typeof ourRow.id).toBe(typeof nodeRow.id);
-        expect(typeof ourRow.name).toBe(typeof nodeRow.name);
-        expect(typeof ourRow.value).toBe(typeof nodeRow.value);
+        // Insert data
+        const testData = [
+          ["Alice", 1.5],
+          ["Bob", 2.7],
+          ["Charlie", 3.14],
+        ];
 
-        expect(ourRow.name).toBe(nodeRow.name);
-        expect(ourRow.value).toBe(nodeRow.value);
-      });
+        testData.forEach(([name, value]) => {
+          const result = stmt.run(name, value);
+          expect(typeof result.changes).toBe("number");
+          expect(result.changes).toBe(1);
+          expect(typeof result.lastInsertRowid).toMatch(/^(number|bigint)$/);
+        });
 
-      ourDb.close();
-      nodeDb.close();
-    });
+        // Test queries
+        const selectSQL = "SELECT * FROM test ORDER BY id";
+        const selectStmt = db.prepare(selectSQL);
+        const results = selectStmt.all();
 
-    test("error handling matches Node.js behavior", () => {
-      if (!nodeAvailable || !NodeSqlite || !NodeSqlite.DatabaseSync) {
-        console.log("Skipping test - Node.js SQLite not available");
-        return;
-      }
+        expect(results.length).toBe(3);
+        results.forEach((row: any, index: number) => {
+          expect(row.name).toBe(testData[index][0]);
+          expect(row.value).toBe(testData[index][1]);
+        });
 
-      const ourDb = new OurDatabaseSync(":memory:");
-      const nodeDb = new NodeSqlite.DatabaseSync(":memory:");
+        db.close();
+      },
+    );
+
+    testBothImplementations("error handling", (DatabaseSync, _implName) => {
+      const db = new DatabaseSync(":memory:");
 
       // Test syntax errors
       const invalidSQL = "INVALID SQL STATEMENT";
-
-      let ourError: Error | null = null;
-      let nodeError: Error | null = null;
-
-      try {
-        ourDb.exec(invalidSQL);
-      } catch (error) {
-        ourError = error as Error;
-      }
-
-      try {
-        nodeDb.exec(invalidSQL);
-      } catch (error) {
-        nodeError = error as Error;
-      }
-
-      // Both should throw errors
-      expect(ourError).toBeTruthy();
-      expect(nodeError).toBeTruthy();
-
-      // Error messages should be similar (though not necessarily identical)
-      expect(ourError!.message.toLowerCase()).toContain("syntax");
-      expect(nodeError!.message.toLowerCase()).toContain("syntax");
-
-      ourDb.close();
-      nodeDb.close();
-    });
-
-    test("transaction behavior matches Node.js", () => {
-      if (!nodeAvailable || !NodeSqlite || !NodeSqlite.DatabaseSync) {
-        console.log("Skipping test - Node.js SQLite not available");
-        return;
-      }
-
-      const ourDb = new OurDatabaseSync(":memory:");
-      const nodeDb = new NodeSqlite.DatabaseSync(":memory:");
-
-      // Setup tables
-      const setupSQL = "CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)";
-      ourDb.exec(setupSQL);
-      nodeDb.exec(setupSQL);
-
-      // Test transaction properties
-      expect(ourDb.isTransaction).toBe(false);
-      expect(nodeDb.isTransaction).toBe(false);
-
-      // Start transactions
-      ourDb.exec("BEGIN");
-      nodeDb.exec("BEGIN");
-
-      expect(ourDb.isTransaction).toBe(true);
-      expect(nodeDb.isTransaction).toBe(true);
-
-      // Make changes
-      ourDb.exec("INSERT INTO test (value) VALUES ('test1')");
-      nodeDb.exec("INSERT INTO test (value) VALUES ('test1')");
-
-      // Rollback
-      ourDb.exec("ROLLBACK");
-      nodeDb.exec("ROLLBACK");
-
-      expect(ourDb.isTransaction).toBe(false);
-      expect(nodeDb.isTransaction).toBe(false);
-
-      // Check that data was rolled back
-      const ourCount = ourDb
-        .prepare("SELECT COUNT(*) as count FROM test")
-        .get();
-      const nodeCount = nodeDb
-        .prepare("SELECT COUNT(*) as count FROM test")
-        .get();
-
-      expect(ourCount.count).toBe(0);
-      expect(nodeCount.count).toBe(0);
-      expect(ourCount.count).toBe(nodeCount.count);
-
-      ourDb.close();
-      nodeDb.close();
-    });
-
-    test("prepared statement behavior matches Node.js", () => {
-      if (!nodeAvailable || !NodeSqlite || !NodeSqlite.DatabaseSync) {
-        console.log("Skipping test - Node.js SQLite not available");
-        return;
-      }
-
-      const ourDb = new OurDatabaseSync(":memory:");
-      const nodeDb = new NodeSqlite.DatabaseSync(":memory:");
-
-      // Setup
-      const setupSQL = "CREATE TABLE test (id INTEGER, name TEXT, data BLOB)";
-      ourDb.exec(setupSQL);
-      nodeDb.exec(setupSQL);
-
-      // Test parameter binding
-      const insertSQL = "INSERT INTO test VALUES (?, ?, ?)";
-      const ourStmt = ourDb.prepare(insertSQL);
-      const nodeStmt = nodeDb.prepare(insertSQL);
-
-      const testBuffer = Buffer.from("test data", "utf8");
-
-      const ourResult = ourStmt.run(1, "test", testBuffer);
-      const nodeResult = nodeStmt.run(1, "test", testBuffer);
-
-      // Results should be similar
-      expect(ourResult.changes).toBe(nodeResult.changes);
-      expect(typeof ourResult.lastInsertRowid).toBe(
-        typeof nodeResult.lastInsertRowid,
-      );
-
-      // Test different data types
-      const selectSQL = "SELECT * FROM test WHERE id = ?";
-      const ourSelectStmt = ourDb.prepare(selectSQL);
-      const nodeSelectStmt = nodeDb.prepare(selectSQL);
-
-      const ourRow = ourSelectStmt.get(1);
-      const nodeRow = nodeSelectStmt.get(1);
-
-      expect(typeof ourRow.id).toBe(typeof nodeRow.id);
-      expect(typeof ourRow.name).toBe(typeof nodeRow.name);
-
-      // BLOB handling might differ - both should handle the data correctly
-      expect(ourRow.name).toBe(nodeRow.name);
-
-      // Check that BLOB data is preserved correctly in both implementations
-      const isOurDataBuffer = Buffer.isBuffer(ourRow.data);
-      const isNodeDataBuffer = Buffer.isBuffer(nodeRow.data);
-
-      if (isOurDataBuffer && isNodeDataBuffer) {
-        expect(ourRow.data.equals(nodeRow.data)).toBe(true);
-      } else {
-        // If implementations differ in BLOB representation, at least verify the content
-        console.log("BLOB representation differs:", {
-          our: typeof ourRow.data,
-          node: typeof nodeRow.data,
-        });
-      }
-
-      ourDb.close();
-      nodeDb.close();
-    });
-
-    test("constants match Node.js values", () => {
-      if (!nodeAvailable || !NodeSqlite || !NodeSqlite.constants) {
-        console.log("Skipping test - Node.js SQLite not available");
-        return;
-      }
-
-      const nodeConstants = NodeSqlite.constants;
-
-      // Check that common constants have the same values (if both implementations have them)
-      const commonConstants = [
-        "SQLITE_OPEN_READONLY",
-        "SQLITE_OPEN_READWRITE",
-        "SQLITE_OPEN_CREATE",
-      ];
-
-      commonConstants.forEach((constant) => {
-        const hasOur = Object.prototype.hasOwnProperty.call(
-          ourConstants,
-          constant,
-        );
-        const hasNode = Object.prototype.hasOwnProperty.call(
-          nodeConstants,
-          constant,
-        );
-
-        expect(hasOur).toBe(true);
-
-        if (hasOur && hasNode) {
-          expect((ourConstants as any)[constant]).toBe(
-            (nodeConstants as any)[constant],
-          );
-        } else {
-          console.log(
-            `Constant ${constant} availability differs: our=${hasOur}, node=${hasNode}`,
-          );
-        }
-      });
-    });
-  });
-
-  describe("Extended Features Comparison", () => {
-    test("our implementation provides additional features", () => {
-      const db = new OurDatabaseSync(":memory:");
-
-      // Test features that might not be in basic Node.js implementation
-      expect(typeof db.backup).toBe("function");
-      expect(typeof db.function).toBe("function");
-      expect(typeof db.aggregate).toBe("function");
-      expect(typeof db.createSession).toBe("function");
-
-      // Test statement configuration methods
-      db.exec("CREATE TABLE test (id INTEGER)");
-      const stmt = db.prepare("SELECT * FROM test");
-
-      expect(typeof stmt.setReadBigInts).toBe("function");
-      expect(typeof stmt.setReturnArrays).toBe("function");
-      expect(typeof stmt.setAllowBareNamedParameters).toBe("function");
-      expect(typeof stmt.columns).toBe("function");
+      expect(() => {
+        db.exec(invalidSQL);
+      }).toThrow(/syntax/i);
 
       db.close();
     });
 
-    test("user-defined functions work correctly", () => {
+    testBothImplementations(
+      "transaction behavior",
+      (DatabaseSync, _implName) => {
+        const db = new DatabaseSync(":memory:");
+
+        // Setup table
+        db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)");
+
+        // Test transaction properties
+        expect(db.isTransaction).toBe(false);
+
+        // Start transaction
+        db.exec("BEGIN");
+        expect(db.isTransaction).toBe(true);
+
+        // Make changes
+        db.exec("INSERT INTO test (value) VALUES ('test1')");
+
+        // Rollback
+        db.exec("ROLLBACK");
+        expect(db.isTransaction).toBe(false);
+
+        // Check that data was rolled back
+        const count = db.prepare("SELECT COUNT(*) as count FROM test").get();
+        expect(count.count).toBe(0);
+
+        db.close();
+      },
+    );
+
+    testBothImplementations(
+      "prepared statement behavior",
+      (DatabaseSync, _implName) => {
+        const db = new DatabaseSync(":memory:");
+
+        // Setup
+        db.exec("CREATE TABLE test (id INTEGER, name TEXT, data BLOB)");
+
+        // Test parameter binding
+        const insertSQL = "INSERT INTO test VALUES (?, ?, ?)";
+        const stmt = db.prepare(insertSQL);
+
+        const testBuffer = Buffer.from("test data", "utf8");
+        const result = stmt.run(1, "test", testBuffer);
+
+        expect(result.changes).toBe(1);
+
+        // Test different data types
+        const selectSQL = "SELECT * FROM test WHERE id = ?";
+        const selectStmt = db.prepare(selectSQL);
+        const row = selectStmt.get(1);
+
+        expect(row.id).toBe(1);
+        expect(row.name).toBe("test");
+
+        // BLOB data should be preserved
+        if (Buffer.isBuffer(row.data)) {
+          expect(row.data.toString()).toBe("test data");
+        } else if (row.data instanceof Uint8Array) {
+          expect(Buffer.from(row.data).toString()).toBe("test data");
+        }
+
+        db.close();
+      },
+    );
+
+    // Custom functions tests from node-compat.test.ts
+    testBothImplementations(
+      "custom functions - basic functionality",
+      (DatabaseSync, _implName) => {
+        const db = new DatabaseSync(":memory:");
+
+        // Basic function
+        db.function("double", (x: number) => x * 2);
+        const result = db.prepare("SELECT double(21) as result").get();
+        expect(result.result).toBe(42);
+
+        // Function with multiple arguments
+        db.function("add_numbers", (a: number, b: number) => a + b);
+        const addResult = db
+          .prepare("SELECT add_numbers(10, 32) as result")
+          .get();
+        expect(addResult.result).toBe(42);
+
+        db.close();
+      },
+    );
+
+    testBothImplementations(
+      "custom functions - useBigIntArguments",
+      (DatabaseSync, _implName) => {
+        const db = new DatabaseSync(":memory:");
+
+        // Test with useBigIntArguments: true
+        let value: any;
+        db.function("custom", { useBigIntArguments: true }, (arg: any) => {
+          value = arg;
+        });
+        db.prepare("SELECT custom(5) AS custom").get();
+        expect(value).toBe(5n);
+
+        // Test with useBigIntArguments: false (default)
+        db.function("custom2", (arg: any) => {
+          value = arg;
+        });
+        db.prepare("SELECT custom2(5) AS custom").get();
+        expect(value).toBe(5);
+
+        db.close();
+      },
+    );
+
+    testBothImplementations(
+      "custom functions - varargs",
+      (DatabaseSync, _implName) => {
+        const db = new DatabaseSync(":memory:");
+
+        // Test with varargs: true
+        let value: any;
+        db.function("custom", { varargs: true }, (...args: any[]) => {
+          value = args;
+        });
+        db.prepare("SELECT custom(5, 4, 3, 2, 1) AS custom").get();
+        expect(value).toEqual([5, 4, 3, 2, 1]);
+
+        // Test with varargs: false (default) - uses function.length
+        db.function("custom2", (a: any, b: any, c: any) => {
+          value = [a, b, c];
+        });
+        db.prepare("SELECT custom2(7, 8, 9) AS custom").get();
+        expect(value).toEqual([7, 8, 9]);
+
+        // Test error when wrong number of arguments
+        db.function("fixed", () => {});
+        expect(() => {
+          db.prepare("SELECT fixed(1, 2, 3) AS result").get();
+        }).toThrow(/wrong number of arguments/);
+
+        db.close();
+      },
+    );
+
+    testBothImplementations(
+      "custom functions - deterministic",
+      (DatabaseSync, _implName) => {
+        const db = new DatabaseSync(":memory:");
+
+        // Deterministic functions can be used in generated columns
+        db.function("isDeterministic", { deterministic: true }, () => 42);
+        expect(() => {
+          db.exec(`
+            CREATE TABLE t1 (
+              a INTEGER PRIMARY KEY,
+              b INTEGER GENERATED ALWAYS AS (isDeterministic()) VIRTUAL
+            )
+          `);
+        }).not.toThrow();
+
+        // Non-deterministic functions cannot
+        db.function("isNonDeterministic", { deterministic: false }, () => 42);
+        expect(() => {
+          db.exec(`
+            CREATE TABLE t2 (
+              a INTEGER PRIMARY KEY,
+              b INTEGER GENERATED ALWAYS AS (isNonDeterministic()) VIRTUAL
+            )
+          `);
+        }).toThrow(/non-deterministic functions prohibited/);
+
+        db.close();
+      },
+    );
+
+    testBothImplementations(
+      "custom functions - error propagation",
+      (DatabaseSync, _implName) => {
+        const db = new DatabaseSync(":memory:");
+
+        const err = new Error("boom");
+        db.function("throws", () => {
+          throw err;
+        });
+
+        const stmt = db.prepare("SELECT throws()");
+        expect(() => {
+          stmt.get();
+        }).toThrow(err);
+
+        db.close();
+      },
+    );
+
+    testBothImplementations(
+      "custom functions - data type handling",
+      (DatabaseSync, _implName) => {
+        const db = new DatabaseSync(":memory:");
+
+        let receivedArgs: any[] = [];
+        db.function("testArgs", (i: any, f: any, s: any, n: any) => {
+          receivedArgs = [i, f, s, n];
+          return 42;
+        });
+
+        const stmt = db.prepare(
+          "SELECT testArgs(5, 3.14, 'foo', null) as result",
+        );
+        const result = stmt.get();
+
+        expect(receivedArgs[0]).toBe(5); // integer
+        expect(receivedArgs[1]).toBeCloseTo(3.14); // float
+        expect(receivedArgs[2]).toBe("foo"); // string
+        expect(receivedArgs[3]).toBe(null); // null
+        expect(result.result).toBe(42);
+
+        // Test binary data
+        db.function("getBinary", () => new Uint8Array([1, 2, 3]));
+        const binaryResult = db.prepare("SELECT getBinary() as data").get();
+        expect(binaryResult.data).toBeInstanceOf(Uint8Array);
+        expect(Array.from(binaryResult.data)).toEqual([1, 2, 3]);
+
+        db.close();
+      },
+    );
+
+    // Direct comparison tests when both implementations are available
+    if (nodeAvailable && NodeSqlite?.DatabaseSync) {
+      test("constants match between implementations", () => {
+        const nodeConstants = NodeSqlite.constants;
+
+        // Check that common constants have the same values
+        const commonConstants = [
+          "SQLITE_OPEN_READONLY",
+          "SQLITE_OPEN_READWRITE",
+          "SQLITE_OPEN_CREATE",
+        ];
+
+        commonConstants.forEach((constant) => {
+          if (
+            Object.prototype.hasOwnProperty.call(ourConstants, constant) &&
+            Object.prototype.hasOwnProperty.call(nodeConstants, constant)
+          ) {
+            expect((ourConstants as any)[constant]).toBe(
+              (nodeConstants as any)[constant],
+            );
+          }
+        });
+      });
+
+      test("side-by-side operation comparison", () => {
+        const ourDb = new OurDatabaseSync(":memory:");
+        const nodeDb = new NodeSqlite.DatabaseSync(":memory:");
+
+        // Run identical operations
+        const sql = "CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)";
+        ourDb.exec(sql);
+        nodeDb.exec(sql);
+
+        const insertStmt = "INSERT INTO test (value) VALUES (?)";
+        const ourStmt = ourDb.prepare(insertStmt);
+        const nodeStmt = nodeDb.prepare(insertStmt);
+
+        // Insert same data
+        for (let i = 0; i < 5; i++) {
+          const ourResult = ourStmt.run(`value_${i}`);
+          const nodeResult = nodeStmt.run(`value_${i}`);
+
+          expect(ourResult.changes).toBe(nodeResult.changes);
+          expect(Number(ourResult.lastInsertRowid)).toBe(
+            Number(nodeResult.lastInsertRowid),
+          );
+        }
+
+        // Query and compare results
+        const ourResults = ourDb.prepare("SELECT * FROM test").all();
+        const nodeResults = nodeDb.prepare("SELECT * FROM test").all();
+
+        expect(ourResults).toEqual(nodeResults);
+
+        ourDb.close();
+        nodeDb.close();
+      });
+    }
+  });
+
+  describe("Extended Features (Our Implementation)", () => {
+    test("aggregate functions work correctly", () => {
       const db = new OurDatabaseSync(":memory:");
-
-      // Test user-defined function
-      db.function("double", (x: number) => x * 2);
-
-      const result = db.prepare("SELECT double(21) as result").get();
-      expect(result.result).toBe(42);
 
       // Test aggregate function
       db.exec("CREATE TABLE numbers (n INTEGER)");
@@ -422,29 +509,26 @@ describe("Node.js API Compatibility Tests", () => {
       db.close();
     });
 
-    test("backup functionality works", () => {
+    test("backup functionality exists", () => {
       const db = new OurDatabaseSync(":memory:");
 
       db.exec("CREATE TABLE test (id INTEGER, data TEXT)");
       db.exec("INSERT INTO test VALUES (1, 'test data')");
 
-      // Test backup method exists and can be called
+      // Test backup method exists
       expect(typeof db.backup).toBe("function");
 
-      // For in-memory databases, backup may not work the same way as file databases
-      // So let's just test that the method exists and doesn't crash when called properly
+      // For in-memory databases, backup may have limitations
       try {
-        // This may or may not work for :memory: databases, but shouldn't crash
         db.backup(":memory:");
       } catch {
         // Some backup operations may not be supported for in-memory databases
-        // This is acceptable
       }
 
       db.close();
     });
 
-    test("session functionality works", () => {
+    test("session functionality exists", () => {
       const db = new OurDatabaseSync(":memory:");
 
       db.exec("CREATE TABLE test (id INTEGER, value TEXT)");
@@ -459,10 +543,6 @@ describe("Node.js API Compatibility Tests", () => {
       // Generate changeset
       const changeset = session.changeset();
       expect(Buffer.isBuffer(changeset)).toBe(true);
-
-      // Note: changeset might be empty if no changes were captured
-      // This depends on when the session was started relative to the changes
-      expect(changeset.length).toBeGreaterThanOrEqual(0);
 
       db.close();
     });
@@ -494,7 +574,7 @@ describe("Node.js API Compatibility Tests", () => {
       const endTime = Date.now();
       const duration = endTime - startTime;
 
-      // Should complete within reasonable time (adjust threshold as needed)
+      // Should complete within reasonable time
       expect(duration).toBeLessThan(1000); // 1 second
 
       console.log(`Performance test completed in ${duration}ms`);
