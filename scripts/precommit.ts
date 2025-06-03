@@ -22,6 +22,7 @@ run("npm run compile", "Type checking with TypeScript");
 run("npm run lint", "Running ESLint");
 run("npm run security", "Running security checks");
 run("npm run bundle", "Building project");
+run("npm run node-gyp-rebuild", "Building native project");
 run("npm run test:cjs", "Running tests in CJS mode");
 run("npm run test:esm", "Running tests in ESM mode");
 
