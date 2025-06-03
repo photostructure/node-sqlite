@@ -34,6 +34,7 @@ void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
   UserDefinedFunction *self = static_cast<UserDefinedFunction *>(user_data);
 
   try {
+    Napi::HandleScope scope(self->env_);
     Napi::Function fn = self->fn_.Value();
 
     // Convert SQLite arguments to JavaScript values
