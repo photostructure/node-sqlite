@@ -148,8 +148,8 @@ export function useTempDir(
       await fsp.rm(context.tempDir, {
         recursive: true,
         force: true,
-        maxRetries: 3,
-        retryDelay: 500,
+        maxRetries: process.platform === "win32" ? 10 : 3,
+        retryDelay: process.platform === "win32" ? 1000 : 500,
       });
     }
 
@@ -211,7 +211,7 @@ export function useTempDirSuite(
   afterAll(async () => {
     // Wait a bit for Windows file handles to be released if requested
     if (options?.waitForWindows && process.platform === "win32") {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     try {
@@ -219,8 +219,8 @@ export function useTempDirSuite(
         await fsp.rm(context.tempDir, {
           recursive: true,
           force: true,
-          maxRetries: 3,
-          retryDelay: 500,
+          maxRetries: process.platform === "win32" ? 10 : 3,
+          retryDelay: process.platform === "win32" ? 1000 : 500,
         });
       }
     } catch {
