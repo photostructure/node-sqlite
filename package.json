@@ -56,7 +56,7 @@
     "clang-tidy": "tsx scripts/clang-tidy.ts",
     "precommit:quality": "node -e \"if(process.platform==='linux'||process.platform==='darwin')process.exit(1)\" || npm run clang-tidy",
     "precommit:memory": "node -e \"if(process.platform!=='linux')process.exit(1)\" && npm run test:memory || echo 'Skipping memory tests (Linux only)'",
-    "lint": "run-p lint:eslint lint:scripts",
+    "lint": "run-p lint:*",
     "lint:eslint": "eslint src/ test/",
     "// lint:api-compat": "run by the api compability CI workflow",
     "lint:api-compat": "tsx scripts/check-api-compat.ts",

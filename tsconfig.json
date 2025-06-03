@@ -7,5 +7,5 @@
     "moduleResolution": "node",
     "types": ["node", "jest"]
   },
-  "exclude": ["dist", "coverage", "docs"]
+  "exclude": ["dist", "coverage", "docs", "src/api-compatibility.test.ts"]
 }
