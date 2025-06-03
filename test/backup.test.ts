@@ -644,19 +644,22 @@ describe("Backup functionality", () => {
   });
 
   it("should demonstrate different behavior with different rates", async () => {
-    // Create a medium-sized database
+    // Create a larger database to ensure consistent behavior across platforms
     sourceDb.exec(`
       CREATE TABLE test_data (
         id INTEGER PRIMARY KEY,
-        content TEXT
+        content TEXT,
+        extra_data TEXT
       );
     `);
 
-    const content = "y".repeat(500);
-    for (let i = 0; i < 50; i++) {
+    // Insert more data with larger rows to ensure multiple pages
+    const content = "x".repeat(1000);
+    const extraData = "y".repeat(1000);
+    for (let i = 0; i < 200; i++) {
       sourceDb
-        .prepare("INSERT INTO test_data (content) VALUES (?)")
-        .run(content);
+        .prepare("INSERT INTO test_data (content, extra_data) VALUES (?, ?)")
+        .run(content, extraData);
     }
 
     // Test 1: Backup with rate = -1 (all at once)
@@ -704,10 +707,12 @@ describe("Backup functionality", () => {
     // With rate=-1, we should get 0 or very few callbacks (maybe just 1)
     expect(callbackCount1).toBeLessThanOrEqual(1);
 
-    // With rate=1, we should get many callbacks
+    // With rate=1, we should get more callbacks than rate=5
+    // Allow for at least a 2:1 ratio or a minimum difference of 2
     expect(callbackCount2).toBeGreaterThan(callbackCount3);
+    expect(callbackCount2 - callbackCount3).toBeGreaterThanOrEqual(2);
 
-    // With rate=5, we should get fewer callbacks than rate=1
+    // With rate=5, we should get some callbacks but fewer than rate=1
     expect(callbackCount3).toBeGreaterThan(0);
     expect(callbackCount3).toBeLessThan(callbackCount2);
 
@@ -746,8 +751,8 @@ describe("Backup functionality", () => {
     ).c;
     db3.close();
 
-    expect(count1).toBe(50);
-    expect(count2).toBe(50);
-    expect(count3).toBe(50);
+    expect(count1).toBe(200);
+    expect(count2).toBe(200);
+    expect(count3).toBe(200);
   }, 10000);
 });
