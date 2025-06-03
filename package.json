@@ -39,6 +39,7 @@
     "build": "run-s build:*",
     "build:ts": "tsc -p tsconfig.build.json --noEmit",
     "build:native": "prebuildify --napi --tag-libc --strip",
+    "build:portable": "bash scripts/portable-build.sh",
     "build:dist": "tsup && node scripts/post-build.mjs",
     "// test": "support `npm t name_of_file` (and don't fail due to missing coverage)",
     "test": "npm run test:cjs -- --no-coverage",

@@ -58,20 +58,16 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x64, arm64]
-    runs-on: ubuntu-22.04 # < compile with oldest supported Ubuntu
+    runs-on: ubuntu-24.04 # Use newer runner for Docker support
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-qemu
         with:
           arch: ${{ matrix.arch }}
-      - run: sudo apt-get update
-      - run: sudo apt-get install -y build-essential
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: "npm"
+      # Build in Debian 11 Bullseye container for GLIBC 2.31 compatibility
+      # This ensures compatibility with Ubuntu 20.04 LTS, Debian 11, and newer
       - run: npm ci
-      - run: npm run build:native
+      - run: TARGET_ARCH=${{ matrix.arch }} npm run build:portable
       - uses: actions/upload-artifact@v4
         with:
           name: prebuilds-linux-${{ matrix.arch }}-glibc
