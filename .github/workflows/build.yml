@@ -166,6 +166,7 @@ jobs:
           merge-multiple: true
       - run: |
           docker run --rm -v $(pwd):/tmp/project --entrypoint /bin/sh --platform linux/${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} node:${{ matrix.node-version }}-alpine -c "\
+          apk add build-base git python3 py3-setuptools --update-cache && \
           cd /tmp/project && \
           npm ci && \
           npm run build && \
@@ -181,11 +182,12 @@ jobs:
           node-version: 24
           cache: "npm"
       - run: npm ci
-      - run: npm run build
-      - name: Check API compatibility types
+      - name: Check API compatibility types (TypeScript compile-time validation)
         run: npm run lint:api-compat
-      - name: Run API compatibility tests
+      - name: Run API type compatibility tests (ensures our TypeScript types match node:sqlite)
         run: npm run test:api-compat
+      - name: Run behavioral compatibility tests (validates runtime behavior matches node:sqlite)
+        run: npm run test:node-compat
 
   publish:
     if: ${{ github.event_name == 'workflow_dispatch' }}
