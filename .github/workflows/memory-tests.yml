@@ -1,92 +1,50 @@
-name: Memory Tests (Comprehensive)
+name: Memory Tests
 
 on:
   push:
     branches: [main]
-  schedule:
-    # Run comprehensive memory tests weekly on Monday at 3 AM UTC
-    - cron: '0 3 * * 1'
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
 
 jobs:
+  # Comprehensive memory tests - all platforms and Node versions
   memory-tests:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [20, 22, 23, 24]
+    runs-on: ${{ matrix.os }}
+    
     steps:
       - uses: actions/checkout@v4
       
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: "npm"
-      
-      - name: Install dependencies
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y valgrind gcc g++ clang clang-tidy
-      
-      - name: Install Node dependencies
-        run: npm ci
-      
-      - name: Build project
-        run: npm run build
-      
-      - name: Run JavaScript memory tests
-        run: npm run memory:test
-      
-      - name: Run valgrind tests
-        run: bash scripts/valgrind.sh
-          
-      - name: Run AddressSanitizer tests
-        run: npm run memory:asan
-        continue-on-error: true
-          
-      - name: Upload ASAN output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: asan-output
-          path: asan-output.log
-          if-no-files-found: ignore
-      
-      - name: Run clang-tidy
-        run: npm run lint:native
-
-  memory-tests-full:
-    # Run more comprehensive memory tests on main branch only
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+          sudo apt-get install -y valgrind build-essential clang
       
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
-          cache: "npm"
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
       
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y valgrind gcc g++ clang clang-tidy clang-tools
-      
-      - name: Install Node dependencies
         run: npm ci
       
-      - name: Build project
+      - name: Build native and javascript bundle
         run: npm run build
       
-      - name: Run full memory test suite
-        run: npm run memory:suite
+      - name: Run comprehensive memory tests
+        run: npm run check:memory
       
-      - name: Run ASAN with full test suite
-        run: |
-          ENABLE_ASAN=1 npm run memory:suite
-          
       - name: Upload memory test artifacts
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: memory-test-results
+          name: memory-test-results-${{ matrix.os }}-node${{ matrix.node-version }}
           path: |
+            asan-test.log
+            valgrind.log
             asan-output.log
-            valgrind-*.log
           if-no-files-found: ignore

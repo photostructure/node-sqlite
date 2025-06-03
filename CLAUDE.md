@@ -148,9 +148,10 @@ Actions that have multiple targets can be run in parallel using wildcards:
 
 - **memory:\*** - Memory testing scripts that should not run automatically with `test:*`
   - `memory:test` - JavaScript memory leak tests
-  - `memory:suite` - Comprehensive memory testing suite (valgrind, ASAN, etc.)
-  - `memory:asan` - AddressSanitizer specific tests
-  - Run with `ENABLE_ASAN=1` to include sanitizer tests
+  - `memory:valgrind` - Valgrind memory analysis (Linux only)
+  - `memory:asan` - AddressSanitizer and LeakSanitizer tests (Linux only)
+- **check:\*** - Comprehensive checking scripts
+  - `check:memory` - Complete memory test suite (JavaScript + valgrind + ASAN)
 
 ### Naming Guidelines
 
@@ -180,8 +181,9 @@ npm run build:dist       # Bundle for distribution
 
 # Memory testing
 npm run memory:test      # JavaScript memory tests
-npm run memory:suite     # Full memory test suite
-npm run memory:asan      # AddressSanitizer tests
+npm run memory:valgrind  # Valgrind memory analysis (Linux only)
+npm run memory:asan      # AddressSanitizer tests (Linux only)
+npm run check:memory     # Complete memory test suite (all platforms)
 
 # Sync latest Node.js SQLite implementation
 npm run sync:node

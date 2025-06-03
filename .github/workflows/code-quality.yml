@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  clang-tidy:
+  lint:native:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

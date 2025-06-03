@@ -51,18 +51,7 @@ if (isLinux || isMacOS) {
   run("npm run lint:native", "Running clang-tidy");
 }
 
-if (isLinux) {
-  console.log("\n▶ Running memory tests (Linux only)");
-
-  // Run quick memory tests for precommit
-  run("npm run memory:test", "JavaScript memory tests");
-
-  // Optional: Run valgrind if you want (might be slow)
-  // run("bash scripts/valgrind.sh", "Valgrind memory tests");
-
-  console.log("✓ Memory tests passed");
-} else {
-  console.log("\n⚠ Skipping memory tests (Linux only)");
-}
+// Run comprehensive memory tests (cross-platform)
+run("npm run check:memory", "Comprehensive memory tests");
 
 console.log("\n✅ All precommit checks passed!");
