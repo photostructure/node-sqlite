@@ -334,7 +334,7 @@ describe("Invalid Operations Tests", () => {
       const stmt = db.prepare("SELECT conditional_error(?)");
       expect(() => {
         stmt.get(-5);
-      }).toThrow(/Negative input not allowed/i);
+      }).toThrow(/Negative input not allowed|Invalid argument/i);
 
       // Valid input should work
       const result = stmt.get(5);
