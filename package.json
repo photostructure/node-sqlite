@@ -35,6 +35,7 @@
     "node-gyp-rebuild": "node-gyp rebuild",
     "prebuild": "prebuildify --napi --tag-libc --strip",
     "compile": "tsc -p tsconfig.build.json --noEmit",
+    "compile:all": "tsc --noEmit",
     "bundle": "tsup && node scripts/post-build.mjs",
     "test": "npm run test:cjs -- --no-coverage",
     "test:cjs": "jest",
@@ -135,7 +136,7 @@
     "typescript-eslint": "^8.33.1"
   },
   "versions": {
-    "nodejs": "v24.1.1@8a1eaea",
+    "nodejs": "v24.1.1@0f1e94f",
     "sqlite": "3.50.0"
   }
 }
