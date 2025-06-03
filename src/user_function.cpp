@@ -35,7 +35,20 @@ void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
 
   try {
     Napi::HandleScope scope(self->env_);
+
+    // Check if function reference is still valid
+    if (self->fn_.IsEmpty()) {
+      sqlite3_result_error(ctx, "Function reference is no longer valid", -1);
+      return;
+    }
+
     Napi::Function fn = self->fn_.Value();
+
+    // Additional check for function validity
+    if (!fn.IsFunction()) {
+      sqlite3_result_error(ctx, "Invalid function reference", -1);
+      return;
+    }
 
     // Convert SQLite arguments to JavaScript values
     std::vector<napi_value> js_args;
@@ -48,6 +61,19 @@ void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
 
     // Call the JavaScript function
     Napi::Value result = fn.Call(js_args);
+
+    // Check if there's a pending exception after the call
+    if (self->env_.IsExceptionPending()) {
+      Napi::Error error = self->env_.GetAndClearPendingException();
+      std::string error_msg = error.Message();
+      try {
+        sqlite3_result_error(ctx, error_msg.c_str(),
+                             SafeCastToInt(error_msg.length()));
+      } catch (const std::overflow_error &) {
+        sqlite3_result_error(ctx, "Error message too long", -1);
+      }
+      return;
+    }
 
     // Convert result back to SQLite
     self->JSValueToSqliteResult(ctx, result);
