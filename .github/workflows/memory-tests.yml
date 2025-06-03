@@ -31,13 +31,13 @@ jobs:
         run: npm run build
       
       - name: Run JavaScript memory tests
-        run: npm run test:memory
+        run: npm run memory:test
       
       - name: Run valgrind tests
         run: bash scripts/valgrind.sh
           
       - name: Run AddressSanitizer tests
-        run: npm run asan
+        run: npm run memory:asan
         continue-on-error: true
           
       - name: Upload ASAN output
@@ -49,7 +49,7 @@ jobs:
           if-no-files-found: ignore
       
       - name: Run clang-tidy
-        run: npm run clang-tidy
+        run: npm run lint:native
 
   memory-tests-full:
     # Run more comprehensive memory tests on main branch only
@@ -75,11 +75,11 @@ jobs:
         run: npm run build
       
       - name: Run full memory test suite
-        run: npm run tests:memory
+        run: npm run memory:suite
       
       - name: Run ASAN with full test suite
         run: |
-          ENABLE_ASAN=1 npm run tests:memory
+          ENABLE_ASAN=1 npm run memory:suite
           
       - name: Upload memory test artifacts
         if: always()

@@ -53,7 +53,7 @@ function runCommand(
 async function runJavaScriptMemoryTests(): Promise<number> {
   log("\n=== Running JavaScript Memory Tests ===", colors.blue);
 
-  const exitCode = await runCommand("npm", ["run", "test:memory"]);
+  const exitCode = await runCommand("npm", ["run", "memory:test"]);
 
   if (exitCode === 0) {
     log("✓ JavaScript memory tests passed", colors.green);
@@ -93,21 +93,8 @@ async function runValgrindTests(): Promise<number> {
 async function buildWithASAN() {
   log("Building with AddressSanitizer...", colors.dim);
 
-  // Clean previous build
-  execCommand("npm run clean");
-
-  // Set compiler flags for ASAN
-  const env = {
-    ...process.env,
-    CC: "gcc",
-    CXX: "g++",
-    CFLAGS: "-fsanitize=address -fno-omit-frame-pointer -g -O1",
-    CXXFLAGS: "-fsanitize=address -fno-omit-frame-pointer -g -O1",
-    LDFLAGS: "-fsanitize=address",
-  };
-
-  // Rebuild with ASAN
-  execCommand("npm run node-gyp-rebuild", { env });
+  // Use the dedicated ASAN build script to avoid circular dependencies
+  execCommand("npm run build:asan");
 
   log("✓ Built with AddressSanitizer", colors.green);
 }

@@ -11,7 +11,7 @@ console.log("Running quick memory tests...");
 
 try {
   // Run only the JavaScript memory tests (faster than valgrind)
-  execSync("npm run test:memory", { stdio: "inherit" });
+  execSync("npm run memory:test", { stdio: "inherit" });
   console.log("✓ Memory tests passed");
 } catch (error) {
   console.error("✗ Memory tests failed");

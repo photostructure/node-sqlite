@@ -29,7 +29,7 @@ jobs:
         run: npm run build
       
       - name: Run clang-tidy
-        run: npm run clang-tidy
+        run: npm run lint:native
         
   memory-tests-basic:
     runs-on: ubuntu-latest
@@ -53,7 +53,7 @@ jobs:
         run: npm run build
       
       - name: Run JavaScript memory tests
-        run: npm run test:memory
+        run: npm run memory:test
       
       - name: Run valgrind tests
         run: bash scripts/valgrind.sh

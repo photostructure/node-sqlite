@@ -488,11 +488,16 @@ Note that all changes are human-reviewed before merging.
 
 ### Project Timeline
 
-**Conception to v1.0: 4 days** ⚡
-
-- **3,900 lines** of C++ implementation
-- **11,000 lines** of comprehensive TypeScript tests
-- **337 tests** with full API compliance
+- <details>
+    <summary>900+ lines of C++</summary>
+    `find . -name "*.cpp" -o -name "*.h" -not -path "./node_modules/*" -not -path "./vendored/*" -not -path "*/upstream/*" -exec wc -l {} +`
+  </details>
+- <details>
+      <summary>17,000 lines of comprehensive TypeScript tests
+  </summary>
+      `find . -name "*.ts" -not -path "./node_modules/*" -not -path "./vendored/*" -not -path "*/upstream/*" -exec wc -l {} +`
+    </details>
+- **400+ tests** with full API compliance running in both ESM and CJS modes
 - **Multi-platform CI/CD** with automated builds
 - **Security scanning** and memory leak detection
 - **Automated sync** from Node.js and SQLite upstream
@@ -500,8 +505,8 @@ Note that all changes are human-reviewed before merging.
 
 ### Development Cost
 
-- **API usage**: ~$550 in Claude tokens
-- **Actual cost**: $100/month Anthropic MAX plan subscription
+- **API usage**: ~$650 in Claude tokens
+- **Actual cost**: $200/month MAX 20x plan subscription
 - **Time saved**: Weeks of manual porting work
 
 This project demonstrates how AI-assisted development can accelerate complex system programming while maintaining high code quality through comprehensive testing and human oversight.

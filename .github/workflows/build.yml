@@ -46,7 +46,7 @@ jobs:
           node-version: 20
           cache: "npm"
       - run: npm ci
-      - run: npm run prebuild
+      - run: npm run build:native
       - uses: actions/upload-artifact@v4
         with:
           name: prebuilds-${{ matrix.os }}
@@ -71,7 +71,7 @@ jobs:
           node-version: 20
           cache: "npm"
       - run: npm ci
-      - run: npm run prebuild
+      - run: npm run build:native
       - uses: actions/upload-artifact@v4
         with:
           name: prebuilds-linux-${{ matrix.arch }}-glibc
@@ -94,7 +94,7 @@ jobs:
           apk add build-base git python3 py3-setuptools --update-cache && \
           cd /tmp/project && \
           npm ci && \
-          npm run prebuild"
+          npm run build:native"
       - uses: actions/upload-artifact@v4
         with:
           name: prebuilds-linux-${{ matrix.arch }}-musl

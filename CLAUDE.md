@@ -114,6 +114,51 @@ node-sqlite/
 - **`vendored/node-sqlite3/`**: node-sqlite3 package for additional compatibility testing
   - Provides reference for async SQLite patterns and additional API coverage
 
+## npm Script Naming Conventions
+
+This project follows consistent naming patterns for npm scripts to improve discoverability and maintainability:
+
+### Action:Target Format
+
+Scripts follow an `action:target` pattern where:
+
+- **action**: The operation being performed (`build`, `clean`, `lint`, `test`, `fmt`)
+- **target**: What the action operates on (`native`, `ts`, `dist`)
+
+Examples:
+
+- `build:native` - Build native C++ code
+- `build:ts` - Type-check TypeScript for production
+- `build:dist` - Bundle TypeScript to distribution files
+- `lint:ts` - Lint TypeScript/JavaScript code
+- `lint:native` - Lint C++ code with clang-tidy
+- `fmt:ts` - Format TypeScript/JavaScript/JSON/Markdown files
+- `fmt:native` - Format C++ files with clang-format
+
+### Parallel Execution
+
+Actions that have multiple targets can be run in parallel using wildcards:
+
+- `npm run build` runs all `build:*` scripts in sequence
+- `npm run lint` runs all `lint:*` scripts in parallel
+- `npm run fmt` runs all `fmt:*` scripts in parallel
+- Uses `run-s` (sequential) or `run-p` (parallel) from npm-run-all
+
+### Special Namespaces
+
+- **memory:\*** - Memory testing scripts that should not run automatically with `test:*`
+  - `memory:test` - JavaScript memory leak tests
+  - `memory:suite` - Comprehensive memory testing suite (valgrind, ASAN, etc.)
+  - `memory:asan` - AddressSanitizer specific tests
+  - Run with `ENABLE_ASAN=1` to include sanitizer tests
+
+### Naming Guidelines
+
+- Use explicit names to avoid ambiguity (e.g., `build:native` instead of just `prebuild`)
+- Group related scripts by action prefix for easy wildcard execution
+- Avoid names that could cause npm lifecycle conflicts
+- Use descriptive suffixes that clearly indicate the target or purpose
+
 ## Common Commands
 
 ### Development Workflow
@@ -122,19 +167,24 @@ node-sqlite/
 # Run all tests
 npm test
 
-# Run specific test files
-npm run test:unit        # Tests in src/ directory
-npm run test:integration # Tests in test/ directory
-jest test/database.test.ts  # Single test file
+# Run all tests including ESM
+npm run tests
 
-# Build native addon
-npm run node-gyp-rebuild
-
-# Full build (compile TypeScript and create bundles)
+# Build everything (native, TypeScript, distribution)
 npm run build
 
+# Build individual components
+npm run build:native     # Native C++ prebuilds
+npm run build:ts         # Type-check TypeScript
+npm run build:dist       # Bundle for distribution
+
+# Memory testing
+npm run memory:test      # JavaScript memory tests
+npm run memory:suite     # Full memory test suite
+npm run memory:asan      # AddressSanitizer tests
+
 # Sync latest Node.js SQLite implementation
-npm run sync
+npm run sync:node
 ```
 
 ### Build System
