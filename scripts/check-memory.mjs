@@ -108,6 +108,9 @@ if (os.platform() === "linux") {
     );
     exitCode = 1;
   }
+
+  // Note: The ASAN script now cleans up after itself
+  // No need to rebuild here
 }
 
 if (exitCode === 0) {
