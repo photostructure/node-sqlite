@@ -1,10 +1,12 @@
 import { expect } from "@jest/globals";
 import * as fs from "node:fs";
 import { DatabaseSync } from "../src/index";
-import { useTempDir } from "./test-utils";
+import { getTestTimeout, getTimingMultiplier, useTempDir } from "./test-utils";
 
 describe("Backup Restoration", () => {
-  const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-");
+  const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-", {
+    timeout: getTestTimeout(), // Use environment-aware timeout
+  });
 
   let sourceDb: InstanceType<typeof DatabaseSync>;
   let sourceFile: string;

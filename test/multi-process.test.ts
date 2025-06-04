@@ -3,7 +3,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { DatabaseSync } from "../src";
-import { getDirname, useTempDir } from "./test-utils";
+import {
+  getDirname,
+  getTestTimeout,
+  getTimingMultiplier,
+  useTempDir,
+} from "./test-utils";
 
 const execFile = promisify(childProcess.execFile);
 
@@ -15,6 +20,7 @@ const execFile = promisify(childProcess.execFile);
 describe("Multi-Process Database Access", () => {
   const { getDbPath } = useTempDir("sqlite-multiproc-", {
     cleanupWalFiles: true,
+    timeout: getTestTimeout(),
   });
   let dbPath: string;
 
@@ -335,10 +341,9 @@ describe("Multi-Process Database Access", () => {
   describe("File Locking and Error Handling", () => {
     test("handles database locked errors gracefully", async () => {
       // Use longer timeouts on slower CI platforms
-      const isSlowCI =
-        process.platform === "darwin" || process.platform === "win32";
-      const lockHoldTime = isSlowCI ? 5000 : 1000;
-      const writerDelay = isSlowCI ? 2000 : 200;
+      const multiplier = getTimingMultiplier();
+      const lockHoldTime = 1000 * multiplier;
+      const writerDelay = 200 * multiplier;
       const setupDb = new DatabaseSync(dbPath);
       setupDb.exec(`
         CREATE TABLE lock_test (

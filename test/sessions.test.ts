@@ -4,12 +4,13 @@ import {
   type DatabaseSyncInstance,
   type Session,
 } from "../src/index";
-import { useTempDir } from "./test-utils";
+import { getTestTimeout, getTimingMultiplier, useTempDir } from "./test-utils";
 
 describe("SQLite Sessions", () => {
   const { getDbPath, closeDatabases } = useTempDir("sqlite-session-test-", {
     waitForWindows: true,
     cleanupWalFiles: true,
+    timeout: getTestTimeout(), // Use environment-aware timeout
   });
   let db: DatabaseSyncInstance;
 
