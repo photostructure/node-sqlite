@@ -12,6 +12,10 @@
 namespace photostructure {
 namespace sqlite {
 
+// JavaScript safe integer limits (2^53 - 1)
+constexpr int64_t JS_MAX_SAFE_INTEGER = 9007199254740991LL;
+constexpr int64_t JS_MIN_SAFE_INTEGER = -9007199254740991LL;
+
 // Path validation function implementation
 std::optional<std::string> ValidateDatabasePath(Napi::Env env, Napi::Value path,
                                                 const std::string &field_name) {
@@ -1285,12 +1289,13 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
 
     sqlite3_int64 last_rowid =
         sqlite3_last_insert_rowid(database_->connection());
-    if (last_rowid > 2147483647LL) {
+    // Use JavaScript's safe integer limits (2^53 - 1)
+    if (last_rowid > JS_MAX_SAFE_INTEGER || last_rowid < JS_MIN_SAFE_INTEGER) {
       result_obj.Set("lastInsertRowid",
-                     Napi::BigInt::New(env, static_cast<uint64_t>(last_rowid)));
+                     Napi::BigInt::New(env, static_cast<int64_t>(last_rowid)));
     } else {
       result_obj.Set("lastInsertRowid",
-                     Napi::Number::New(env, static_cast<int32_t>(last_rowid)));
+                     Napi::Number::New(env, static_cast<double>(last_rowid)));
     }
 
     return result_obj;
@@ -1801,11 +1806,12 @@ Napi::Value StatementSync::CreateResult() {
         if (use_big_ints_) {
           // Always return BigInt when readBigInts is true
           value = Napi::BigInt::New(env, static_cast<int64_t>(int_val));
-        } else if (int_val > 2147483647LL || int_val < -2147483648LL) {
-          // Return BigInt for values outside 32-bit range
+        } else if (int_val > JS_MAX_SAFE_INTEGER ||
+                   int_val < JS_MIN_SAFE_INTEGER) {
+          // Return BigInt for values outside JavaScript's safe integer range
           value = Napi::BigInt::New(env, static_cast<int64_t>(int_val));
         } else {
-          value = Napi::Number::New(env, static_cast<int32_t>(int_val));
+          value = Napi::Number::New(env, static_cast<double>(int_val));
         }
         break;
       }
@@ -1852,11 +1858,12 @@ Napi::Value StatementSync::CreateResult() {
         if (use_big_ints_) {
           // Always return BigInt when readBigInts is true
           value = Napi::BigInt::New(env, static_cast<int64_t>(int_val));
-        } else if (int_val > 2147483647LL || int_val < -2147483648LL) {
-          // Return BigInt for values outside 32-bit range
+        } else if (int_val > JS_MAX_SAFE_INTEGER ||
+                   int_val < JS_MIN_SAFE_INTEGER) {
+          // Return BigInt for values outside JavaScript's safe integer range
           value = Napi::BigInt::New(env, static_cast<int64_t>(int_val));
         } else {
-          value = Napi::Number::New(env, static_cast<int32_t>(int_val));
+          value = Napi::Number::New(env, static_cast<double>(int_val));
         }
         break;
       }
