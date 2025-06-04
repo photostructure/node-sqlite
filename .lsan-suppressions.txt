@@ -75,6 +75,25 @@ leak:_dbus_
 leak:sqlite3_initialize
 leak:sqlite3_config
 
+# Python runtime (used by some build tools)
+leak:python
+leak:_Py
+leak:Py
+leak:builtin_exec
+leak:PyImport_
+leak:PyModule_
+leak:PyType_
+leak:PyDict_
+leak:PyObject_
+leak:_PyEval_
+leak:import_find_and_load
+
+# Node.js modules and dependencies
+leak:node_modules/
+leak:@rollup/rollup
+leak:rollup.linux
+leak:napi_register_module
+
 # System libraries
 leak:libstdc++
 leak:libgcc_s.so
