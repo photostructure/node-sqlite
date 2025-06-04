@@ -6,7 +6,7 @@ import ts_eslint from "typescript-eslint";
 /** @type {import('eslint').Linter.Config[]} */
 export default [
   {
-    files: ["src/**/*.ts", "test/**/*.ts", "scripts/*.js"],
+    files: ["src/**/*.ts", "test/**/*.ts", "scripts/*.js", "scripts/*.ts"],
     languageOptions: {
       globals: {
         ...globals.node,
