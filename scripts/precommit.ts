@@ -15,16 +15,19 @@ function run(command: string, description: string) {
 }
 
 // Always run these
+run("npm run clean", "Start fresh");
 run("npm run sync:node", "Fetching upstream from Node.js");
 run("npm run sync:sqlite", "Fetching upstream from SQLite.org");
 run("npm run fmt", "Formatting code");
-run("npm run check:ts", "Type checking all TypeScript files (including tests)");
-run("npm run lint", "Running ESLint");
+run("npm run lint", "Running TypeScript, eslint, and clang-tidy");
 run("npm run security", "Running security checks");
 run("npm run build:dist", "Building project");
-run("npm run node-gyp-rebuild", "Building native project");
-run("npm run test:cjs", "Running tests in CJS mode");
-run("npm run test:esm", "Running tests in ESM mode");
+run(
+  "npm run build:" + (isLinux ? "linux-glibc" : "native"),
+  "Building native project for " +
+    (isLinux ? "Linux with portable GLIBC" : platform()),
+);
+run("npm run tests", "Running tests in CJS and ESM mode");
 
 // Check Node.js version for API compatibility tests
 const nodeVersion = process.version;
