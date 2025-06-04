@@ -180,6 +180,7 @@ void *sqlite3_aggregate_context(sqlite3_context*, int nBytes);
 ```
 
 **Important Notes**:
+
 - SQLite allocates the memory and zeros it on first call with nBytes > 0
 - Subsequent calls return the same memory pointer
 - Memory is automatically freed after xFinal is called
@@ -226,12 +227,12 @@ void cppStep(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
     void *buffer = sqlite3_aggregate_context(ctx, sizeof(ComplexAggregateData));
     if (buffer) {
         ComplexAggregateData *data = static_cast<ComplexAggregateData*>(buffer);
-        
+
         // First time: construct the object in-place
         if (data->values.empty() && sqlite3_value_type(argv[0]) != SQLITE_NULL) {
             new (data) ComplexAggregateData();
         }
-        
+
         data->values.push_back(sqlite3_value_double(argv[0]));
     }
 }
@@ -459,7 +460,7 @@ Convert JavaScript exceptions to SQLite errors:
 try {
   // Call JavaScript function
   Napi::Value result = js_function.Call(args);
-  
+
   if (env_.IsExceptionPending()) {
     Napi::Error error = env_.GetAndClearPendingException();
     sqlite3_result_error(ctx, error.Message().c_str(), -1);
@@ -509,7 +510,7 @@ For validating user function implementations in N-API/Node.js context:
 - [ ] Exception handling with conversion to SQLite errors via sqlite3_result_error()
 - [ ] Support for both scalar and aggregate functions
 - [ ] Proper use of sqlite3_user_data() for accessing user data
-- [ ] BigInt support for JavaScript interop (use_bigint_args_ flag)
+- [ ] BigInt support for JavaScript interop (use*bigint_args* flag)
 - [ ] No HandleScope creation in value conversion methods
 - [ ] Thread safety considerations for N-API calls
 - [ ] Proper cleanup in destructor (xDestroy callback)
