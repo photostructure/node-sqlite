@@ -449,7 +449,7 @@ async function main() {
       console.log("Use --force to sync these files anyway.");
     }
     console.log("\nNext steps:");
-    console.log("1. Run `npm run build` to compile the native addon");
+    console.log("1. Run `npm run build:native` to ensure the native addon ");
     console.log("2. Run `npm test` to verify everything works");
   } else if (!args.dryRun && successCount < actualTotal) {
     console.log(`\n⚠️  ${actualTotal - successCount} files failed to download`);
