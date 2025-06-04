@@ -27,7 +27,7 @@ describeMemoryTests("Memory Tests", () => {
 
   function runMemoryTest(
     testName: string,
-    testFn: () => void,
+    testFn: () => void | Promise<void>,
     options: {
       iterations?: number;
       warmupIterations?: number;
@@ -42,12 +42,12 @@ describeMemoryTests("Memory Tests", () => {
       errorMargin = 0.1,
     } = options;
 
-    test(testName, () => {
+    test(testName, async () => {
       const measurements: number[] = [];
 
       // Warm up
       for (let i = 0; i < warmupIterations; i++) {
-        testFn();
+        await testFn();
         if (gc) gc();
       }
 
@@ -55,7 +55,7 @@ describeMemoryTests("Memory Tests", () => {
       for (let i = 0; i < iterations; i++) {
         // run gc() before each measurement:
         getMemoryUsage();
-        testFn();
+        await testFn();
         const after = getMemoryUsage();
         measurements.push(after);
 
