@@ -122,37 +122,8 @@ This project follows consistent naming patterns for npm scripts to improve disco
 
 Scripts follow an `action:target` pattern where:
 
-- **action**: The operation being performed (`build`, `clean`, `lint`, `test`, `fmt`)
+- **action**: The operation being performed (`setup`, `build`, `clean`, `lint`, `test`, `fmt`)
 - **target**: What the action operates on (`native`, `ts`, `dist`)
-
-Examples:
-
-- `build:native` - Build native C++ code
-- `build:ts` - Type-check TypeScript for production
-- `build:dist` - Bundle TypeScript to distribution files
-- `lint:ts` - Type-check TypeScript/JavaScript code
-- `lint:ts-scripts` - Type-check TypeScript scripts
-- `lint:eslint` - Lint TypeScript/JavaScript code with ESLint
-- `lint:native` - Lint C++ code with clang-tidy
-- `fmt:ts` - Format TypeScript/JavaScript/JSON/Markdown files
-- `fmt:native` - Format C++ files with clang-format
-
-### Parallel Execution
-
-Actions that have multiple targets can be run in parallel using wildcards:
-
-- `npm run lint` runs all `lint:*` scripts in parallel
-- `npm run fmt` runs all `fmt:*` scripts in parallel
-- Uses `run-s` (sequential) or `run-p` (parallel) from npm-run-all
-
-### Special Namespaces
-
-- **memory:\*** - Memory testing scripts that should not run automatically with `test:*`
-  - `memory:test` - JavaScript memory leak tests
-  - `memory:valgrind` - Valgrind memory analysis (Linux only)
-  - `memory:asan` - AddressSanitizer and LeakSanitizer tests (Linux only)
-- **check:\*** - Comprehensive checking scripts
-  - `check:memory` - Complete memory test suite (JavaScript + valgrind + ASAN)
 
 ### Naming Guidelines
 
@@ -160,61 +131,6 @@ Actions that have multiple targets can be run in parallel using wildcards:
 - Group related scripts by action prefix for easy wildcard execution
 - Avoid names that could cause npm lifecycle conflicts
 - Use descriptive suffixes that clearly indicate the target or purpose
-
-## Common Commands
-
-### Development Workflow
-
-```bash
-# Run all tests
-npm test
-
-# Run all tests including ESM
-npm run tests
-
-# Build individual components
-npm run build:native     # Native C++ prebuilds
-npm run build:ts         # Type-check TypeScript
-npm run build:dist       # Bundle for distribution
-
-# Memory testing
-npm run memory:test      # JavaScript memory tests
-npm run memory:valgrind  # Valgrind memory analysis (Linux only)
-npm run memory:asan      # AddressSanitizer tests (Linux only)
-npm run check:memory     # Complete memory test suite (all platforms)
-
-# Sync latest Node.js SQLite implementation
-npm run sync:node
-```
-
-### Build System
-
-```bash
-# Clean build artifacts
-npm run clean
-
-# Rebuild from scratch
-npm run clean && npm install
-
-# Create prebuilds for distribution
-npm run prebuild
-
-# Format code
-npm run fmt
-
-# Lint code
-npm run lint
-```
-
-### Sync from Node.js Repository
-
-```bash
-# Sync from default location (../node)
-npm run sync
-
-# Sync from specific path
-node scripts/sync-from-node.js /path/to/node/repo
-```
 
 ## Development Notes
 
