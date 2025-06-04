@@ -1,7 +1,8 @@
 {
   "targets": [
     {
-      "target_name": "sqlite",
+        # We're prefixing with phstr to avoid conflicts with other SQLite addons.
+      "target_name": "phstr_sqlite",
       "sources": [
         "src/binding.cpp",
         "src/sqlite_impl.cpp",
@@ -50,9 +51,9 @@
         "SQLITE_SOUNDEX",
         "SQLITE_THREADSAFE=2"
       ],
-      # cflags apply only to C files (not C++), so -Wno-implicit-fallthrough
-      # suppresses SQLite's intentional switch fallthrough warnings without
-      # affecting our C++ code
+      # cflags apply only to C files (not C++), so these warnings suppressions
+      # are specific to SQLite's C code and don't affect our C++ code:
+      # -Wno-implicit-fallthrough: SQLite uses intentional switch fallthroughs
       "cflags": [
         "-fvisibility=hidden",
         "-fPIC",

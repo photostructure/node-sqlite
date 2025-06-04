@@ -157,4 +157,4 @@ Napi::Object InitSqlite(Napi::Env env, Napi::Object exports) {
 }
 
 // Register the module
-NODE_API_MODULE(sqlite, InitSqlite)
+NODE_API_MODULE(phstr_sqlite, InitSqlite)
