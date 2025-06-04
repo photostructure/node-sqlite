@@ -175,8 +175,11 @@ void UserDefinedFunction::JSValueToSqliteResult(sqlite3_context *ctx,
     double num_val = value.As<Napi::Number>().DoubleValue();
 
     // Check if it's an integer value
-    if (std::floor(num_val) == num_val && num_val >= INT64_MIN &&
-        num_val <= INT64_MAX) {
+    // Note: We cast INT64_MIN/MAX to double to avoid implicit conversion
+    // warnings
+    if (std::floor(num_val) == num_val &&
+        num_val >= static_cast<double>(INT64_MIN) &&
+        num_val <= static_cast<double>(INT64_MAX)) {
       sqlite3_result_int64(ctx, static_cast<sqlite3_int64>(num_val));
     } else {
       sqlite3_result_double(ctx, num_val);
