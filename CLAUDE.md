@@ -139,7 +139,6 @@ Examples:
 
 Actions that have multiple targets can be run in parallel using wildcards:
 
-- `npm run build` runs all `build:*` scripts in sequence
 - `npm run lint` runs all `lint:*` scripts in parallel
 - `npm run fmt` runs all `fmt:*` scripts in parallel
 - Uses `run-s` (sequential) or `run-p` (parallel) from npm-run-all
@@ -170,9 +169,6 @@ npm test
 
 # Run all tests including ESM
 npm run tests
-
-# Build everything (native, TypeScript, distribution)
-npm run build
 
 # Build individual components
 npm run build:native     # Native C++ prebuilds
@@ -296,7 +292,6 @@ node scripts/sync-from-node.js /path/to/node/repo
 
 ### Build and Dependencies
 
-- **Use `npm run build`** to compile TypeScript and create bundles
 - **Run `npm run lint`** to check code quality
 - **Native rebuilds** use `npm run node-gyp-rebuild`
 - **Multi-platform prebuilds** are generated via GitHub Actions
