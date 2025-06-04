@@ -76,7 +76,6 @@ fi
 
 # Build the native module
 echo "Building with AddressSanitizer..."
-npm run configure:native
 npm run node-gyp-rebuild
 
 # Build the distribution bundle
@@ -98,52 +97,99 @@ echo -e "\n${YELLOW}Analyzing ASAN output...${NC}"
 # Count different types of issues
 OUR_ERRORS=0
 OUR_LEAKS=0
-INTERNAL_LEAKS=0
+PYTHON_LEAKS=0
+SYSTEM_LEAKS=0
+TOTAL_LEAKS=0
 
 # Check for ASAN errors in our code (not V8/Node internals)
-if grep -E "(ERROR: AddressSanitizer|ERROR: LeakSanitizer)" "$OUTPUT_FILE" | grep -E "(sqlite\.node|/src/)" > /dev/null; then
+if grep -E "(ERROR: AddressSanitizer|ERROR: LeakSanitizer)" "$OUTPUT_FILE" | grep -E "(phstr_sqlite\.node|/src/|aggregate_function|user_function|sqlite_impl)" > /dev/null; then
     OUR_ERRORS=1
 fi
 
-# Check for direct/indirect leaks in our code with context
-while IFS= read -r line_num; do
-    # Get 5 lines before and 10 lines after for context
-    start=$((line_num - 5))
-    end=$((line_num + 10))
-    if sed -n "${start},${end}p" "$OUTPUT_FILE" | grep -E "(sqlite\.node|/src/|photostructure)" > /dev/null; then
-        OUR_LEAKS=1
-        break
-    fi
-done < <(grep -n "Direct leak\|Indirect leak" "$OUTPUT_FILE" | cut -d: -f1)
-
-# Count V8/Node internal leaks for information
-INTERNAL_LEAKS=$(grep -c "leak.*\/usr\/bin\/node" "$OUTPUT_FILE" 2>/dev/null || echo "0")
-INTERNAL_LEAKS="${INTERNAL_LEAKS//[[:space:]]/}"  # Remove any whitespace
+# Check for any leak summary
+if grep -q "SUMMARY: AddressSanitizer.*leaked" "$OUTPUT_FILE"; then
+    # Extract total number of leak allocations (not bytes)
+    TOTAL_LEAKS=$(grep "SUMMARY: AddressSanitizer" "$OUTPUT_FILE" | grep -oE "[0-9]+ allocation\(s\)" | grep -oE "[0-9]+" | head -1 || echo "0")
+    
+    # Check for direct/indirect leaks in our code with context
+    while IFS= read -r line_num; do
+        # Get 5 lines before and 20 lines after for context
+        start=$((line_num - 5))
+        end=$((line_num + 20))
+        context=$(sed -n "${start},${end}p" "$OUTPUT_FILE")
+        
+        # Check if this leak is from our code
+        if echo "$context" | grep -E "(phstr_sqlite\.node|/src/|aggregate_function|user_function|sqlite_impl|photostructure)" > /dev/null && ! echo "$context" | grep -E "/node_modules/" > /dev/null; then
+            OUR_LEAKS=$((OUR_LEAKS + 1))
+        # Check if this leak is from Python
+        elif echo "$context" | grep -iE "(python|libpython|\.py:|Py_|PyObject)" > /dev/null; then
+            PYTHON_LEAKS=$((PYTHON_LEAKS + 1))
+        # Check if this leak is from node_modules dependencies
+        elif echo "$context" | grep -E "/node_modules/" > /dev/null; then
+            SYSTEM_LEAKS=$((SYSTEM_LEAKS + 1))
+        # Otherwise it's a system/Node.js leak
+        else
+            SYSTEM_LEAKS=$((SYSTEM_LEAKS + 1))
+        fi
+    done < <(grep -n "Direct leak\|Indirect leak" "$OUTPUT_FILE" | cut -d: -f1)
+fi
 
 # Report results
 EXIT_CODE=0
 
 if [[ "$OUR_ERRORS" -eq 1 ]]; then
     echo -e "${RED}\n✗ AddressSanitizer found errors in sqlite code:${NC}"
-    grep -E "(ERROR: AddressSanitizer|ERROR: LeakSanitizer)" "$OUTPUT_FILE" | grep -E "(sqlite\.node|/src/)" | head -20
+    grep -E "(ERROR: AddressSanitizer|ERROR: LeakSanitizer)" "$OUTPUT_FILE" | grep -E "(phstr_sqlite\.node|/src/)" | head -20
     EXIT_CODE=1
 fi
 
-if [[ "$OUR_LEAKS" -eq 1 ]]; then
-    echo -e "${RED}\n✗ LeakSanitizer found memory leaks in sqlite code:${NC}"
-    # Show leak summary
-    grep -A 5 "SUMMARY: AddressSanitizer" "$OUTPUT_FILE" || true
+if [[ "$OUR_LEAKS" -gt 0 ]]; then
+    echo -e "${RED}\n✗ LeakSanitizer found $OUR_LEAKS memory leak(s) in sqlite code:${NC}"
+    # Show leaks from our code
+    while IFS= read -r line_num; do
+        start=$((line_num - 2))
+        end=$((line_num + 15))
+        context=$(sed -n "${start},${end}p" "$OUTPUT_FILE")
+        if echo "$context" | grep -E "(phstr_sqlite\.node|/src/|aggregate_function|user_function|sqlite_impl|photostructure)" > /dev/null; then
+            echo "$context"
+            echo "---"
+        fi
+    done < <(grep -n "Direct leak\|Indirect leak" "$OUTPUT_FILE" | cut -d: -f1)
     EXIT_CODE=1
 fi
 
 if [[ "$EXIT_CODE" -eq 0 ]]; then
     echo -e "${GREEN}\n✓ AddressSanitizer and LeakSanitizer tests passed (no issues in sqlite code)${NC}"
-    if [[ "$INTERNAL_LEAKS" -gt 0 ]]; then
-        echo -e "${YELLOW}   Note: $INTERNAL_LEAKS V8/Node.js internal leaks detected (suppressed)${NC}"
+    
+    # Report suppressed leaks if any
+    if [[ "$TOTAL_LEAKS" -gt 0 ]]; then
+        echo -e "${YELLOW}\n   Suppressed/Ignored leaks:${NC}"
+        if [[ "$PYTHON_LEAKS" -gt 0 ]]; then
+            echo -e "${YELLOW}   - Python/build tools: $PYTHON_LEAKS leak(s)${NC}"
+        fi
+        if [[ "$SYSTEM_LEAKS" -gt 0 ]]; then
+            echo -e "${YELLOW}   - System/Node.js/Dependencies: $SYSTEM_LEAKS leak(s)${NC}"
+        fi
+        echo -e "${BLUE}   Total: $TOTAL_LEAKS leak(s) (not from our code)${NC}"
+        
+        # Don't show the SUMMARY line for non-our-code leaks
+        echo -e "${BLUE}\n   Note: These leaks are from Python build tools, system libraries,${NC}"
+        echo -e "${BLUE}   or npm dependencies - not from the @photostructure/sqlite code.${NC}"
     fi
 else
-    echo -e "${RED}\n✗ Memory safety issues detected!${NC}"
+    echo -e "${RED}\n✗ Memory safety issues detected in @photostructure/sqlite code!${NC}"
     echo -e "${YELLOW}See $OUTPUT_FILE for full details${NC}"
+    
+    # Still report other leaks for context
+    if [[ "$PYTHON_LEAKS" -gt 0 ]] || [[ "$SYSTEM_LEAKS" -gt 0 ]]; then
+        echo -e "${YELLOW}\nAdditional suppressed leaks:${NC}"
+        if [[ "$PYTHON_LEAKS" -gt 0 ]]; then
+            echo -e "${YELLOW}   - Python/build tools: $PYTHON_LEAKS leak(s)${NC}"
+        fi
+        if [[ "$SYSTEM_LEAKS" -gt 0 ]]; then
+            echo -e "${YELLOW}   - System/Node.js/Dependencies: $SYSTEM_LEAKS leak(s)${NC}"
+        fi
+    fi
 fi
 
 # Show ASAN statistics if verbose
@@ -151,5 +197,21 @@ if [[ "$VERBOSE" -eq 1 ]] && grep -q "Stats:" "$OUTPUT_FILE"; then
     echo -e "\n${BLUE}ASAN Statistics:${NC}"
     grep -A 20 "Stats:" "$OUTPUT_FILE" | head -20
 fi
+
+# Debug: Check if ASAN was actually loaded
+if [[ "$VERBOSE" -eq 1 ]] || [[ "$EXIT_CODE" -eq 0 ]]; then
+    if ! grep -q "AddressSanitizer\|LeakSanitizer\|==[0-9]*==" "$OUTPUT_FILE"; then
+        echo -e "${YELLOW}\nNote: No ASAN/LSAN output detected. This could mean:${NC}"
+        echo -e "${YELLOW}  - No memory errors or leaks were found${NC}"
+        echo -e "${YELLOW}  - ASAN might not be properly loaded${NC}"
+        if [[ -n "${LD_PRELOAD:-}" ]]; then
+            echo -e "${BLUE}  - LD_PRELOAD is set to: $LD_PRELOAD${NC}"
+        fi
+    fi
+fi
+
+# Clean up: Remove ASAN-instrumented build
+echo -e "\n${YELLOW}Cleaning up ASAN build...${NC}"
+npm run clean:native > /dev/null 2>&1 || true
 
 exit $EXIT_CODE
