@@ -47,7 +47,14 @@
       "Bash(node:*)",
       "Bash(npm info:*)",
       "Bash(docker run:*)",
-      "Bash(sudo rm:*)"
+      "Bash(sudo rm:*)",
+      "Bash(./test-asan-detection.sh:*)",
+      "Bash(ldd:*)",
+      "WebFetch(domain:stackoverflow.com)",
+      "WebFetch(domain:en.cppreference.com)",
+      "Bash(g++:*)",
+      "Bash(./test_double_conversion)",
+      "Bash(./test-int64-double)"
     ]
   },
   "enableAllProjectMcpServers": false
