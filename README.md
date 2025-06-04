@@ -297,11 +297,32 @@ Performance is quite similar to node:sqlite and better-sqlite3, while significan
 
 ## Platform Support
 
-| Platform | x64 | ARM64 | Notes         |
-| -------- | --- | ----- | ------------- |
-| Linux    | ✅  | ✅    | Ubuntu 20.04+ |
-| macOS    | ✅  | ✅    | macOS 10.15+  |
-| Windows  | ✅  | ✅    | Windows 10+   |
+| Platform | x64 | ARM64 | Notes                                            |
+| -------- | --- | ----- | ------------------------------------------------ |
+| Linux    | ✅  | ✅    | GLIBC 2.31+ (Ubuntu 20.04+, Debian 11+, RHEL 8+) |
+| Alpine   | ✅  | ✅    | Alpine 3.21+ (musl libc)                         |
+| macOS    | ✅  | ✅    | macOS 10.15+                                     |
+| Windows  | ✅  | ✅    | Windows 10+                                      |
+
+### Linux Distribution Requirements
+
+**Supported distributions** (with prebuilt binaries):
+
+- Ubuntu 20.04 LTS and newer
+- Debian 11 (Bullseye) and newer
+- RHEL/CentOS/Rocky/Alma Linux 8 and newer
+- Fedora 32 and newer
+- Alpine Linux 3.21 and newer (musl libc)
+- Any distribution with GLIBC 2.31 or newer
+
+**Not supported** (GLIBC too old):
+
+- Debian 10 (Buster) - GLIBC 2.28
+- Ubuntu 18.04 LTS - GLIBC 2.27
+- CentOS 7 - GLIBC 2.17
+- Amazon Linux 2 - GLIBC 2.26
+
+> **Note**: While Node.js 20 itself supports these older distributions, our prebuilt binaries require GLIBC 2.31+ due to toolchain requirements. Users on older distributions can still compile from source if they have a compatible compiler (GCC 10+ with C++20 support).
 
 Prebuilt binaries are provided for all supported platforms. If a prebuilt binary isn't available, the package will compile from source using node-gyp.
 
@@ -309,9 +330,10 @@ Prebuilt binaries are provided for all supported platforms. If a prebuilt binary
 
 - **Node.js**: v20 or higher
 - **Build tools** (if compiling from source):
-  - Linux: `build-essential`, `python3`
+  - Linux: `build-essential`, `python3` (3.8+), GCC 10+ or Clang 10+
   - macOS: Xcode command line tools
-  - Windows: Visual Studio Build Tools
+  - Windows: Visual Studio Build Tools 2019 or newer
+- **Python**: 3.8 or higher (required by node-gyp v11)
 
 ## Alternatives
 
