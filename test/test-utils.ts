@@ -5,9 +5,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "../src";
-import { getTestTimeout } from "./test-timeout-config.cjs";
+import { getTestTimeout, getTimingMultiplier } from "./test-timeout-config.cjs";
 
-export { getTestTimeout };
+export { getTestTimeout, getTimingMultiplier };
 
 /**
  * Helper to get __dirname in both CJS and ESM environments
