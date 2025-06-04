@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version bump type"
+        description: "@photostructure/sqlite release: bump version"
         required: false
         type: choice
         options:
