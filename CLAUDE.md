@@ -130,7 +130,9 @@ Examples:
 - `build:native` - Build native C++ code
 - `build:ts` - Type-check TypeScript for production
 - `build:dist` - Bundle TypeScript to distribution files
-- `lint:ts` - Lint TypeScript/JavaScript code
+- `lint:ts` - Type-check TypeScript/JavaScript code
+- `lint:ts-scripts` - Type-check TypeScript scripts
+- `lint:eslint` - Lint TypeScript/JavaScript code with ESLint
 - `lint:native` - Lint C++ code with clang-tidy
 - `fmt:ts` - Format TypeScript/JavaScript/JSON/Markdown files
 - `fmt:native` - Format C++ files with clang-format
@@ -416,16 +418,16 @@ if (global.gc) {
 
 The anti-pattern is using timeouts to "fix" async cleanup issues.
 
-**Root Cause**: The current BackupJob implementation uses detached threads that cannot be joined. When Jest tries to exit, these threads are still running, causing the "worker process has failed to exit gracefully" warning.
+**Root Cause**: When async operations are not properly cleaned up, Jest may display the "worker process has failed to exit gracefully" warning.
 
 **Proper Solutions**:
 
-1. Use Node.js's built-in AsyncWorker pattern instead of custom ThreadPoolWork
-2. Implement proper thread joining in the finalizer
-3. Track all async operations and ensure they complete before process exit
+1. Use Node.js's built-in AsyncWorker pattern (which BackupJob already uses via `Napi::AsyncProgressWorker`)
+2. Ensure all async operations complete before process exit
+3. Track all async operations and clean them up properly
 4. Use proper RAII patterns to ensure cleanup happens deterministically
 
-**Current Status**: The BackupJob implementation needs to be refactored to use joinable threads or Node.js's AsyncWorker pattern. The current detached thread approach is fundamentally incompatible with clean process shutdown.
+**Current Status**: The BackupJob implementation correctly uses `Napi::AsyncProgressWorker`, which is the proper Node.js async pattern. This ensures threads are properly managed and cleaned up.
 
 ## References
 
