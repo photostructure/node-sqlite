@@ -2,7 +2,12 @@ import { describe, expect, it } from "@jest/globals";
 import * as path from "path";
 import { Worker } from "worker_threads";
 import { DatabaseSync } from "../src";
-import { createTestDb, getDirname, useTempDir } from "./test-utils";
+import {
+  createTestDb,
+  getDirname,
+  getTestTimeout,
+  useTempDir,
+} from "./test-utils";
 
 describe("Worker Thread Initialization Test", () => {
   const { getDbPath, writeWorkerScript } = useTempDir("sqlite-worker-init-");
@@ -91,14 +96,16 @@ try {
     expect(workerResults).toHaveLength(numWorkers);
   });
 
-  it("should test multiple sequential workers after main thread init", async () => {
-    // Initialize in main thread first
-    const mainDb = new DatabaseSync(":memory:");
-    mainDb.close();
+  it(
+    "should test multiple sequential workers after main thread init",
+    async () => {
+      // Initialize in main thread first
+      const mainDb = new DatabaseSync(":memory:");
+      mainDb.close();
 
-    // Run workers sequentially
-    for (let i = 0; i < 20; i++) {
-      const workerCode = `
+      // Run workers sequentially
+      for (let i = 0; i < 20; i++) {
+        const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
 const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
 
@@ -123,26 +130,28 @@ try {
 }
 `;
 
-      const workerPath = writeWorkerScript(`seq-worker-${i}.js`, workerCode);
+        const workerPath = writeWorkerScript(`seq-worker-${i}.js`, workerCode);
 
-      const worker = new Worker(workerPath, {
-        workerData: { dbPath, workerId: i },
-      });
-
-      const result = await new Promise<any>((resolve, reject) => {
-        worker.on("message", resolve);
-        worker.on("error", reject);
-        worker.on("exit", (code) => {
-          if (code !== 0)
-            reject(new Error(`Worker ${i} exited with code ${code}`));
+        const worker = new Worker(workerPath, {
+          workerData: { dbPath, workerId: i },
         });
-      });
 
-      expect(result.success).toBe(true);
-      expect(result.count).toBe(2);
-      console.log(`Sequential worker ${i} completed successfully`);
-    }
-  });
+        const result = await new Promise<any>((resolve, reject) => {
+          worker.on("message", resolve);
+          worker.on("error", reject);
+          worker.on("exit", (code) => {
+            if (code !== 0)
+              reject(new Error(`Worker ${i} exited with code ${code}`));
+          });
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.count).toBe(2);
+        console.log(`Sequential worker ${i} completed successfully`);
+      }
+    },
+    getTestTimeout(),
+  );
 
   it("should test workers without main thread initialization (control)", async () => {
     // DON'T initialize in main thread - this should have higher failure rate
