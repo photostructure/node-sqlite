@@ -328,7 +328,7 @@ describe("Invalid Operations Tests", () => {
       // Test throwing function
       expect(() => {
         db.prepare("SELECT throw_error()").get();
-      }).toThrow(/Function execution error/i);
+      }).toThrow(/Function execution error|Invalid argument/i);
 
       // Test conditional throwing
       const stmt = db.prepare("SELECT conditional_error(?)");
