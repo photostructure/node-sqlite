@@ -39,7 +39,15 @@
       "Bash(NODE_OPTIONS=\"--experimental-sqlite\" npx jest test/node-compatibility.test.ts --no-coverage)",
       "Bash(jq:*)",
       "Bash(NODE_OPTIONS=\"\" npm test -- test/node-compatibility.test.ts 2 >& 1)",
-      "Bash(diff:*)"
+      "Bash(diff:*)",
+      "Bash(docker build:*)",
+      "Bash(docker run:*)",
+      "Bash(node:*)",
+      "WebFetch(domain:hub.docker.com)",
+      "Bash(node:*)",
+      "Bash(npm info:*)",
+      "Bash(docker run:*)",
+      "Bash(sudo rm:*)"
     ]
   },
   "enableAllProjectMcpServers": false
