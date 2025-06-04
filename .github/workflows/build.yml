@@ -21,19 +21,19 @@ run-name: ${{ github.event_name == 'workflow_dispatch' && format('Release - {0}'
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y clang-tidy bear build-essential
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20
           cache: "npm"
-      - run: npm ci
-      - name: Run linters
-        run: npm run lint
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
 
   prebuild-mac-win:
-    needs: [lint]
     strategy:
       fail-fast: false
       matrix:
@@ -45,15 +45,14 @@ jobs:
         with:
           node-version: 20
           cache: "npm"
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run build:native
       - uses: actions/upload-artifact@v4
         with:
           name: prebuilds-${{ matrix.os }}
           path: prebuilds/
 
-  prebuild-ubuntu:
-    needs: [lint]
+  prebuild-linux-glibc:
     strategy:
       fail-fast: false
       matrix:
@@ -64,17 +63,14 @@ jobs:
       - uses: ./.github/actions/setup-qemu
         with:
           arch: ${{ matrix.arch }}
-      # Build in Debian 11 Bullseye container for GLIBC 2.31 compatibility
-      # This ensures compatibility with Ubuntu 20.04 LTS, Debian 11, and newer
-      - run: npm ci
-      - run: TARGET_ARCH=${{ matrix.arch }} npm run build:portable
+      - run: npm ci --ignore-scripts
+      - run: TARGET_ARCH=${{ matrix.arch }} npm run build:linux-glibc
       - uses: actions/upload-artifact@v4
         with:
           name: prebuilds-linux-${{ matrix.arch }}-glibc
           path: prebuilds/
 
-  prebuild-alpine:
-    needs: [lint]
+  prebuild-linux-musl:
     strategy:
       fail-fast: false
       matrix:
@@ -86,11 +82,13 @@ jobs:
         with:
           arch: ${{ matrix.arch }}
       - run: |
-          docker run --rm -v $(pwd):/tmp/project --entrypoint /bin/sh --platform linux/${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} node:20-alpine -c "\
-          apk add build-base git python3 py3-setuptools --update-cache && \
-          cd /tmp/project && \
-          npm ci && \
-          npm run build:native"
+          CONTAINER_NAME="node-sqlite-musl-build-$$"
+          docker run -d --name "$CONTAINER_NAME" --platform linux/${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} node:20-alpine sleep 3600
+          docker cp . "$CONTAINER_NAME:/tmp/project"
+          docker exec "$CONTAINER_NAME" sh -c "cd /tmp/project && apk add build-base git python3 py3-setuptools --update-cache && npm ci --ignore-scripts && npm run build:native"
+          docker cp "$CONTAINER_NAME:/tmp/project/prebuilds" . 2>/dev/null || true
+          docker cp "$CONTAINER_NAME:/tmp/project/build" . 2>/dev/null || true
+          docker rm -f "$CONTAINER_NAME" >/dev/null
       - uses: actions/upload-artifact@v4
         with:
           name: prebuilds-linux-${{ matrix.arch }}-musl
@@ -115,11 +113,10 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
       - run: npm ci
-      - run: npm run build
       - run: npm test
 
   test-ubuntu:
-    needs: [prebuild-ubuntu]
+    needs: [prebuild-linux-glibc]
     strategy:
       fail-fast: false
       matrix:
@@ -140,11 +137,10 @@ jobs:
           path: ./prebuilds
           merge-multiple: true
       - run: npm ci
-      - run: npm run build
       - run: npm test
 
   test-alpine:
-    needs: [prebuild-alpine]
+    needs: [prebuild-linux-musl]
     strategy:
       fail-fast: false
       matrix:
@@ -165,13 +161,11 @@ jobs:
           apk add build-base git python3 py3-setuptools --update-cache && \
           cd /tmp/project && \
           npm ci && \
-          npm run build && \
           npm test"
 
   # Node.js compatibility tests require --experimental-sqlite flag and Node 22+
   # We test only on Node 24 as the experimental SQLite API may change between versions
   test-api-compatibility:
-    needs: [lint]
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -194,7 +188,7 @@ jobs:
   publish:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
-    needs: [test-mac-win, test-ubuntu, test-alpine, test-api-compatibility]
+    needs: [test-mac-win, test-ubuntu, test-alpine, lint, test-api-compatibility]
     permissions:
       contents: write
       packages: write
