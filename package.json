@@ -33,6 +33,7 @@
     "sync:node": "tsx scripts/sync-from-node.ts",
     "sync:sqlite": "tsx scripts/sync-from-sqlite.ts",
     "node-gyp-rebuild": "node-gyp rebuild",
+    "build": "run-p build:native build:dist",
     "build:native": "prebuildify --napi --tag-libc --strip",
     "build:linux-glibc": "bash scripts/prebuild-linux-glibc.sh",
     "build:dist": "tsup && node scripts/post-build.mjs",

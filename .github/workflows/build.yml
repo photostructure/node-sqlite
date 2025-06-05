@@ -31,6 +31,7 @@ jobs:
           node-version: 20
           cache: "npm"
       - run: npm ci --ignore-scripts
+      - run: npm run build:dist
       - run: npm run lint
 
   prebuild-mac-win:
@@ -113,6 +114,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
       - run: npm ci
+      - run: npm run build:dist
       - run: npm test
 
   test-ubuntu:
@@ -137,6 +139,7 @@ jobs:
           path: ./prebuilds
           merge-multiple: true
       - run: npm ci
+      - run: npm run build:dist
       - run: npm test
 
   test-alpine:
@@ -161,6 +164,7 @@ jobs:
           apk add build-base git python3 py3-setuptools --update-cache && \
           cd /tmp/project && \
           npm ci && \
+          npm run build:dist && \
           npm test"
 
   # Node.js compatibility tests require --experimental-sqlite flag and Node 22+
@@ -178,6 +182,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
       - run: npm ci
+      - run: npm run build:dist
       - name: Check API compatibility types (TypeScript compile-time validation)
         run: npm run lint:api-compat
       - name: Run API type compatibility tests (ensures our TypeScript types match node:sqlite)
