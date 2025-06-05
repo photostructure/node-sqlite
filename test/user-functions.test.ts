@@ -148,23 +148,30 @@ describe("User-defined Functions Tests", () => {
 
     // Test string conversion
     let result = stmt.get("string", 123);
+    expect(result).toBeDefined();
     expect(result.result).toBe("123");
 
     // Test number conversion
     result = stmt.get("number", "456");
+    expect(result).toBeDefined();
     expect(result.result).toBe(456);
 
     // Test boolean conversion (SQLite returns 0/1 for false/true)
     result = stmt.get("boolean", 0);
+    expect(result).toBeDefined();
     expect(result.result).toBe(0); // SQLite stores false as 0
 
     result = stmt.get("boolean", 1);
+    expect(result).toBeDefined();
     expect(result.result).toBe(1); // SQLite stores true as 1
 
     // Test null return
     result = stmt.get("null", "anything");
+    expect(result).toBeDefined();
     expect(result.result).toBe(null);
 
+    // Explicitly finalize the statement before closing the database
+    stmt.finalize();
     db.close();
   });
 });
