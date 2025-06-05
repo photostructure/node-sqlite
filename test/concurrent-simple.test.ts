@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import { DatabaseSync } from "../src";
-import { getTestTimeout, getTimingMultiplier, useTempDir } from "./test-utils";
+import { getTestTimeout, useTempDir } from "./test-utils";
 
 describe("Simple Concurrent Access Tests", () => {
   const { getDbPath } = useTempDir("sqlite-concurrent-simple-", {

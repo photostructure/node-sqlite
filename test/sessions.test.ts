@@ -4,7 +4,7 @@ import {
   type DatabaseSyncInstance,
   type Session,
 } from "../src/index";
-import { getTestTimeout, getTimingMultiplier, useTempDir } from "./test-utils";
+import { getTestTimeout, useTempDir } from "./test-utils";
 
 describe("SQLite Sessions", () => {
   const { getDbPath, closeDatabases } = useTempDir("sqlite-session-test-", {
