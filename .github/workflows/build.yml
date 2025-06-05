@@ -22,6 +22,7 @@ run-name: ${{ github.event_name == 'workflow_dispatch' && format('Release - {0}'
 jobs:
   lint:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30  # Extend timeout to 30 minutes (default is 6 hours for a job)
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update
@@ -33,6 +34,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build:dist
       - run: npm run lint
+        timeout-minutes: 20  # Give the lint step more time
 
   prebuild-mac-win:
     strategy:
