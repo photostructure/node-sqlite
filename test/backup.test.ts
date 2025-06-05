@@ -6,7 +6,7 @@ import { createTestDb, getTestTimeout, useTempDir } from "./test-utils";
 describe("Backup functionality", () => {
   const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-", {
     waitForWindows: true,
-    timeout: getTestTimeout(120000), // 2 minutes base timeout for backup tests
+    timeout: getTestTimeout(), // 30 seconds base timeout for backup tests
   });
 
   let sourceDb: InstanceType<typeof DatabaseSync>;
