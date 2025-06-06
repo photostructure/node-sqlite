@@ -5,9 +5,11 @@ const path = require("path");
 const fs = require("fs");
 
 // Build the test extension
-const buildProcess = spawn("node-gyp", ["rebuild"], {
+// Use npx to ensure node-gyp is available on all platforms, especially Windows
+const buildProcess = spawn("npx", ["node-gyp", "rebuild"], {
   cwd: __dirname,
   stdio: "inherit",
+  shell: true, // Required for npx on Windows
 });
 
 buildProcess.on("close", (code) => {
