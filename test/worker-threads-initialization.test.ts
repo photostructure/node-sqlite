@@ -150,7 +150,7 @@ try {
         console.log(`Sequential worker ${i} completed successfully`);
       }
     },
-    getTestTimeout(),
+    getTestTimeout(30000), // Increase base timeout for Alpine Linux
   );
 
   it("should test workers without main thread initialization (control)", async () => {
