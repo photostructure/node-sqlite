@@ -243,9 +243,9 @@ export function useTempDir(
           // Try one more time with execSync, but don't wait
           try {
             const { exec } = await import("child_process");
-            exec(`rmdir /s /q "${context.tempDir}" 2>nul`, (err) => {
-              if (err) {
-                logDebug(`Background cleanup also failed: ${err.message}`);
+            exec(`rmdir /s /q "${context.tempDir}" 2>nul`, (execErr) => {
+              if (execErr) {
+                logDebug(`Background cleanup also failed: ${execErr.message}`);
               }
             });
           } catch {
