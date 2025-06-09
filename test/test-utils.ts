@@ -140,22 +140,22 @@ export function useTempDir(
     // On Windows, we need to be more careful about cleanup timing
     if (process.platform === "win32") {
       logDebug("Windows detected - using special cleanup procedure");
-      
+
       // First, give SQLite time to release file handles
       logDebug("Initial wait for SQLite cleanup");
       await new Promise((resolve) => setTimeout(resolve, 100));
-      
+
       // Try to clean up WAL and SHM files
       if (options?.cleanupWalFiles && fs.existsSync(context.tempDir)) {
         logDebug("Cleaning up WAL/SHM files");
         let retryCount = 0;
         const maxRetries = 5;
-        
+
         while (retryCount < maxRetries) {
           try {
             const files = fs.readdirSync(context.tempDir);
             let walShmFound = false;
-            
+
             for (const file of files) {
               if (file.endsWith("-wal") || file.endsWith("-shm")) {
                 walShmFound = true;
@@ -163,7 +163,7 @@ export function useTempDir(
                   fs.unlinkSync(path.join(context.tempDir, file));
                   logDebug(`Deleted ${file} on attempt ${retryCount + 1}`);
                 } catch (err: any) {
-                  if (err.code === 'EBUSY' || err.code === 'EPERM') {
+                  if (err.code === "EBUSY" || err.code === "EPERM") {
                     logDebug(`File ${file} still in use, will retry`);
                   } else {
                     logDebug(`Failed to delete ${file}: ${err}`);
@@ -171,21 +171,23 @@ export function useTempDir(
                 }
               }
             }
-            
+
             if (!walShmFound) {
               logDebug("No WAL/SHM files found");
               break;
             }
-            
+
             // Check if all WAL/SHM files are gone
             const remainingFiles = fs.readdirSync(context.tempDir);
-            const hasWalShm = remainingFiles.some(f => f.endsWith("-wal") || f.endsWith("-shm"));
-            
+            const hasWalShm = remainingFiles.some(
+              (f) => f.endsWith("-wal") || f.endsWith("-shm"),
+            );
+
             if (!hasWalShm) {
               logDebug("All WAL/SHM files successfully deleted");
               break;
             }
-            
+
             retryCount++;
             if (retryCount < maxRetries) {
               logDebug(`Retry ${retryCount}/${maxRetries} - waiting 200ms`);
@@ -197,7 +199,7 @@ export function useTempDir(
           }
         }
       }
-      
+
       // Additional wait before main cleanup
       logDebug("Final wait before directory removal");
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -238,8 +240,10 @@ export function useTempDir(
         // On Windows, if the directory still exists, it's likely in use
         // Log but don't fail - the OS will clean it up eventually
         if (process.platform === "win32" && fs.existsSync(context.tempDir)) {
-          logDebug(`Warning: Could not remove ${context.tempDir} - likely still in use`);
-          
+          logDebug(
+            `Warning: Could not remove ${context.tempDir} - likely still in use`,
+          );
+
           // Try one more time with execSync, but don't wait
           try {
             const { exec } = await import("child_process");

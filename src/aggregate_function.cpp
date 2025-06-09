@@ -361,7 +361,8 @@ Napi::Value CustomAggregate::GetStartValue() {
 
 void CustomAggregate::StoreJSValueAsRaw(AggregateData *agg, Napi::Value value) {
   // Always clean up previous object reference if it exists
-  if (agg->value_type == AggregateData::TYPE_OBJECT && !agg->object_ref.IsEmpty()) {
+  if (agg->value_type == AggregateData::TYPE_OBJECT &&
+      !agg->object_ref.IsEmpty()) {
     agg->object_ref.Reset();
   }
 
