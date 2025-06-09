@@ -89,11 +89,15 @@ export function useTempDir(
     closeDatabases: (...dbs) => {
       for (const db of dbs) {
         try {
-          if (db && db.isOpen) {
+          if (db && typeof db.close === "function") {
+            // Always try to close, regardless of state
             db.close();
           }
-        } catch {
-          // Ignore close errors during cleanup
+        } catch (err) {
+          // Log but don't throw during cleanup
+          if (process.platform === "win32" || process.env.DEBUG_CLEANUP) {
+            console.log(`Warning: Error closing database: ${err}`);
+          }
         }
       }
     },
@@ -120,40 +124,140 @@ export function useTempDir(
   });
 
   afterEach(async () => {
-    // Clean up WAL and SHM files if requested
-    if (options?.cleanupWalFiles && fs.existsSync(context.tempDir)) {
-      try {
-        const files = fs.readdirSync(context.tempDir);
-        for (const file of files) {
-          if (file.endsWith("-wal") || file.endsWith("-shm")) {
-            try {
-              fs.unlinkSync(path.join(context.tempDir, file));
-            } catch {
-              // Ignore errors
+    const startTime = Date.now();
+    const logDebug = (msg: string) => {
+      if (process.env.DEBUG_CLEANUP || process.platform === "win32") {
+        console.log(`[${Date.now() - startTime}ms] ${msg}`);
+      }
+    };
+
+    logDebug(`afterEach starting for tempDir: ${context.tempDir}`);
+
+    // Force a small delay to ensure databases are closed
+    // This helps with the timing of cleanup vs database closure
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // On Windows, we need to be more careful about cleanup timing
+    if (process.platform === "win32") {
+      logDebug("Windows detected - using special cleanup procedure");
+      
+      // First, give SQLite time to release file handles
+      logDebug("Initial wait for SQLite cleanup");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      
+      // Try to clean up WAL and SHM files
+      if (options?.cleanupWalFiles && fs.existsSync(context.tempDir)) {
+        logDebug("Cleaning up WAL/SHM files");
+        let retryCount = 0;
+        const maxRetries = 5;
+        
+        while (retryCount < maxRetries) {
+          try {
+            const files = fs.readdirSync(context.tempDir);
+            let walShmFound = false;
+            
+            for (const file of files) {
+              if (file.endsWith("-wal") || file.endsWith("-shm")) {
+                walShmFound = true;
+                try {
+                  fs.unlinkSync(path.join(context.tempDir, file));
+                  logDebug(`Deleted ${file} on attempt ${retryCount + 1}`);
+                } catch (err: any) {
+                  if (err.code === 'EBUSY' || err.code === 'EPERM') {
+                    logDebug(`File ${file} still in use, will retry`);
+                  } else {
+                    logDebug(`Failed to delete ${file}: ${err}`);
+                  }
+                }
+              }
             }
+            
+            if (!walShmFound) {
+              logDebug("No WAL/SHM files found");
+              break;
+            }
+            
+            // Check if all WAL/SHM files are gone
+            const remainingFiles = fs.readdirSync(context.tempDir);
+            const hasWalShm = remainingFiles.some(f => f.endsWith("-wal") || f.endsWith("-shm"));
+            
+            if (!hasWalShm) {
+              logDebug("All WAL/SHM files successfully deleted");
+              break;
+            }
+            
+            retryCount++;
+            if (retryCount < maxRetries) {
+              logDebug(`Retry ${retryCount}/${maxRetries} - waiting 200ms`);
+              await new Promise((resolve) => setTimeout(resolve, 200));
+            }
+          } catch (err) {
+            logDebug(`Error during WAL/SHM cleanup: ${err}`);
+            break;
           }
         }
-      } catch {
-        // Ignore errors
+      }
+      
+      // Additional wait before main cleanup
+      logDebug("Final wait before directory removal");
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    } else {
+      // Non-Windows cleanup
+      if (options?.cleanupWalFiles && fs.existsSync(context.tempDir)) {
+        logDebug("Cleaning up WAL/SHM files");
+        try {
+          const files = fs.readdirSync(context.tempDir);
+          for (const file of files) {
+            if (file.endsWith("-wal") || file.endsWith("-shm")) {
+              try {
+                fs.unlinkSync(path.join(context.tempDir, file));
+                logDebug(`Deleted ${file}`);
+              } catch (err) {
+                logDebug(`Failed to delete ${file}: ${err}`);
+              }
+            }
+          }
+        } catch (err) {
+          logDebug(`Error reading directory: ${err}`);
+        }
       }
     }
 
-    // Wait a bit for Windows file handles to be released
-    if (process.platform === "win32") {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-
     if (fs.existsSync(context.tempDir)) {
-      await fsp.rm(context.tempDir, {
-        recursive: true,
-        force: true,
-        maxRetries: process.platform === "win32" ? 10 : 3,
-        retryDelay: process.platform === "win32" ? 1000 : 500,
-      });
+      logDebug("Starting fsp.rm of tempDir");
+      try {
+        await fsp.rm(context.tempDir, {
+          recursive: true,
+          force: true,
+          maxRetries: process.platform === "win32" ? 3 : 3,
+          retryDelay: process.platform === "win32" ? 100 : 100,
+        });
+        logDebug("Successfully removed tempDir");
+      } catch (err) {
+        logDebug(`Error removing tempDir: ${err}`);
+        // On Windows, if the directory still exists, it's likely in use
+        // Log but don't fail - the OS will clean it up eventually
+        if (process.platform === "win32" && fs.existsSync(context.tempDir)) {
+          logDebug(`Warning: Could not remove ${context.tempDir} - likely still in use`);
+          
+          // Try one more time with execSync, but don't wait
+          try {
+            const { exec } = await import("child_process");
+            exec(`rmdir /s /q "${context.tempDir}" 2>nul`, (err) => {
+              if (err) {
+                logDebug(`Background cleanup also failed: ${err.message}`);
+              }
+            });
+          } catch {
+            // Ignore
+          }
+        }
+      }
     }
 
     // Clear additional files set
     additionalFiles.clear();
+    logDebug("afterEach completed");
   }, options?.timeout ?? getTestTimeout()); // Use environment-aware timeout
 
   return context;
@@ -179,11 +283,15 @@ export function useTempDirSuite(
     closeDatabases: (...dbs) => {
       for (const db of dbs) {
         try {
-          if (db && db.isOpen) {
+          if (db && typeof db.close === "function") {
+            // Always try to close, regardless of state
             db.close();
           }
-        } catch {
-          // Ignore close errors during cleanup
+        } catch (err) {
+          // Log but don't throw during cleanup
+          if (process.platform === "win32" || process.env.DEBUG_CLEANUP) {
+            console.log(`Warning: Error closing database: ${err}`);
+          }
         }
       }
     },
