@@ -1,16 +1,25 @@
-import { expect } from "@jest/globals";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from "@jest/globals";
 import * as fs from "node:fs";
 import { DatabaseSync } from "../src/index";
 import { getTestTimeout, useTempDir } from "./test-utils";
 
 describe("Backup Restoration", () => {
-  const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-", {
-    timeout: getTestTimeout(), // Use environment-aware timeout
-  });
+  jest.setTimeout(getTestTimeout());
+  const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-");
 
   let sourceDb: InstanceType<typeof DatabaseSync>;
   let sourceFile: string;
   let backupFile: string;
+
+  // Track all databases created in tests for proper cleanup
+  const testDatabases = new Set<InstanceType<typeof DatabaseSync>>();
 
   beforeEach(() => {
     sourceFile = getDbPath("source.db");
@@ -19,7 +28,8 @@ describe("Backup Restoration", () => {
   });
 
   afterEach(() => {
-    closeDatabases(sourceDb);
+    closeDatabases(sourceDb, ...testDatabases);
+    testDatabases.clear();
   });
 
   it("should restore data correctly from backup", async () => {
@@ -354,9 +364,9 @@ describe("Backup Restoration", () => {
     // Opening corrupt database or running queries should throw
     try {
       const corruptDb = new DatabaseSync(sourceFile);
+      testDatabases.add(corruptDb);
       // If opening doesn't throw, executing a query should
       corruptDb.exec("SELECT * FROM test");
-      corruptDb.close();
       // If we get here, the test should fail
       expect(true).toBe(false);
     } catch (err: any) {

@@ -1,12 +1,13 @@
+import { describe, expect, it, jest } from "@jest/globals";
 import * as fs from "node:fs";
 import { URL } from "node:url";
 import { DatabaseSync, type DatabaseSyncInstance } from "../src";
-import { useTempDir } from "./test-utils";
+import { getTestTimeout, useTempDir } from "./test-utils";
 
 describe("Path Validation", () => {
-  const { getDbPath } = useTempDir("sqlite-path-test-", {
-    waitForWindows: true,
-  });
+  jest.setTimeout(getTestTimeout());
+
+  const { getDbPath } = useTempDir("sqlite-path-test-");
 
   describe("String paths", () => {
     it("should accept valid string paths", () => {

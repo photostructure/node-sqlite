@@ -1,9 +1,12 @@
+import { afterEach, beforeEach, describe, expect, jest } from "@jest/globals";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "../src/index";
+import { getTestTimeout } from "./test-utils";
 
 describe("SQLite Resource Limits", () => {
+  jest.setTimeout(getTestTimeout());
   let db: InstanceType<typeof DatabaseSync>;
 
   afterEach(() => {
@@ -91,11 +94,28 @@ describe("SQLite Resource Limits", () => {
       tempFiles = [];
     });
 
-    afterEach(() => {
-      // Clean up temp files
+    afterEach(async () => {
+      // Wait for Windows file handles to be released
+      if (process.platform === "win32") {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+
+      // Clean up temp files with retries for Windows
       for (const file of tempFiles) {
         if (existsSync(file)) {
-          rmSync(file);
+          let retries = process.platform === "win32" ? 3 : 1;
+          while (retries > 0) {
+            try {
+              rmSync(file, { force: true });
+              break;
+            } catch {
+              retries--;
+              if (retries > 0) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
+              // Ignore errors on final attempt
+            }
+          }
         }
       }
     });

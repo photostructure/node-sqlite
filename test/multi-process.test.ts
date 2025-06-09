@@ -3,12 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { DatabaseSync } from "../src";
-import {
-  getDirname,
-  getTestTimeout,
-  getTimingMultiplier,
-  useTempDir,
-} from "./test-utils";
+import { getDirname, getTimingMultiplier, useTempDir } from "./test-utils";
 
 const execFile = promisify(childProcess.execFile);
 
@@ -20,7 +15,6 @@ const execFile = promisify(childProcess.execFile);
 describe("Multi-Process Database Access", () => {
   const { getDbPath } = useTempDir("sqlite-multiproc-", {
     cleanupWalFiles: true,
-    timeout: getTestTimeout(),
   });
   let dbPath: string;
 

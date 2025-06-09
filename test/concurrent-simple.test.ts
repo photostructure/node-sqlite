@@ -1,11 +1,10 @@
-import { describe, expect, it } from "@jest/globals";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { DatabaseSync } from "../src";
 import { getTestTimeout, useTempDir } from "./test-utils";
 
 describe("Simple Concurrent Access Tests", () => {
-  const { getDbPath } = useTempDir("sqlite-concurrent-simple-", {
-    timeout: getTestTimeout(), // Use environment-aware timeout
-  });
+  jest.setTimeout(getTestTimeout());
+  const { getDbPath } = useTempDir("sqlite-concurrent-simple-");
   let dbPath: string;
 
   beforeEach(() => {

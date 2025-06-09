@@ -24,8 +24,18 @@ describe("Session Lifecycle Management (RAII)", () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-lifecycle-test-"));
   });
 
-  afterAll(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterAll(async () => {
+    // Wait for Windows file handles to be released
+    if (process.platform === "win32") {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10 });
+    } catch (e) {
+      // Ignore cleanup errors
+      console.warn("Cleanup error in afterAll:", e);
+    }
   });
 
   describe("Normal Lifecycle Paths", () => {

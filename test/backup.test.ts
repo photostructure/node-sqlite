@@ -1,17 +1,17 @@
 import { describe, expect, it } from "@jest/globals";
 import * as fs from "node:fs";
 import { DatabaseSync } from "../src";
-import { createTestDb, getTestTimeout, useTempDir } from "./test-utils";
+import { createTestDb, useTempDir } from "./test-utils";
 
 describe("Backup functionality", () => {
-  const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-", {
-    waitForWindows: true,
-    timeout: getTestTimeout(), // 30 seconds base timeout for backup tests
-  });
+  const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-");
 
   let sourceDb: InstanceType<typeof DatabaseSync>;
   let sourcePath: string;
   let destPath: string;
+
+  // Track all databases created in tests for proper cleanup
+  const testDatabases = new Set<InstanceType<typeof DatabaseSync>>();
 
   beforeEach(() => {
     sourcePath = getDbPath("source.db");
@@ -45,7 +45,9 @@ describe("Backup functionality", () => {
   });
 
   afterEach(() => {
-    closeDatabases(sourceDb);
+    // Close all tracked databases
+    closeDatabases(sourceDb, ...testDatabases);
+    testDatabases.clear();
   });
 
   it("should create a backup of the database", async () => {
@@ -53,11 +55,9 @@ describe("Backup functionality", () => {
     const totalPages = await sourceDb.backup(destPath);
     expect(totalPages).toBeGreaterThan(0);
 
-    // Close source database
-    sourceDb.close();
-
     // Open and verify destination database
     const destDb = new DatabaseSync(destPath);
+    testDatabases.add(destDb);
 
     // Check that tables exist
     const tables = destDb
@@ -88,8 +88,6 @@ describe("Backup functionality", () => {
       { id: 2, name: "Gadget", price: 19.99 },
       { id: 3, name: "Doohickey", price: 29.99 },
     ]);
-
-    destDb.close();
   });
 
   it("should handle backup with custom rate", async () => {
@@ -97,13 +95,12 @@ describe("Backup functionality", () => {
     expect(totalPages).toBeGreaterThan(0);
 
     // Verify the backup
-    sourceDb.close();
     const destDb = new DatabaseSync(destPath);
+    testDatabases.add(destDb);
     const count = destDb
       .prepare("SELECT COUNT(*) as count FROM users")
       .get() as { count: number };
     expect(count.count).toBe(3);
-    destDb.close();
   });
 
   it("should call progress callback during backup", async () => {
@@ -129,13 +126,12 @@ describe("Backup functionality", () => {
     }
 
     // Verify the backup completed
-    sourceDb.close();
     const destDb = new DatabaseSync(destPath);
+    testDatabases.add(destDb);
     const count = destDb
       .prepare("SELECT COUNT(*) as count FROM users")
       .get() as { count: number };
     expect(count.count).toBe(3);
-    destDb.close();
   });
 
   it("should handle backup to memory database", async () => {
@@ -161,8 +157,8 @@ describe("Backup functionality", () => {
     const totalPages = await sourceDb.backup(destPath);
     expect(totalPages).toBeGreaterThan(0);
 
-    sourceDb.close();
     const destDb = new DatabaseSync(destPath);
+    testDatabases.add(destDb);
 
     // Verify main database tables
     const tables = destDb
@@ -174,8 +170,6 @@ describe("Backup functionality", () => {
 
     // Attached table should not be in the backup
     expect(tables.find((t) => t.name === "extra_data")).toBeUndefined();
-
-    destDb.close();
   });
 
   it("should handle errors for invalid destination", async () => {
@@ -185,8 +179,14 @@ describe("Backup functionality", () => {
   });
 
   it("should handle errors for closed database", async () => {
-    sourceDb.close();
-    await expect(sourceDb.backup(destPath)).rejects.toThrow(
+    // Create a separate database for this test to avoid affecting other tests
+    const testDbPath = getDbPath("closed-test.db");
+    const testDb = new DatabaseSync(testDbPath);
+    testDatabases.add(testDb);
+
+    // Close it and try to backup
+    testDb.close();
+    await expect(testDb.backup(destPath)).rejects.toThrow(
       "database is not open",
     );
   });
@@ -211,21 +211,19 @@ describe("Backup functionality", () => {
     expect(pages2).toBeGreaterThan(0);
 
     // Verify both backups
-    sourceDb.close();
-
     const destDb1 = new DatabaseSync(destPath);
+    testDatabases.add(destDb1);
     const count1 = destDb1
       .prepare("SELECT COUNT(*) as count FROM users")
       .get() as { count: number };
     expect(count1.count).toBe(3);
-    destDb1.close();
 
     const destDb2 = new DatabaseSync(destPath2);
+    testDatabases.add(destDb2);
     const count2 = destDb2
       .prepare("SELECT COUNT(*) as count FROM users")
       .get() as { count: number };
     expect(count2.count).toBe(3);
-    destDb2.close();
   });
 
   it("should perform a complete backup and restore cycle", async () => {
@@ -283,6 +281,7 @@ describe("Backup functionality", () => {
 
     // Open the restored database
     const restoredDb = new DatabaseSync(sourcePath);
+    testDatabases.add(restoredDb);
 
     // Verify all tables exist
     const tables = restoredDb
@@ -451,6 +450,7 @@ describe("Backup functionality", () => {
 
     // Open backup and verify pragmas
     const backupDb = new DatabaseSync(backupPath);
+    testDatabases.add(backupDb);
 
     const backupPragmas = {
       journal_mode: (
@@ -574,8 +574,8 @@ describe("Backup functionality", () => {
     );
 
     // Verify the backup is complete and valid
-    sourceDb.close();
     const backupDb = new DatabaseSync(backupPath);
+    testDatabases.add(backupDb);
 
     const rowCount = backupDb
       .prepare("SELECT COUNT(*) as count FROM large_data")
@@ -590,8 +590,6 @@ describe("Backup functionality", () => {
     expect(sampleRows[0].data).toContain("Row 0:");
     expect(sampleRows[1].data).toContain("Row 49:");
     expect(sampleRows[2].data).toContain("Row 99:");
-
-    backupDb.close();
   });
 
   it("should handle incremental backup simulation", async () => {
@@ -614,6 +612,7 @@ describe("Backup functionality", () => {
 
     // Verify first backup has original data only
     const backup1Db = new DatabaseSync(backup1Path);
+    testDatabases.add(backup1Db);
     const backup1Users = backup1Db
       .prepare("SELECT COUNT(*) as count FROM users")
       .get() as { count: number };
@@ -622,10 +621,10 @@ describe("Backup functionality", () => {
       .prepare("SELECT COUNT(*) as count FROM products")
       .get() as { count: number };
     expect(backup1Products.count).toBe(3);
-    backup1Db.close();
 
     // Verify second backup has all data
     const backup2Db = new DatabaseSync(backup2Path);
+    testDatabases.add(backup2Db);
     const backup2Users = backup2Db
       .prepare("SELECT COUNT(*) as count FROM users")
       .get() as { count: number };
@@ -640,8 +639,6 @@ describe("Backup functionality", () => {
       .prepare("SELECT * FROM users WHERE name = ?")
       .get("David") as { id: number; name: string; email: string };
     expect(david).toEqual({ id: 4, name: "David", email: "david@example.com" });
-
-    backup2Db.close();
   });
 
   it("should demonstrate different behavior with different rates", async () => {
@@ -716,7 +713,9 @@ describe("Backup functionality", () => {
 
     // The key difference: rate=-1 should have minimal callbacks compared to others
     if (callbackCount2 > 0 && callbackCount3 > 0) {
-      expect(callbackCount1).toBeLessThan(Math.max(callbackCount2, callbackCount3));
+      expect(callbackCount1).toBeLessThan(
+        Math.max(callbackCount2, callbackCount3),
+      );
     }
 
     // Ensure the backups actually completed successfully
@@ -748,25 +747,23 @@ describe("Backup functionality", () => {
     }
 
     // All backups should produce identical databases
-    sourceDb.close();
-
     const db1 = new DatabaseSync(backup1Path);
+    testDatabases.add(db1);
     const count1 = (
       db1.prepare("SELECT COUNT(*) as c FROM test_data").get() as { c: number }
     ).c;
-    db1.close();
 
     const db2 = new DatabaseSync(backup2Path);
+    testDatabases.add(db2);
     const count2 = (
       db2.prepare("SELECT COUNT(*) as c FROM test_data").get() as { c: number }
     ).c;
-    db2.close();
 
     const db3 = new DatabaseSync(backup3Path);
+    testDatabases.add(db3);
     const count3 = (
       db3.prepare("SELECT COUNT(*) as c FROM test_data").get() as { c: number }
     ).c;
-    db3.close();
 
     expect(count1).toBe(200);
     expect(count2).toBe(200);

@@ -1,8 +1,10 @@
+import { beforeEach, describe, expect, jest } from "@jest/globals";
 import * as fs from "node:fs";
 import { DatabaseSync } from "../src/index";
-import { useTempDir } from "./test-utils";
+import { getTestTimeout, useTempDir } from "./test-utils";
 
 describe("Enhanced location() method tests", () => {
+  jest.setTimeout(getTestTimeout());
   const { getDbPath } = useTempDir("node-sqlite-location-");
   let dbPath: string;
   let attachedDbPath: string;

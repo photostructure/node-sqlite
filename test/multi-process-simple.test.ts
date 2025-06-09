@@ -1,10 +1,11 @@
+import { afterEach, beforeEach, describe, expect, jest } from "@jest/globals";
 import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { DatabaseSync } from "../src";
-import { getDirname } from "./test-utils";
+import { getDirname, getTestTimeout } from "./test-utils";
 
 const execFile = promisify(childProcess.execFile);
 
@@ -14,6 +15,7 @@ const execFile = promisify(childProcess.execFile);
  * npm run test:serial -- test/multi-process-simple.test.ts
  */
 describe("Simple Multi-Process Tests", () => {
+  jest.setTimeout(getTestTimeout());
   let tempDir: string;
   let dbPath: string;
 
@@ -29,16 +31,60 @@ describe("Simple Multi-Process Tests", () => {
 
   afterEach(async () => {
     // Ensure all database connections are closed before cleanup
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Use longer delay on Windows to allow file handles to be released
+    const delay = process.platform === "win32" ? 500 : 10;
+    await new Promise((resolve) => setTimeout(resolve, delay));
 
     try {
-      if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
-      if (fs.existsSync(dbPath + "-wal")) fs.unlinkSync(dbPath + "-wal");
-      if (fs.existsSync(dbPath + "-shm")) fs.unlinkSync(dbPath + "-shm");
-      fs.rmdirSync(tempDir);
+      // Clean up database files with retries for Windows
+      const filesToDelete = [dbPath, dbPath + "-wal", dbPath + "-shm"];
+      for (const file of filesToDelete) {
+        if (fs.existsSync(file)) {
+          let retries = process.platform === "win32" ? 5 : 1;
+          while (retries > 0) {
+            try {
+              fs.unlinkSync(file);
+              break;
+            } catch (e: any) {
+              if (
+                retries === 1 ||
+                !e.code ||
+                (e.code !== "EBUSY" && e.code !== "ENOTEMPTY")
+              ) {
+                break; // Give up
+              }
+              retries--;
+              await new Promise((resolve) => setTimeout(resolve, 200));
+            }
+          }
+        }
+      }
+
+      // Remove directory with retries
+      let dirRetries = process.platform === "win32" ? 5 : 1;
+      while (dirRetries > 0) {
+        try {
+          fs.rmdirSync(tempDir);
+          break;
+        } catch (e: any) {
+          if (
+            dirRetries === 1 ||
+            !e.code ||
+            (e.code !== "EBUSY" && e.code !== "ENOTEMPTY")
+          ) {
+            // Log only on final failure
+            if (dirRetries === 1) {
+              console.warn("Cleanup error in afterEach:", e);
+            }
+            break;
+          }
+          dirRetries--;
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+      }
     } catch (e) {
       // Log cleanup errors for debugging but don't fail the test
-      console.warn("Cleanup error in afterEach:", e);
+      console.warn("Unexpected cleanup error in afterEach:", e);
     }
   });
 

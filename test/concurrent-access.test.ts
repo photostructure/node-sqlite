@@ -8,7 +8,6 @@ if (process.platform === "win32" && process.env.CI) {
 
 describe("Concurrent Access Patterns Tests", () => {
   const { getDbPath } = useTempDir("sqlite-concurrent-test-", {
-    waitForWindows: true,
     cleanupWalFiles: true,
   });
   let dbPath: string;

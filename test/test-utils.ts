@@ -78,7 +78,6 @@ export function useTempDir(
   prefix = "sqlite-test-",
   options?: {
     timeout?: number;
-    waitForWindows?: boolean;
     cleanupWalFiles?: boolean;
   },
 ): TempDirContext {
@@ -139,8 +138,8 @@ export function useTempDir(
       }
     }
 
-    // Wait a bit for Windows file handles to be released if requested
-    if (options?.waitForWindows && process.platform === "win32") {
+    // Wait a bit for Windows file handles to be released
+    if (process.platform === "win32") {
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
@@ -172,7 +171,6 @@ export function useTempDirSuite(
   prefix = "sqlite-test-suite-",
   options?: {
     timeout?: number;
-    waitForWindows?: boolean;
   },
 ): TempDirContext {
   const context: TempDirContext = {
@@ -209,8 +207,8 @@ export function useTempDirSuite(
   });
 
   afterAll(async () => {
-    // Wait a bit for Windows file handles to be released if requested
-    if (options?.waitForWindows && process.platform === "win32") {
+    // Wait a bit for Windows file handles to be released
+    if (process.platform === "win32") {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
