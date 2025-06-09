@@ -54,7 +54,9 @@
       "WebFetch(domain:en.cppreference.com)",
       "Bash(g++:*)",
       "Bash(./test_double_conversion)",
-      "Bash(./test-int64-double)"
+      "Bash(./test-int64-double)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)"
     ]
   },
   "enableAllProjectMcpServers": false
