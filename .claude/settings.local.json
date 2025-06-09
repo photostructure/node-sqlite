@@ -56,6 +56,8 @@
       "Bash(./test_double_conversion)",
       "Bash(./test-int64-double)",
       "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)",
       "Bash(gh run view:*)"
     ]
   },
