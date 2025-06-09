@@ -360,6 +360,11 @@ Napi::Value CustomAggregate::GetStartValue() {
 }
 
 void CustomAggregate::StoreJSValueAsRaw(AggregateData *agg, Napi::Value value) {
+  // Always clean up previous object reference if it exists
+  if (agg->value_type == AggregateData::TYPE_OBJECT && !agg->object_ref.IsEmpty()) {
+    agg->object_ref.Reset();
+  }
+
   if (value.IsNull()) {
     agg->value_type = AggregateData::TYPE_NULL;
   } else if (value.IsUndefined()) {
@@ -380,9 +385,6 @@ void CustomAggregate::StoreJSValueAsRaw(AggregateData *agg, Napi::Value value) {
   } else {
     // Complex object - this still requires Persistent reference
     agg->value_type = AggregateData::TYPE_OBJECT;
-    if (!agg->object_ref.IsEmpty()) {
-      agg->object_ref.Reset();
-    }
     agg->object_ref = Napi::Reference<Napi::Value>::New(value, 1);
   }
 }
