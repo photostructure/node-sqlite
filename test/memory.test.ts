@@ -1,7 +1,6 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "../src/index";
+import { useTempDir } from "./test-utils";
 
 // TypeScript already has gc declaration in @types/node, no need to redeclare
 
@@ -163,23 +162,18 @@ describeMemoryTests("Memory Tests", () => {
     db.close();
   });
 
-  runMemoryTest("file database operations", () => {
-    const tempDir = mkdtempSync(join(tmpdir(), "sqlite-mem-test-"));
-    const dbPath = join(tempDir, "test.db");
+  runMemoryTest("file database operations", async () => {
+    const { getDbPath } = useTempDir("sqlite-mem-test-");
 
-    try {
-      const db = new DatabaseSync(dbPath);
-      db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT)");
+    const db = new DatabaseSync(getDbPath());
+    db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT)");
 
-      const insert = db.prepare("INSERT INTO test (data) VALUES (?)");
-      for (let i = 0; i < 50; i++) {
-        insert.run(`data_${i}`);
-      }
-
-      db.close();
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+    const insert = db.prepare("INSERT INTO test (data) VALUES (?)");
+    for (let i = 0; i < 50; i++) {
+      insert.run(`data_${i}`);
     }
+
+    db.close();
   });
 
   runMemoryTest("user-defined functions", () => {
@@ -468,44 +462,40 @@ describeMemoryTests("Memory Tests", () => {
 
   runMemoryTest(
     "multiple database operations",
-    () => {
-      const tempDir = mkdtempSync(join(tmpdir(), "sqlite-multi-db-test-"));
+    async () => {
+      const { tempDir } = useTempDir("sqlite-multi-db-test-");
 
-      try {
-        const db1 = new DatabaseSync(join(tempDir, "db1.sqlite"));
-        const db2 = new DatabaseSync(join(tempDir, "db2.sqlite"));
+      const db1 = new DatabaseSync(join(tempDir, "db1.sqlite"));
+      const db2 = new DatabaseSync(join(tempDir, "db2.sqlite"));
 
-        // Set up both databases
-        db1.exec("CREATE TABLE test1 (id INTEGER PRIMARY KEY, data TEXT)");
-        db2.exec("CREATE TABLE test2 (id INTEGER PRIMARY KEY, data TEXT)");
+      // Set up both databases
+      db1.exec("CREATE TABLE test1 (id INTEGER PRIMARY KEY, data TEXT)");
+      db2.exec("CREATE TABLE test2 (id INTEGER PRIMARY KEY, data TEXT)");
 
-        const insert1 = db1.prepare("INSERT INTO test1 (data) VALUES (?)");
-        const insert2 = db2.prepare("INSERT INTO test2 (data) VALUES (?)");
+      const insert1 = db1.prepare("INSERT INTO test1 (data) VALUES (?)");
+      const insert2 = db2.prepare("INSERT INTO test2 (data) VALUES (?)");
 
-        // Alternate operations between databases
-        for (let i = 0; i < 50; i++) {
-          insert1.run(`data1_${i}`);
-          insert2.run(`data2_${i}`);
+      // Alternate operations between databases
+      for (let i = 0; i < 50; i++) {
+        insert1.run(`data1_${i}`);
+        insert2.run(`data2_${i}`);
 
-          // Occasional cross-database verification
-          if (i % 10 === 0) {
-            const count1 = db1
-              .prepare("SELECT COUNT(*) as count FROM test1")
-              .get();
-            const count2 = db2
-              .prepare("SELECT COUNT(*) as count FROM test2")
-              .get();
-            if (count1.count !== count2.count) {
-              throw new Error("Database sync issue detected");
-            }
+        // Occasional cross-database verification
+        if (i % 10 === 0) {
+          const count1 = db1
+            .prepare("SELECT COUNT(*) as count FROM test1")
+            .get();
+          const count2 = db2
+            .prepare("SELECT COUNT(*) as count FROM test2")
+            .get();
+          if (count1.count !== count2.count) {
+            throw new Error("Database sync issue detected");
           }
         }
-
-        db1.close();
-        db2.close();
-      } finally {
-        rmSync(tempDir, { recursive: true, force: true });
       }
+
+      db1.close();
+      db2.close();
     },
     { maxSlopeKBPerIteration: 60, iterations: 30 },
   );
