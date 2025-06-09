@@ -301,18 +301,19 @@ describe("File-based Database Tests", () => {
     const originalCwd = process.cwd();
 
     try {
-      // Change to temp directory
+      // Change to temp directory FIRST, before creating the database
       process.chdir(tempDir);
 
       const db = new DatabaseSync("relative-test.db");
       db.exec("CREATE TABLE test (id INTEGER)");
 
-      expect(fs.existsSync("relative-test.db")).toBe(true);
+      // File should exist in the temp directory (current working directory)
+      expect(fs.existsSync(path.join(tempDir, "relative-test.db"))).toBe(true);
 
       db.close();
 
-      // Clean up
-      fs.unlinkSync("relative-test.db");
+      // Clean up from temp directory
+      fs.unlinkSync(path.join(tempDir, "relative-test.db"));
     } finally {
       process.chdir(originalCwd);
     }

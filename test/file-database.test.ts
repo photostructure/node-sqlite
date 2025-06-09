@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { DatabaseSync } from "../src";
 import { uniqueDbName, useTempDirSuite } from "./test-utils";
@@ -120,31 +121,47 @@ describe("File-based Database Tests", () => {
 
   test("database with relative path", () => {
     // Test that SQLite resolves relative paths from the current working directory
-    const relativePath = `relative-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const originalCwd = process.cwd();
+    const relativePath = uniqueDbName("relative-test");
 
-    // When we pass a relative path to SQLite, it resolves it from process.cwd()
-    const expectedAbsolutePath = path.resolve(process.cwd(), relativePath);
+    try {
+      // Ensure we have a valid temp directory for this test
+      // If tempDir is empty/undefined, create our own temp directory
+      let currentTempDir = tempDir;
+      if (!currentTempDir) {
+        currentTempDir = fs.mkdtempSync(path.join(os.tmpdir(), "test-relative-"));
+      }
+      
+      // Create temp directory if it doesn't exist
+      if (!fs.existsSync(currentTempDir)) {
+        fs.mkdirSync(currentTempDir, { recursive: true });
+      }
 
-    // Ensure the file doesn't exist before we start
-    if (fs.existsSync(expectedAbsolutePath)) {
+      // Change to temp directory to ensure relative path resolves there
+      process.chdir(currentTempDir);
+
+      // When we pass a relative path to SQLite, it resolves it from process.cwd() (now currentTempDir)
+      const expectedAbsolutePath = path.resolve(currentTempDir, relativePath);
+
+      const db = new DatabaseSync(relativePath);
+
+      // SQLite normalizes the path to absolute based on current working directory
+      const location = db.location();
+      expect(location).not.toBeNull();
+      expect(location).toBe(fs.realpathSync(expectedAbsolutePath));
+
+      db.exec("CREATE TABLE test (id INTEGER)");
+      db.close();
+
+      // Verify the file was created at the expected location (in tempDir)
+      expect(fs.existsSync(expectedAbsolutePath)).toBe(true);
+
+      // Clean up the file from the temp directory
       fs.unlinkSync(expectedAbsolutePath);
+    } finally {
+      // Always restore original working directory
+      process.chdir(originalCwd);
     }
-
-    const db = new DatabaseSync(relativePath);
-
-    // SQLite normalizes the path to absolute based on current working directory
-    const location = db.location();
-    expect(location).not.toBeNull();
-    expect(location).toBe(fs.realpathSync(expectedAbsolutePath));
-
-    db.exec("CREATE TABLE test (id INTEGER)");
-    db.close();
-
-    // Verify the file was created at the expected location
-    expect(fs.existsSync(expectedAbsolutePath)).toBe(true);
-
-    // Clean up the file from the current working directory
-    fs.unlinkSync(expectedAbsolutePath);
   });
 
   test("sequential database access to same file", () => {
