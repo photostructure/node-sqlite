@@ -21,7 +21,7 @@ export function getDirname(): string {
 
   // In ESM with Jest, we need to extract from stack trace
   const e = new Error();
-  const stack = e.stack || "";
+  const stack = e.stack ?? "";
 
   // Look for the calling file in the stack trace
   const frames = stack.split("\n");

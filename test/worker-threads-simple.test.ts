@@ -35,7 +35,7 @@ try {
   
   parentPort.postMessage({ success: true, rows });
 } catch (error) {
-  parentPort.postMessage({ success: false, error: error.message || String(error) });
+  parentPort.postMessage({ success: false, error: error.message ?? String(error) });
 }
 `;
 
@@ -73,7 +73,7 @@ try {
   
   parentPort.postMessage({ success: true, count: result.count, threadId: workerData.threadId });
 } catch (error) {
-  parentPort.postMessage({ success: false, error: error.message || String(error), threadId: workerData.threadId });
+  parentPort.postMessage({ success: false, error: error.message ?? String(error), threadId: workerData.threadId });
 }
 `;
 

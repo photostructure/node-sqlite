@@ -241,7 +241,7 @@ describeMemoryTests("Memory Tests", () => {
           | undefined;
         if (!row || row.data.length !== 10001) {
           throw new Error(
-            `Data mismatch: expected 10001, got ${row?.data.length || 0}`,
+            `Data mismatch: expected 10001, got ${row?.data.length ?? 0}`,
           );
         }
       }

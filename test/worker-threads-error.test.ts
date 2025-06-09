@@ -40,7 +40,7 @@ try {
 } catch (error) {
   parentPort.postMessage({ 
     success: false, 
-    error: error.message || String(error),
+    error: error.message ?? String(error),
     errorType: error.constructor.name 
   });
 }
@@ -87,7 +87,7 @@ try {
 } catch (error) {
   parentPort.postMessage({ 
     success: false, 
-    error: error.message || String(error),
+    error: error.message ?? String(error),
     errorType: error.constructor.name 
   });
 }
@@ -134,7 +134,7 @@ try {
 } catch (error) {
   parentPort.postMessage({ 
     success: false, 
-    error: error.message || String(error) 
+    error: error.message ?? String(error) 
   });
 }
 `;

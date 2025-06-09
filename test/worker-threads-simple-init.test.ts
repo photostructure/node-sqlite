@@ -51,7 +51,7 @@ try {
   console.error('Worker failed:', error);
   parentPort.postMessage({ 
     success: false, 
-    error: error.message || String(error)
+    error: error.message ?? String(error)
   });
 }
 `;
@@ -96,7 +96,7 @@ try {
   console.error('Worker failed:', error);
   parentPort.postMessage({ 
     success: false, 
-    error: error.message || String(error)
+    error: error.message ?? String(error)
   });
 }
 `;

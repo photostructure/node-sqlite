@@ -61,7 +61,7 @@ try {
   console.error('Worker ${i} failed:', error.message);
   parentPort.postMessage({ 
     success: false, 
-    error: error.message || String(error),
+    error: error.message ?? String(error),
     workerId: ${i}
   });
 }
@@ -124,7 +124,7 @@ try {
 } catch (error) {
   parentPort.postMessage({ 
     success: false, 
-    error: error.message || String(error),
+    error: error.message ?? String(error),
     workerId: workerData.workerId
   });
 }
@@ -182,7 +182,7 @@ try {
 } catch (error) {
   parentPort.postMessage({ 
     success: false, 
-    error: error.message || String(error),
+    error: error.message ?? String(error),
     workerId: ${i}
   });
 }
