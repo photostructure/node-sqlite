@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { DatabaseSync } from "../src/index";
-import { useTempDir } from "./test-utils";
+import { getUniqueTableName, useTempDir } from "./test-utils";
 
 // TypeScript already has gc declaration in @types/node, no need to redeclare
 
@@ -164,11 +164,12 @@ describeMemoryTests("Memory Tests", () => {
 
   runMemoryTest("file database operations", async () => {
     const { getDbPath } = useTempDir("sqlite-mem-test-");
+    const tableName = getUniqueTableName("test");
 
     const db = new DatabaseSync(getDbPath());
-    db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT)");
+    db.exec(`CREATE TABLE ${tableName} (id INTEGER PRIMARY KEY, data TEXT)`);
 
-    const insert = db.prepare("INSERT INTO test (data) VALUES (?)");
+    const insert = db.prepare(`INSERT INTO ${tableName} (data) VALUES (?)`);
     for (let i = 0; i < 50; i++) {
       insert.run(`data_${i}`);
     }

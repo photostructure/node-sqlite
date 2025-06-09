@@ -232,6 +232,16 @@ export function useTempDirSuite(
 /**
  * Helper to create a test database with optional initial schema
  */
+/**
+ * Generates a unique table name for testing to avoid conflicts
+ * @param prefix - Optional prefix for the table name (default: "test_table")
+ * @returns A unique table name safe for concurrent tests
+ */
+export function getUniqueTableName(prefix = "test_table"): string {
+  const random = Math.random().toString(36).substring(2, 8);
+  return `${prefix}_${random}`;
+}
+
 export function createTestDb(
   dbPath: string,
   schema?: string,
