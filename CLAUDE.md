@@ -345,6 +345,25 @@ The anti-pattern is using timeouts to "fix" async cleanup issues.
 
 **Current Status**: The BackupJob implementation correctly uses `Napi::AsyncProgressWorker`, which is the proper Node.js async pattern. This ensures threads are properly managed and cleaned up.
 
+## Windows-Compatible Directory Cleanup
+
+**IMPORTANT**: Never use `fs.rmSync()` or `fs.rm()` without proper Windows retry logic for directory cleanup in tests.
+
+**Problem**: On Windows, SQLite database files can remain locked longer than on Unix systems, causing `EBUSY` errors during cleanup.
+
+**Proper Solution**: Use `fsp.rm()` (async) with retry options:
+
+```typescript
+await fsp.rm(tempDir, {
+  recursive: true,
+  force: true,
+  maxRetries: process.platform === "win32" ? 3 : 1,
+  retryDelay: process.platform === "win32" ? 100 : 0,
+});
+```
+
+**Best Practice**: Use the existing test utilities (`useTempDir`, `useTempDirSuite`) which already handle Windows-compatible cleanup. Don't manually clean up temp directories - let the test framework handle it.
+
 ## References
 
 - [Node.js SQLite Documentation](https://nodejs.org/api/sqlite.html)
