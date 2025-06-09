@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { DatabaseSync } from "../src";
-import { uniqueDbName, useTempDirSuite } from "./test-utils";
+import { rm, uniqueDbName, useTempDirSuite } from "./test-utils";
 
 describe("File-based Database Tests", () => {
   const { tempDir, getDbPath } = useTempDirSuite("sqlite-test-");
@@ -119,7 +119,7 @@ describe("File-based Database Tests", () => {
     expect(fs.existsSync(absolutePath)).toBe(true);
   });
 
-  test("database with relative path", () => {
+  test("database with relative path", async () => {
     // Test that SQLite resolves relative paths from the current working directory
     const originalCwd = process.cwd();
     const relativePath = uniqueDbName("relative-test");
@@ -129,9 +129,11 @@ describe("File-based Database Tests", () => {
       // If tempDir is empty/undefined, create our own temp directory
       let currentTempDir = tempDir;
       if (!currentTempDir) {
-        currentTempDir = fs.mkdtempSync(path.join(os.tmpdir(), "test-relative-"));
+        currentTempDir = fs.mkdtempSync(
+          path.join(os.tmpdir(), "test-relative-"),
+        );
       }
-      
+
       // Create temp directory if it doesn't exist
       if (!fs.existsSync(currentTempDir)) {
         fs.mkdirSync(currentTempDir, { recursive: true });
@@ -157,7 +159,7 @@ describe("File-based Database Tests", () => {
       expect(fs.existsSync(expectedAbsolutePath)).toBe(true);
 
       // Clean up the file from the temp directory
-      fs.unlinkSync(expectedAbsolutePath);
+      await rm(expectedAbsolutePath);
     } finally {
       // Always restore original working directory
       process.chdir(originalCwd);

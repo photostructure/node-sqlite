@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { DatabaseSync } from "../src";
-import { getDirname, getTestTimeout } from "./test-utils";
+import { getDirname, getTestTimeout, rm } from "./test-utils";
 
 const execFile = promisify(childProcess.execFile);
 
@@ -39,25 +39,7 @@ describe("Simple Multi-Process Tests", () => {
       // Clean up database files with retries for Windows
       const filesToDelete = [dbPath, dbPath + "-wal", dbPath + "-shm"];
       for (const file of filesToDelete) {
-        if (fs.existsSync(file)) {
-          let retries = process.platform === "win32" ? 5 : 1;
-          while (retries > 0) {
-            try {
-              fs.unlinkSync(file);
-              break;
-            } catch (e: any) {
-              if (
-                retries === 1 ||
-                !e.code ||
-                (e.code !== "EBUSY" && e.code !== "ENOTEMPTY")
-              ) {
-                break; // Give up
-              }
-              retries--;
-              await new Promise((resolve) => setTimeout(resolve, 200));
-            }
-          }
-        }
+        await rm(file);
       }
 
       // Remove directory with retries

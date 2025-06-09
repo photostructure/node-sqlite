@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { DatabaseSync } from "../src";
+import { rm } from "./test-utils";
 
 describe("DatabaseSync Tests", () => {
   test("can create in-memory database", () => {
@@ -164,16 +165,10 @@ describe("File-based Database Tests", () => {
     dbPath = path.join(tempDir, "test.db");
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Clean up test files
-    try {
-      if (fs.existsSync(dbPath)) {
-        fs.unlinkSync(dbPath);
-      }
-      fs.rmdirSync(tempDir);
-    } catch {
-      // Ignore cleanup errors in tests
-    }
+    await rm(dbPath);
+    await rm(tempDir);
   });
 
   test("can create and open file-based database", () => {
@@ -297,7 +292,7 @@ describe("File-based Database Tests", () => {
     db.close();
   });
 
-  test("can create database with relative path", () => {
+  test("can create database with relative path", async () => {
     const originalCwd = process.cwd();
 
     try {
@@ -313,7 +308,7 @@ describe("File-based Database Tests", () => {
       db.close();
 
       // Clean up from temp directory
-      fs.unlinkSync(path.join(tempDir, "relative-test.db"));
+      await rm(path.join(tempDir, "relative-test.db"));
     } finally {
       process.chdir(originalCwd);
     }
@@ -329,16 +324,10 @@ describe("Database Configuration Tests", () => {
     dbPath = path.join(tempDir, "config-test.db");
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Clean up test files
-    try {
-      if (fs.existsSync(dbPath)) {
-        fs.unlinkSync(dbPath);
-      }
-      fs.rmdirSync(tempDir);
-    } catch {
-      // Ignore cleanup errors in tests
-    }
+    await rm(dbPath);
+    await rm(tempDir);
   });
 
   test("can open database with configuration options", () => {

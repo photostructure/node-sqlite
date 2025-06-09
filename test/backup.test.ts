@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import * as fs from "node:fs";
 import { DatabaseSync } from "../src";
-import { createTestDb, useTempDir } from "./test-utils";
+import { createTestDb, rm, useTempDir } from "./test-utils";
 
 describe("Backup functionality", () => {
   const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-");
@@ -274,7 +274,7 @@ describe("Backup functionality", () => {
 
     // Close source and remove it
     sourceDb.close();
-    fs.unlinkSync(sourcePath);
+    await rm(sourcePath);
 
     // Simulate "restore" by renaming backup to original location
     fs.renameSync(backupPath, sourcePath);

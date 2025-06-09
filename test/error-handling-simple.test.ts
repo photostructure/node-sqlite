@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { DatabaseSync } from "../src";
+import { rm } from "./test-utils";
 
 describe("Error Handling Tests - Safe Edition", () => {
   describe("Constraint Violation Errors", () => {
@@ -613,7 +614,7 @@ describe("Error Handling Tests - Safe Edition", () => {
       db.close();
     });
 
-    test("handles readonly database write attempts", () => {
+    test("handles readonly database write attempts", async () => {
       // Create a database file first
       const tempDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "sqlite-readonly-test-"),
@@ -654,12 +655,8 @@ describe("Error Handling Tests - Safe Edition", () => {
         db.close();
       } finally {
         // Clean up
-        try {
-          if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
-          fs.rmdirSync(tempDir);
-        } catch {
-          // Ignore cleanup errors
-        }
+        await rm(dbPath);
+        await rm(tempDir);
       }
     });
 

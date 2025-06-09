@@ -2,7 +2,7 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { DatabaseSync } from "../src";
-import { getDirname } from "./test-utils";
+import { getDirname, rm } from "./test-utils";
 
 describe("Extension Loading Tests", () => {
   // Build the test extension before running tests
@@ -360,13 +360,11 @@ describe("Extension Loading Tests", () => {
       db.close();
     });
 
-    test("can load extension in file-based database", () => {
+    test("can load extension in file-based database", async () => {
       const dbPath = path.join(getDirname(), "test-extension.db");
 
       // Clean up any existing file
-      if (fs.existsSync(dbPath)) {
-        fs.unlinkSync(dbPath);
-      }
+      await rm(dbPath);
 
       const db = new DatabaseSync(dbPath, { allowExtension: true });
       db.enableLoadExtension(true);
@@ -386,9 +384,7 @@ describe("Extension Loading Tests", () => {
       db.close();
 
       // Clean up
-      if (fs.existsSync(dbPath)) {
-        fs.unlinkSync(dbPath);
-      }
+      await rm(dbPath);
     });
   });
 });

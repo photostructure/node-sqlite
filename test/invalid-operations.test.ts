@@ -3,6 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { StatementSyncInstance } from "../src";
 import { DatabaseSync, StatementSync } from "../src";
+import { rm } from "./test-utils";
 
 /**
  * Tests for invalid operations and edge cases.
@@ -205,7 +206,7 @@ describe("Invalid Operations Tests", () => {
       }
     });
 
-    test("handles invalid database options", () => {
+    test("handles invalid database options", async () => {
       // Test invalid option combinations
       expect(() => {
         new DatabaseSync(":memory:", {
@@ -231,12 +232,8 @@ describe("Invalid Operations Tests", () => {
           });
         }).not.toThrow(); // This should work - opening existing file for writing
       } finally {
-        try {
-          fs.unlinkSync(dbPath);
-          fs.rmdirSync(tempDir);
-        } catch {
-          // Ignore cleanup errors
-        }
+        await rm(dbPath);
+        await rm(tempDir);
       }
     });
 
@@ -1167,7 +1164,7 @@ describe("Invalid Operations Tests", () => {
       }).toThrow();
     });
 
-    test("handles statement use across database re-open", () => {
+    test("handles statement use across database re-open", async () => {
       const dbPath = path.join(os.tmpdir(), `sqlite-test-${Date.now()}.db`);
 
       try {
@@ -1189,11 +1186,7 @@ describe("Invalid Operations Tests", () => {
 
         db2.close();
       } finally {
-        try {
-          fs.unlinkSync(dbPath);
-        } catch {
-          // Ignore cleanup errors
-        }
+        await rm(dbPath);
       }
     });
 

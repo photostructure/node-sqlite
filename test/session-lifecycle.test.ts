@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { DatabaseSync, Session } from "../src";
-import { getTestTimeout } from "./test-utils";
+import { getTestTimeout, rm } from "./test-utils";
 
 /**
  * Comprehensive lifecycle tests for RAII session management
@@ -283,7 +283,7 @@ describe("Session Lifecycle Management (RAII)", () => {
   });
 
   describe("RAII-Specific Guarantees", () => {
-    it("should ensure sessions are deleted before database in destructor", () => {
+    it("should ensure sessions are deleted before database in destructor", async () => {
       // This test verifies the cleanup order by creating a scenario where
       // incorrect order would cause issues
 
@@ -317,7 +317,7 @@ describe("Session Lifecycle Management (RAII)", () => {
       expect(count.cnt).toBe(100);
       db2.close();
 
-      fs.unlinkSync(dbPath);
+      await rm(dbPath);
     });
 
     it("should handle exceptions during session operations", () => {
