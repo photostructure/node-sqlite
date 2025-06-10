@@ -59,7 +59,10 @@
       "Bash(gh run view:*)",
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
-      "Bash(gh workflow:*)"
+      "Bash(gh workflow:*)",
+      "Bash(git restore:*)",
+      "Bash(TEST_MEMORY=1 node --expose-gc node_modules/jest/bin/jest.js --no-coverage test/memory.test.ts -t \"file database operations\" --runInBand --detectOpenHandles)",
+      "Bash(TEST_MEMORY=1 TEST_ESM=1 node --expose-gc --experimental-vm-modules node_modules/jest/bin/jest.js --no-coverage test/memory.test.ts -t \"final test marker\" --runInBand)"
     ]
   },
   "enableAllProjectMcpServers": false

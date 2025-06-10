@@ -10,17 +10,19 @@ const shouldRunMemoryTests = process.env.TEST_MEMORY === "1";
 
 const describeMemoryTests = shouldRunMemoryTests ? describe : describe.skip;
 
+// Check if we're in ESM mode
+const isESM =
+  process.env.TEST_ESM === "1" ||
+  process.env.NODE_OPTIONS?.includes("--experimental-vm-modules");
+
+// Note: Memory tests should be run in CJS mode only due to a Jest issue
+// where ESM tests don't properly exit after completion. This is a known
+// limitation of Jest's experimental ESM support with native modules.
+
 describeMemoryTests("Memory Tests", () => {
   beforeAll(() => {
     if (!global.gc) {
       throw new Error("Memory tests require --expose-gc flag");
-    }
-  });
-
-  afterAll(() => {
-    // Force a final GC to help with cleanup
-    if (global.gc) {
-      global.gc();
     }
   });
 
@@ -491,4 +493,12 @@ describeMemoryTests("Memory Tests", () => {
     },
     { maxMemoryGrowthKBPerSecond: 800 }, // Standard growth allowance
   );
+
+  // Add a simple test at the end to verify Jest reaches the end
+  test("final test marker", () => {
+    console.log(
+      `[Test Suite] All memory tests completed (${isESM ? "ESM" : "CJS"} mode)`,
+    );
+    expect(true).toBe(true);
+  });
 });
