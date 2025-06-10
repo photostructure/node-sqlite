@@ -372,7 +372,16 @@ export function testMemoryBenchmark(
   test(
     testName,
     async () => {
+      // Add debug output to track test progress in ESM mode
+      if (process.env.DEBUG_ESM_TESTS) {
+        console.log(`[ESM Debug] Starting test: ${testName}`);
+      }
+
       const result = await runMemoryBenchmark(operation, options);
+
+      if (process.env.DEBUG_ESM_TESTS) {
+        console.log(`[ESM Debug] Completed test: ${testName}`);
+      }
 
       // Log results
       console.log(`${testName}:`);
