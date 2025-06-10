@@ -372,38 +372,47 @@ export function testMemoryBenchmark(
   test(
     testName,
     async () => {
-      // Add debug output to track test progress in ESM mode
-      if (process.env.DEBUG_ESM_TESTS) {
-        console.log(`[ESM Debug] Starting test: ${testName}`);
-      }
+      let result: MemoryBenchmarkResult | null = null;
+      
+      try {
+        // Add debug output to track test progress in ESM mode
+        if (process.env.DEBUG_ESM_TESTS) {
+          console.log(`[ESM Debug] Starting test: ${testName}`);
+        }
 
-      const result = await runMemoryBenchmark(operation, options);
+        result = await runMemoryBenchmark(operation, options);
 
-      if (process.env.DEBUG_ESM_TESTS) {
-        console.log(`[ESM Debug] Completed test: ${testName}`);
-      }
+        if (process.env.DEBUG_ESM_TESTS) {
+          console.log(`[ESM Debug] Completed test: ${testName}`);
+        }
 
-      // Log results
-      console.log(`${testName}:`);
-      console.log(`  Iterations: ${result.iterations}`);
-      console.log(`  Duration: ${(result.totalDurationMs / 1000).toFixed(1)}s`);
-      console.log(
-        `  Growth rate: ${result.memoryGrowthKBPerSecond.toFixed(2)} KB/second`,
-      );
-      console.log(`  R-squared: ${result.rSquared.toFixed(4)}`);
-      console.log(
-        `  Initial memory: ${(result.initialMemoryBytes / 1024 / 1024).toFixed(2)} MB`,
-      );
-      console.log(
-        `  Final memory: ${(result.finalMemoryBytes / 1024 / 1024).toFixed(2)} MB`,
-      );
+        // Log results - only if we successfully got results
+        if (result) {
+          console.log(`${testName}:`);
+          console.log(`  Iterations: ${result.iterations}`);
+          console.log(`  Duration: ${(result.totalDurationMs / 1000).toFixed(1)}s`);
+          console.log(
+            `  Growth rate: ${result.memoryGrowthKBPerSecond.toFixed(2)} KB/second`,
+          );
+          console.log(`  R-squared: ${result.rSquared.toFixed(4)}`);
+          console.log(
+            `  Initial memory: ${(result.initialMemoryBytes / 1024 / 1024).toFixed(2)} MB`,
+          );
+          console.log(
+            `  Final memory: ${(result.finalMemoryBytes / 1024 / 1024).toFixed(2)} MB`,
+          );
+        }
 
-      if (result.hasMemoryLeak) {
-        throw new Error(
-          `Memory leak detected: ${result.memoryGrowthKBPerSecond.toFixed(2)} KB/second ` +
-            `(max allowed: ${benchmarkOptions.maxMemoryGrowthKBPerSecond ?? 500} KB/second, ` +
-            `R²: ${result.rSquared.toFixed(4)})`,
-        );
+        if (result?.hasMemoryLeak) {
+          throw new Error(
+            `Memory leak detected: ${result.memoryGrowthKBPerSecond.toFixed(2)} KB/second ` +
+              `(max allowed: ${benchmarkOptions.maxMemoryGrowthKBPerSecond ?? 500} KB/second, ` +
+              `R²: ${result.rSquared.toFixed(4)})`,
+          );
+        }
+      } catch (error) {
+        // Re-throw but ensure no async operations continue
+        throw error;
       }
     },
     jestTimeout,
