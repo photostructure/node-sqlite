@@ -364,13 +364,17 @@ describe("Multi-Process Database Access", () => {
         db.exec("BEGIN EXCLUSIVE");
         console.log("LOCK_ACQUIRED");
         
-        // Hold lock for a while
-        setTimeout(() => {
+        // Hold lock for a while and keep process alive
+        const lockTimeout = setTimeout(() => {
           db.exec("UPDATE lock_test SET value = 999 WHERE id = 1");
           db.exec("COMMIT");
           db.close();
           console.log("LOCK_RELEASED");
+          process.exit(0); // Explicitly exit after releasing lock
         }, ${lockHoldTime}); // Platform-specific lock time
+        
+        // Keep the process alive by preventing exit
+        lockTimeout.ref();
       `;
 
         // Script that tries to write while locked
