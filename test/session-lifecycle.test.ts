@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { DatabaseSync, Session } from "../src";
+import { testMemoryBenchmark } from "./benchmark-harness";
 import { getTestTimeout, rm } from "./test-utils";
 
 /**
@@ -465,25 +466,35 @@ describe("Session Lifecycle Management (RAII)", () => {
   });
 
   describe("Memory Safety", () => {
-    it("should not leak memory with many sessions", () => {
-      const db = new DatabaseSync(":memory:");
-      db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY)");
+    testMemoryBenchmark(
+      "should not leak memory with many sessions",
+      () => {
+        const db = new DatabaseSync(":memory:");
+        db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY)");
 
-      // Create and destroy many sessions
-      for (let i = 0; i < 1000; i++) {
-        const session = db.createSession();
-        db.prepare("INSERT INTO test VALUES (?)").run(i);
-        const changeset = session.changeset();
-        expect(changeset).toBeInstanceOf(Buffer);
-        expect(changeset.length).toBeGreaterThan(0);
-        session.close();
-      }
+        // Create and destroy many sessions
+        for (let i = 0; i < 100; i++) {
+          const session = db.createSession();
+          db.prepare("INSERT INTO test VALUES (?)").run(i);
+          const changeset = session.changeset();
+          if (!(changeset instanceof Buffer)) {
+            throw new Error("Expected changeset to be a Buffer");
+          }
+          if (changeset.length === 0) {
+            throw new Error("Expected changeset to have non-zero length");
+          }
+          session.close();
+        }
 
-      db.close();
-
-      // If we get here without OOM, we're not leaking
-      expect(true).toBe(true);
-    });
+        db.close();
+      },
+      {
+        maxMemoryGrowthKBPerSecond: 500, // Allow reasonable growth for session operations
+        minRSquaredForLeak: 0.7, // Higher confidence threshold for memory leak detection
+        targetDurationMs: 30000, // Longer duration for statistical significance
+        forceGC: false, // Don't require --expose-gc flag
+      },
+    );
 
     it("should handle nested session operations safely", () => {
       const db = new DatabaseSync(":memory:");
