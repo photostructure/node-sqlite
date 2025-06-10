@@ -58,8 +58,9 @@ try {
     env: {
       ...process.env,
       TEST_MEMORY: "1",
-      TEST_ESM: "1",
-      NODE_OPTIONS: "--expose-gc --experimental-vm-modules --no-warnings",
+      // Run memory tests in CJS mode to avoid Jest ESM hanging issue
+      // TEST_ESM: "1",
+      NODE_OPTIONS: "--expose-gc --no-warnings",
     },
   });
   console.log(color(colors.GREEN, "✓ JavaScript memory tests passed"));
