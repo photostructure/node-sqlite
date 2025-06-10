@@ -42,13 +42,22 @@ void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
       return;
     }
 
-    Napi::Function fn = self->fn_.Value();
-
-    // Additional check for function validity
-    if (!fn.IsFunction()) {
-      sqlite3_result_error(ctx, "Invalid function reference", -1);
+    Napi::Value fn_value;
+    try {
+      fn_value = self->fn_.Value();
+    } catch (const Napi::Error &e) {
+      sqlite3_result_error(ctx, "Failed to retrieve function reference", -1);
       return;
     }
+
+    // Additional check for function validity
+    if (!fn_value.IsFunction()) {
+      sqlite3_result_error(ctx, "Invalid function reference - not a function",
+                           -1);
+      return;
+    }
+
+    Napi::Function fn = fn_value.As<Napi::Function>();
 
     // Convert SQLite arguments to JavaScript values
     std::vector<napi_value> js_args;
