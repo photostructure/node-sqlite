@@ -318,13 +318,19 @@ await new Promise((resolve) => setTimeout(resolve, 100));
 if (global.gc) {
   global.gc();
 }
+
+// BAD: Adding setImmediate in afterAll to "fix" hanging tests
+afterAll(async () => {
+  await new Promise((resolve) => setImmediate(resolve));
+});
 ```
 
 **Why these are problematic:**
 
 1. **Arbitrary timeouts** are race conditions waiting to happen. They might work on fast machines but fail on slower CI runners.
 2. **Forcing GC** should never be required for correct behavior. If your code depends on GC for correctness, it has a fundamental design flaw.
-3. These approaches mask the real problem instead of fixing it.
+3. **setImmediate/nextTick delays** in cleanup hooks don't fix the root cause - they just paper over the real issue.
+4. These approaches mask the real problem instead of fixing it.
 
 **Note**: This is different from legitimate uses of timeouts, such as:
 
@@ -332,7 +338,15 @@ if (global.gc) {
 - Rate limiting or throttling tests
 - Testing timeout behavior itself
 
-The anti-pattern is using timeouts to "fix" async cleanup issues.
+The anti-pattern is using timeouts or GC to "fix" async cleanup issues.
+
+**What to do instead:**
+
+1. Find the actual resource that's keeping the process alive (use `--detectOpenHandles`)
+2. Ensure all database connections are properly closed
+3. Ensure all file handles are closed
+4. Cancel or await all pending async operations
+5. Use proper resource management patterns (RAII, try-finally, using statements)
 
 **Root Cause**: When async operations are not properly cleaned up, Jest may display the "worker process has failed to exit gracefully" warning.
 
@@ -363,6 +377,231 @@ await fsp.rm(tempDir, {
 ```
 
 **Best Practice**: Use the existing test utilities (`useTempDir`, `useTempDirSuite`) which already handle Windows-compatible cleanup. Don't manually clean up temp directories - let the test framework handle it.
+
+## Robust Testing Guidelines
+
+Based on analysis of CI failures, these guidelines ensure tests are reliable across all platforms and environments.
+
+### Common Flaky Test Patterns and Solutions
+
+#### 1. Timeout Failures
+
+**Pattern**: Tests failing with "Exceeded timeout of 10000 ms for a test" especially in memory tests and backup tests.
+
+**Root Causes**:
+
+- Fixed timeouts don't account for slower CI environments
+- Alpine Linux (musl libc) is 2x slower than glibc
+- ARM64 emulation on x64 runners is 5x slower
+- Windows process forking is 4x slower
+- macOS VMs are 4x slower
+
+**Solutions**:
+
+```typescript
+// DON'T: Use fixed timeouts
+test("my test", async () => {
+  // Test code
+}, 10000);
+
+// DO: Use adaptive timeouts
+import { getTestTimeout } from "./test-timeout-config.cjs";
+
+test(
+  "my test",
+  async () => {
+    // Test code
+  },
+  getTestTimeout(10000),
+);
+
+// DO: Use the benchmark harness for memory tests
+import { testMemoryBenchmark } from "./benchmark-harness";
+
+testMemoryBenchmark(
+  "memory test",
+  () => {
+    // Test code
+  },
+  { maxTimeoutMs: 60000 },
+);
+```
+
+#### 2. Database Locking Race Conditions
+
+**Pattern**: Multi-process tests expecting `DATABASE_LOCKED` errors but getting `WRITE_SUCCESS`.
+
+**Root Cause**: The timing between establishing a lock and attempting concurrent access varies by platform.
+
+**Solutions**:
+
+```typescript
+// DON'T: Assume immediate locking
+const lockHolder = spawn(nodeCmd, [lockScript]);
+const writer = spawn(nodeCmd, [writerScript]);
+expect(writer.stdout).toBe("DATABASE_LOCKED"); // May succeed on fast systems!
+
+// DO: Ensure lock is established first
+const lockHolder = spawn(nodeCmd, [lockScript]);
+// Wait for lock confirmation
+await waitForOutput(lockHolder, "LOCK_ACQUIRED");
+// Now attempt concurrent access
+const writer = spawn(nodeCmd, [writerScript]);
+expect(writer.stdout).toBe("DATABASE_LOCKED");
+```
+
+#### 3. Jest Not Exiting Cleanly
+
+**Pattern**: "Jest did not exit one second after the test run has completed" warnings.
+
+**Root Causes**:
+
+- Unclosed database connections
+- Active async operations
+- Console logs after test completion
+
+**Solutions**:
+
+```typescript
+// DON'T: Leave resources open
+test("my test", async () => {
+  const db = new DatabaseSync("test.db");
+  // Test code but forget to close
+});
+
+// DO: Always clean up resources
+test("my test", async () => {
+  const db = new DatabaseSync("test.db");
+  try {
+    // Test code
+  } finally {
+    db.close();
+  }
+});
+
+// DO: Use test utilities that handle cleanup
+test("my test", async () => {
+  using tempDir = useTempDir();
+  const db = tempDir.newDatabase();
+  // db is automatically closed when tempDir is disposed
+});
+
+// DO: Cancel async operations in afterEach/afterAll
+let asyncOperation: Promise<void> | null = null;
+
+afterEach(() => {
+  if (asyncOperation) {
+    // Cancel or wait for completion
+    asyncOperation = null;
+  }
+});
+```
+
+#### 4. Platform-Specific Failures
+
+**Pattern**: Tests failing only on specific platforms (Alpine ARM64, Windows).
+
+**Root Causes**:
+
+- Platform timing differences
+- File system behavior variations
+- Process spawning differences
+
+**Solutions**:
+
+```typescript
+// DON'T: Assume uniform platform behavior
+expect(error.message).toBe("SQLITE_BUSY: database is locked");
+
+// DO: Handle platform variations
+expect(error.message).toMatch(/SQLITE_BUSY|database is locked/);
+
+// DO: Use platform-aware utilities
+import { getTestTimeout, getTimingMultiplier } from "./test-timeout-config.cjs";
+
+// DO: Add platform-specific retry logic
+async function waitForCondition(check: () => boolean, options = {}) {
+  const { maxAttempts = 10, delay = 100 } = options;
+  const multiplier = getTimingMultiplier();
+
+  for (let i = 0; i < maxAttempts * multiplier; i++) {
+    if (check()) return true;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+  return false;
+}
+```
+
+### Best Practices for Reliable Tests
+
+1. **Use Adaptive Timeouts**: Always use `getTestTimeout()` for Jest timeouts and `getTimingMultiplier()` for custom timing logic.
+
+2. **Explicit Resource Management**: Use `using` declarations or try/finally blocks to ensure cleanup.
+
+3. **Wait for Conditions**: Don't assume timing - explicitly wait for conditions to be met.
+
+4. **Platform-Aware Expectations**: Account for platform differences in error messages and behavior.
+
+5. **Avoid Console Logs in Async Code**: Ensure all logging happens before test completion.
+
+6. **Use Test Utilities**: Leverage `useTempDir`, `useTempDirSuite`, and other utilities that handle platform differences.
+
+7. **Benchmark Harness for Performance Tests**: Use the adaptive benchmark harness that accounts for environment performance.
+
+### Memory Test Guidelines
+
+Memory tests are particularly prone to flakiness due to:
+
+- GC timing variations
+- Platform memory management differences
+- CI environment resource constraints
+
+**Best Practices**:
+
+```typescript
+// Use the memory benchmark harness
+testMemoryBenchmark(
+  "test name",
+  async () => {
+    // Operation to test
+  },
+  {
+    maxMemoryGrowthKBPerSecond: 500, // Adjust based on operation
+    minRSquaredForLeak: 0.5, // Statistical confidence
+    forceGC: true, // Consistent GC behavior
+    maxTimeoutMs: 60000, // Generous timeout
+  },
+);
+```
+
+### Multi-Process Test Guidelines
+
+Multi-process tests need careful synchronization:
+
+```typescript
+// Use explicit synchronization
+const script = `
+  const db = new DatabaseSync(process.argv[2]);
+  console.log("READY");  // Signal readiness
+  // ... test code ...
+`;
+
+const proc = spawn(process.execPath, ["-e", script, dbPath]);
+await waitForOutput(proc, "READY"); // Wait for process to be ready
+```
+
+### CI Environment Considerations
+
+1. **GitHub Actions runners vary significantly**:
+
+   - Ubuntu: Fast and reliable
+   - Windows: 4x slower process operations
+   - macOS: 4x slower in VMs
+   - Alpine ARM64: 10x slower (2x for musl + 5x for emulation)
+
+2. **Resource constraints**: CI environments may have limited memory/CPU, affecting timing and performance tests.
+
+3. **Parallel test execution**: Tests must be isolated and not depend on specific port numbers or global resources.
 
 ## References
 
