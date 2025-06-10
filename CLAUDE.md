@@ -603,6 +603,247 @@ await waitForOutput(proc, "READY"); // Wait for process to be ready
 
 3. **Parallel test execution**: Tests must be isolated and not depend on specific port numbers or global resources.
 
+## Advanced CI/CD Reliability Patterns
+
+Based on cross-project analysis and lessons learned from other native Node.js modules, these advanced patterns help eliminate the most stubborn sources of test flakiness:
+
+### 1. Alpine Linux ARM64 Emulation Detection
+
+**Problem**: ARM64 emulation on x64 GitHub Actions runners is 5-20x slower and can cause unexpected timeouts.
+
+**Solution**: Auto-detect emulated environments and adjust behavior:
+
+```typescript
+// Detect Alpine Linux emulation environment
+const isAlpine = fs.existsSync("/etc/alpine-release");
+const isARM64 = process.arch === "arm64";
+const isEmulated = isARM64 && process.env.GITHUB_ACTIONS === "true";
+
+// Skip intensive tests on emulated environments
+const describeForNative = isEmulated ? describe.skip : describe;
+
+describeForNative("CPU-intensive operations", () => {
+  // Tests that spawn multiple processes or do heavy computation
+});
+```
+
+### 2. Dynamic Value Testing for Changing Metadata
+
+**Problem**: File system metadata like `available` space and `used` space change continuously as other processes run, making exact equality assertions unreliable.
+
+**Solution**: Focus on type validation and stability patterns:
+
+```typescript
+// DON'T: Test dynamic values for exact equality or ranges
+const result1 = db.prepare("PRAGMA freelist_count").get();
+const result2 = db.prepare("PRAGMA freelist_count").get();
+expect(result1.freelist_count).toBe(result2.freelist_count); // May fail!
+expect(result1.freelist_count).toBeGreaterThan(0); // May fail if pages are freed!
+
+// DO: Test for type correctness and structural properties
+expect(typeof result.freelist_count).toBe("number");
+expect(Number.isInteger(result.freelist_count)).toBe(true);
+expect(result.freelist_count).toBeGreaterThanOrEqual(0);
+
+// DO: Test static/stable properties for exact equality
+expect(result.page_size).toBe(4096); // Page size doesn't change
+expect(result.application_id).toBe(expectedId); // Application ID is stable
+```
+
+### 3. Worker Thread Resource Management
+
+**Problem**: Race conditions and resource leaks in concurrent worker operations can cause Jest to hang.
+
+**Solution**: Implement proper worker lifecycle management:
+
+```typescript
+// Track all active workers for cleanup
+const activeWorkers = new Set<Worker>();
+
+afterEach(async () => {
+  // Terminate all workers with timeout
+  const terminations = Array.from(activeWorkers).map((worker) =>
+    Promise.race([
+      new Promise<void>((resolve) => {
+        worker.terminate().then(() => resolve());
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 1000)), // 1s timeout
+    ]),
+  );
+
+  await Promise.allSettled(terminations);
+  activeWorkers.clear();
+});
+
+// Use Promise.allSettled() instead of Promise.all() for concurrent operations
+const results = await Promise.allSettled(
+  workers.map((worker) => worker.performOperation()),
+);
+
+// Check results individually
+results.forEach((result, index) => {
+  if (result.status === "fulfilled") {
+    expect(result.value).toBeDefined();
+  } else {
+    console.warn(`Worker ${index} failed:`, result.reason);
+  }
+});
+```
+
+### 4. Benchmark Test Reliability
+
+**Problem**: "Cannot log after tests are done" errors in performance tests due to async operations continuing after test completion.
+
+**Solution**: Ensure complete async operation lifecycle management:
+
+```typescript
+// DON'T: Allow async operations to continue after test
+test("benchmark performance", async () => {
+  const operations = [];
+  for (let i = 0; i < 1000; i++) {
+    operations.push(performAsyncOperation(i)); // May continue after test ends
+  }
+  const results = await Promise.all(operations);
+  console.log("Performance results:", results); // May log after test completion
+});
+
+// DO: Use proper lifecycle management with explicit synchronization
+test("benchmark performance", async () => {
+  const operations = [];
+  const abortController = new AbortController();
+
+  try {
+    for (let i = 0; i < 1000; i++) {
+      operations.push(
+        performAsyncOperation(i, { signal: abortController.signal }),
+      );
+    }
+
+    const results = await Promise.allSettled(operations);
+    const successful = results.filter((r) => r.status === "fulfilled");
+
+    // Log immediately, before any potential async continuation
+    expect(successful.length).toBeGreaterThan(900); // Allow some failures
+  } finally {
+    // Ensure all operations are cancelled
+    abortController.abort();
+
+    // Wait for any cleanup to complete
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+});
+```
+
+### 5. Timeout Test Precision
+
+**Problem**: Exact timing assertions fail due to CI environment variability and timer precision limitations.
+
+**Solution**: Use statistical timing validation:
+
+```typescript
+// DON'T: Test exact timing
+const start = Date.now();
+await operationWithTimeout(100);
+const duration = Date.now() - start;
+expect(duration).toBe(100); // Will fail due to timing precision
+
+// DO: Use ranges with platform-aware margins
+const start = process.hrtime.bigint();
+await operationWithTimeout(100);
+const duration = Number(process.hrtime.bigint() - start) / 1_000_000; // Convert to ms
+
+const expectedDuration = 100;
+const margin = process.env.CI ? 50 : 20; // Larger margin in CI
+expect(duration).toBeGreaterThanOrEqual(expectedDuration - margin);
+expect(duration).toBeLessThanOrEqual(expectedDuration + margin);
+```
+
+### 6. Environment-Specific Test Configuration
+
+**Problem**: Tests behave differently in local vs CI environments, causing flaky failures.
+
+**Solution**: Implement environment detection and adaptive configuration:
+
+```typescript
+// Environment detection helper
+export function getTestEnvironment() {
+  const isCI = process.env.CI === "true";
+  const isGitHubActions = process.env.GITHUB_ACTIONS === "true";
+  const isLocal = !isCI;
+
+  return {
+    isCI,
+    isGitHubActions,
+    isLocal,
+
+    // Adaptive configuration
+    concurrencyLimit: isCI ? 2 : 4,
+    retryAttempts: isCI ? 3 : 1,
+    timeoutMultiplier: isCI ? 3 : 1,
+
+    // Platform-specific adjustments
+    shouldSkipHeavyTests: isAlpine && isARM64,
+    shouldUseSequentialExecution: process.platform === "win32" && isCI,
+  };
+}
+
+// Use in test configuration
+const env = getTestEnvironment();
+
+beforeAll(() => {
+  if (env.shouldUseSequentialExecution) {
+    jest.retryTimes(env.retryAttempts);
+  }
+});
+```
+
+### 7. Deterministic Test Data
+
+**Problem**: Tests using random data or timestamps can be inconsistent across runs.
+
+**Solution**: Use deterministic data generation with seeded randomness:
+
+```typescript
+// DON'T: Use truly random data
+test("database operations", () => {
+  const randomId = Math.random(); // Different every run
+  const timestamp = Date.now(); // Different every run
+
+  db.prepare("INSERT INTO test VALUES (?, ?)").run(randomId, timestamp);
+  // Test behavior becomes unpredictable
+});
+
+// DO: Use seeded deterministic data
+import { createHash } from "node:crypto";
+
+function deterministicRandom(seed: string): number {
+  const hash = createHash("sha256").update(seed).digest("hex");
+  return parseInt(hash.substring(0, 8), 16) / 0xffffffff;
+}
+
+test("database operations", () => {
+  const testSeed = "test-database-operations"; // Consistent across runs
+  const deterministicId = deterministicRandom(testSeed + "-id");
+  const deterministicTimestamp = 1704067200000; // Fixed timestamp: 2024-01-01
+
+  db.prepare("INSERT INTO test VALUES (?, ?)").run(
+    deterministicId,
+    deterministicTimestamp,
+  );
+  // Test behavior is now predictable and reproducible
+});
+```
+
+### Best Practices Summary
+
+1. **Environment Detection**: Auto-detect emulated environments and adjust test behavior accordingly
+2. **Dynamic Value Handling**: Focus on type validation rather than exact values for changing metadata
+3. **Resource Lifecycle**: Implement comprehensive cleanup for workers, timers, and async operations
+4. **Statistical Validation**: Use ranges and statistical analysis instead of exact timing assertions
+5. **Deterministic Data**: Prefer seeded randomness over truly random data for consistent test results
+6. **Adaptive Configuration**: Adjust concurrency, timeouts, and retry logic based on environment
+7. **Graceful Degradation**: Skip or modify tests that can't work reliably in certain environments
+
 ## References
 
 - [Node.js SQLite Documentation](https://nodejs.org/api/sqlite.html)
