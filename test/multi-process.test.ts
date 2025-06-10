@@ -344,7 +344,6 @@ describe("Multi-Process Database Access", () => {
         // Use longer timeouts on slower CI platforms
         const multiplier = getTimingMultiplier();
         const lockHoldTime = 1000 * multiplier;
-        const writerDelay = 200 * multiplier;
         const setupDb = new DatabaseSync(dbPath);
         setupDb.exec(`
         CREATE TABLE lock_test (
@@ -381,19 +380,15 @@ describe("Multi-Process Database Access", () => {
         const writerScriptTemplate = `
         const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
         
-        // Wait a bit to ensure lock is held
-        const delay = ${writerDelay};
-        const start = Date.now();
-        while (Date.now() - start < delay) {
-          // Busy wait
-        }
-        
         const db = new DatabaseSync(\${dbPath}, { timeout: 100 }); // Short timeout
         try {
+          // Try to start a transaction immediately - this should fail if lock is held
+          db.exec("BEGIN IMMEDIATE");
           db.exec("UPDATE lock_test SET value = 111 WHERE id = 1");
+          db.exec("COMMIT");
           console.log("WRITE_SUCCESS");
         } catch (error) {
-          if (error.message.includes("locked") || error.message.includes("busy")) {
+          if (error.message.includes("locked") || error.message.includes("busy") || error.message.includes("SQLITE_BUSY")) {
             console.log("DATABASE_LOCKED");
           } else {
             console.error("UNEXPECTED_ERROR:", error.message);
@@ -428,6 +423,9 @@ describe("Multi-Process Database Access", () => {
             }
           }, 10);
         });
+
+        // Add a small delay to ensure lock is fully established
+        await new Promise((resolve) => setTimeout(resolve, 100 * multiplier));
 
         // Try to write while locked
         const writerResult = await execFile("node", [
