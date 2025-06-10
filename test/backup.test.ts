@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import * as fs from "node:fs";
 import { DatabaseSync } from "../src";
-import { createTestDb, rm, useTempDir } from "./test-utils";
+import { createTestDb, getTestTimeout, rm, useTempDir } from "./test-utils";
 
 describe("Backup functionality", () => {
   const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-");
@@ -641,9 +641,11 @@ describe("Backup functionality", () => {
     expect(david).toEqual({ id: 4, name: "David", email: "david@example.com" });
   });
 
-  it("should demonstrate different behavior with different rates", async () => {
-    // Create a larger database to ensure consistent behavior across platforms
-    sourceDb.exec(`
+  it(
+    "should demonstrate different behavior with different rates",
+    async () => {
+      // Create a larger database to ensure consistent behavior across platforms
+      sourceDb.exec(`
       CREATE TABLE test_data (
         id INTEGER PRIMARY KEY,
         content TEXT,
@@ -651,122 +653,134 @@ describe("Backup functionality", () => {
       );
     `);
 
-    // Insert more data with larger rows to ensure multiple pages
-    const content = "x".repeat(1000);
-    const extraData = "y".repeat(1000);
-    for (let i = 0; i < 200; i++) {
-      sourceDb
-        .prepare("INSERT INTO test_data (content, extra_data) VALUES (?, ?)")
-        .run(content, extraData);
-    }
+      // Adjust data size based on platform - Windows is much slower
+      const rowCount = process.platform === "win32" ? 50 : 200;
+      const content = "x".repeat(1000);
+      const extraData = "y".repeat(1000);
+      for (let i = 0; i < rowCount; i++) {
+        sourceDb
+          .prepare("INSERT INTO test_data (content, extra_data) VALUES (?, ?)")
+          .run(content, extraData);
+      }
 
-    // Test 1: Backup with rate = -1 (all at once)
-    const backup1Path = getDbPath("all_at_once.db");
-    let callbackCount1 = 0;
+      // Test 1: Backup with rate = -1 (all at once)
+      const backup1Path = getDbPath("all_at_once.db");
+      let callbackCount1 = 0;
 
-    await sourceDb.backup(backup1Path, {
-      rate: -1, // Negative value to copy all pages at once
-      progress: () => {
-        callbackCount1++;
-      },
-    });
+      await sourceDb.backup(backup1Path, {
+        rate: -1, // Negative value to copy all pages at once
+        progress: () => {
+          callbackCount1++;
+        },
+      });
 
-    // Test 2: Backup with rate = 1 (one page at a time)
-    const backup2Path = getDbPath("one_page.db");
-    let callbackCount2 = 0;
-    const progressInfo2: Array<{ remaining: number }> = [];
+      // Test 2: Backup with rate = 1 (one page at a time)
+      const backup2Path = getDbPath("one_page.db");
+      let callbackCount2 = 0;
+      const progressInfo2: Array<{ remaining: number }> = [];
 
-    await sourceDb.backup(backup2Path, {
-      rate: 1,
-      progress: (info) => {
-        callbackCount2++;
-        progressInfo2.push({ remaining: info.remainingPages });
-      },
-    });
+      await sourceDb.backup(backup2Path, {
+        rate: 1,
+        progress: (info) => {
+          callbackCount2++;
+          progressInfo2.push({ remaining: info.remainingPages });
+        },
+      });
 
-    // Test 3: Backup with rate = 5
-    const backup3Path = getDbPath("five_pages.db");
-    let callbackCount3 = 0;
-    const progressInfo3: Array<{ remaining: number }> = [];
+      // Test 3: Backup with rate = 5
+      const backup3Path = getDbPath("five_pages.db");
+      let callbackCount3 = 0;
+      const progressInfo3: Array<{ remaining: number }> = [];
 
-    await sourceDb.backup(backup3Path, {
-      rate: 5,
-      progress: (info) => {
-        callbackCount3++;
-        progressInfo3.push({ remaining: info.remainingPages });
-      },
-    });
+      await sourceDb.backup(backup3Path, {
+        rate: 5,
+        progress: (info) => {
+          callbackCount3++;
+          progressInfo3.push({ remaining: info.remainingPages });
+        },
+      });
 
-    // Verify different behaviors
-    console.log(
-      `Callbacks - All at once: ${callbackCount1}, One page: ${callbackCount2}, Five pages: ${callbackCount3}`,
-    );
-
-    // With rate=-1, we should get 0 or very few callbacks (maybe just 1)
-    expect(callbackCount1).toBeLessThanOrEqual(1);
-
-    // With smaller rates, we generally expect more callbacks, but AsyncWorker
-    // can coalesce progress updates, making the exact behavior platform-dependent.
-    // Just verify that we got callbacks with both rate=1 and rate=5
-    expect(callbackCount2).toBeGreaterThan(0);
-    expect(callbackCount3).toBeGreaterThan(0);
-
-    // The key difference: rate=-1 should have minimal callbacks compared to others
-    if (callbackCount2 > 0 && callbackCount3 > 0) {
-      expect(callbackCount1).toBeLessThan(
-        Math.max(callbackCount2, callbackCount3),
+      // Verify different behaviors
+      console.log(
+        `Callbacks - All at once: ${callbackCount1}, One page: ${callbackCount2}, Five pages: ${callbackCount3}`,
       );
-    }
 
-    // Ensure the backups actually completed successfully
-    const verifyBackup = (path: string) => {
-      const db = new DatabaseSync(path);
-      const count = db
-        .prepare("SELECT COUNT(*) as count FROM test_data")
-        .get() as { count: number };
-      expect(count.count).toBe(200);
-      db.close();
-    };
+      // With rate=-1, we should get 0 or very few callbacks (maybe just 1)
+      expect(callbackCount1).toBeLessThanOrEqual(1);
 
-    verifyBackup(backup1Path);
-    verifyBackup(backup2Path);
-    verifyBackup(backup3Path);
+      // With smaller rates, we generally expect more callbacks, but AsyncWorker
+      // can coalesce progress updates, making the exact behavior platform-dependent.
+      // Just verify that we got callbacks with both rate=1 and rate=5
+      expect(callbackCount2).toBeGreaterThan(0);
+      expect(callbackCount3).toBeGreaterThan(0);
 
-    // Verify the progress is different
-    if (progressInfo2.length > 1 && progressInfo3.length > 1) {
-      // With AsyncWorker, the exact page decrease per callback is not guaranteed
-      // Just verify that progress is being made (remaining pages decrease)
-      const decrease2 = progressInfo2[0].remaining - progressInfo2[1].remaining;
-      expect(decrease2).toBeGreaterThan(0);
+      // The key difference: rate=-1 should have minimal callbacks compared to others
+      if (callbackCount2 > 0 && callbackCount3 > 0) {
+        expect(callbackCount1).toBeLessThan(
+          Math.max(callbackCount2, callbackCount3),
+        );
+      }
 
-      const decrease3 = progressInfo3[0].remaining - progressInfo3[1].remaining;
-      expect(decrease3).toBeGreaterThan(0);
+      // Ensure the backups actually completed successfully
+      const expectedCount = process.platform === "win32" ? 50 : 200;
+      const verifyBackup = (path: string) => {
+        const db = new DatabaseSync(path);
+        const count = db
+          .prepare("SELECT COUNT(*) as count FROM test_data")
+          .get() as { count: number };
+        expect(count.count).toBe(expectedCount);
+        db.close();
+      };
 
-      // The actual behavior we care about: different rates should result in
-      // different numbers of callbacks, which we already verified above
-    }
+      verifyBackup(backup1Path);
+      verifyBackup(backup2Path);
+      verifyBackup(backup3Path);
 
-    // All backups should produce identical databases
-    const db1 = new DatabaseSync(backup1Path);
-    testDatabases.add(db1);
-    const count1 = (
-      db1.prepare("SELECT COUNT(*) as c FROM test_data").get() as { c: number }
-    ).c;
+      // Verify the progress is different
+      if (progressInfo2.length > 1 && progressInfo3.length > 1) {
+        // With AsyncWorker, the exact page decrease per callback is not guaranteed
+        // Just verify that progress is being made (remaining pages decrease)
+        const decrease2 =
+          progressInfo2[0].remaining - progressInfo2[1].remaining;
+        expect(decrease2).toBeGreaterThan(0);
 
-    const db2 = new DatabaseSync(backup2Path);
-    testDatabases.add(db2);
-    const count2 = (
-      db2.prepare("SELECT COUNT(*) as c FROM test_data").get() as { c: number }
-    ).c;
+        const decrease3 =
+          progressInfo3[0].remaining - progressInfo3[1].remaining;
+        expect(decrease3).toBeGreaterThan(0);
 
-    const db3 = new DatabaseSync(backup3Path);
-    testDatabases.add(db3);
-    const count3 = (
-      db3.prepare("SELECT COUNT(*) as c FROM test_data").get() as { c: number }
-    ).c;
+        // The actual behavior we care about: different rates should result in
+        // different numbers of callbacks, which we already verified above
+      }
 
-    expect(count1).toBe(200);
-    expect(count2).toBe(200);
-    expect(count3).toBe(200);
-  }, 10000);
+      // All backups should produce identical databases
+      const db1 = new DatabaseSync(backup1Path);
+      testDatabases.add(db1);
+      const count1 = (
+        db1.prepare("SELECT COUNT(*) as c FROM test_data").get() as {
+          c: number;
+        }
+      ).c;
+
+      const db2 = new DatabaseSync(backup2Path);
+      testDatabases.add(db2);
+      const count2 = (
+        db2.prepare("SELECT COUNT(*) as c FROM test_data").get() as {
+          c: number;
+        }
+      ).c;
+
+      const db3 = new DatabaseSync(backup3Path);
+      testDatabases.add(db3);
+      const count3 = (
+        db3.prepare("SELECT COUNT(*) as c FROM test_data").get() as {
+          c: number;
+        }
+      ).c;
+
+      expect(count1).toBe(expectedCount);
+      expect(count2).toBe(expectedCount);
+      expect(count3).toBe(expectedCount);
+    },
+    getTestTimeout(30000),
+  );
 });

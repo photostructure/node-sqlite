@@ -3,7 +3,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { DatabaseSync } from "../src";
-import { getDirname, getTimingMultiplier, useTempDir } from "./test-utils";
+import {
+  getDirname,
+  getTestTimeout,
+  getTimingMultiplier,
+  useTempDir,
+} from "./test-utils";
 
 const execFile = promisify(childProcess.execFile);
 
@@ -333,23 +338,25 @@ describe("Multi-Process Database Access", () => {
   });
 
   describe("File Locking and Error Handling", () => {
-    test("handles database locked errors gracefully", async () => {
-      // Use longer timeouts on slower CI platforms
-      const multiplier = getTimingMultiplier();
-      const lockHoldTime = 1000 * multiplier;
-      const writerDelay = 200 * multiplier;
-      const setupDb = new DatabaseSync(dbPath);
-      setupDb.exec(`
+    test(
+      "handles database locked errors gracefully",
+      async () => {
+        // Use longer timeouts on slower CI platforms
+        const multiplier = getTimingMultiplier();
+        const lockHoldTime = 1000 * multiplier;
+        const writerDelay = 200 * multiplier;
+        const setupDb = new DatabaseSync(dbPath);
+        setupDb.exec(`
         CREATE TABLE lock_test (
           id INTEGER PRIMARY KEY,
           value INTEGER
         )
       `);
-      setupDb.exec("INSERT INTO lock_test (id, value) VALUES (1, 0)");
-      setupDb.close();
+        setupDb.exec("INSERT INTO lock_test (id, value) VALUES (1, 0)");
+        setupDb.close();
 
-      // Script that holds a write lock
-      const lockHolderScriptTemplate = `
+        // Script that holds a write lock
+        const lockHolderScriptTemplate = `
         const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
         const db = new DatabaseSync(\${dbPath});
         
@@ -366,67 +373,80 @@ describe("Multi-Process Database Access", () => {
         }, ${lockHoldTime}); // Platform-specific lock time
       `;
 
-      // Script that tries to write while locked
-      const writerScriptTemplate = `
+        // Script that tries to write while locked
+        const writerScriptTemplate = `
         const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        const db = new DatabaseSync(\${dbPath}, { timeout: 100 }); // Short timeout
         
         // Wait a bit to ensure lock is held
-        setTimeout(() => {
-          try {
-            db.exec("UPDATE lock_test SET value = 111 WHERE id = 1");
-            console.log("WRITE_SUCCESS");
-          } catch (error) {
-            if (error.message.includes("locked") || error.message.includes("busy")) {
-              console.log("DATABASE_LOCKED");
-            } else {
-              console.error("UNEXPECTED_ERROR:", error.message);
-            }
-          } finally {
-            db.close();
+        const delay = ${writerDelay};
+        const start = Date.now();
+        while (Date.now() - start < delay) {
+          // Busy wait
+        }
+        
+        const db = new DatabaseSync(\${dbPath}, { timeout: 100 }); // Short timeout
+        try {
+          db.exec("UPDATE lock_test SET value = 111 WHERE id = 1");
+          console.log("WRITE_SUCCESS");
+        } catch (error) {
+          if (error.message.includes("locked") || error.message.includes("busy")) {
+            console.log("DATABASE_LOCKED");
+          } else {
+            console.error("UNEXPECTED_ERROR:", error.message);
           }
-        }, ${writerDelay}); // Platform-specific delay
+        } finally {
+          db.close();
+        }
       `;
 
-      // Start lock holder process
-      const lockHolder = childProcess.spawn("node", [
-        "-e",
-        createScript(lockHolderScriptTemplate, { dbPath }),
-      ]);
+        // Start lock holder process
+        const lockHolder = childProcess.spawn("node", [
+          "-e",
+          createScript(lockHolderScriptTemplate, { dbPath }),
+        ]);
 
-      let lockHolderOutput = "";
-      lockHolder.stdout.on("data", (data) => {
-        lockHolderOutput += data.toString();
-      });
+        let lockHolderOutput = "";
+        lockHolder.stdout.on("data", (data) => {
+          lockHolderOutput += data.toString();
+        });
 
-      // Wait for lock to be acquired
-      await new Promise((resolve) => {
-        const checkLock = setInterval(() => {
-          if (lockHolderOutput.includes("LOCK_ACQUIRED")) {
-            clearInterval(checkLock);
-            resolve(undefined);
-          }
-        }, 10);
-      });
+        // Wait for lock to be acquired with timeout
+        const lockAcquireTimeout = 5000 * multiplier;
+        const lockAcquireStart = Date.now();
+        await new Promise((resolve, reject) => {
+          const checkLock = setInterval(() => {
+            if (lockHolderOutput.includes("LOCK_ACQUIRED")) {
+              clearInterval(checkLock);
+              resolve(undefined);
+            } else if (Date.now() - lockAcquireStart > lockAcquireTimeout) {
+              clearInterval(checkLock);
+              reject(new Error("Timeout waiting for lock acquisition"));
+            }
+          }, 10);
+        });
 
-      // Try to write while locked
-      const writerResult = await execFile("node", [
-        "-e",
-        createScript(writerScriptTemplate, { dbPath }),
-      ]);
-      expect(writerResult.stdout.trim()).toBe("DATABASE_LOCKED");
+        // Try to write while locked
+        const writerResult = await execFile("node", [
+          "-e",
+          createScript(writerScriptTemplate, { dbPath }),
+        ]);
+        expect(writerResult.stdout.trim()).toBe("DATABASE_LOCKED");
 
-      // Wait for lock holder to finish
-      await new Promise((resolve) => lockHolder.on("close", resolve));
-      expect(lockHolderOutput).toContain("LOCK_RELEASED");
+        // Wait for lock holder to finish
+        await new Promise((resolve) => lockHolder.on("close", resolve));
+        expect(lockHolderOutput).toContain("LOCK_RELEASED");
 
-      // Verify lock holder's update succeeded
-      const verifyDb = new DatabaseSync(dbPath);
-      const stmt = verifyDb.prepare("SELECT value FROM lock_test WHERE id = 1");
-      const { value } = stmt.get();
-      expect(value).toBe(999);
-      verifyDb.close();
-    });
+        // Verify lock holder's update succeeded
+        const verifyDb = new DatabaseSync(dbPath);
+        const stmt = verifyDb.prepare(
+          "SELECT value FROM lock_test WHERE id = 1",
+        );
+        const { value } = stmt.get();
+        expect(value).toBe(999);
+        verifyDb.close();
+      },
+      getTestTimeout(20000),
+    );
 
     test("handles concurrent schema changes", async () => {
       const setupDb = new DatabaseSync(dbPath);

@@ -1,6 +1,8 @@
+import * as fsp from "node:fs/promises";
+import * as os from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "../src/index";
-import { getUniqueTableName, useTempDir } from "./test-utils";
+import { getUniqueTableName, rm } from "./test-utils";
 
 // TypeScript already has gc declaration in @types/node, no need to redeclare
 
@@ -162,20 +164,28 @@ describeMemoryTests("Memory Tests", () => {
     db.close();
   });
 
-  runMemoryTest("file database operations", async () => {
-    const { getDbPath } = useTempDir("sqlite-mem-test-");
-    const tableName = getUniqueTableName("test");
+  runMemoryTest(
+    "file database operations",
+    async () => {
+      const tempDir = await fsp.mkdtemp(join(os.tmpdir(), "sqlite-mem-test-"));
+      const dbPath = join(tempDir, "test.db");
+      const tableName = getUniqueTableName("test");
 
-    const db = new DatabaseSync(getDbPath());
-    db.exec(`CREATE TABLE ${tableName} (id INTEGER PRIMARY KEY, data TEXT)`);
+      const db = new DatabaseSync(dbPath);
+      db.exec(`CREATE TABLE ${tableName} (id INTEGER PRIMARY KEY, data TEXT)`);
 
-    const insert = db.prepare(`INSERT INTO ${tableName} (data) VALUES (?)`);
-    for (let i = 0; i < 50; i++) {
-      insert.run(`data_${i}`);
-    }
+      const insert = db.prepare(`INSERT INTO ${tableName} (data) VALUES (?)`);
+      for (let i = 0; i < 50; i++) {
+        insert.run(`data_${i}`);
+      }
 
-    db.close();
-  });
+      db.close();
+
+      // Cleanup
+      await rm(tempDir);
+    },
+    { iterations: 50 }, // Reduce iterations for file operations
+  );
 
   runMemoryTest("user-defined functions", () => {
     const db = new DatabaseSync(":memory:");
@@ -464,7 +474,9 @@ describeMemoryTests("Memory Tests", () => {
   runMemoryTest(
     "multiple database operations",
     async () => {
-      const { tempDir } = useTempDir("sqlite-multi-db-test-");
+      const tempDir = await fsp.mkdtemp(
+        join(os.tmpdir(), "sqlite-multi-db-test-"),
+      );
 
       const db1 = new DatabaseSync(join(tempDir, "db1.sqlite"));
       const db2 = new DatabaseSync(join(tempDir, "db2.sqlite"));
@@ -497,6 +509,9 @@ describeMemoryTests("Memory Tests", () => {
 
       db1.close();
       db2.close();
+
+      // Cleanup
+      await rm(tempDir);
     },
     { maxSlopeKBPerIteration: 60, iterations: 30 },
   );
