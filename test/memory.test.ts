@@ -2,9 +2,8 @@ import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "../src/index";
+import { testMemoryBenchmark } from "./benchmark-harness";
 import { getUniqueTableName, rm } from "./test-utils";
-
-// TypeScript already has gc declaration in @types/node, no need to redeclare
 
 // Only run memory tests when explicitly requested
 const shouldRunMemoryTests = process.env.TEST_MEMORY === "1";
@@ -12,107 +11,20 @@ const shouldRunMemoryTests = process.env.TEST_MEMORY === "1";
 const describeMemoryTests = shouldRunMemoryTests ? describe : describe.skip;
 
 describeMemoryTests("Memory Tests", () => {
-  // Force garbage collection if available
-  const gc = global.gc;
-
   beforeAll(() => {
-    if (!gc) {
+    if (!global.gc) {
       throw new Error("Memory tests require --expose-gc flag");
     }
   });
 
-  function getMemoryUsage(): number {
-    if (gc) gc();
-    return process.memoryUsage().heapUsed;
-  }
+  afterAll(() => {
+    // Force a final GC to help with cleanup
+    if (global.gc) {
+      global.gc();
+    }
+  });
 
-  function runMemoryTest(
-    testName: string,
-    testFn: () => void | Promise<void>,
-    options: {
-      iterations?: number;
-      warmupIterations?: number;
-      maxSlopeKBPerIteration?: number;
-      errorMargin?: number;
-    } = {},
-  ) {
-    const {
-      iterations = 100,
-      warmupIterations = 10,
-      maxSlopeKBPerIteration = 10,
-      errorMargin = 0.1,
-    } = options;
-
-    test(testName, async () => {
-      const measurements: number[] = [];
-
-      // Warm up
-      for (let i = 0; i < warmupIterations; i++) {
-        await testFn();
-        if (gc) gc();
-      }
-
-      // Take measurements
-      for (let i = 0; i < iterations; i++) {
-        // run gc() before each measurement:
-        getMemoryUsage();
-        await testFn();
-        const after = getMemoryUsage();
-        measurements.push(after);
-
-        // Force GC every 10 iterations
-        if (i % 10 === 0 && gc) {
-          gc();
-        }
-      }
-
-      // Calculate linear regression
-      const n = measurements.length;
-      const sumX = (n * (n - 1)) / 2;
-      const sumX2 = (n * (n - 1) * (2 * n - 1)) / 6;
-      const sumY = measurements.reduce((a, b) => a + b, 0);
-      const sumXY = measurements.reduce((sum, y, x) => sum + x * y, 0);
-
-      const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-      const slopeKBPerIteration = slope / 1024;
-
-      // Calculate R-squared
-      const meanY = sumY / n;
-      const ssTotal = measurements.reduce(
-        (sum, y) => sum + Math.pow(y - meanY, 2),
-        0,
-      );
-      const ssResidual = measurements.reduce((sum, y, x) => {
-        const predicted = meanY + slope * (x - sumX / n);
-        return sum + Math.pow(y - predicted, 2);
-      }, 0);
-      const rSquared = 1 - ssResidual / ssTotal;
-
-      console.log(`${testName}:`);
-      console.log(`  Slope: ${slopeKBPerIteration.toFixed(2)} KB/iteration`);
-      console.log(`  R-squared: ${rSquared.toFixed(4)}`);
-      console.log(
-        `  Initial memory: ${(measurements[0] / 1024 / 1024).toFixed(2)} MB`,
-      );
-      console.log(
-        `  Final memory: ${(measurements[n - 1] / 1024 / 1024).toFixed(2)} MB`,
-      );
-
-      // Only consider it a leak if R-squared is high (good linear fit)
-      // and slope is significantly positive
-      if (
-        rSquared > 1 - errorMargin &&
-        slopeKBPerIteration > maxSlopeKBPerIteration
-      ) {
-        throw new Error(
-          `Memory leak detected: ${slopeKBPerIteration.toFixed(2)} KB/iteration ` +
-            `(max allowed: ${maxSlopeKBPerIteration} KB/iteration)`,
-        );
-      }
-    });
-  }
-
-  runMemoryTest("open and close in-memory databases", () => {
+  testMemoryBenchmark("open and close in-memory databases", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT)");
     const stmt = db.prepare("INSERT INTO test (data) VALUES (?)");
@@ -122,7 +34,7 @@ describeMemoryTests("Memory Tests", () => {
     db.close();
   });
 
-  runMemoryTest("prepare and finalize statements", () => {
+  testMemoryBenchmark("prepare and finalize statements", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT)");
 
@@ -135,7 +47,7 @@ describeMemoryTests("Memory Tests", () => {
     db.close();
   });
 
-  runMemoryTest("execute many queries", () => {
+  testMemoryBenchmark("execute many queries", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT)");
     const insert = db.prepare("INSERT INTO test (data) VALUES (?)");
@@ -152,7 +64,7 @@ describeMemoryTests("Memory Tests", () => {
     db.close();
   });
 
-  runMemoryTest("create and drop tables", () => {
+  testMemoryBenchmark("create and drop tables", () => {
     const db = new DatabaseSync(":memory:");
 
     for (let i = 0; i < 10; i++) {
@@ -164,7 +76,7 @@ describeMemoryTests("Memory Tests", () => {
     db.close();
   });
 
-  runMemoryTest(
+  testMemoryBenchmark(
     "file database operations",
     async () => {
       const tempDir = await fsp.mkdtemp(join(os.tmpdir(), "sqlite-mem-test-"));
@@ -184,10 +96,13 @@ describeMemoryTests("Memory Tests", () => {
       // Cleanup
       await rm(tempDir);
     },
-    { iterations: 50 }, // Reduce iterations for file operations
+    {
+      targetDurationMs: 10_000, // Shorter duration for file operations
+      maxMemoryGrowthKBPerSecond: 1000, // Allow more growth for file operations
+    },
   );
 
-  runMemoryTest("user-defined functions", () => {
+  testMemoryBenchmark("user-defined functions", () => {
     const db = new DatabaseSync(":memory:");
 
     // Create and remove functions repeatedly
@@ -203,7 +118,7 @@ describeMemoryTests("Memory Tests", () => {
     db.close();
   });
 
-  runMemoryTest("aggregate functions", () => {
+  testMemoryBenchmark("aggregate functions", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("CREATE TABLE numbers (n INTEGER)");
 
@@ -230,7 +145,7 @@ describeMemoryTests("Memory Tests", () => {
     db.close();
   });
 
-  runMemoryTest(
+  testMemoryBenchmark(
     "large text data",
     () => {
       const db = new DatabaseSync(":memory:");
@@ -258,10 +173,10 @@ describeMemoryTests("Memory Tests", () => {
 
       db.close();
     },
-    { maxSlopeKBPerIteration: 50 },
-  ); // Allow more memory for large data
+    { maxMemoryGrowthKBPerSecond: 1000 }, // Allow more memory for large data
+  );
 
-  runMemoryTest("transactions", () => {
+  testMemoryBenchmark("transactions", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT)");
 
@@ -282,7 +197,7 @@ describeMemoryTests("Memory Tests", () => {
     db.close();
   });
 
-  runMemoryTest("statement iteration", () => {
+  testMemoryBenchmark("statement iteration", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT)");
 
@@ -307,7 +222,7 @@ describeMemoryTests("Memory Tests", () => {
     db.close();
   });
 
-  runMemoryTest(
+  testMemoryBenchmark(
     "large dataset insertion and retrieval",
     () => {
       const db = new DatabaseSync(":memory:");
@@ -346,10 +261,10 @@ describeMemoryTests("Memory Tests", () => {
 
       db.close();
     },
-    { maxSlopeKBPerIteration: 100, iterations: 50 },
+    { maxMemoryGrowthKBPerSecond: 2000 }, // Allow more growth for large dataset test
   );
 
-  runMemoryTest(
+  testMemoryBenchmark(
     "bulk operations with transactions",
     () => {
       const db = new DatabaseSync(":memory:");
@@ -379,10 +294,13 @@ describeMemoryTests("Memory Tests", () => {
 
       db.close();
     },
-    { maxSlopeKBPerIteration: 80, iterations: 30 },
+    {
+      targetDurationMs: 10_000, // Shorter duration for transaction-heavy test
+      maxMemoryGrowthKBPerSecond: 1500,
+    },
   );
 
-  runMemoryTest(
+  testMemoryBenchmark(
     "complex queries on large dataset",
     () => {
       const db = new DatabaseSync(":memory:");
@@ -432,10 +350,10 @@ describeMemoryTests("Memory Tests", () => {
 
       db.close();
     },
-    { maxSlopeKBPerIteration: 50, iterations: 50 },
+    { maxMemoryGrowthKBPerSecond: 1000 }, // Allow reasonable growth for complex queries
   );
 
-  runMemoryTest(
+  testMemoryBenchmark(
     "BLOB data handling",
     () => {
       const db = new DatabaseSync(":memory:");
@@ -468,10 +386,13 @@ describeMemoryTests("Memory Tests", () => {
 
       db.close();
     },
-    { maxSlopeKBPerIteration: 200, iterations: 20 },
+    {
+      targetDurationMs: 10_000, // Shorter duration for BLOB test
+      maxMemoryGrowthKBPerSecond: 2000, // BLOBs can use more memory
+    },
   );
 
-  runMemoryTest(
+  testMemoryBenchmark(
     "multiple database operations",
     async () => {
       const tempDir = await fsp.mkdtemp(
@@ -513,10 +434,13 @@ describeMemoryTests("Memory Tests", () => {
       // Cleanup
       await rm(tempDir);
     },
-    { maxSlopeKBPerIteration: 60, iterations: 30 },
+    {
+      targetDurationMs: 10_000, // Shorter duration for file operations
+      maxMemoryGrowthKBPerSecond: 1000, // Allow more growth for file operations
+    },
   );
 
-  runMemoryTest(
+  testMemoryBenchmark(
     "prepared statement reuse",
     () => {
       const db = new DatabaseSync(":memory:");
@@ -565,6 +489,6 @@ describeMemoryTests("Memory Tests", () => {
 
       db.close();
     },
-    { maxSlopeKBPerIteration: 30, iterations: 50 },
+    { maxMemoryGrowthKBPerSecond: 800 }, // Standard growth allowance
   );
 });

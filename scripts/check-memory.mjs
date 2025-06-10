@@ -38,7 +38,12 @@ try {
   // Use node to execute jest.js for cross-platform compatibility
   const jestPath = path.join("node_modules", "jest", "bin", "jest.js");
   const nodeExe = process.execPath;
-  const args = [jestPath, "--no-coverage", "--runInBand", "test/memory.test.ts"];
+  const args = [
+    jestPath,
+    "--no-coverage",
+    "--runInBand",
+    "test/memory.test.ts",
+  ];
 
   // Debug output
   console.log("Debug: Node executable:", nodeExe);
