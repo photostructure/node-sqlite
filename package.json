@@ -1,6 +1,6 @@
 {
   "name": "@photostructure/sqlite",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Drop-in replacement for node:sqlite",
   "homepage": "https://photostructure.github.io/node-sqlite/",
   "types": "./dist/index.d.ts",
