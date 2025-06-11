@@ -2,6 +2,7 @@ import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
 import { promisify } from "node:util";
 import { DatabaseSync } from "../src";
+import * as scripts from "./multi-process-scripts";
 import {
   getTestTimeout,
   getTimingMultiplier,
@@ -11,7 +12,6 @@ import {
 } from "./test-utils";
 
 const execFile = promisify(childProcess.execFile);
-import scripts from "./multi-process-scripts.js";
 
 /**
  * Multi-process tests can be sensitive to test parallelization.
@@ -25,7 +25,10 @@ describe("Multi-Process Database Access", () => {
   let dbPath: string;
 
   // Helper to execute a script with environment variables
-  const execScript = (scriptName: string, env: Record<string, string> = {}) => {
+  const execScript = (
+    scriptName: keyof typeof scripts,
+    env: Record<string, string> = {},
+  ) => {
     return execFile("node", ["-e", scripts[scriptName]], {
       env: {
         ...process.env,

@@ -3,16 +3,17 @@
  * These are used as child process scripts that are executed via node -e
  */
 
-const path = require("node:path");
-
 // Helper to resolve the DatabaseSync module path
-const getModulePath = () =>
-  JSON.stringify(path.resolve(__dirname, "../dist/index.cjs"));
+// Use a simple path relative to the test directory
+const getModulePath = () => {
+  // When scripts are executed, they run from the project root
+  return JSON.stringify("./dist/index.cjs");
+};
 
 /**
  * Script that reads from the database and returns count/sum
  */
-exports.readerScript = `
+export const readerScript = `
   const { DatabaseSync } = require(${getModulePath()});
   const db = new DatabaseSync(process.env.DB_PATH);
   const stmt = db.prepare("SELECT COUNT(*) as count, SUM(value) as sum FROM shared_data");
@@ -24,7 +25,7 @@ exports.readerScript = `
 /**
  * Script that writes to database with proper locking
  */
-exports.writerScript = `
+export const writerScript = `
   const { DatabaseSync } = require(${getModulePath()});
   const processId = parseInt(process.env.PROCESS_ID);
   const db = new DatabaseSync(process.env.DB_PATH, { timeout: 10000 });
@@ -54,7 +55,7 @@ exports.writerScript = `
 /**
  * Script that performs a transaction with delay
  */
-exports.transactionScript = `
+export const transactionScript = `
   const { DatabaseSync } = require(${getModulePath()});
   const processId = parseInt(process.env.PROCESS_ID);
   const db = new DatabaseSync(process.env.DB_PATH, { timeout: 5000 });
@@ -91,7 +92,7 @@ exports.transactionScript = `
 /**
  * Script that conditionally rolls back
  */
-exports.rollbackScript = `
+export const rollbackScript = `
   const { DatabaseSync } = require(${getModulePath()});
   const shouldRollback = process.env.SHOULD_ROLLBACK === 'true';
   const db = new DatabaseSync(process.env.DB_PATH, { timeout: 5000 });
@@ -132,7 +133,7 @@ exports.rollbackScript = `
 /**
  * Script that holds a write lock
  */
-exports.lockHolderScript = `
+export const lockHolderScript = `
   const { DatabaseSync } = require(${getModulePath()});
   let db;
   
@@ -189,7 +190,7 @@ exports.lockHolderScript = `
 /**
  * Script that tries to write while database is locked
  */
-exports.lockWriterScript = `
+export const lockWriterScript = `
   const { DatabaseSync } = require(${getModulePath()});
   let db;
   
@@ -237,7 +238,7 @@ exports.lockWriterScript = `
 /**
  * Script that tries to alter schema
  */
-exports.schemaChangeScript = `
+export const schemaChangeScript = `
   const { DatabaseSync } = require(${getModulePath()});
   const columnName = process.env.COLUMN_NAME;
   const db = new DatabaseSync(process.env.DB_PATH, { timeout: 5000 });
@@ -261,7 +262,7 @@ exports.schemaChangeScript = `
 /**
  * Script that increments a counter
  */
-exports.incrementScript = `
+export const incrementScript = `
   const { DatabaseSync } = require(${getModulePath()});
   const processId = parseInt(process.env.PROCESS_ID);
   const db = new DatabaseSync(process.env.DB_PATH, { timeout: 10000 });
@@ -289,7 +290,7 @@ exports.incrementScript = `
 /**
  * Script that performs mixed operations for stress testing
  */
-exports.stressTestScript = `
+export const stressTestScript = `
   const { DatabaseSync } = require(${getModulePath()});
   const processId = parseInt(process.env.PROCESS_ID);
   const db = new DatabaseSync(process.env.DB_PATH, { timeout: 10000 });
@@ -345,7 +346,7 @@ exports.stressTestScript = `
 /**
  * Script that simulates a crash during transaction
  */
-exports.crashScript = `
+export const crashScript = `
   const { DatabaseSync } = require(${getModulePath()});
   const shouldCrash = process.env.SHOULD_CRASH === 'true';
   const db = new DatabaseSync(process.env.DB_PATH);
@@ -370,7 +371,7 @@ exports.crashScript = `
 /**
  * Script that handles WAL checkpointing
  */
-exports.walScript = `
+export const walScript = `
   const { DatabaseSync } = require(${getModulePath()});
   const shouldCheckpoint = process.env.SHOULD_CHECKPOINT === 'true';
   const processId = parseInt(process.env.PROCESS_ID);
