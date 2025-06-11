@@ -75,7 +75,7 @@
     "security": "run-s security:*",
     "security:audit": "npm audit --production",
     "security:audit-fix": "npm audit fix --force",
-    "security:osv": "osv-scanner scan source --recursive . || echo 'OSV Scanner not installed. Install with: go install github.com/google/osv-scanner/cmd/osv-scanner@latest'",
+    "security:osv": "if command -v osv-scanner >/dev/null 2>&1; then osv-scanner scan source --recursive .; else echo 'OSV Scanner not installed. Install with: go install github.com/google/osv-scanner/cmd/osv-scanner@latest'; fi",
     "xsecurity:snyk": "snyk test"
   },
   "gypfile": true,
