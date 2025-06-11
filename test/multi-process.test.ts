@@ -11,7 +11,7 @@ import {
 } from "./test-utils";
 
 const execFile = promisify(childProcess.execFile);
-const scripts = require("./multi-process-scripts.js");
+import scripts from "./multi-process-scripts.js";
 
 /**
  * Multi-process tests can be sensitive to test parallelization.
