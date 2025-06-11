@@ -22,10 +22,10 @@
     "deasync": "^0.1.30"
   },
   "devDependencies": {
-    "@types/node": "^22.15.27",
+    "@types/node": "^24.0.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/deasync": "^0.1.5",
-    "tsx": "4.19.4",
+    "tsx": "4.20.1",
     "typescript": "^5.8.3"
   },
   "optionalDependencies": {
