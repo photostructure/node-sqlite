@@ -1,10 +1,10 @@
 // @ts-check
 
+
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 const config = {
   displayName: `API Compatibility Test`,
   testEnvironment: "jest-environment-node",
-  testTimeout: 10000,
   roots: ["<rootDir>/src"],
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
   verbose: true,

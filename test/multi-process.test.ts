@@ -1,16 +1,17 @@
 import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import { promisify } from "node:util";
 import { DatabaseSync } from "../src";
 import {
-  getDirname,
   getTestTimeout,
   getTimingMultiplier,
+  isAlpineLinux,
+  isEmulated,
   useTempDir,
 } from "./test-utils";
 
 const execFile = promisify(childProcess.execFile);
+const scripts = require("./multi-process-scripts.js");
 
 /**
  * Multi-process tests can be sensitive to test parallelization.
@@ -23,22 +24,15 @@ describe("Multi-Process Database Access", () => {
   });
   let dbPath: string;
 
-  // Helper to create script with embedded arguments
-  const createScript = (template: string, args: Record<string, any>) => {
-    let script = template;
-    for (const [key, value] of Object.entries(args)) {
-      // Use different placeholder for raw values vs JSON values
-      script = script.replace(
-        new RegExp(`\\$\\{${key}\\}`, "g"),
-        JSON.stringify(value),
-      );
-      // For raw string interpolation (no quotes)
-      script = script.replace(
-        new RegExp(`\\$\\$\\{${key}\\}`, "g"),
-        String(value),
-      );
-    }
-    return script;
+  // Helper to execute a script with environment variables
+  const execScript = (scriptName: string, env: Record<string, string> = {}) => {
+    return execFile("node", ["-e", scripts[scriptName]], {
+      env: {
+        ...process.env,
+        DB_PATH: dbPath,
+        ...env,
+      },
+    });
   };
 
   beforeEach(() => {
@@ -66,21 +60,10 @@ describe("Multi-Process Database Access", () => {
       }
       setupDb.close();
 
-      // Create child process script
-      const childScriptTemplate = `
-        const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        const db = new DatabaseSync(\${dbPath});
-        const stmt = db.prepare("SELECT COUNT(*) as count, SUM(value) as sum FROM shared_data");
-        const result = stmt.get();
-        console.log(JSON.stringify(result));
-        db.close();
-      `;
-
       // Spawn multiple child processes to read simultaneously
       const promises = [];
       for (let i = 0; i < 5; i++) {
-        const script = createScript(childScriptTemplate, { dbPath });
-        promises.push(execFile("node", ["-e", script]));
+        promises.push(execScript("readerScript"));
       }
 
       const results = await Promise.all(promises);
@@ -107,42 +90,10 @@ describe("Multi-Process Database Access", () => {
       `);
       setupDb.close();
 
-      // Child process script that performs writes
-      const writerScriptTemplate = `
-        const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        const processId = \${processId};
-        const db = new DatabaseSync(\${dbPath}, { timeout: 10000 });
-        
-        try {
-          const stmt = db.prepare(
-            "INSERT INTO process_writes (process_id, value, timestamp) VALUES (?, ?, ?)"
-          );
-          
-          for (let i = 0; i < 20; i++) {
-            stmt.run(processId, \`value_\${processId}_\${i}\`, new Date().toISOString());
-            // Small delay to increase chance of contention
-            if (i % 5 === 0) {
-              const start = Date.now();
-              while (Date.now() - start < 10) {} // Busy wait
-            }
-          }
-          
-          console.log("SUCCESS");
-        } catch (error) {
-          console.error("ERROR:", error.message);
-        } finally {
-          db.close();
-        }
-      `;
-
       // Spawn multiple writer processes
       const promises = [];
       for (let i = 0; i < 3; i++) {
-        const script = createScript(writerScriptTemplate, {
-          dbPath,
-          processId: i,
-        });
-        promises.push(execFile("node", ["-e", script]));
+        promises.push(execScript("writerScript", { PROCESS_ID: i.toString() }));
       }
 
       const results = await Promise.all(promises);
@@ -184,51 +135,10 @@ describe("Multi-Process Database Access", () => {
       setupDb.exec("INSERT INTO transaction_test (id) VALUES (1)");
       setupDb.close();
 
-      // Script that performs a transaction with delay
-      const transactionScriptTemplate = `
-        const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        const processId = \${processId};
-        const db = new DatabaseSync(\${dbPath}, { timeout: 5000 });
-        
-        try {
-          // Start transaction
-          db.exec("BEGIN");
-          
-          // Read current balance
-          const stmt = db.prepare("SELECT balance FROM transaction_test WHERE id = 1");
-          const { balance } = stmt.get();
-          console.log(\`Process \${processId} read balance: \${balance}\`);
-          
-          // Simulate processing delay
-          const start = Date.now();
-          while (Date.now() - start < 100) {} // 100ms delay
-          
-          // Update balance
-          const updateStmt = db.prepare("UPDATE transaction_test SET balance = ? WHERE id = 1");
-          updateStmt.run(balance + parseInt(processId) * 100);
-          
-          // Commit transaction
-          db.exec("COMMIT");
-          console.log(\`Process \${processId} committed\`);
-          
-        } catch (error) {
-          db.exec("ROLLBACK");
-          console.error(\`Process \${processId} error: \${error.message}\`);
-        } finally {
-          db.close();
-        }
-      `;
-
       // Run two processes that try to update the same row
       const [result1, result2] = await Promise.all([
-        execFile("node", [
-          "-e",
-          createScript(transactionScriptTemplate, { dbPath, processId: 1 }),
-        ]),
-        execFile("node", [
-          "-e",
-          createScript(transactionScriptTemplate, { dbPath, processId: 2 }),
-        ]),
+        execScript("transactionScript", { PROCESS_ID: "1" }),
+        execScript("transactionScript", { PROCESS_ID: "2" }),
       ]);
 
       // Both should complete (WAL mode allows better concurrency)
@@ -265,61 +175,10 @@ describe("Multi-Process Database Access", () => {
       `);
       setupDb.close();
 
-      // Script that conditionally rolls back
-      const rollbackScriptTemplate = `
-        const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        const shouldRollback = \${shouldRollback};
-        const db = new DatabaseSync(\${dbPath}, { timeout: 5000 });
-        
-        let retries = 3;
-        while (retries > 0) {
-          try {
-            db.exec("BEGIN IMMEDIATE");
-            const stmt = db.prepare("INSERT INTO rollback_test (data) VALUES (?)");
-            stmt.run(shouldRollback ? "rollback_data" : "commit_data");
-            
-            if (shouldRollback) {
-              db.exec("ROLLBACK");
-              console.log("ROLLED BACK");
-            } else {
-              db.exec("COMMIT");
-              console.log("COMMITTED");
-            }
-            break; // Success, exit retry loop
-          } catch (e) {
-            if (retries > 1 && (e.message.includes("locked") || e.message.includes("busy"))) {
-              retries--;
-              // Small delay before retry
-              const delay = Math.random() * 50;
-              const start = Date.now();
-              while (Date.now() - start < delay) {
-                // Busy wait
-              }
-            } else {
-              throw e;
-            }
-          }
-        }
-        
-        db.close();
-      `;
-
       // Run one process that commits and one that rolls back
       const [commitResult, rollbackResult] = await Promise.all([
-        execFile("node", [
-          "-e",
-          createScript(rollbackScriptTemplate, {
-            dbPath,
-            shouldRollback: false,
-          }),
-        ]),
-        execFile("node", [
-          "-e",
-          createScript(rollbackScriptTemplate, {
-            dbPath,
-            shouldRollback: true,
-          }),
-        ]),
+        execScript("rollbackScript", { SHOULD_ROLLBACK: "false" }),
+        execScript("rollbackScript", { SHOULD_ROLLBACK: "true" }),
       ]);
 
       expect(commitResult.stdout.trim()).toBe("COMMITTED");
@@ -341,101 +200,149 @@ describe("Multi-Process Database Access", () => {
     test(
       "handles database locked errors gracefully",
       async () => {
-        // Use longer timeouts on slower CI platforms
+        // Use reasonable timeouts even on slower CI platforms
         const multiplier = getTimingMultiplier();
-        const lockHoldTime = 1000 * multiplier;
+        // Use shorter base time but allow platform multiplier
+        const lockHoldTime = 500 * multiplier;
+
+        console.log(
+          `Test environment: CI=${process.env.CI}, Alpine=${isAlpineLinux()}, Emulated=${isEmulated()}, multiplier=${multiplier}, lockHoldTime=${lockHoldTime}ms`,
+        );
+
         const setupDb = new DatabaseSync(dbPath);
         setupDb.exec(`
-        CREATE TABLE lock_test (
-          id INTEGER PRIMARY KEY,
-          value INTEGER
-        )
-      `);
+          CREATE TABLE lock_test (
+            id INTEGER PRIMARY KEY,
+            value INTEGER
+          )
+        `);
         setupDb.exec("INSERT INTO lock_test (id, value) VALUES (1, 0)");
         setupDb.close();
 
-        // Script that holds a write lock
-        const lockHolderScriptTemplate = `
-        const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        const db = new DatabaseSync(\${dbPath});
-        
-        // Start exclusive transaction
-        db.exec("BEGIN EXCLUSIVE");
-        console.log("LOCK_ACQUIRED");
-        
-        // Hold lock for a while and keep process alive
-        const lockTimeout = setTimeout(() => {
-          db.exec("UPDATE lock_test SET value = 999 WHERE id = 1");
-          db.exec("COMMIT");
-          db.close();
-          console.log("LOCK_RELEASED");
-          process.exit(0); // Explicitly exit after releasing lock
-        }, ${lockHoldTime}); // Platform-specific lock time
-        
-        // Keep the process alive by preventing exit
-        lockTimeout.ref();
-      `;
-
-        // Script that tries to write while locked
-        const writerScriptTemplate = `
-        const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        
-        const db = new DatabaseSync(\${dbPath}, { timeout: 100 }); // Short timeout
-        try {
-          // Try to start a transaction immediately - this should fail if lock is held
-          db.exec("BEGIN IMMEDIATE");
-          db.exec("UPDATE lock_test SET value = 111 WHERE id = 1");
-          db.exec("COMMIT");
-          console.log("WRITE_SUCCESS");
-        } catch (error) {
-          if (error.message.includes("locked") || error.message.includes("busy") || error.message.includes("SQLITE_BUSY")) {
-            console.log("DATABASE_LOCKED");
-          } else {
-            console.error("UNEXPECTED_ERROR:", error.message);
-          }
-        } finally {
-          db.close();
-        }
-      `;
-
         // Start lock holder process
-        const lockHolder = childProcess.spawn("node", [
-          "-e",
-          createScript(lockHolderScriptTemplate, { dbPath }),
-        ]);
+        const lockHolder = childProcess.spawn(
+          "node",
+          ["-e", scripts.lockHolderScript],
+          {
+            env: {
+              ...process.env,
+              DB_PATH: dbPath,
+              LOCK_HOLD_TIME: lockHoldTime.toString(),
+            },
+          },
+        );
 
         let lockHolderOutput = "";
+        let lockHolderError = "";
         lockHolder.stdout.on("data", (data) => {
           lockHolderOutput += data.toString();
+        });
+        lockHolder.stderr.on("data", (data) => {
+          lockHolderError += data.toString();
         });
 
         // Wait for lock to be acquired with timeout
         const lockAcquireTimeout = 5000 * multiplier;
         const lockAcquireStart = Date.now();
-        await new Promise((resolve, reject) => {
-          const checkLock = setInterval(() => {
-            if (lockHolderOutput.includes("LOCK_ACQUIRED")) {
-              clearInterval(checkLock);
-              resolve(undefined);
-            } else if (Date.now() - lockAcquireStart > lockAcquireTimeout) {
-              clearInterval(checkLock);
-              reject(new Error("Timeout waiting for lock acquisition"));
-            }
-          }, 10);
-        });
 
-        // Add a small delay to ensure lock is fully established
-        await new Promise((resolve) => setTimeout(resolve, 100 * multiplier));
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const checkLock = setInterval(() => {
+              if (lockHolderOutput.includes("LOCK_ACQUIRED")) {
+                clearInterval(checkLock);
+                resolve();
+              } else if (lockHolderError.includes("Error")) {
+                clearInterval(checkLock);
+                reject(new Error(`Lock holder failed: ${lockHolderError}`));
+              } else if (Date.now() - lockAcquireStart > lockAcquireTimeout) {
+                clearInterval(checkLock);
+                reject(
+                  new Error(
+                    `Timeout waiting for lock acquisition after ${lockAcquireTimeout}ms. ` +
+                      `Output: "${lockHolderOutput}", Error: "${lockHolderError}"`,
+                  ),
+                );
+              }
+            }, 50); // Check less frequently to reduce CPU usage
+          });
+        } catch (error) {
+          console.error("Failed to acquire lock:", error);
+          // Kill the lock holder process if it's still running
+          try {
+            lockHolder.kill("SIGTERM");
+            // Give it time to terminate gracefully
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            if (!lockHolder.killed) {
+              lockHolder.kill("SIGKILL");
+            }
+          } catch (killError) {
+            console.error("Error killing lock holder:", killError);
+          }
+          throw error;
+        }
+
+        console.log("Lock acquired, waiting for it to be fully established...");
+
+        // Add a delay to ensure lock is fully established
+        // The lock holder now performs an actual write during BEGIN EXCLUSIVE
+        // to ensure the lock is truly held
+        const establishDelay = 300 * multiplier;
+        console.log(
+          `Waiting ${establishDelay}ms for lock to be fully established...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, establishDelay));
 
         // Try to write while locked
-        const writerResult = await execFile("node", [
-          "-e",
-          createScript(writerScriptTemplate, { dbPath }),
-        ]);
-        expect(writerResult.stdout.trim()).toBe("DATABASE_LOCKED");
+        console.log("Attempting to write to locked database...");
+        let writerResult;
+        try {
+          writerResult = await execScript("lockWriterScript");
+          const output = writerResult.stdout.trim();
+          const errorOutput = writerResult.stderr.trim();
 
-        // Wait for lock holder to finish
-        await new Promise((resolve) => lockHolder.on("close", resolve));
+          console.log("Writer stdout:", output);
+          if (errorOutput) {
+            console.log("Writer stderr:", errorOutput);
+          }
+
+          // The writer should have been blocked
+          expect(output).toBe("DATABASE_LOCKED");
+        } catch (error: any) {
+          console.error("Writer script failed:", error);
+          console.error("Writer stdout:", error.stdout);
+          console.error("Writer stderr:", error.stderr);
+          throw error;
+        }
+
+        // Wait for lock holder to finish with timeout
+        console.log("Waiting for lock holder to finish...");
+        const lockFinishTimeout = lockHoldTime + 5000;
+        let timeoutHandle: NodeJS.Timeout | undefined;
+
+        const exitCode = await Promise.race([
+          new Promise<number>((resolve) => {
+            lockHolder.on("close", (code) => {
+              console.log(`Lock holder exited with code ${code}`);
+              if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+              }
+              resolve(code || 0);
+            });
+          }),
+          new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+              console.error("Lock holder timeout - killing process");
+              lockHolder.kill("SIGKILL");
+              reject(
+                new Error(
+                  `Lock holder didn't finish within ${lockFinishTimeout}ms`,
+                ),
+              );
+            }, lockFinishTimeout);
+          }),
+        ]);
+
+        expect(exitCode).toBe(0);
         expect(lockHolderOutput).toContain("LOCK_RELEASED");
 
         // Verify lock holder's update succeeded
@@ -447,7 +354,7 @@ describe("Multi-Process Database Access", () => {
         expect(value).toBe(999);
         verifyDb.close();
       },
-      getTestTimeout(20000),
+      getTestTimeout(60000), // Base timeout of 60s for this complex multi-process test
     );
 
     test("handles concurrent schema changes", async () => {
@@ -456,44 +363,15 @@ describe("Multi-Process Database Access", () => {
       setupDb.exec("CREATE TABLE schema_test (id INTEGER PRIMARY KEY)");
       setupDb.close();
 
-      // Script that tries to alter schema
-      const schemaScriptTemplate = `
-        const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        const columnName = \${columnName};
-        const db = new DatabaseSync(\${dbPath}, { timeout: 5000 });
-        
-        try {
-          db.exec(\`ALTER TABLE schema_test ADD COLUMN \${columnName} TEXT\`);
-          console.log(\`ADDED_\${columnName}\`);
-        } catch (error) {
-          if (error.message.includes("duplicate column")) {
-            console.log(\`DUPLICATE_\${columnName}\`);
-          } else if (error.message.includes("locked") || error.message.includes("busy")) {
-            console.log(\`LOCKED_\${columnName}\`);
-          } else {
-            console.error(\`ERROR_\${columnName}: \${error.message}\`);
-          }
-        } finally {
-          db.close();
-        }
-      `;
-
       // Try to add different columns concurrently
       const [result1, result2] = await Promise.all([
-        execFile("node", [
-          "-e",
-          createScript(schemaScriptTemplate, { dbPath, columnName: "column1" }),
-        ]),
-        execFile("node", [
-          "-e",
-          createScript(schemaScriptTemplate, { dbPath, columnName: "column2" }),
-        ]),
+        execScript("schemaChangeScript", { COLUMN_NAME: "column1" }),
+        execScript("schemaChangeScript", { COLUMN_NAME: "column2" }),
       ]);
 
       // Both operations should succeed (WAL mode helps)
-      // Note: column names will have quotes because they're JSON stringified
-      expect(result1.stdout.trim()).toMatch(/ADDED_"column1"|LOCKED_"column1"/);
-      expect(result2.stdout.trim()).toMatch(/ADDED_"column2"|LOCKED_"column2"/);
+      expect(result1.stdout.trim()).toMatch(/ADDED_column1|LOCKED_column1/);
+      expect(result2.stdout.trim()).toMatch(/ADDED_column2|LOCKED_column2/);
 
       // Verify final schema
       const verifyDb = new DatabaseSync(dbPath);
@@ -523,41 +401,12 @@ describe("Multi-Process Database Access", () => {
       setupDb.exec("INSERT INTO counter (id) VALUES (1)");
       setupDb.close();
 
-      // Script that increments counter
-      const incrementScriptTemplate = `
-        const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        const processId = \${processId};
-        const db = new DatabaseSync(\${dbPath}, { timeout: 10000 });
-        
-        let successCount = 0;
-        let errorCount = 0;
-        
-        for (let i = 0; i < 10; i++) {
-          try {
-            db.exec("BEGIN IMMEDIATE");
-            const { count } = db.prepare("SELECT count FROM counter WHERE id = 1").get();
-            db.prepare("UPDATE counter SET count = ? WHERE id = 1").run(count + 1);
-            db.exec("COMMIT");
-            successCount++;
-          } catch (error) {
-            try { db.exec("ROLLBACK"); } catch {}
-            errorCount++;
-          }
-        }
-        
-        console.log(JSON.stringify({ processId, successCount, errorCount }));
-        db.close();
-      `;
-
       // Spawn many processes
       const processCount = 10;
       const promises = [];
       for (let i = 0; i < processCount; i++) {
         promises.push(
-          execFile("node", [
-            "-e",
-            createScript(incrementScriptTemplate, { dbPath, processId: i }),
-          ]),
+          execScript("incrementScript", { PROCESS_ID: i.toString() }),
         );
       }
 
@@ -605,69 +454,12 @@ describe("Multi-Process Database Access", () => {
       `);
       setupDb.close();
 
-      // Script that performs mixed operations
-      const stressScriptTemplate = `
-        const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        const processId = \${processId};
-        const db = new DatabaseSync(\${dbPath}, { timeout: 10000 });
-        
-        const operations = ["insert", "select", "update", "aggregate"];
-        let results = { insert: 0, select: 0, update: 0, aggregate: 0, errors: 0 };
-        
-        for (let i = 0; i < 20; i++) {
-          const op = operations[i % operations.length];
-          
-          try {
-            switch (op) {
-              case "insert":
-                db.prepare(
-                  "INSERT INTO stress_test (process_id, operation, value, timestamp) VALUES (?, ?, ?, ?)"
-                ).run(processId, op, \`value_\${i}\`, new Date().toISOString());
-                results.insert++;
-                break;
-                
-              case "select":
-                const rows = db.prepare(
-                  "SELECT * FROM stress_test WHERE process_id = ? LIMIT 5"
-                ).all(processId);
-                results.select++;
-                break;
-                
-              case "update":
-                db.exec("BEGIN");
-                db.prepare(
-                  "UPDATE stress_test SET value = ? WHERE process_id = ? AND operation = ?"
-                ).run(\`updated_\${i}\`, processId, "insert");
-                db.exec("COMMIT");
-                results.update++;
-                break;
-                
-              case "aggregate":
-                const agg = db.prepare(
-                  "SELECT COUNT(*) as count, operation FROM stress_test GROUP BY operation"
-                ).all();
-                results.aggregate++;
-                break;
-            }
-          } catch (error) {
-            results.errors++;
-            try { db.exec("ROLLBACK"); } catch {}
-          }
-        }
-        
-        console.log(JSON.stringify(results));
-        db.close();
-      `;
-
       // Run stress test with multiple processes
       const processCount = 5;
       const promises = [];
       for (let i = 0; i < processCount; i++) {
         promises.push(
-          execFile("node", [
-            "-e",
-            createScript(stressScriptTemplate, { dbPath, processId: i }),
-          ]),
+          execScript("stressTestScript", { PROCESS_ID: i.toString() }),
         );
       }
 
@@ -724,45 +516,18 @@ describe("Multi-Process Database Access", () => {
       `);
       setupDb.close();
 
-      // Script that simulates crash during transaction
-      const crashScriptTemplate = `
-        const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        const shouldCrash = \${shouldCrash};
-        const db = new DatabaseSync(\${dbPath});
-        
-        try {
-          db.exec("BEGIN");
-          db.prepare("INSERT INTO crash_test (data) VALUES (?)").run("uncommitted_data");
-          
-          if (shouldCrash) {
-            // Simulate crash by exiting without commit/rollback
-            process.exit(1);
-          } else {
-            db.prepare("UPDATE crash_test SET committed = 1 WHERE data = ?").run("uncommitted_data");
-            db.exec("COMMIT");
-            console.log("COMMITTED");
-          }
-        } finally {
-          if (!shouldCrash) db.close();
-        }
-      `;
-
       // First, simulate a crash
       try {
-        await execFile("node", [
-          "-e",
-          createScript(crashScriptTemplate, { dbPath, shouldCrash: true }),
-        ]);
+        await execScript("crashScript", { SHOULD_CRASH: "true" });
       } catch (error: any) {
         // Expected to fail with exit code 1
         expect(error.code).toBe(1);
       }
 
       // Then run a successful transaction
-      const successResult = await execFile("node", [
-        "-e",
-        createScript(crashScriptTemplate, { dbPath, shouldCrash: false }),
-      ]);
+      const successResult = await execScript("crashScript", {
+        SHOULD_CRASH: "false",
+      });
       expect(successResult.stdout.trim()).toBe("COMMITTED");
 
       // Verify only committed data exists
@@ -796,82 +561,20 @@ describe("Multi-Process Database Access", () => {
       `);
       setupDb.close();
 
-      // Script that inserts data and optionally checkpoints
-      const walScriptTemplate = `
-        const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-        const shouldCheckpoint = \${shouldCheckpoint};
-        const processId = \${processId};
-        const db = new DatabaseSync(\${dbPath}, { timeout: 5000 });
-        
-        try {
-          // Insert some data with retry logic
-          const stmt = db.prepare("INSERT INTO wal_test (data) VALUES (?)");
-          let inserted = 0;
-          for (let i = 0; i < 100; i++) {
-            let retries = 3;
-            while (retries > 0) {
-              try {
-                stmt.run(\`process_\${processId}_row_\${i}\`);
-                inserted++;
-                break;
-              } catch (e) {
-                if (retries > 1 && (e.message.includes("locked") || e.message.includes("busy"))) {
-                  retries--;
-                  // Small delay before retry
-                  const delay = Math.random() * 20;
-                  const start = Date.now();
-                  while (Date.now() - start < delay) {
-                    // Busy wait
-                  }
-                } else {
-                  throw e; // Re-throw if not a lock error or out of retries
-                }
-              }
-            }
-          }
-          
-          console.log(\`Inserted \${inserted} rows\`);
-          
-          if (shouldCheckpoint) {
-            const result = db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get();
-            console.log(\`CHECKPOINT: \${JSON.stringify(result)}\`);
-          } else {
-            console.log("DATA_INSERTED");
-          }
-        } catch (error) {
-          console.error(\`ERROR: \${error.message}\`);
-          throw error;
-        } finally {
-          db.close();
-        }
-      `;
-
       // Multiple processes insert data
       const writers = await Promise.all([
-        execFile("node", [
-          "-e",
-          createScript(walScriptTemplate, {
-            dbPath,
-            shouldCheckpoint: false,
-            processId: 1,
-          }),
-        ]),
-        execFile("node", [
-          "-e",
-          createScript(walScriptTemplate, {
-            dbPath,
-            shouldCheckpoint: false,
-            processId: 2,
-          }),
-        ]),
-        execFile("node", [
-          "-e",
-          createScript(walScriptTemplate, {
-            dbPath,
-            shouldCheckpoint: false,
-            processId: 3,
-          }),
-        ]),
+        execScript("walScript", {
+          SHOULD_CHECKPOINT: "false",
+          PROCESS_ID: "1",
+        }),
+        execScript("walScript", {
+          SHOULD_CHECKPOINT: "false",
+          PROCESS_ID: "2",
+        }),
+        execScript("walScript", {
+          SHOULD_CHECKPOINT: "false",
+          PROCESS_ID: "3",
+        }),
       ]);
 
       writers.forEach(({ stdout }) => {
@@ -880,14 +583,10 @@ describe("Multi-Process Database Access", () => {
       });
 
       // One process performs checkpoint
-      const checkpointer = await execFile("node", [
-        "-e",
-        createScript(walScriptTemplate, {
-          dbPath,
-          shouldCheckpoint: true,
-          processId: 4,
-        }),
-      ]);
+      const checkpointer = await execScript("walScript", {
+        SHOULD_CHECKPOINT: "true",
+        PROCESS_ID: "4",
+      });
       expect(checkpointer.stdout).toContain("CHECKPOINT");
 
       // Verify all data is present

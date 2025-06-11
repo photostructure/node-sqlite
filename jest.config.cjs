@@ -1,7 +1,6 @@
 // @ts-check
 
 const { argv } = require("node:process");
-const { getTestTimeout } = require("./test/test-timeout-config.cjs");
 
 const isESM =
   process.env.TEST_ESM === "1" ||
@@ -11,8 +10,6 @@ const isESM =
 const config = {
   displayName: `@photostructure/sqlite (${isESM ? "ESM" : "CJS"})`,
   testEnvironment: "jest-environment-node",
-  // Use environment-aware timeout configuration
-  testTimeout: getTestTimeout(),
   roots: ["<rootDir>/src", "<rootDir>/test"],
   coverageProvider: "v8",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
@@ -43,7 +40,7 @@ const config = {
   coverageThreshold: {
     global: {
       statements: 70,
-      branches: 30,  // Lowered due to dirname/stack_path environment-specific branches
+      branches: 30, // Lowered due to dirname/stack_path environment-specific branches
       functions: 20, // Lowered due to dirname/stack_path helper functions
       lines: 70,
     },
