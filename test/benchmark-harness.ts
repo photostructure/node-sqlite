@@ -130,7 +130,7 @@ export async function runAdaptiveBenchmark(
   options: BenchmarkOptions = {},
 ): Promise<BenchmarkResult> {
   const {
-    targetDurationMs = 20_000,
+    targetDurationMs = 10_000,
     maxTimeoutMs = 60_000,
     minIterations = 5,
     maxIterations = 10_000,
@@ -183,6 +183,10 @@ export async function runAdaptiveBenchmark(
     Math.min(maxIterations, targetIterations),
   );
 
+  console.log(
+    `  Target: ${targetIterations} iterations over ~${(adjustedTargetMs / 1000).toFixed(1)}s (avg ${avgWarmupTime.toFixed(1)}ms per iteration)`,
+  );
+
   if (debug) {
     console.log(
       `[Benchmark] Calculated target iterations: ${targetIterations}`,
@@ -193,6 +197,7 @@ export async function runAdaptiveBenchmark(
   const benchmarkStart = Date.now();
   let completedIterations = 0;
   let timedOut = false;
+  let lastProgressReport = 0;
 
   for (let i = 0; i < targetIterations; i++) {
     // Check if we're approaching the timeout
@@ -204,6 +209,21 @@ export async function runAdaptiveBenchmark(
         );
       timedOut = true;
       break;
+    }
+
+    // Report progress every 10% of iterations or every 5 seconds, whichever is more frequent
+    const progressInterval = Math.max(1, Math.floor(targetIterations / 10));
+    const timeInterval = 5000; // 5 seconds
+
+    if (
+      (i > 0 && i % progressInterval === 0) ||
+      elapsed - lastProgressReport > timeInterval
+    ) {
+      const percentage = ((i / targetIterations) * 100).toFixed(0);
+      console.log(
+        `  Progress: ${i}/${targetIterations} iterations (${percentage}%) - ${(elapsed / 1000).toFixed(1)}s elapsed`,
+      );
+      lastProgressReport = elapsed;
     }
 
     await operation();
@@ -372,6 +392,9 @@ export function testMemoryBenchmark(
   test(
     testName,
     async () => {
+      // Show when test starts
+      console.log(`\n🔬 Starting memory test: ${testName}`);
+
       // Add debug output to track test progress in ESM mode
       if (process.env.DEBUG_ESM_TESTS) {
         console.log(`[ESM Debug] Starting test: ${testName}`);
@@ -385,20 +408,14 @@ export function testMemoryBenchmark(
 
       // Log results - only if we successfully got results
       if (result) {
-        console.log(`${testName}:`);
-        console.log(`  Iterations: ${result.iterations}`);
+        const leakStatus = result.hasMemoryLeak
+          ? "❌ LEAK DETECTED"
+          : "✅ No leak";
         console.log(
-          `  Duration: ${(result.totalDurationMs / 1000).toFixed(1)}s`,
+          `  ${leakStatus}: ${result.iterations} iterations in ${(result.totalDurationMs / 1000).toFixed(1)}s`,
         );
         console.log(
-          `  Growth rate: ${result.memoryGrowthKBPerSecond.toFixed(2)} KB/second`,
-        );
-        console.log(`  R-squared: ${result.rSquared.toFixed(4)}`);
-        console.log(
-          `  Initial memory: ${(result.initialMemoryBytes / 1024 / 1024).toFixed(2)} MB`,
-        );
-        console.log(
-          `  Final memory: ${(result.finalMemoryBytes / 1024 / 1024).toFixed(2)} MB`,
+          `  Memory: ${(result.initialMemoryBytes / 1024 / 1024).toFixed(1)}MB → ${(result.finalMemoryBytes / 1024 / 1024).toFixed(1)}MB (${result.memoryGrowthKBPerSecond.toFixed(1)} KB/s growth, R²=${result.rSquared.toFixed(3)})`,
         );
       }
 
