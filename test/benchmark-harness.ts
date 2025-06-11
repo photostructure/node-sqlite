@@ -1,4 +1,4 @@
-import { getTimingMultiplier } from "./test-timeout-config.cjs";
+import { getTimingMultiplier } from "./test-timeout-config";
 
 export interface BenchmarkOptions {
   /**
