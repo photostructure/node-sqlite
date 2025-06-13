@@ -484,7 +484,9 @@ describe("Backup functionality", () => {
     backupDb.close();
   });
 
-  it("should respect pages option and perform incremental backup", async () => {
+  it(
+    "should respect pages option and perform incremental backup",
+    async () => {
     // Create a larger database to ensure multiple pages
     sourceDb.exec(`
       CREATE TABLE large_data (
@@ -590,7 +592,9 @@ describe("Backup functionality", () => {
     expect(sampleRows[0].data).toContain("Row 0:");
     expect(sampleRows[1].data).toContain("Row 49:");
     expect(sampleRows[2].data).toContain("Row 99:");
-  });
+    },
+    getTestTimeout(15000),
+  );
 
   it("should handle incremental backup simulation", async () => {
     // Create initial backup

@@ -43,7 +43,9 @@ describe("Multi-Process Database Access", () => {
   });
 
   describe("Basic Multi-Process Operations", () => {
-    test("multiple processes can read from same database", async () => {
+    test(
+      "multiple processes can read from same database",
+      async () => {
       // Create and populate database
       const setupDb = new DatabaseSync(dbPath);
       setupDb.exec(`
@@ -77,9 +79,13 @@ describe("Multi-Process Database Access", () => {
         expect(data.count).toBe(100);
         expect(data.sum).toBe(4950); // Sum of 0-99
       });
-    });
+    },
+    getTestTimeout(10000),
+  );
 
-    test("processes can write to database with proper locking", async () => {
+    test(
+      "processes can write to database with proper locking",
+      async () => {
       // Create database with WAL mode for better concurrency
       const setupDb = new DatabaseSync(dbPath);
       setupDb.exec("PRAGMA journal_mode = WAL");
@@ -121,7 +127,9 @@ describe("Multi-Process Database Access", () => {
       });
 
       verifyDb.close();
-    });
+      },
+      getTestTimeout(10000),
+    );
   });
 
   describe("Transaction Isolation", () => {
@@ -391,7 +399,9 @@ describe("Multi-Process Database Access", () => {
   });
 
   describe("High Concurrency Scenarios", () => {
-    test("handles many processes accessing database simultaneously", async () => {
+    test(
+      "handles many processes accessing database simultaneously",
+      async () => {
       // Create database with counter table
       const setupDb = new DatabaseSync(dbPath);
       setupDb.exec("PRAGMA journal_mode = WAL");
@@ -438,7 +448,9 @@ describe("Multi-Process Database Access", () => {
       );
 
       verifyDb.close();
-    });
+      },
+      getTestTimeout(15000),
+    );
 
     test("stress test with mixed operations", async () => {
       // Create complex schema

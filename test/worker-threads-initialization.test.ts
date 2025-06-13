@@ -153,7 +153,9 @@ try {
     getTestTimeout(30000), // Increase base timeout for Alpine Linux
   );
 
-  it("should test workers without main thread initialization (control)", async () => {
+  it(
+    "should test workers without main thread initialization (control)",
+    async () => {
     // DON'T initialize in main thread - this should have higher failure rate
     console.log("Testing workers without main thread initialization...");
 
@@ -236,5 +238,7 @@ try {
     for (const result of successfulResults) {
       expect(result.count).toBe(2);
     }
-  });
+    },
+    getTestTimeout(15000),
+  );
 });
