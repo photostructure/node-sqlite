@@ -17,5 +17,17 @@
   "navigationLinks": {
     "GitHub": "https://github.com/photostructure/node-sqlite",
     "NPM": "https://www.npmjs.com/package/@photostructure/sqlite"
-  }
+  },
+  "projectDocuments": [
+    "doc/why-reimplement.md",
+    "doc/worker-thread-support.md",
+    "doc/async-api-design.md",
+    "doc/sqlite-api.md",
+    "doc/sqlite-api-core.md",
+    "doc/sqlite-api-statements.md",
+    "doc/sqlite-api-extensions.md",
+    "doc/sqlite-api-advanced.md",
+    "doc/sqlite-api-memory-config.md"
+  ],
+  "highlightLanguages": ["typescript", "javascript", "c++", "cpp", "c", "json", "bash", "sql"]
 }
