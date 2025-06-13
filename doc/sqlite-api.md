@@ -97,7 +97,7 @@ The SQLite C/C++ API is extensive and provides low-level access to all SQLite fu
 
 ### Related Documentation
 
-- [SQLite User Functions Guide](SQLITE-USER-FUNCTIONS.md) - Detailed guide for implementing user-defined functions
+- [SQLite Extensions API](sqlite-api-extensions.md) - Extension and user-defined function APIs
 
 ### External References
 
