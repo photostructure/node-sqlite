@@ -1,3 +1,5 @@
+![PhotoStructure SQLite Logo](https://raw.githubusercontent.com/photostructure/node-sqlite/main/doc/logo.svg)
+
 ## 🚀 Drop-in Replacement for node:sqlite
 
 This package provides **100% API compatibility** with Node.js v24 built-in SQLite module (`node:sqlite`). You can seamlessly switch between this package and the built-in module without changing any code.
@@ -482,24 +484,6 @@ This package includes SQLite, which is in the public domain, as well as code fro
 - 💬 **Questions**: [GitHub Discussions](https://github.com/photostructure/node-sqlite/discussions)
 - 📧 **Security issues**: see [SECURITY.md](./SECURITY.md)
 
-## Current Implementation Status
-
-✅ **Fully Supported:**
-
-- Core SQLite operations (all database and statement methods)
-- User-defined functions and aggregate functions
-- SQLite sessions/changesets for change tracking
-- Database backup and restoration
-- Worker thread support with proper isolation
-- Extension loading with security controls
-- All SQLite data types including BigInt
-- Statement iterators
-- Transaction control
-
-All features of Node.js's built-in SQLite module are now fully implemented!
-
-For concurrent access within the same process, multiple database connections work well with WAL mode enabled.
-
 ---
 
 ## Development
@@ -527,9 +511,9 @@ Note that all changes are human-reviewed before merging.
 
 ### Development Cost
 
-- **API usage**: ~$650 in Claude tokens
+- **API usage**: ~$1400 in Claude API tokens
 - **Actual cost**: $200/month MAX 20x plan subscription
-- **Time saved**: Weeks of manual porting work
+- **Time saved**: At least a month of setup, analysis, porting and testing
 
 This project demonstrates how AI-assisted development can accelerate complex system programming while maintaining high code quality through comprehensive testing and human oversight.
 
