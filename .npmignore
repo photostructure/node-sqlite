@@ -1,7 +1,7 @@
 # no hidden files
 .*
 
-# no configs, docs, logs, or test files
+# no configs, logs, or test files
 *.config.js
 *.config.cjs
 *.config.mjs
@@ -18,14 +18,21 @@ package-lock.json
 jest.config.api-compat.cjs
 tsup.config.ts
 
+# Generated documentation
+docs/
+
+# HOWTOs and other documentation
+doc/
+
 # build/ contains the ingredients for prebuilds/ -- we don't need it.
 build/
 *.tsbuildinfo
 
 # Development and vendored files
-doc/
 vendored/
 benchmark/
+coverage/
+examples/
 CLAUDE.md
 TODO.md
 
@@ -35,11 +42,13 @@ TODO.md
 # include README
 !README.md
 
-# include scripts directory (needed for rebuilds)
-!scripts/
-!scripts/*.js
-!scripts/*.mjs
-!scripts/*.sh
+# Exclude all scripts explicitly
+scripts/**
+scripts/*
+
+# Then include only what's needed
+!scripts/post-build.mjs
+!scripts/prebuild-linux-glibc.sh
 
 # include dist .cjs, .mjs, .js, and types
 !dist/**/*.cjs
@@ -52,6 +61,7 @@ TODO.md
 # include native code for rebuilds
 !src/**/*.cpp
 !src/**/*.h
+!src/**/*.c
 !binding.gyp
 
 # include prebuilds
