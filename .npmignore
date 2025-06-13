@@ -1,29 +1,58 @@
-# Development files
-src/
-test/
-scripts/
+# no hidden files
+.*
 
-# Config files
-tsconfig.json
-jest.config.js
-binding.gyp
+# no configs, docs, logs, or test files
+*.config.js
+*.config.cjs
+*.config.mjs
+*.config.ts
+*.json
+*.log
+*.txt
+*.yml
+yarn.lock
+package-lock.json
+*.test.ts
+*.test.js
+**/test*
+jest.config.api-compat.cjs
+tsup.config.ts
 
-# Build artifacts (keep dist/ for published types and code)
+# build/ contains the ingredients for prebuilds/ -- we don't need it.
 build/
 *.tsbuildinfo
 
-# Development dependencies
-node_modules/
+# Development and vendored files
+doc/
+vendored/
+benchmark/
+CLAUDE.md
+TODO.md
 
+# include package.json
+!package.json
 
-# Docs
-*.md
+# include README
 !README.md
 
-# Temporary files
-*.log
-*.tmp
-.DS_Store
+# include scripts directory (needed for rebuilds)
+!scripts/
+!scripts/*.js
+!scripts/*.mjs
+!scripts/*.sh
 
-# hidden files
-.*
+# include dist .cjs, .mjs, .js, and types
+!dist/**/*.cjs
+!dist/**/*.mjs
+!dist/**/*.js
+!dist/**/*.js.map
+!dist/**/*.d.ts
+!dist/**/*.d.cts
+
+# include native code for rebuilds
+!src/**/*.cpp
+!src/**/*.h
+!binding.gyp
+
+# include prebuilds
+!prebuilds/**
