@@ -1,6 +1,6 @@
 # SQLite Core API Reference
 
-This document covers the fundamental SQLite C/C++ APIs for database connections, basic operations, and error handling.
+This document covers the fundamental SQLite C/C++ APIs for database connections, basic operations, and error handling. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
 
 ## Table of Contents
 

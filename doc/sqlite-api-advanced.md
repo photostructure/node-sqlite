@@ -1,6 +1,6 @@
 # SQLite Advanced Features API Reference
 
-This document covers SQLite's advanced APIs including backup operations, blob I/O, sessions, and threading features.
+This document covers SQLite's advanced APIs including backup operations, blob I/O, sessions, and threading features. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
 
 ## Table of Contents
 

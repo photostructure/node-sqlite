@@ -1,6 +1,6 @@
 # SQLite Statement API Reference
 
-This document covers SQLite's prepared statement APIs, parameter binding, and result retrieval.
+This document covers SQLite's prepared statement APIs, parameter binding, and result retrieval. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
 
 ## Table of Contents
 

@@ -1,6 +1,6 @@
 # SQLite Extension API Reference
 
-This document covers SQLite's extension APIs including user-defined functions, aggregate functions, collations, and virtual tables.
+This document covers SQLite's extension APIs including user-defined functions, aggregate functions, collations, and virtual tables. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
 
 ## Table of Contents
 

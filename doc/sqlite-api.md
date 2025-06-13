@@ -1,6 +1,6 @@
 # SQLite C/C++ API Reference - Index
 
-This is the main index for the SQLite C/C++ API documentation. The API has been organized into logical sections for easier navigation and understanding.
+This is the main index for the SQLite C/C++ API documentation. The API has been organized into logical sections for easier navigation and understanding. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
 
 ## Overview
 

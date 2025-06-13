@@ -1,6 +1,6 @@
 # SQLite Memory Management and Configuration API Reference
 
-This document covers SQLite's memory management, configuration options, and runtime limits.
+This document covers SQLite's memory management, configuration options, and runtime limits. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
 
 ## Table of Contents
 
