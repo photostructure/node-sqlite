@@ -14,8 +14,7 @@ CustomAggregate::CustomAggregate(Napi::Env env, DatabaseSync *db,
                                  Napi::Function step_fn,
                                  Napi::Function inverse_fn,
                                  Napi::Function result_fn)
-    : env_(env), db_(db), use_bigint_args_(use_bigint_args),
-      async_context_(nullptr) {
+    : env_(env), use_bigint_args_(use_bigint_args), async_context_(nullptr) {
   // Handle start value based on type
   if (start.IsNull()) {
     start_type_ = PRIMITIVE_NULL;

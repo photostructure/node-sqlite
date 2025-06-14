@@ -82,7 +82,6 @@ private:
   Napi::Value RawValueToJS(AggregateData *agg);
 
   Napi::Env env_;
-  DatabaseSync *db_;
   bool use_bigint_args_;
 
   // Storage for start value - handle primitives differently

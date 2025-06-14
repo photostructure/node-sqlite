@@ -11,7 +11,7 @@ namespace sqlite {
 
 UserDefinedFunction::UserDefinedFunction(Napi::Env env, Napi::Function fn,
                                          DatabaseSync *db, bool use_bigint_args)
-    : env_(env), fn_(Napi::Reference<Napi::Function>::New(fn, 1)), db_(db),
+    : env_(env), fn_(Napi::Reference<Napi::Function>::New(fn, 1)),
       use_bigint_args_(use_bigint_args) {
   // No need for SuppressDestruct when using reference count
 }

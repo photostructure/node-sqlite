@@ -26,7 +26,6 @@ public:
 private:
   Napi::Env env_;
   Napi::FunctionReference fn_;
-  DatabaseSync *db_;
   bool use_bigint_args_;
 
   // Helper methods
