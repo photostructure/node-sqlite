@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - **Enhanced error information**: SQLite errors now include additional diagnostic properties:
+
   - `sqliteCode`: The primary SQLite error code (e.g., `14` for `SQLITE_CANTOPEN`)
   - `sqliteExtendedCode`: Extended error code for more specific information
   - `code`: SQLite error constant name (e.g., `"SQLITE_CANTOPEN"`)
