@@ -67,6 +67,7 @@ struct AddonData {
 ```
 
 This data is:
+
 - Created when the module is loaded in each worker thread
 - Associated with the worker using `napi_set_instance_data`
 - Automatically cleaned up via `CleanupAddonData` when the worker terminates
@@ -78,7 +79,7 @@ Each database and statement object tracks its creation thread:
 ```cpp
 class DatabaseSync {
   std::thread::id creation_thread_;
-  
+
   void ValidateThread() {
     if (std::this_thread::get_id() != creation_thread_) {
       throw Napi::Error("Database objects cannot be used from different thread");
@@ -282,16 +283,19 @@ class DatabaseSync {
 While worker thread support is fully functional, potential future enhancements could include:
 
 1. **Thread-Safe Function support**
+
    - Implement `Napi::ThreadSafeFunction` for cross-thread callbacks
    - Add async callback mechanisms from worker threads
    - Support for progress notifications across threads
 
 2. **Worker pool utilities**
+
    - Helper classes for managing worker thread pools
    - Load balancing for database operations
    - Connection pooling strategies
 
 3. **Performance optimizations**
+
    - Further optimize for multi-threaded scenarios
    - Reduce lock contention where possible
    - Memory allocation optimizations

@@ -29,5 +29,14 @@
     "doc/sqlite-api-advanced.md",
     "doc/sqlite-api-memory-config.md"
   ],
-  "highlightLanguages": ["typescript", "javascript", "c++", "cpp", "c", "json", "bash", "sql"]
+  "highlightLanguages": [
+    "typescript",
+    "javascript",
+    "c++",
+    "cpp",
+    "c",
+    "json",
+    "bash",
+    "sql"
+  ]
 }
