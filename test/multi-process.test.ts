@@ -46,9 +46,9 @@ describe("Multi-Process Database Access", () => {
     test(
       "multiple processes can read from same database",
       async () => {
-      // Create and populate database
-      const setupDb = new DatabaseSync(dbPath);
-      setupDb.exec(`
+        // Create and populate database
+        const setupDb = new DatabaseSync(dbPath);
+        setupDb.exec(`
         CREATE TABLE shared_data (
           id INTEGER PRIMARY KEY,
           process_id TEXT,
@@ -57,39 +57,39 @@ describe("Multi-Process Database Access", () => {
         )
       `);
 
-      const insert = setupDb.prepare(
-        "INSERT INTO shared_data (process_id, value, timestamp) VALUES (?, ?, ?)",
-      );
-      for (let i = 0; i < 100; i++) {
-        insert.run("main", i, new Date().toISOString());
-      }
-      setupDb.close();
+        const insert = setupDb.prepare(
+          "INSERT INTO shared_data (process_id, value, timestamp) VALUES (?, ?, ?)",
+        );
+        for (let i = 0; i < 100; i++) {
+          insert.run("main", i, new Date().toISOString());
+        }
+        setupDb.close();
 
-      // Spawn multiple child processes to read simultaneously
-      const promises = [];
-      for (let i = 0; i < 5; i++) {
-        promises.push(execScript("readerScript"));
-      }
+        // Spawn multiple child processes to read simultaneously
+        const promises = [];
+        for (let i = 0; i < 5; i++) {
+          promises.push(execScript("readerScript"));
+        }
 
-      const results = await Promise.all(promises);
+        const results = await Promise.all(promises);
 
-      // Verify all processes read the same data
-      results.forEach(({ stdout }) => {
-        const data = JSON.parse(stdout.trim());
-        expect(data.count).toBe(100);
-        expect(data.sum).toBe(4950); // Sum of 0-99
-      });
-    },
-    getTestTimeout(10000),
-  );
+        // Verify all processes read the same data
+        results.forEach(({ stdout }) => {
+          const data = JSON.parse(stdout.trim());
+          expect(data.count).toBe(100);
+          expect(data.sum).toBe(4950); // Sum of 0-99
+        });
+      },
+      getTestTimeout(10000),
+    );
 
     test(
       "processes can write to database with proper locking",
       async () => {
-      // Create database with WAL mode for better concurrency
-      const setupDb = new DatabaseSync(dbPath);
-      setupDb.exec("PRAGMA journal_mode = WAL");
-      setupDb.exec(`
+        // Create database with WAL mode for better concurrency
+        const setupDb = new DatabaseSync(dbPath);
+        setupDb.exec("PRAGMA journal_mode = WAL");
+        setupDb.exec(`
         CREATE TABLE process_writes (
           id INTEGER PRIMARY KEY,
           process_id INTEGER,
@@ -97,36 +97,38 @@ describe("Multi-Process Database Access", () => {
           timestamp TEXT
         )
       `);
-      setupDb.close();
+        setupDb.close();
 
-      // Spawn multiple writer processes
-      const promises = [];
-      for (let i = 0; i < 3; i++) {
-        promises.push(execScript("writerScript", { PROCESS_ID: i.toString() }));
-      }
+        // Spawn multiple writer processes
+        const promises = [];
+        for (let i = 0; i < 3; i++) {
+          promises.push(
+            execScript("writerScript", { PROCESS_ID: i.toString() }),
+          );
+        }
 
-      const results = await Promise.all(promises);
+        const results = await Promise.all(promises);
 
-      // All processes should succeed
-      results.forEach(({ stdout, stderr }) => {
-        expect(stdout.trim()).toBe("SUCCESS");
-        expect(stderr).toBe("");
-      });
+        // All processes should succeed
+        results.forEach(({ stdout, stderr }) => {
+          expect(stdout.trim()).toBe("SUCCESS");
+          expect(stderr).toBe("");
+        });
 
-      // Verify all writes were recorded
-      const verifyDb = new DatabaseSync(dbPath);
-      const countStmt = verifyDb.prepare(
-        "SELECT process_id, COUNT(*) as count FROM process_writes GROUP BY process_id ORDER BY process_id",
-      );
-      const counts = countStmt.all();
+        // Verify all writes were recorded
+        const verifyDb = new DatabaseSync(dbPath);
+        const countStmt = verifyDb.prepare(
+          "SELECT process_id, COUNT(*) as count FROM process_writes GROUP BY process_id ORDER BY process_id",
+        );
+        const counts = countStmt.all();
 
-      expect(counts).toHaveLength(3);
-      counts.forEach((row, index) => {
-        expect(row.process_id).toBe(index);
-        expect(row.count).toBe(20);
-      });
+        expect(counts).toHaveLength(3);
+        counts.forEach((row, index) => {
+          expect(row.process_id).toBe(index);
+          expect(row.count).toBe(20);
+        });
 
-      verifyDb.close();
+        verifyDb.close();
       },
       getTestTimeout(10000),
     );
@@ -402,52 +404,52 @@ describe("Multi-Process Database Access", () => {
     test(
       "handles many processes accessing database simultaneously",
       async () => {
-      // Create database with counter table
-      const setupDb = new DatabaseSync(dbPath);
-      setupDb.exec("PRAGMA journal_mode = WAL");
-      setupDb.exec(`
+        // Create database with counter table
+        const setupDb = new DatabaseSync(dbPath);
+        setupDb.exec("PRAGMA journal_mode = WAL");
+        setupDb.exec(`
         CREATE TABLE counter (
           id INTEGER PRIMARY KEY,
           count INTEGER DEFAULT 0
         )
       `);
-      setupDb.exec("INSERT INTO counter (id) VALUES (1)");
-      setupDb.close();
+        setupDb.exec("INSERT INTO counter (id) VALUES (1)");
+        setupDb.close();
 
-      // Spawn many processes
-      const processCount = 10;
-      const promises = [];
-      for (let i = 0; i < processCount; i++) {
-        promises.push(
-          execScript("incrementScript", { PROCESS_ID: i.toString() }),
+        // Spawn many processes
+        const processCount = 10;
+        const promises = [];
+        for (let i = 0; i < processCount; i++) {
+          promises.push(
+            execScript("incrementScript", { PROCESS_ID: i.toString() }),
+          );
+        }
+
+        const results = await Promise.all(promises);
+
+        // Parse results
+        let totalSuccess = 0;
+        let totalError = 0;
+
+        results.forEach(({ stdout }) => {
+          const data = JSON.parse(stdout.trim());
+          totalSuccess += data.successCount;
+          totalError += data.errorCount;
+        });
+
+        // Verify counter value matches successful increments
+        const verifyDb = new DatabaseSync(dbPath);
+        const stmt = verifyDb.prepare("SELECT count FROM counter WHERE id = 1");
+        const { count } = stmt.get();
+
+        expect(count).toBe(totalSuccess);
+        expect(totalSuccess + totalError).toBe(processCount * 10); // Total attempts
+
+        console.log(
+          `High concurrency test: ${totalSuccess} successful increments, ${totalError} conflicts`,
         );
-      }
 
-      const results = await Promise.all(promises);
-
-      // Parse results
-      let totalSuccess = 0;
-      let totalError = 0;
-
-      results.forEach(({ stdout }) => {
-        const data = JSON.parse(stdout.trim());
-        totalSuccess += data.successCount;
-        totalError += data.errorCount;
-      });
-
-      // Verify counter value matches successful increments
-      const verifyDb = new DatabaseSync(dbPath);
-      const stmt = verifyDb.prepare("SELECT count FROM counter WHERE id = 1");
-      const { count } = stmt.get();
-
-      expect(count).toBe(totalSuccess);
-      expect(totalSuccess + totalError).toBe(processCount * 10); // Total attempts
-
-      console.log(
-        `High concurrency test: ${totalSuccess} successful increments, ${totalError} conflicts`,
-      );
-
-      verifyDb.close();
+        verifyDb.close();
       },
       getTestTimeout(15000),
     );

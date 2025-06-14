@@ -156,16 +156,16 @@ try {
   it(
     "should test workers without main thread initialization (control)",
     async () => {
-    // DON'T initialize in main thread - this should have higher failure rate
-    console.log("Testing workers without main thread initialization...");
+      // DON'T initialize in main thread - this should have higher failure rate
+      console.log("Testing workers without main thread initialization...");
 
-    const results = [];
-    let failures = 0;
+      const results = [];
+      let failures = 0;
 
-    // Run multiple workers to see failure rate
-    for (let i = 0; i < 10; i++) {
-      try {
-        const workerCode = `
+      // Run multiple workers to see failure rate
+      for (let i = 0; i < 10; i++) {
+        try {
+          const workerCode = `
 const { parentPort, workerData } = require('worker_threads');
 const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
 
@@ -190,54 +190,54 @@ try {
 }
 `;
 
-        const workerPath = writeWorkerScript(
-          `control-worker-${i}.js`,
-          workerCode,
-        );
+          const workerPath = writeWorkerScript(
+            `control-worker-${i}.js`,
+            workerCode,
+          );
 
-        const worker = new Worker(workerPath, {
-          workerData: { dbPath, workerId: i },
-        });
-
-        const result = await new Promise<any>((resolve, _reject) => {
-          worker.on("message", resolve);
-          worker.on("error", (error) => {
-            resolve({ success: false, error: error.message, workerId: i });
+          const worker = new Worker(workerPath, {
+            workerData: { dbPath, workerId: i },
           });
-          worker.on("exit", (code) => {
-            if (code !== 0) {
-              resolve({
-                success: false,
-                error: `Worker exited with code ${code}`,
-                workerId: i,
-              });
-            }
-          });
-        });
 
-        results.push(result);
-        if (!result.success) {
+          const result = await new Promise<any>((resolve, _reject) => {
+            worker.on("message", resolve);
+            worker.on("error", (error) => {
+              resolve({ success: false, error: error.message, workerId: i });
+            });
+            worker.on("exit", (code) => {
+              if (code !== 0) {
+                resolve({
+                  success: false,
+                  error: `Worker exited with code ${code}`,
+                  workerId: i,
+                });
+              }
+            });
+          });
+
+          results.push(result);
+          if (!result.success) {
+            failures++;
+            console.log(`Control worker ${i} failed: ${result.error}`);
+          } else {
+            console.log(`Control worker ${i} succeeded`);
+          }
+        } catch (error) {
           failures++;
-          console.log(`Control worker ${i} failed: ${result.error}`);
-        } else {
-          console.log(`Control worker ${i} succeeded`);
+          console.log(`Control worker ${i} crashed: ${String(error)}`);
+          results.push({ success: false, error: String(error), workerId: i });
         }
-      } catch (error) {
-        failures++;
-        console.log(`Control worker ${i} crashed: ${String(error)}`);
-        results.push({ success: false, error: String(error), workerId: i });
       }
-    }
 
-    console.log(
-      `Control test: ${failures}/${results.length} failures (${((failures / results.length) * 100).toFixed(1)}% failure rate)`,
-    );
+      console.log(
+        `Control test: ${failures}/${results.length} failures (${((failures / results.length) * 100).toFixed(1)}% failure rate)`,
+      );
 
-    // We expect some failures in the control group, but still test the successful ones
-    const successfulResults = results.filter((r) => r.success);
-    for (const result of successfulResults) {
-      expect(result.count).toBe(2);
-    }
+      // We expect some failures in the control group, but still test the successful ones
+      const successfulResults = results.filter((r) => r.success);
+      for (const result of successfulResults) {
+        expect(result.count).toBe(2);
+      }
     },
     getTestTimeout(15000),
   );

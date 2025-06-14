@@ -487,8 +487,8 @@ describe("Backup functionality", () => {
   it(
     "should respect pages option and perform incremental backup",
     async () => {
-    // Create a larger database to ensure multiple pages
-    sourceDb.exec(`
+      // Create a larger database to ensure multiple pages
+      sourceDb.exec(`
       CREATE TABLE large_data (
         id INTEGER PRIMARY KEY,
         data TEXT,
@@ -496,102 +496,104 @@ describe("Backup functionality", () => {
       );
     `);
 
-    // Insert enough data to create multiple pages (SQLite default page size is usually 4096 bytes)
-    const largeText = "x".repeat(1000); // 1KB of text per row
-    const insertStmt = sourceDb.prepare(
-      "INSERT INTO large_data (data, padding) VALUES (?, ?)",
-    );
+      // Insert enough data to create multiple pages (SQLite default page size is usually 4096 bytes)
+      const largeText = "x".repeat(1000); // 1KB of text per row
+      const insertStmt = sourceDb.prepare(
+        "INSERT INTO large_data (data, padding) VALUES (?, ?)",
+      );
 
-    for (let i = 0; i < 100; i++) {
-      insertStmt.run(`Row ${i}: ${largeText}`, largeText);
-    }
+      for (let i = 0; i < 100; i++) {
+        insertStmt.run(`Row ${i}: ${largeText}`, largeText);
+      }
 
-    // Get the total page count of the source database
-    const pageCount = sourceDb.prepare("PRAGMA page_count").get() as {
-      page_count: number;
-    };
-    console.log(`Source database has ${pageCount.page_count} pages`);
-    expect(pageCount.page_count).toBeGreaterThan(10); // Ensure we have multiple pages
+      // Get the total page count of the source database
+      const pageCount = sourceDb.prepare("PRAGMA page_count").get() as {
+        page_count: number;
+      };
+      console.log(`Source database has ${pageCount.page_count} pages`);
+      expect(pageCount.page_count).toBeGreaterThan(10); // Ensure we have multiple pages
 
-    // Track progress callbacks
-    const progressCalls: Array<{
-      totalPages: number;
-      remainingPages: number;
-      timestamp: number;
-    }> = [];
+      // Track progress callbacks
+      const progressCalls: Array<{
+        totalPages: number;
+        remainingPages: number;
+        timestamp: number;
+      }> = [];
 
-    const backupPath = getDbPath("pages_test.db");
-    const startTime = Date.now();
+      const backupPath = getDbPath("pages_test.db");
+      const startTime = Date.now();
 
-    // Use a small rate to ensure multiple iterations
-    const pagesPerStep = 2;
-    const totalPages = await sourceDb.backup(backupPath, {
-      rate: pagesPerStep,
-      progress: (info) => {
-        progressCalls.push({
-          ...info,
-          timestamp: Date.now(),
-        });
-      },
-    });
+      // Use a small rate to ensure multiple iterations
+      const pagesPerStep = 2;
+      const totalPages = await sourceDb.backup(backupPath, {
+        rate: pagesPerStep,
+        progress: (info) => {
+          progressCalls.push({
+            ...info,
+            timestamp: Date.now(),
+          });
+        },
+      });
 
-    const duration = Date.now() - startTime;
+      const duration = Date.now() - startTime;
 
-    // Verify we had progress callbacks
-    expect(progressCalls.length).toBeGreaterThan(0);
-    // With AsyncWorker, we may get fewer callbacks than the theoretical maximum
-    // because progress updates can be coalesced. Just verify we got some.
+      // Verify we had progress callbacks
+      expect(progressCalls.length).toBeGreaterThan(0);
+      // With AsyncWorker, we may get fewer callbacks than the theoretical maximum
+      // because progress updates can be coalesced. Just verify we got some.
 
-    // Verify progress is incremental
-    for (let i = 1; i < progressCalls.length; i++) {
-      const prev = progressCalls[i - 1];
-      const curr = progressCalls[i];
+      // Verify progress is incremental
+      for (let i = 1; i < progressCalls.length; i++) {
+        const prev = progressCalls[i - 1];
+        const curr = progressCalls[i];
 
-      // Total pages should remain constant
-      expect(curr.totalPages).toBe(prev.totalPages);
+        // Total pages should remain constant
+        expect(curr.totalPages).toBe(prev.totalPages);
 
-      // Remaining pages should decrease
-      expect(curr.remainingPages).toBeLessThan(prev.remainingPages);
+        // Remaining pages should decrease
+        expect(curr.remainingPages).toBeLessThan(prev.remainingPages);
 
-      // With AsyncWorker, pages may be processed in larger chunks than requested
-      // Just verify that progress is being made
-      const pagesProcessed = prev.remainingPages - curr.remainingPages;
-      expect(pagesProcessed).toBeGreaterThan(0);
-    }
+        // With AsyncWorker, pages may be processed in larger chunks than requested
+        // Just verify that progress is being made
+        const pagesProcessed = prev.remainingPages - curr.remainingPages;
+        expect(pagesProcessed).toBeGreaterThan(0);
+      }
 
-    // Verify callbacks contain valid data
-    if (progressCalls.length > 0) {
-      const firstCall = progressCalls[0];
-      expect(firstCall.totalPages).toBe(totalPages);
-      // With AsyncWorker, the first callback might show any amount of progress
-      // Just verify it's a valid number
-      expect(firstCall.remainingPages).toBeGreaterThanOrEqual(0);
-      expect(firstCall.remainingPages).toBeLessThanOrEqual(totalPages);
-    }
+      // Verify callbacks contain valid data
+      if (progressCalls.length > 0) {
+        const firstCall = progressCalls[0];
+        expect(firstCall.totalPages).toBe(totalPages);
+        // With AsyncWorker, the first callback might show any amount of progress
+        // Just verify it's a valid number
+        expect(firstCall.remainingPages).toBeGreaterThanOrEqual(0);
+        expect(firstCall.remainingPages).toBeLessThanOrEqual(totalPages);
+      }
 
-    // Verify timing - with small page sizes, the backup should take some measurable time
-    // due to multiple iterations (though this is environment-dependent)
-    console.log(
-      `Backup took ${duration}ms with ${progressCalls.length} progress callbacks`,
-    );
+      // Verify timing - with small page sizes, the backup should take some measurable time
+      // due to multiple iterations (though this is environment-dependent)
+      console.log(
+        `Backup took ${duration}ms with ${progressCalls.length} progress callbacks`,
+      );
 
-    // Verify the backup is complete and valid
-    const backupDb = new DatabaseSync(backupPath);
-    testDatabases.add(backupDb);
+      // Verify the backup is complete and valid
+      const backupDb = new DatabaseSync(backupPath);
+      testDatabases.add(backupDb);
 
-    const rowCount = backupDb
-      .prepare("SELECT COUNT(*) as count FROM large_data")
-      .get() as { count: number };
-    expect(rowCount.count).toBe(100);
+      const rowCount = backupDb
+        .prepare("SELECT COUNT(*) as count FROM large_data")
+        .get() as { count: number };
+      expect(rowCount.count).toBe(100);
 
-    // Verify data integrity by checking a few rows
-    const sampleRows = backupDb
-      .prepare("SELECT * FROM large_data WHERE id IN (1, 50, 100) ORDER BY id")
-      .all() as any[];
-    expect(sampleRows.length).toBe(3);
-    expect(sampleRows[0].data).toContain("Row 0:");
-    expect(sampleRows[1].data).toContain("Row 49:");
-    expect(sampleRows[2].data).toContain("Row 99:");
+      // Verify data integrity by checking a few rows
+      const sampleRows = backupDb
+        .prepare(
+          "SELECT * FROM large_data WHERE id IN (1, 50, 100) ORDER BY id",
+        )
+        .all() as any[];
+      expect(sampleRows.length).toBe(3);
+      expect(sampleRows[0].data).toContain("Row 0:");
+      expect(sampleRows[1].data).toContain("Row 49:");
+      expect(sampleRows[2].data).toContain("Row 99:");
     },
     getTestTimeout(15000),
   );
