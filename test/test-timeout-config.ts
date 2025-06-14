@@ -52,8 +52,8 @@ export function getTimingMultiplier(): number {
   // ARM emulation is extremely slow
   if (isEmulated()) multiplier *= 10;
 
-  // Windows is slow to fork
-  if (platform === "win32") multiplier *= 4;
+  // Windows is slow to fork and file operations
+  if (platform === "win32") multiplier *= 6;
 
   // MacOS VMs are glacial:
   if (platform === "darwin") multiplier *= 4;
