@@ -7,6 +7,8 @@
 #include <iostream>
 
 #include "aggregate_function.h"
+#include "shims/sqlite_errors.h"
+#include "sqlite_exception.h"
 #include "user_function.h"
 
 namespace photostructure {
@@ -327,6 +329,8 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
     }
 
     InternalOpen(config);
+  } catch (const SqliteException &e) {
+    node::ThrowFromSqliteException(info.Env(), e);
   } catch (const std::exception &e) {
     node::THROW_ERR_SQLITE_ERROR(info.Env(), e.what());
   }
@@ -404,6 +408,8 @@ Napi::Value DatabaseSync::Open(const Napi::CallbackInfo &info) {
 
   try {
     InternalOpen(config);
+  } catch (const SqliteException &e) {
+    node::ThrowFromSqliteException(env, e);
   } catch (const std::exception &e) {
     node::THROW_ERR_SQLITE_ERROR(env, e.what());
   }
@@ -500,7 +506,8 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
     std::string error = error_msg ? error_msg : "Unknown SQLite error";
     if (error_msg)
       sqlite3_free(error_msg);
-    node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+    // Use enhanced error throwing with database handle
+    node::ThrowSqliteError(env, connection(), error);
   }
 
   return env.Undefined();
@@ -557,11 +564,14 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
 
   if (result != SQLITE_OK) {
     std::string error = sqlite3_errmsg(connection_);
+    // Capture error info before closing
+    SqliteException ex(connection_, result,
+                       "Failed to open database: " + error);
     if (connection_) {
       sqlite3_close(connection_);
       connection_ = nullptr;
     }
-    throw std::runtime_error("Failed to open database: " + error);
+    throw ex;
   }
 
   // Configure database
@@ -581,18 +591,22 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
                                dqs_enable, nullptr);
     if (result != SQLITE_OK) {
       std::string error = sqlite3_errmsg(connection());
+      SqliteException ex(connection_, result,
+                         "Failed to configure DQS_DML: " + error);
       sqlite3_close(connection_);
       connection_ = nullptr;
-      throw std::runtime_error("Failed to configure DQS_DML: " + error);
+      throw ex;
     }
 
     result = sqlite3_db_config(connection(), SQLITE_DBCONFIG_DQS_DDL,
                                dqs_enable, nullptr);
     if (result != SQLITE_OK) {
       std::string error = sqlite3_errmsg(connection());
+      SqliteException ex(connection_, result,
+                         "Failed to configure DQS_DDL: " + error);
       sqlite3_close(connection_);
       connection_ = nullptr;
-      throw std::runtime_error("Failed to configure DQS_DDL: " + error);
+      throw ex;
     }
   }
 }
@@ -1277,7 +1291,8 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
 
     if (result != SQLITE_DONE && result != SQLITE_ROW) {
       std::string error = sqlite3_errmsg(database_->connection());
-      node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+      node::ThrowEnhancedSqliteError(env, database_->connection(), result,
+                                     error);
       return env.Undefined();
     }
 
@@ -1339,7 +1354,8 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
       return env.Undefined();
     } else {
       std::string error = sqlite3_errmsg(database_->connection());
-      node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+      node::ThrowEnhancedSqliteError(env, database_->connection(), result,
+                                     error);
       return env.Undefined();
     }
   } catch (const std::exception &e) {
