@@ -101,7 +101,7 @@ describeMemoryTests("Memory Tests", () => {
     {
       targetDurationMs: 5_000, // Shorter duration for file operations
       maxMemoryGrowthKBPerSecond: 1000, // Allow more growth for file operations
-      maxTimeoutMs: 60_000, // Increased timeout for Windows file operations
+      maxTimeoutMs: 120_000, // Double timeout for Windows file operations
     },
   );
 
@@ -440,7 +440,7 @@ describeMemoryTests("Memory Tests", () => {
     {
       targetDurationMs: 5_000, // Shorter duration for file operations
       maxMemoryGrowthKBPerSecond: 1000, // Allow more growth for file operations
-      maxTimeoutMs: 60_000, // Increased timeout for Windows file operations
+      maxTimeoutMs: 120_000, // Double timeout for Windows file operations
     },
   );
 
