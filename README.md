@@ -25,6 +25,7 @@ This package extracts that implementation into a standalone library that:
 - **Full-featured**: Includes all SQLite extensions (FTS, JSON, math functions, etc.)
 - **High performance**: Direct SQLite C library integration with minimal overhead
 - **Type-safe**: Complete TypeScript definitions matching Node.js exactly
+- **Enhanced error handling**: Detailed error information with SQLite error codes and system errno
 - **Worker thread support**: Full support for Node.js worker threads with proper isolation
 - **Future-proof**: When `node:sqlite` becomes stable, switching back requires zero code changes
 
@@ -270,6 +271,35 @@ const stmt2 = db.prepare(
 const users2 = stmt2.all({ name: "Alice", age: 25 });
 ```
 
+### Enhanced Error Handling
+
+This package provides enhanced error information beyond the standard Node.js SQLite implementation. When an SQLite error occurs, the thrown `Error` object includes additional diagnostic properties:
+
+```typescript
+try {
+  const db = new DatabaseSync("/nonexistent/path/database.db", {
+    readOnly: true,
+  });
+} catch (error) {
+  console.log(error.message); // "Failed to open database: unable to open database file"
+  console.log(error.sqliteCode); // 14
+  console.log(error.sqliteExtendedCode); // 14
+  console.log(error.code); // "SQLITE_CANTOPEN"
+  console.log(error.sqliteErrorString); // "unable to open database file"
+  console.log(error.systemErrno); // 2 (ENOENT on Unix)
+}
+```
+
+#### Error Properties
+
+- **`sqliteCode`**: The primary SQLite error code (e.g., `14` for `SQLITE_CANTOPEN`)
+- **`sqliteExtendedCode`**: Extended error code for more specific information
+- **`code`**: SQLite error constant name (e.g., `"SQLITE_CANTOPEN"`, `"SQLITE_CONSTRAINT"`)
+- **`sqliteErrorString`**: Human-readable description of the error
+- **`systemErrno`** (optional): OS error number for I/O operations (e.g., `2` for `ENOENT`, `13` for `EACCES`)
+
+This enhanced error information makes debugging easier and allows for programmatic error handling based on specific error conditions.
+
 ### Using with TypeScript
 
 ```typescript
@@ -326,7 +356,11 @@ Performance is quite similar to node:sqlite and better-sqlite3, while significan
 
 > **Note**: While Node.js 20 itself supports these older distributions, our prebuilt binaries require GLIBC 2.31+ due to toolchain requirements. Users on older distributions can still compile from source if they have a compatible compiler (GCC 10+ with C++20 support).
 
-Prebuilt binaries are provided for all supported platforms. If a prebuilt binary isn't available, the package will compile from source using node-gyp.
+Prebuilt binaries are provided for all supported platforms with dedicated build infrastructure:
+
+- **Native ARM64 builds**: macOS Apple Silicon and Windows ARM64 use dedicated runners
+- **Cross-platform CI/CD**: Separate build jobs for Intel x64 and ARM64 architectures
+- **Automatic fallback**: If a prebuilt binary isn't available, the package will compile from source using node-gyp
 
 ## Development Requirements
 
@@ -504,7 +538,7 @@ Note that all changes are human-reviewed before merging.
       `find . -name "*.ts" -not -path "./node_modules/*" -not -path "./vendored/*" -not -path "*/upstream/*" -exec wc -l {} +`
     </details>
 - **400+ tests** with full API compliance running in both ESM and CJS modes
-- **Multi-platform CI/CD** with automated builds
+- **Multi-platform CI/CD** with dedicated ARM64 and x64 build jobs across all platforms
 - **Security scanning** and memory leak detection
 - **Automated sync** from Node.js and SQLite upstream
 - **Robust [benchmarking suite](./benchmark/README.md)** including all popular Node.js SQLite libraries

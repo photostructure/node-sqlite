@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] (unreleased)
+
+### Added
+
+- **Enhanced error information**: SQLite errors now include additional diagnostic properties:
+  - `sqliteCode`: The primary SQLite error code (e.g., `14` for `SQLITE_CANTOPEN`)
+  - `sqliteExtendedCode`: Extended error code for more specific information
+  - `code`: SQLite error constant name (e.g., `"SQLITE_CANTOPEN"`)
+  - `sqliteErrorString`: Human-readable error description
+  - `systemErrno`: OS error number for I/O operations (when available)
+  - This provides better debugging capabilities and allows for programmatic error handling
+
+- **Expanded ARM64 support**: Added prebuilt binaries for ARM64 architectures:
+  - macOS Apple Silicon (ARM64) with native compilation
+  - Windows ARM64 with cross-compilation support
+  - Improved CI/CD pipeline with separate build jobs for Intel and ARM architectures
+
 ## [0.1.0] - 2025-01-06
 
 ### Added
