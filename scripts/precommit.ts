@@ -15,6 +15,7 @@ function run(command: string, description: string) {
 }
 
 // Always run these
+run("npm run install", "Installing dependencies");
 run("npm run clean", "Start fresh");
 run("npm run sync:node", "Fetching upstream from Node.js");
 run("npm run sync:sqlite", "Fetching upstream from SQLite.org");
