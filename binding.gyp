@@ -70,25 +70,69 @@
         "CLANG_CXX_LIBRARY": "libc++",
         "MACOSX_DEPLOYMENT_TARGET": "10.15"
       },
-      "msvs_settings": {
-        "VCCLCompilerTool": {
-          "AdditionalOptions": [
-            "/Qspectre",
-            "/guard:cf",
-            "/ZH:SHA_256",
-            "/sdl"
-          ],
-          "ExceptionHandling": 1,
-          "RuntimeTypeInfo": "true"
-        },
-        "VCLinkerTool": {
-          "AdditionalOptions": [
-            "/guard:cf",
-            "/DYNAMICBASE",
-            "/CETCOMPAT"
-          ]
-        }
-      }
+      "conditions": [
+        [
+          "OS=='win'",
+          {
+            "conditions": [
+              [
+                "target_arch=='x64'",
+                {
+                  "defines": [
+                    "_M_X64",
+                    "_WIN64"
+                  ],
+                  "msvs_settings": {
+                    "VCCLCompilerTool": {
+                      "AdditionalOptions": [
+                        "/Qspectre",
+                        "/guard:cf",
+                        "/ZH:SHA_256",
+                        "/sdl"
+                      ],
+                      "ExceptionHandling": 1,
+                      "RuntimeTypeInfo": "true"
+                    },
+                    "VCLinkerTool": {
+                      "AdditionalOptions": [
+                        "/guard:cf",
+                        "/DYNAMICBASE",
+                        "/CETCOMPAT"
+                      ]
+                    }
+                  }
+                }
+              ],
+              [
+                "target_arch=='arm64'",
+                {
+                  "defines": [
+                    "_M_ARM64",
+                    "_WIN64"
+                  ],
+                  "msvs_settings": {
+                    "VCCLCompilerTool": {
+                      "AdditionalOptions": [
+                        "/guard:cf",
+                        "/ZH:SHA_256",
+                        "/sdl"
+                      ],
+                      "ExceptionHandling": 1,
+                      "RuntimeTypeInfo": "true"
+                    },
+                    "VCLinkerTool": {
+                      "AdditionalOptions": [
+                        "/guard:cf",
+                        "/DYNAMICBASE"
+                      ]
+                    }
+                  }
+                }
+              ]
+            ]
+          }
+        ]
+      ]
     }
   ]
 }
