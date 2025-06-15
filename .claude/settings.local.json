@@ -69,7 +69,8 @@
       "Bash(gh repo view:*)",
       "Bash(brew list:*)",
       "Bash(brew:*)",
-      "Bash(/opt/homebrew/opt/llvm/bin/clang++:*)"
+      "Bash(/opt/homebrew/opt/llvm/bin/clang++:*)",
+      "Bash(npx typedoc:*)"
     ]
   },
   "enableAllProjectMcpServers": false
