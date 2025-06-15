@@ -489,7 +489,10 @@ describe("Session Lifecycle Management (RAII)", () => {
         db.close();
       },
       {
-        maxMemoryGrowthKBPerSecond: 500, // Allow reasonable growth for session operations
+        // macOS GitHub Actions runners have different memory allocation characteristics
+        // Without --expose-gc, they show higher apparent memory growth rates
+        maxMemoryGrowthKBPerSecond:
+          process.platform === "darwin" && process.env.CI ? 5000 : 500,
         minRSquaredForLeak: 0.7, // Higher confidence threshold for memory leak detection
         targetDurationMs: 30000, // Longer duration for statistical significance
         forceGC: false, // Don't require --expose-gc flag
