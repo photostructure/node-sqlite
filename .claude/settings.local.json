@@ -66,7 +66,10 @@
       "WebFetch(domain:osv.dev)",
       "Bash(npm update:*)",
       "Bash(npm install)",
-      "Bash(gh repo view:*)"
+      "Bash(gh repo view:*)",
+      "Bash(brew list:*)",
+      "Bash(brew:*)",
+      "Bash(/opt/homebrew/opt/llvm/bin/clang++:*)"
     ]
   },
   "enableAllProjectMcpServers": false
