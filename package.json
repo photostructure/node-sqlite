@@ -51,7 +51,7 @@
     "memory:test": "cross-env TEST_MEMORY=1 node --expose-gc node_modules/jest/bin/jest.js --no-coverage test/memory.test.ts",
     "memory:valgrind": "bash scripts/valgrind-test.sh",
     "memory:asan": "bash scripts/sanitizers-test.sh",
-    "check:memory": "node scripts/check-memory.mjs",
+    "check:memory": "npx --yes tsx scripts/check-memory.ts",
     "benchmark": "cd benchmark && npm install && npm run bench",
     "benchmark:memory": "cd benchmark && npm install && npm run bench:memory",
     "benchmark:full": "cd benchmark && npm install && npm run bench && npm run bench:memory",

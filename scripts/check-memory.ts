@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env npx --yes tsx
 
 /**
  * Cross-platform memory checking script for @photostructure/sqlite
@@ -6,10 +6,10 @@
  * Runs valgrind and ASAN tests only on Linux
  */
 
-import { execFileSync, execSync } from "child_process";
-import os from "os";
-import path from "path";
-import { fileURLToPath } from "url";
+import { execFileSync } from "node:child_process";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,11 +21,11 @@ const colors = {
   YELLOW: "\x1b[33m",
   BLUE: "\x1b[34m",
   RESET: "\x1b[0m",
-};
+} as const;
 
 // Use colors only if not on Windows
 const isWindows = os.platform() === "win32";
-const color = (colorCode, text) =>
+const color = (colorCode: string, text: string): string =>
   isWindows ? text : `${colorCode}${text}${colors.RESET}`;
 
 console.log(color(colors.BLUE, "=== SQLite Memory Leak Detection Suite ==="));
@@ -66,12 +66,12 @@ try {
   console.log(color(colors.GREEN, "✓ JavaScript memory tests passed"));
 } catch (error) {
   console.log(color(colors.RED, "✗ JavaScript memory tests failed"));
-  console.error("Debug: Error details:", error.message);
-  if (error.code) {
-    console.error("Debug: Error code:", error.code);
+  console.error("Debug: Error details:", (error as Error).message);
+  if ((error as any).code) {
+    console.error("Debug: Error code:", (error as any).code);
   }
-  if (error.signal) {
-    console.error("Debug: Error signal:", error.signal);
+  if ((error as any).signal) {
+    console.error("Debug: Error signal:", (error as any).signal);
   }
   exitCode = 1;
 }
@@ -83,7 +83,7 @@ if (os.platform() === "linux") {
     console.log(color(colors.YELLOW, "\nRunning valgrind memory analysis..."));
     try {
       const valgrindScript = path.join(__dirname, "valgrind-test.sh");
-      execSync(valgrindScript, { stdio: "inherit" });
+      execFileSync("/bin/bash", [valgrindScript], { stdio: "inherit" });
       console.log(color(colors.GREEN, "✓ Valgrind tests passed"));
     } catch {
       console.log(color(colors.RED, "✗ Valgrind tests failed"));
@@ -104,7 +104,7 @@ if (os.platform() === "linux") {
   );
   try {
     const asanScript = path.join(__dirname, "sanitizers-test.sh");
-    execSync(asanScript, { stdio: "inherit" });
+    execFileSync("/bin/bash", [asanScript], { stdio: "inherit" });
     console.log(
       color(colors.GREEN, "✓ AddressSanitizer and LeakSanitizer tests passed"),
     );
