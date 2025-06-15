@@ -85,6 +85,27 @@ if (existsSync(compileCommandsPath)) {
 
 // Find clang-tidy binary (try different versions)
 function findClangTidy(): string {
+  // First check if LLVM is installed via Homebrew on macOS
+  if (platform() === "darwin") {
+    try {
+      const llvmPrefix = execSync("brew --prefix llvm 2>/dev/null", {
+        encoding: "utf8",
+      }).trim();
+      const llvmClangTidy = join(llvmPrefix, "bin", "clang-tidy");
+      if (existsSync(llvmClangTidy)) {
+        const versionInfo = execSync(`${llvmClangTidy} --version`, {
+          encoding: "utf8",
+        });
+        console.log(
+          `${colors.dim}Found clang-tidy: ${versionInfo.split("\n")[0]}${colors.reset}`,
+        );
+        return llvmClangTidy;
+      }
+    } catch {
+      // Fall through to other methods
+    }
+  }
+
   const versions = ["", "-18", "-17", "-16", "-15", "-14"];
   for (const version of versions) {
     try {
@@ -141,8 +162,37 @@ async function runClangTidyOnFile(
   file: string,
 ): Promise<TidyResult> {
   try {
+    // On macOS, we need to explicitly add system include paths
+    let extraArgs = "";
+    if (platform() === "darwin") {
+      // Try to find the correct clang version directory
+      const clangVersionDirs = [
+        "/Library/Developer/CommandLineTools/usr/lib/clang/17/include",
+        "/Library/Developer/CommandLineTools/usr/lib/clang/16/include",
+        "/Library/Developer/CommandLineTools/usr/lib/clang/15/include",
+      ];
+      
+      let clangInclude = clangVersionDirs.find(dir => existsSync(dir));
+      if (!clangInclude) {
+        // Find it dynamically
+        try {
+          const clangVersion = execSync("clang --version | grep version | awk '{print $3}' | cut -d. -f1", {
+            encoding: "utf8",
+            shell: true
+          }).trim();
+          clangInclude = `/Library/Developer/CommandLineTools/usr/lib/clang/${clangVersion}/include`;
+        } catch {
+          clangInclude = clangVersionDirs[0]; // fallback
+        }
+      }
+      
+      extraArgs = `--extra-arg=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 ` +
+                  `--extra-arg=-isystem${clangInclude} ` +
+                  `--extra-arg=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include`;
+    }
+    
     const { stdout, stderr } = await exec(
-      `${clangTidy} -p ${projectRoot} "${file}" 2>&1`,
+      `${clangTidy} -p ${projectRoot} ${extraArgs} "${file}" 2>&1`,
     );
     const output = stdout + stderr;
 
