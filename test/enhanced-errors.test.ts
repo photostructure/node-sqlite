@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { DatabaseSync } from "../src";
+import { isAlpineLinux } from "./test-utils";
 
 describe("Enhanced SQLite Error Information", () => {
   test("should include system errno for file not found", () => {
@@ -50,6 +51,13 @@ describe("Enhanced SQLite Error Information", () => {
   test("should include system errno for permission denied", () => {
     // Skip on Windows as permission handling is different
     if (process.platform === "win32") return;
+    
+    // Skip on Alpine Linux as SQLite silently falls back to read-only mode
+    // instead of throwing an error when opening a read-only file with write mode.
+    // This is by design - since SQLite 3.34.0, opening with SQLITE_OPEN_READWRITE
+    // falls back to read-only if write access cannot be obtained.
+    // See: https://sqlite.org/forum/info/42cf8e985bb051a2
+    if (isAlpineLinux()) return;
 
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-test-"));
 
