@@ -69,7 +69,7 @@
     "fmt:native": "clang-format --style=LLVM -i src/shims/*.h src/*.cpp src/*.h test/fixtures/test-extension/*.c || true",
     "docs": "typedoc",
     "// precommit": "should be manually run by developers before they run `git commit`",
-    "precommit": "tsx scripts/precommit.ts",
+    "precommit": "npx --yes tsx scripts/precommit.ts",
     "prepare-release": "npm run build:dist",
     "release": "release-it",
     "security": "run-s security:*",
