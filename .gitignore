@@ -71,8 +71,7 @@ test-results/
 coverage/
 test/*.db
 
-# Generated documentation
-docs/
+# Generated documentation is now in build/docs/ (covered by build/ ignore)
 
 # third-party libraries for reference
 vendored/

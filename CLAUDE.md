@@ -114,6 +114,23 @@ node-sqlite/
 - **`vendored/node-sqlite3/`**: node-sqlite3 package for additional compatibility testing
   - Provides reference for async SQLite patterns and additional API coverage
 
+### Documentation Structure
+
+The project maintains two distinct documentation directories:
+
+- **`doc/`**: Manually written documentation files checked into git
+  - Contains architecture documents, API guides, and design notes
+  - These files are version-controlled and maintained by developers
+  - Referenced by TypeDoc as additional project documents
+
+- **`build/docs/`**: TypeDoc-generated API documentation (gitignored)
+  - Generated from TypeScript source code and JSDoc comments
+  - Created by running `npm run docs`
+  - Automatically deployed to GitHub Pages via CI/CD
+  - Not checked into version control (covered by `build/` in .gitignore)
+
+This separation ensures that all generated artifacts live under `build/` and eliminates confusion between source documentation and generated output.
+
 ## npm Script Naming Conventions
 
 This project follows consistent naming patterns for npm scripts to improve discoverability and maintainability:
