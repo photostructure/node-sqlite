@@ -176,9 +176,9 @@ async function runClangTidyOnFile(
       if (!clangInclude) {
         // Find it dynamically
         try {
-          const clangVersion = execSync("clang --version | grep version | awk '{print $3}' | cut -d. -f1", {
+          const clangVersion = execSync("clang --version | head -1 | awk '{print $NF}' | cut -d. -f1", {
             encoding: "utf8",
-            shell: true
+            shell: "/bin/sh"
           }).trim();
           clangInclude = `/Library/Developer/CommandLineTools/usr/lib/clang/${clangVersion}/include`;
         } catch {
