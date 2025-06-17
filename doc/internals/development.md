@@ -21,7 +21,7 @@ This project was built with substantial assistance from [Claude Code](https://cl
 ### Development Cost
 
 - **API usage**: ~$1400 in Claude API tokens
-- **Actual cost**: $200/month MAX 20x plan subscription  
+- **Actual cost**: $200/month MAX 20x plan subscription
 - **Time saved**: At least a month of setup, analysis, porting and testing
 
 ### Development Process
@@ -36,6 +36,7 @@ This project was built with substantial assistance from [Claude Code](https://cl
 ### Quality Assurance
 
 While AI significantly accelerated development, all code underwent:
+
 - Human review before merging
 - Comprehensive automated testing
 - Memory leak detection (Valgrind, ASAN)
@@ -90,6 +91,7 @@ npm test -- working-with-data.test.ts
 ## Architecture
 
 See [Architecture Documentation](./architecture.md) for details on:
+
 - Shim layer design
 - Node.js compatibility approach
 - Memory management strategy
@@ -124,6 +126,7 @@ See [Release Process](./release-process.md) for detailed release instructions.
 ## Upstream Synchronization
 
 The project maintains synchronization with:
+
 - Node.js SQLite implementation
 - SQLite amalgamation source
 

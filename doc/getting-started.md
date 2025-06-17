@@ -9,6 +9,7 @@ npm install @photostructure/sqlite
 ```
 
 Or with yarn:
+
 ```bash
 yarn add @photostructure/sqlite
 ```
@@ -22,6 +23,7 @@ yarn add @photostructure/sqlite
 ### Linux Distribution Requirements
 
 **Supported distributions** (with prebuilt binaries):
+
 - Ubuntu 20.04 LTS and newer
 - Debian 11 (Bullseye) and newer
 - RHEL/CentOS/Rocky/Alma Linux 8 and newer
@@ -30,6 +32,7 @@ yarn add @photostructure/sqlite
 - Any distribution with GLIBC 2.31 or newer
 
 **Not supported** (GLIBC too old):
+
 - Debian 10 (Buster) - GLIBC 2.28
 - Ubuntu 18.04 LTS - GLIBC 2.27
 - CentOS 7 - GLIBC 2.17
@@ -51,10 +54,10 @@ If prebuilt binaries aren't available for your platform, the package will compil
 ### In-Memory Database
 
 ```javascript
-import { DatabaseSync } from '@photostructure/sqlite';
+import { DatabaseSync } from "@photostructure/sqlite";
 
 // Create an in-memory database
-const db = new DatabaseSync(':memory:');
+const db = new DatabaseSync(":memory:");
 
 // Create a table
 db.exec(`
@@ -66,12 +69,12 @@ db.exec(`
 `);
 
 // Insert data
-const insert = db.prepare('INSERT INTO users (name, email) VALUES (?, ?)');
-insert.run('Alice', 'alice@example.com');
-insert.run('Bob', 'bob@example.com');
+const insert = db.prepare("INSERT INTO users (name, email) VALUES (?, ?)");
+insert.run("Alice", "alice@example.com");
+insert.run("Bob", "bob@example.com");
 
 // Query data
-const users = db.prepare('SELECT * FROM users').all();
+const users = db.prepare("SELECT * FROM users").all();
 console.log(users);
 // Output: [
 //   { id: 1, name: 'Alice', email: 'alice@example.com' },
@@ -85,13 +88,13 @@ db.close();
 ### File-Based Database
 
 ```javascript
-import { DatabaseSync } from '@photostructure/sqlite';
+import { DatabaseSync } from "@photostructure/sqlite";
 
 // Create or open a database file
-const db = new DatabaseSync('myapp.db');
+const db = new DatabaseSync("myapp.db");
 
 // Enable foreign keys (recommended)
-db.exec('PRAGMA foreign_keys = ON');
+db.exec("PRAGMA foreign_keys = ON");
 
 // Your database operations...
 
@@ -102,7 +105,7 @@ db.close();
 ### Using TypeScript
 
 ```typescript
-import { DatabaseSync, StatementSync } from '@photostructure/sqlite';
+import { DatabaseSync, StatementSync } from "@photostructure/sqlite";
 
 interface User {
   id: number;
@@ -110,10 +113,10 @@ interface User {
   email: string;
 }
 
-const db = new DatabaseSync('users.db');
+const db = new DatabaseSync("users.db");
 
 // Type your statement results
-const stmt: StatementSync = db.prepare('SELECT * FROM users WHERE id = ?');
+const stmt: StatementSync = db.prepare("SELECT * FROM users WHERE id = ?");
 const user = stmt.get(1) as User | undefined;
 
 if (user) {
@@ -128,10 +131,12 @@ db.close();
 ### Using try-finally for cleanup
 
 ```javascript
-const db = new DatabaseSync('myapp.db');
+const db = new DatabaseSync("myapp.db");
 try {
   // Your database operations
-  db.exec('CREATE TABLE IF NOT EXISTS data (id INTEGER PRIMARY KEY, value TEXT)');
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS data (id INTEGER PRIMARY KEY, value TEXT)",
+  );
   // ... more operations ...
 } finally {
   // Ensure database is closed even if an error occurs
@@ -142,17 +147,19 @@ try {
 ### Transactions
 
 ```javascript
-const db = new DatabaseSync('myapp.db');
+const db = new DatabaseSync("myapp.db");
 try {
-  db.exec('BEGIN TRANSACTION');
-  
-  const insert = db.prepare('INSERT INTO accounts (name, balance) VALUES (?, ?)');
-  insert.run('Alice', 1000);
-  insert.run('Bob', 500);
-  
-  db.exec('COMMIT');
+  db.exec("BEGIN TRANSACTION");
+
+  const insert = db.prepare(
+    "INSERT INTO accounts (name, balance) VALUES (?, ?)",
+  );
+  insert.run("Alice", 1000);
+  insert.run("Bob", 500);
+
+  db.exec("COMMIT");
 } catch (error) {
-  db.exec('ROLLBACK');
+  db.exec("ROLLBACK");
   throw error;
 } finally {
   db.close();

@@ -105,26 +105,26 @@ _The original asynchronous SQLite binding for Node.js_
 
 ## Feature Matrix
 
-| Feature | @photostructure/sqlite | node:sqlite | better-sqlite3 | sqlite3 |
-|---------|----------------------|-------------|----------------|---------|
-| **API Compatibility** | node:sqlite | - | Custom | Custom |
-| **Min Node.js Version** | 20.0.0 | 22.5.0 | 14.0.0 | 10.0.0 |
-| **Experimental Flag** | ❌ Not needed | ✅ Required | ❌ Not needed | ❌ Not needed |
-| **Synchronous API** | ✅ | ✅ | ✅ | ❌ |
-| **Asynchronous API** | ❌ | ❌ | ❌ | ✅ |
-| **TypeScript Types** | ✅ Built-in | ✅ Built-in | ✅ Via @types | ✅ Via @types |
-| **Custom Functions** | ✅ | ✅ | ✅ | ✅ |
-| **Aggregate Functions** | ✅ | ✅ | ✅ | ❌ |
-| **Window Functions** | ✅ | ✅ | ✅ | ❌ |
-| **Sessions/Changesets** | ✅ | ✅ | ❌ | ❌ |
-| **Backup API** | ✅ | ✅ | ✅ Different API | ✅ |
-| **Extension Loading** | ✅ | ✅ | ✅ | ✅ |
-| **Worker Threads** | ✅ | ✅ | ✅ | ⚠️ Limited |
-| **FTS5** | ✅ | ✅ | ✅ | ✅ |
-| **JSON Functions** | ✅ | ✅ | ✅ | ✅ |
-| **R*Tree** | ✅ | ✅ | ✅ | ✅ |
-| **Node-API** | ✅ | N/A | ❌ V8-specific | ✅ |
-| **Build Size** | ~2MB | 0 (built-in) | ~2MB | ~3MB |
+| Feature                 | @photostructure/sqlite | node:sqlite  | better-sqlite3   | sqlite3       |
+| ----------------------- | ---------------------- | ------------ | ---------------- | ------------- |
+| **API Compatibility**   | node:sqlite            | -            | Custom           | Custom        |
+| **Min Node.js Version** | 20.0.0                 | 22.5.0       | 14.0.0           | 10.0.0        |
+| **Experimental Flag**   | ❌ Not needed          | ✅ Required  | ❌ Not needed    | ❌ Not needed |
+| **Synchronous API**     | ✅                     | ✅           | ✅               | ❌            |
+| **Asynchronous API**    | ❌                     | ❌           | ❌               | ✅            |
+| **TypeScript Types**    | ✅ Built-in            | ✅ Built-in  | ✅ Via @types    | ✅ Via @types |
+| **Custom Functions**    | ✅                     | ✅           | ✅               | ✅            |
+| **Aggregate Functions** | ✅                     | ✅           | ✅               | ❌            |
+| **Window Functions**    | ✅                     | ✅           | ✅               | ❌            |
+| **Sessions/Changesets** | ✅                     | ✅           | ❌               | ❌            |
+| **Backup API**          | ✅                     | ✅           | ✅ Different API | ✅            |
+| **Extension Loading**   | ✅                     | ✅           | ✅               | ✅            |
+| **Worker Threads**      | ✅                     | ✅           | ✅               | ⚠️ Limited    |
+| **FTS5**                | ✅                     | ✅           | ✅               | ✅            |
+| **JSON Functions**      | ✅                     | ✅           | ✅               | ✅            |
+| **R\*Tree**             | ✅                     | ✅           | ✅               | ✅            |
+| **Node-API**            | ✅                     | N/A          | ❌ V8-specific   | ✅            |
+| **Build Size**          | ~2MB                   | 0 (built-in) | ~2MB             | ~3MB          |
 
 ## Performance Comparison
 
@@ -136,6 +136,7 @@ All synchronous libraries (@photostructure/sqlite, node:sqlite, better-sqlite3) 
 - **Efficient batch operations** with prepared statements
 
 The async sqlite3 library is slower due to:
+
 - Thread pool overhead
 - Callback/promise creation costs
 - Mutex contention under load
@@ -148,12 +149,13 @@ The async sqlite3 library is slower due to:
 ```javascript
 // Just change the import - everything else stays the same!
 // From: import { DatabaseSync } from 'node:sqlite';
-import { DatabaseSync } from '@photostructure/sqlite';
+import { DatabaseSync } from "@photostructure/sqlite";
 ```
 
 ### From `better-sqlite3` to `@photostructure/sqlite`
 
 See our detailed [migration guide](./migrating-from-better-sqlite3.md). Key differences:
+
 - Constructor syntax slightly different
 - No `.transaction()` helper method
 - Different property names (e.g., `.name` → `.location`)

@@ -8,20 +8,20 @@ Simply change your import statement:
 
 ```javascript
 // Before: Using Node.js built-in SQLite (requires Node.js 22.5.0+ and --experimental-sqlite flag)
-const { DatabaseSync } = require('node:sqlite');
+const { DatabaseSync } = require("node:sqlite");
 
 // After: Using @photostructure/sqlite (works on Node.js 20+ without any flags)
-const { DatabaseSync } = require('@photostructure/sqlite');
+const { DatabaseSync } = require("@photostructure/sqlite");
 ```
 
 Or with ES modules:
 
 ```javascript
 // Before
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from "node:sqlite";
 
 // After
-import { DatabaseSync } from '@photostructure/sqlite';
+import { DatabaseSync } from "@photostructure/sqlite";
 ```
 
 **That's it!** All your existing code will work exactly the same.
@@ -58,10 +58,10 @@ All classes, methods, and properties are identical:
 
 ```javascript
 // This code works identically with both libraries
-const { DatabaseSync, StatementSync } = require('@photostructure/sqlite');
+const { DatabaseSync, StatementSync } = require("@photostructure/sqlite");
 // OR: const { DatabaseSync, StatementSync } = require('node:sqlite');
 
-const db = new DatabaseSync(':memory:');
+const db = new DatabaseSync(":memory:");
 
 // Create tables
 db.exec(`
@@ -73,17 +73,17 @@ db.exec(`
 `);
 
 // Prepared statements
-const insert = db.prepare('INSERT INTO users (name, email) VALUES (?, ?)');
-const result = insert.run('Alice', 'alice@example.com');
+const insert = db.prepare("INSERT INTO users (name, email) VALUES (?, ?)");
+const result = insert.run("Alice", "alice@example.com");
 console.log(result.lastInsertRowid);
 
 // Queries
-const users = db.prepare('SELECT * FROM users').all();
+const users = db.prepare("SELECT * FROM users").all();
 console.log(users);
 
 // Custom functions
-db.function('uppercase', (str) => str.toUpperCase());
-const upper = db.prepare('SELECT uppercase(name) as name FROM users').get();
+db.function("uppercase", (str) => str.toUpperCase());
+const upper = db.prepare("SELECT uppercase(name) as name FROM users").get();
 console.log(upper.name); // ALICE
 
 // Cleanup
@@ -120,7 +120,7 @@ When `node:sqlite` becomes stable (removes the experimental flag), migrating bac
 
 ```javascript
 // Simply change the import back
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from "node:sqlite";
 // All your code continues to work unchanged
 ```
 

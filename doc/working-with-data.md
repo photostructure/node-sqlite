@@ -5,6 +5,7 @@ This guide covers common data operations using @photostructure/sqlite, including
 ## Prepared Statements
 
 Prepared statements are the recommended way to execute SQL queries. They provide:
+
 - Protection against SQL injection
 - Better performance for repeated queries
 - Type-safe parameter binding
@@ -12,12 +13,12 @@ Prepared statements are the recommended way to execute SQL queries. They provide
 ### Basic Usage
 
 ```javascript
-import { DatabaseSync } from '@photostructure/sqlite';
+import { DatabaseSync } from "@photostructure/sqlite";
 
-const db = new DatabaseSync('myapp.db');
+const db = new DatabaseSync("myapp.db");
 
 // Prepare a statement
-const stmt = db.prepare('SELECT * FROM users WHERE age > ?');
+const stmt = db.prepare("SELECT * FROM users WHERE age > ?");
 
 // Execute it multiple times with different parameters
 const adults = stmt.all(18);
@@ -32,23 +33,23 @@ db.close();
 
 ```javascript
 // .run() - Execute statement, returns info about changes
-const insert = db.prepare('INSERT INTO users (name, age) VALUES (?, ?)');
-const info = insert.run('Alice', 30);
-console.log(info.changes);        // Number of rows affected
+const insert = db.prepare("INSERT INTO users (name, age) VALUES (?, ?)");
+const info = insert.run("Alice", 30);
+console.log(info.changes); // Number of rows affected
 console.log(info.lastInsertRowid); // ID of inserted row
 
 // .get() - Return first row
-const select = db.prepare('SELECT * FROM users WHERE id = ?');
+const select = db.prepare("SELECT * FROM users WHERE id = ?");
 const user = select.get(1);
 console.log(user); // { id: 1, name: 'Alice', age: 30 }
 
 // .all() - Return all rows as array
-const selectAll = db.prepare('SELECT * FROM users WHERE age > ?');
+const selectAll = db.prepare("SELECT * FROM users WHERE age > ?");
 const users = selectAll.all(25);
 console.log(users); // Array of user objects
 
 // .iterate() - Return iterator for memory-efficient row processing
-const iter = db.prepare('SELECT * FROM users');
+const iter = db.prepare("SELECT * FROM users");
 for (const user of iter) {
   console.log(user);
   // Process one row at a time
@@ -60,35 +61,37 @@ for (const user of iter) {
 ### Positional Parameters (?)
 
 ```javascript
-const stmt = db.prepare('INSERT INTO users (name, age, email) VALUES (?, ?, ?)');
-stmt.run('Bob', 25, 'bob@example.com');
+const stmt = db.prepare(
+  "INSERT INTO users (name, age, email) VALUES (?, ?, ?)",
+);
+stmt.run("Bob", 25, "bob@example.com");
 ```
 
 ### Named Parameters
 
 ```javascript
 const stmt = db.prepare(
-  'INSERT INTO users (name, age, email) VALUES ($name, $age, $email)'
+  "INSERT INTO users (name, age, email) VALUES ($name, $age, $email)",
 );
-stmt.run({ $name: 'Charlie', $age: 35, $email: 'charlie@example.com' });
+stmt.run({ $name: "Charlie", $age: 35, $email: "charlie@example.com" });
 
 // Also works with : prefix
 const stmt2 = db.prepare(
-  'INSERT INTO users (name, age, email) VALUES (:name, :age, :email)'
+  "INSERT INTO users (name, age, email) VALUES (:name, :age, :email)",
 );
-stmt2.run({ name: 'David', age: 40, email: 'david@example.com' });
+stmt2.run({ name: "David", age: 40, email: "david@example.com" });
 ```
 
 ### Anonymous Parameters
 
 ```javascript
 // Enable anonymous parameters for a specific statement
-const stmt = db.prepare('INSERT INTO logs (message) VALUES (?)', {
-  anonymousParameters: true
+const stmt = db.prepare("INSERT INTO logs (message) VALUES (?)", {
+  anonymousParameters: true,
 });
 
 // Now you can bind any number of parameters
-stmt.run('Error', 'Details', 'Stack trace'); // All concatenated
+stmt.run("Error", "Details", "Stack trace"); // All concatenated
 ```
 
 ## Data Types
@@ -97,18 +100,18 @@ SQLite supports several data types, and this library handles JavaScript type con
 
 ### Type Mapping
 
-| SQLite Type | JavaScript Type | Notes |
-|------------|-----------------|-------|
-| NULL | null | |
-| INTEGER | number or bigint | BigInt for values outside safe integer range |
-| REAL | number | |
-| TEXT | string | |
-| BLOB | Buffer | Node.js Buffer objects |
+| SQLite Type | JavaScript Type  | Notes                                        |
+| ----------- | ---------------- | -------------------------------------------- |
+| NULL        | null             |                                              |
+| INTEGER     | number or bigint | BigInt for values outside safe integer range |
+| REAL        | number           |                                              |
+| TEXT        | string           |                                              |
+| BLOB        | Buffer           | Node.js Buffer objects                       |
 
 ### Working with Different Types
 
 ```javascript
-const db = new DatabaseSync(':memory:');
+const db = new DatabaseSync(":memory:");
 
 // Create table with various types
 db.exec(`
@@ -129,31 +132,31 @@ const insert = db.prepare(`
 
 // Insert different types
 insert.run(
-  42,                          // INTEGER
-  19.99,                       // REAL
-  'Product',                   // TEXT
-  Buffer.from('binary data'),  // BLOB
-  new Date().toISOString()     // TEXT (store dates as ISO strings)
+  42, // INTEGER
+  19.99, // REAL
+  "Product", // TEXT
+  Buffer.from("binary data"), // BLOB
+  new Date().toISOString(), // TEXT (store dates as ISO strings)
 );
 
 // Retrieve and check types
-const row = db.prepare('SELECT * FROM data_types WHERE id = ?').get(1);
-console.log(typeof row.count);  // 'number'
-console.log(typeof row.price);  // 'number'
-console.log(typeof row.name);   // 'string'
-console.log(row.data);          // <Buffer ...>
+const row = db.prepare("SELECT * FROM data_types WHERE id = ?").get(1);
+console.log(typeof row.count); // 'number'
+console.log(typeof row.price); // 'number'
+console.log(typeof row.name); // 'string'
+console.log(row.data); // <Buffer ...>
 ```
 
 ### BigInt Support
 
 ```javascript
 // Large integers automatically returned as BigInt
-db.exec('CREATE TABLE big_numbers (value INTEGER)');
-const bigInsert = db.prepare('INSERT INTO big_numbers VALUES (?)');
+db.exec("CREATE TABLE big_numbers (value INTEGER)");
+const bigInsert = db.prepare("INSERT INTO big_numbers VALUES (?)");
 bigInsert.run(9007199254740993n); // Using BigInt literal
 
-const result = db.prepare('SELECT value FROM big_numbers').get();
-console.log(result.value);        // 9007199254740993n
+const result = db.prepare("SELECT value FROM big_numbers").get();
+console.log(result.value); // 9007199254740993n
 console.log(typeof result.value); // 'bigint'
 ```
 
@@ -164,23 +167,27 @@ Transactions ensure data consistency by grouping multiple operations into a sing
 ### Basic Transaction
 
 ```javascript
-const db = new DatabaseSync('bank.db');
+const db = new DatabaseSync("bank.db");
 
 try {
-  db.exec('BEGIN TRANSACTION');
-  
-  const withdraw = db.prepare('UPDATE accounts SET balance = balance - ? WHERE id = ?');
-  const deposit = db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?');
-  
+  db.exec("BEGIN TRANSACTION");
+
+  const withdraw = db.prepare(
+    "UPDATE accounts SET balance = balance - ? WHERE id = ?",
+  );
+  const deposit = db.prepare(
+    "UPDATE accounts SET balance = balance + ? WHERE id = ?",
+  );
+
   // Transfer $100 from account 1 to account 2
   withdraw.run(100, 1);
   deposit.run(100, 2);
-  
-  db.exec('COMMIT');
-  console.log('Transfer successful');
+
+  db.exec("COMMIT");
+  console.log("Transfer successful");
 } catch (error) {
-  db.exec('ROLLBACK');
-  console.error('Transfer failed:', error.message);
+  db.exec("ROLLBACK");
+  console.error("Transfer failed:", error.message);
 } finally {
   db.close();
 }
@@ -190,43 +197,43 @@ try {
 
 ```javascript
 // Default transaction
-db.exec('BEGIN');
+db.exec("BEGIN");
 // or
-db.exec('BEGIN TRANSACTION');
+db.exec("BEGIN TRANSACTION");
 
 // Deferred transaction (default)
-db.exec('BEGIN DEFERRED');
+db.exec("BEGIN DEFERRED");
 
 // Immediate transaction (acquires RESERVED lock)
-db.exec('BEGIN IMMEDIATE');
+db.exec("BEGIN IMMEDIATE");
 
 // Exclusive transaction (acquires EXCLUSIVE lock)
-db.exec('BEGIN EXCLUSIVE');
+db.exec("BEGIN EXCLUSIVE");
 ```
 
 ### Savepoints
 
 ```javascript
-db.exec('BEGIN');
+db.exec("BEGIN");
 try {
   db.exec('INSERT INTO users (name) VALUES ("Alice")');
-  
+
   // Create savepoint
-  db.exec('SAVEPOINT sp1');
-  
+  db.exec("SAVEPOINT sp1");
+
   try {
     db.exec('INSERT INTO users (name) VALUES ("Bob")');
     // This might fail
-    db.exec('INSERT INTO users (name) VALUES (NULL)'); // Error if NOT NULL
+    db.exec("INSERT INTO users (name) VALUES (NULL)"); // Error if NOT NULL
   } catch (error) {
     // Rollback to savepoint
-    db.exec('ROLLBACK TO sp1');
-    console.log('Rolled back to savepoint');
+    db.exec("ROLLBACK TO sp1");
+    console.log("Rolled back to savepoint");
   }
-  
-  db.exec('COMMIT');
+
+  db.exec("COMMIT");
 } catch (error) {
-  db.exec('ROLLBACK');
+  db.exec("ROLLBACK");
 }
 ```
 
@@ -234,16 +241,16 @@ try {
 
 ```javascript
 // Inserting NULL values
-const stmt = db.prepare('INSERT INTO users (name, email) VALUES (?, ?)');
-stmt.run('Alice', null); // email will be NULL
+const stmt = db.prepare("INSERT INTO users (name, email) VALUES (?, ?)");
+stmt.run("Alice", null); // email will be NULL
 
 // Checking for NULL in queries
-const nullCheck = db.prepare('SELECT * FROM users WHERE email IS NULL');
+const nullCheck = db.prepare("SELECT * FROM users WHERE email IS NULL");
 const usersWithoutEmail = nullCheck.all();
 
 // COALESCE to provide default values
 const withDefaults = db.prepare(
-  'SELECT name, COALESCE(email, "no-email@example.com") as email FROM users'
+  'SELECT name, COALESCE(email, "no-email@example.com") as email FROM users',
 );
 ```
 
@@ -253,16 +260,18 @@ SQLite doesn't have a native date type, so dates are typically stored as TEXT, I
 
 ```javascript
 // Store as ISO string (TEXT)
-const insertDate = db.prepare('INSERT INTO events (name, date) VALUES (?, ?)');
-insertDate.run('Meeting', new Date().toISOString());
+const insertDate = db.prepare("INSERT INTO events (name, date) VALUES (?, ?)");
+insertDate.run("Meeting", new Date().toISOString());
 
 // Store as Unix timestamp (INTEGER)
-const insertTimestamp = db.prepare('INSERT INTO events (name, timestamp) VALUES (?, ?)');
-insertTimestamp.run('Meeting', Math.floor(Date.now() / 1000));
+const insertTimestamp = db.prepare(
+  "INSERT INTO events (name, timestamp) VALUES (?, ?)",
+);
+insertTimestamp.run("Meeting", Math.floor(Date.now() / 1000));
 
 // Query and parse dates
-const events = db.prepare('SELECT * FROM events').all();
-events.forEach(event => {
+const events = db.prepare("SELECT * FROM events").all();
+events.forEach((event) => {
   if (event.date) {
     const date = new Date(event.date);
     console.log(`${event.name} at ${date.toLocaleString()}`);
@@ -270,23 +279,27 @@ events.forEach(event => {
 });
 
 // Use SQLite date functions
-const recent = db.prepare(`
+const recent = db
+  .prepare(
+    `
   SELECT * FROM events 
   WHERE date > datetime('now', '-7 days')
-`).all();
+`,
+  )
+  .all();
 ```
 
 ## Error Handling
 
 ```javascript
 try {
-  const stmt = db.prepare('SELECT * FROM nonexistent_table');
+  const stmt = db.prepare("SELECT * FROM nonexistent_table");
   stmt.all();
 } catch (error) {
-  console.error('SQLite error:', error.message);
-  console.error('Error code:', error.code);
-  console.error('SQLite code:', error.sqliteCode);
-  console.error('Extended code:', error.sqliteExtendedCode);
+  console.error("SQLite error:", error.message);
+  console.error("Error code:", error.code);
+  console.error("SQLite code:", error.sqliteCode);
+  console.error("Extended code:", error.sqliteExtendedCode);
 }
 ```
 

@@ -9,20 +9,20 @@ Scalar functions operate on individual values and return a single result.
 ### Basic Functions
 
 ```javascript
-import { DatabaseSync } from '@photostructure/sqlite';
+import { DatabaseSync } from "@photostructure/sqlite";
 
-const db = new DatabaseSync(':memory:');
+const db = new DatabaseSync(":memory:");
 
 // Simple function
-db.function('double', (x) => x * 2);
+db.function("double", (x) => x * 2);
 
 // Use in SQL
-const result = db.prepare('SELECT double(21) as answer').get();
+const result = db.prepare("SELECT double(21) as answer").get();
 console.log(result.answer); // 42
 
 // Multiple parameters
-db.function('multiply', (a, b) => a * b);
-const product = db.prepare('SELECT multiply(6, 7) as result').get();
+db.function("multiply", (a, b) => a * b);
+const product = db.prepare("SELECT multiply(6, 7) as result").get();
 console.log(product.result); // 42
 ```
 
@@ -30,30 +30,44 @@ console.log(product.result); // 42
 
 ```javascript
 // Deterministic function - same input always produces same output
-db.function('hash', {
-  deterministic: true
-}, (value) => {
-  const crypto = require('crypto');
-  return crypto.createHash('sha256').update(String(value)).digest('hex');
-});
+db.function(
+  "hash",
+  {
+    deterministic: true,
+  },
+  (value) => {
+    const crypto = require("crypto");
+    return crypto.createHash("sha256").update(String(value)).digest("hex");
+  },
+);
 
 // Direct-only function - cannot be used in triggers or views
-db.function('random_uuid', {
-  directOnly: true
-}, () => {
-  const crypto = require('crypto');
-  return crypto.randomUUID();
-});
+db.function(
+  "random_uuid",
+  {
+    directOnly: true,
+  },
+  () => {
+    const crypto = require("crypto");
+    return crypto.randomUUID();
+  },
+);
 
 // Variable arguments function
-db.function('concat', {
-  varargs: true
-}, (...args) => {
-  return args.join('');
-});
+db.function(
+  "concat",
+  {
+    varargs: true,
+  },
+  (...args) => {
+    return args.join("");
+  },
+);
 
 // Use varargs function
-const text = db.prepare('SELECT concat("Hello", " ", "World", "!") as msg').get();
+const text = db
+  .prepare('SELECT concat("Hello", " ", "World", "!") as msg')
+  .get();
 console.log(text.msg); // "Hello World!"
 ```
 
@@ -63,24 +77,24 @@ console.log(text.msg); // "Hello World!"
 
 ```javascript
 // Reverse string function
-db.function('reverse', (str) => {
-  return str ? str.split('').reverse().join('') : null;
+db.function("reverse", (str) => {
+  return str ? str.split("").reverse().join("") : null;
 });
 
 // Extract domain from email
-db.function('email_domain', (email) => {
-  if (!email || !email.includes('@')) return null;
-  return email.split('@')[1].toLowerCase();
+db.function("email_domain", (email) => {
+  if (!email || !email.includes("@")) return null;
+  return email.split("@")[1].toLowerCase();
 });
 
 // Slugify function
-db.function('slugify', (text) => {
+db.function("slugify", (text) => {
   if (!text) return null;
   return text
     .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
     .trim();
 });
 
@@ -98,56 +112,60 @@ db.exec(`
 
 ```javascript
 // Parse ISO date to Unix timestamp
-db.function('iso_to_timestamp', (isoDate) => {
+db.function("iso_to_timestamp", (isoDate) => {
   const date = new Date(isoDate);
   return Math.floor(date.getTime() / 1000);
 });
 
 // Format timestamp as relative time
-db.function('time_ago', (timestamp) => {
+db.function("time_ago", (timestamp) => {
   const seconds = Math.floor(Date.now() / 1000) - timestamp;
-  
+
   const intervals = [
-    { label: 'year', seconds: 31536000 },
-    { label: 'month', seconds: 2592000 },
-    { label: 'day', seconds: 86400 },
-    { label: 'hour', seconds: 3600 },
-    { label: 'minute', seconds: 60 }
+    { label: "year", seconds: 31536000 },
+    { label: "month", seconds: 2592000 },
+    { label: "day", seconds: 86400 },
+    { label: "hour", seconds: 3600 },
+    { label: "minute", seconds: 60 },
   ];
-  
+
   for (const interval of intervals) {
     const count = Math.floor(seconds / interval.seconds);
     if (count >= 1) {
-      return `${count} ${interval.label}${count > 1 ? 's' : ''} ago`;
+      return `${count} ${interval.label}${count > 1 ? "s" : ""} ago`;
     }
   }
-  
-  return 'just now';
+
+  return "just now";
 });
 
 // Usage
-const posts = db.prepare(`
+const posts = db
+  .prepare(
+    `
   SELECT title, time_ago(created_at) as posted
   FROM posts
   ORDER BY created_at DESC
-`).all();
+`,
+  )
+  .all();
 ```
 
 #### JSON Operations
 
 ```javascript
 // Parse JSON and extract field
-db.function('json_get', (jsonStr, path) => {
+db.function("json_get", (jsonStr, path) => {
   try {
     const obj = JSON.parse(jsonStr);
-    return path.split('.').reduce((o, p) => o?.[p], obj);
+    return path.split(".").reduce((o, p) => o?.[p], obj);
   } catch {
     return null;
   }
 });
 
 // Check if JSON contains value
-db.function('json_contains', (jsonStr, value) => {
+db.function("json_contains", (jsonStr, value) => {
   try {
     const obj = JSON.parse(jsonStr);
     return JSON.stringify(obj).includes(value) ? 1 : 0;
@@ -165,13 +183,13 @@ Aggregate functions process multiple rows and return a single result.
 
 ```javascript
 // Custom sum aggregate
-db.aggregate('custom_sum', {
+db.aggregate("custom_sum", {
   start: 0,
-  step: (total, value) => total + (value || 0)
+  step: (total, value) => total + (value || 0),
 });
 
 // Custom average with null handling
-db.aggregate('custom_avg', {
+db.aggregate("custom_avg", {
   start: { sum: 0, count: 0 },
   step: (acc, value) => {
     if (value != null) {
@@ -180,7 +198,7 @@ db.aggregate('custom_avg', {
     }
     return acc;
   },
-  result: (acc) => acc.count > 0 ? acc.sum / acc.count : null
+  result: (acc) => (acc.count > 0 ? acc.sum / acc.count : null),
 });
 ```
 
@@ -190,7 +208,7 @@ db.aggregate('custom_avg', {
 
 ```javascript
 // Standard deviation
-db.aggregate('stddev', {
+db.aggregate("stddev", {
   start: { values: [] },
   step: (acc, value) => {
     if (value != null) acc.values.push(value);
@@ -198,18 +216,18 @@ db.aggregate('stddev', {
   },
   result: (acc) => {
     if (acc.values.length === 0) return null;
-    
+
     const mean = acc.values.reduce((a, b) => a + b) / acc.values.length;
-    const variance = acc.values
-      .map(x => Math.pow(x - mean, 2))
-      .reduce((a, b) => a + b) / acc.values.length;
-    
+    const variance =
+      acc.values.map((x) => Math.pow(x - mean, 2)).reduce((a, b) => a + b) /
+      acc.values.length;
+
     return Math.sqrt(variance);
-  }
+  },
 });
 
 // Median
-db.aggregate('median', {
+db.aggregate("median", {
   start: { values: [] },
   step: (acc, value) => {
     if (value != null) acc.values.push(value);
@@ -217,14 +235,14 @@ db.aggregate('median', {
   },
   result: (acc) => {
     if (acc.values.length === 0) return null;
-    
+
     acc.values.sort((a, b) => a - b);
     const mid = Math.floor(acc.values.length / 2);
-    
+
     return acc.values.length % 2 === 0
       ? (acc.values[mid - 1] + acc.values[mid]) / 2
       : acc.values[mid];
-  }
+  },
 });
 ```
 
@@ -232,7 +250,7 @@ db.aggregate('median', {
 
 ```javascript
 // Group concat with custom separator
-db.aggregate('group_concat_custom', {
+db.aggregate("group_concat_custom", {
   start: () => ({ values: [], separator: null }),
   step: (acc, value, separator) => {
     if (value != null) acc.values.push(value);
@@ -241,46 +259,54 @@ db.aggregate('group_concat_custom', {
     }
     return acc;
   },
-  result: (acc) => acc.values.join(acc.separator || ',')
+  result: (acc) => acc.values.join(acc.separator || ","),
 });
 
 // Usage
-const tags = db.prepare(`
+const tags = db
+  .prepare(
+    `
   SELECT group_concat_custom(tag, ' | ') as all_tags
   FROM post_tags
   WHERE post_id = ?
-`).get(postId);
+`,
+  )
+  .get(postId);
 ```
 
 #### JSON Aggregation
 
 ```javascript
 // Aggregate into JSON array
-db.aggregate('json_array_agg', {
+db.aggregate("json_array_agg", {
   start: [],
   step: (acc, value) => {
     if (value != null) acc.push(value);
     return acc;
   },
-  result: (acc) => JSON.stringify(acc)
+  result: (acc) => JSON.stringify(acc),
 });
 
 // Aggregate into JSON object
-db.aggregate('json_object_agg', {
+db.aggregate("json_object_agg", {
   start: {},
   step: (acc, key, value) => {
     if (key != null) acc[key] = value;
     return acc;
   },
-  result: (acc) => JSON.stringify(acc)
+  result: (acc) => JSON.stringify(acc),
 });
 
 // Usage
-const userPrefs = db.prepare(`
+const userPrefs = db
+  .prepare(
+    `
   SELECT json_object_agg(key, value) as preferences
   FROM user_settings
   WHERE user_id = ?
-`).get(userId);
+`,
+  )
+  .get(userId);
 ```
 
 ### Window Functions
@@ -289,20 +315,24 @@ Aggregate functions can be used as window functions in SQLite:
 
 ```javascript
 // Cumulative sum aggregate
-db.aggregate('cumsum', {
+db.aggregate("cumsum", {
   start: 0,
-  step: (sum, value) => sum + (value || 0)
+  step: (sum, value) => sum + (value || 0),
 });
 
 // Use as window function
-const results = db.prepare(`
+const results = db
+  .prepare(
+    `
   SELECT 
     date,
     amount,
     cumsum(amount) OVER (ORDER BY date) as running_total
   FROM transactions
   WHERE account_id = ?
-`).all(accountId);
+`,
+  )
+  .all(accountId);
 ```
 
 ## Loading Extensions
@@ -313,15 +343,15 @@ SQLite supports loadable extensions to add functionality at runtime.
 
 ```javascript
 // Must be enabled in constructor
-const db = new DatabaseSync('myapp.db', {
-  allowExtension: true
+const db = new DatabaseSync("myapp.db", {
+  allowExtension: true,
 });
 
 // Enable extension loading
 db.enableLoadExtension(true);
 
 // Load an extension
-db.loadExtension('./extensions/vector.so');
+db.loadExtension("./extensions/vector.so");
 
 // Disable for security
 db.enableLoadExtension(false);
@@ -330,25 +360,25 @@ db.enableLoadExtension(false);
 ### Platform-Specific Extensions
 
 ```javascript
-const path = require('path');
-const os = require('os');
+const path = require("path");
+const os = require("os");
 
 function loadExtension(db, extensionName) {
   // Determine platform-specific extension
   let ext;
   switch (os.platform()) {
-    case 'win32':
-      ext = '.dll';
+    case "win32":
+      ext = ".dll";
       break;
-    case 'darwin':
-      ext = '.dylib';
+    case "darwin":
+      ext = ".dylib";
       break;
     default:
-      ext = '.so';
+      ext = ".so";
   }
-  
-  const extensionPath = path.join(__dirname, 'extensions', extensionName + ext);
-  
+
+  const extensionPath = path.join(__dirname, "extensions", extensionName + ext);
+
   db.enableLoadExtension(true);
   try {
     db.loadExtension(extensionPath);
@@ -359,8 +389,8 @@ function loadExtension(db, extensionName) {
 }
 
 // Usage
-loadExtension(db, 'vector');  // Loads vector.so/.dll/.dylib
-loadExtension(db, 'crypto');  // Loads crypto extension
+loadExtension(db, "vector"); // Loads vector.so/.dll/.dylib
+loadExtension(db, "crypto"); // Loads crypto extension
 ```
 
 ### Common Extensions
@@ -381,13 +411,17 @@ const insertVec = db.prepare(`
 `);
 
 // Search similar vectors
-const similar = db.prepare(`
+const similar = db
+  .prepare(
+    `
   SELECT rowid, distance
   FROM products_vec
   WHERE embedding MATCH ?
   ORDER BY distance
   LIMIT 10
-`).all(queryEmbedding);
+`,
+  )
+  .all(queryEmbedding);
 ```
 
 #### Full-Text Search (Built-in)
@@ -410,12 +444,16 @@ db.exec(`
 `);
 
 // Search
-const results = db.prepare(`
+const results = db
+  .prepare(
+    `
   SELECT title, snippet(articles_fts, 1, '<b>', '</b>', '...', 32) as excerpt
   FROM articles_fts
   WHERE articles_fts MATCH ?
   ORDER BY rank
-`).all('sqlite NEAR extension');
+`,
+  )
+  .all("sqlite NEAR extension");
 ```
 
 ## Best Practices
@@ -423,15 +461,15 @@ const results = db.prepare(`
 ### Error Handling in Functions
 
 ```javascript
-db.function('safe_divide', (a, b) => {
+db.function("safe_divide", (a, b) => {
   if (b === 0) {
-    throw new Error('Division by zero');
+    throw new Error("Division by zero");
   }
   return a / b;
 });
 
 // More graceful error handling
-db.function('safe_json_parse', (jsonStr) => {
+db.function("safe_json_parse", (jsonStr) => {
   try {
     return JSON.stringify(JSON.parse(jsonStr));
   } catch (e) {
@@ -444,16 +482,20 @@ db.function('safe_json_parse', (jsonStr) => {
 
 ```javascript
 // Deterministic functions can be optimized by SQLite
-db.function('expensive_calculation', {
-  deterministic: true  // SQLite can cache results
-}, (input) => {
-  // Complex calculation
-  return complexMath(input);
-});
+db.function(
+  "expensive_calculation",
+  {
+    deterministic: true, // SQLite can cache results
+  },
+  (input) => {
+    // Complex calculation
+    return complexMath(input);
+  },
+);
 
 // Avoid creating closures in hot paths
 const cache = new Map();
-db.function('cached_lookup', (key) => {
+db.function("cached_lookup", (key) => {
   if (!cache.has(key)) {
     cache.set(key, expensiveLookup(key));
   }
@@ -467,12 +509,12 @@ db.function('cached_lookup', (key) => {
 // Test helper
 function testFunction(db, functionName, testCases) {
   for (const { input, expected } of testCases) {
-    const sql = `SELECT ${functionName}(${input.map(() => '?').join(',')}) as result`;
+    const sql = `SELECT ${functionName}(${input.map(() => "?").join(",")}) as result`;
     const result = db.prepare(sql).get(...input);
-    
+
     if (result.result !== expected) {
       throw new Error(
-        `${functionName}(${input.join(', ')}) = ${result.result}, expected ${expected}`
+        `${functionName}(${input.join(", ")}) = ${result.result}, expected ${expected}`,
       );
     }
   }
@@ -480,10 +522,10 @@ function testFunction(db, functionName, testCases) {
 }
 
 // Test custom functions
-testFunction(db, 'double', [
+testFunction(db, "double", [
   { input: [5], expected: 10 },
   { input: [0], expected: 0 },
-  { input: [-3], expected: -6 }
+  { input: [-3], expected: -6 },
 ]);
 ```
 

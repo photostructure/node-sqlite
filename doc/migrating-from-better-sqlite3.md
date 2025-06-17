@@ -8,14 +8,14 @@ This guide helps you migrate from better-sqlite3 to @photostructure/sqlite. Whil
 
 ```javascript
 // better-sqlite3
-const Database = require('better-sqlite3');
-const db = new Database('mydb.sqlite');
-const db = new Database('mydb.sqlite', { readonly: true });
+const Database = require("better-sqlite3");
+const db = new Database("mydb.sqlite");
+const db = new Database("mydb.sqlite", { readonly: true });
 
 // @photostructure/sqlite
-const { DatabaseSync } = require('@photostructure/sqlite');
-const db = new DatabaseSync('mydb.sqlite');
-const db = new DatabaseSync('mydb.sqlite', { readOnly: true });
+const { DatabaseSync } = require("@photostructure/sqlite");
+const db = new DatabaseSync("mydb.sqlite");
+const db = new DatabaseSync("mydb.sqlite", { readOnly: true });
 ```
 
 ### Statement Preparation
@@ -24,10 +24,10 @@ Both libraries use prepared statements, but with different property names:
 
 ```javascript
 // better-sqlite3
-const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
+const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
 
 // @photostructure/sqlite
-const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
+const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
 // Same syntax! ✅
 ```
 
@@ -55,7 +55,8 @@ for (const row of stmt.iterate()) {
 }
 
 // @photostructure/sqlite
-for (const row of stmt) {  // Direct iteration on statement
+for (const row of stmt) {
+  // Direct iteration on statement
   console.log(row);
 }
 ```
@@ -64,14 +65,14 @@ for (const row of stmt) {  // Direct iteration on statement
 
 ```javascript
 // better-sqlite3
-console.log(db.name);           // 'mydb.sqlite'
-console.log(db.open);           // true/false
-console.log(db.inTransaction);  // true/false
-console.log(db.memory);         // true/false
-console.log(db.readonly);       // true/false
+console.log(db.name); // 'mydb.sqlite'
+console.log(db.open); // true/false
+console.log(db.inTransaction); // true/false
+console.log(db.memory); // true/false
+console.log(db.readonly); // true/false
 
 // @photostructure/sqlite
-console.log(db.location);       // 'mydb.sqlite' (different property name)
+console.log(db.location); // 'mydb.sqlite' (different property name)
 // Note: open, inTransaction, memory, readonly properties not available
 ```
 
@@ -79,16 +80,24 @@ console.log(db.location);       // 'mydb.sqlite' (different property name)
 
 ```javascript
 // better-sqlite3
-db.function('add', (a, b) => a + b);
-db.function('add', { 
-  deterministic: true 
-}, (a, b) => a + b);
+db.function("add", (a, b) => a + b);
+db.function(
+  "add",
+  {
+    deterministic: true,
+  },
+  (a, b) => a + b,
+);
 
 // @photostructure/sqlite
-db.function('add', (a, b) => a + b);
-db.function('add', {
-  deterministic: true
-}, (a, b) => a + b);
+db.function("add", (a, b) => a + b);
+db.function(
+  "add",
+  {
+    deterministic: true,
+  },
+  (a, b) => a + b,
+);
 // Same syntax! ✅
 ```
 
@@ -96,17 +105,17 @@ db.function('add', {
 
 ```javascript
 // better-sqlite3
-db.aggregate('custom_sum', {
+db.aggregate("custom_sum", {
   start: 0,
   step: (total, nextValue) => total + nextValue,
-  result: total => total
+  result: (total) => total,
 });
 
 // @photostructure/sqlite
-db.aggregate('custom_sum', {
+db.aggregate("custom_sum", {
   start: 0,
   step: (total, nextValue) => total + nextValue,
-  result: total => total  // Optional in @photostructure/sqlite
+  result: (total) => total, // Optional in @photostructure/sqlite
 });
 // Nearly identical! ✅
 ```
@@ -124,14 +133,14 @@ transaction(items);
 
 // @photostructure/sqlite
 // Manual transaction management
-db.exec('BEGIN');
+db.exec("BEGIN");
 try {
   for (const item of items) {
     insertStmt.run(item);
   }
-  db.exec('COMMIT');
+  db.exec("COMMIT");
 } catch (err) {
-  db.exec('ROLLBACK');
+  db.exec("ROLLBACK");
   throw err;
 }
 ```
@@ -140,12 +149,12 @@ try {
 
 ```javascript
 // better-sqlite3
-db.pragma('journal_mode = WAL');
-const result = db.pragma('cache_size');
+db.pragma("journal_mode = WAL");
+const result = db.pragma("cache_size");
 
 // @photostructure/sqlite
-db.exec('PRAGMA journal_mode = WAL');
-const result = db.prepare('PRAGMA cache_size').get();
+db.exec("PRAGMA journal_mode = WAL");
+const result = db.prepare("PRAGMA cache_size").get();
 ```
 
 ## Feature Differences
@@ -153,7 +162,7 @@ const result = db.prepare('PRAGMA cache_size').get();
 ### Features Only in better-sqlite3
 
 - ❌ `.transaction()` helper method
-- ❌ `.pragma()` convenience method  
+- ❌ `.pragma()` convenience method
 - ❌ `.backup()` method (different API)
 - ❌ Virtual table support
 - ❌ `.loadExtension()` method
@@ -183,45 +192,43 @@ Here's a script to help automate common migrations:
 
 ```javascript
 // migrate-from-better-sqlite3.js
-const fs = require('fs');
+const fs = require("fs");
 
 function migrateFile(filePath) {
-  let content = fs.readFileSync(filePath, 'utf8');
-  
+  let content = fs.readFileSync(filePath, "utf8");
+
   // Update imports
   content = content.replace(
     /const Database = require\(['"]better-sqlite3['"]\)/g,
-    "const { DatabaseSync } = require('@photostructure/sqlite')"
+    "const { DatabaseSync } = require('@photostructure/sqlite')",
   );
   content = content.replace(
     /import Database from ['"]better-sqlite3['"]/g,
-    "import { DatabaseSync } from '@photostructure/sqlite'"
+    "import { DatabaseSync } from '@photostructure/sqlite'",
   );
-  
+
   // Update constructor calls
-  content = content.replace(
-    /new Database\(/g,
-    'new DatabaseSync('
-  );
-  
+  content = content.replace(/new Database\(/g, "new DatabaseSync(");
+
   // Update options
-  content = content.replace(
-    /\breadonly:\s*true/g,
-    'readOnly: true'
-  );
-  
+  content = content.replace(/\breadonly:\s*true/g, "readOnly: true");
+
   // Update property access
-  content = content.replace(/\.name\b/g, '.location');
-  
+  content = content.replace(/\.name\b/g, ".location");
+
   // Flag manual review needed for transactions
-  if (content.includes('.transaction(')) {
-    console.warn(`${filePath}: Manual review needed - contains .transaction() calls`);
+  if (content.includes(".transaction(")) {
+    console.warn(
+      `${filePath}: Manual review needed - contains .transaction() calls`,
+    );
   }
-  
-  if (content.includes('.pragma(')) {
-    console.warn(`${filePath}: Manual review needed - contains .pragma() calls`);
+
+  if (content.includes(".pragma(")) {
+    console.warn(
+      `${filePath}: Manual review needed - contains .pragma() calls`,
+    );
   }
-  
+
   fs.writeFileSync(filePath, content);
 }
 
@@ -231,6 +238,7 @@ function migrateFile(filePath) {
 ## Performance Considerations
 
 Both libraries offer similar performance characteristics:
+
 - Synchronous operations (no async overhead)
 - Direct SQLite C API access
 - Minimal JavaScript wrapper overhead
@@ -241,12 +249,12 @@ Update your type imports:
 
 ```typescript
 // better-sqlite3
-import Database from 'better-sqlite3';
-const db: Database.Database = new Database('mydb.sqlite');
+import Database from "better-sqlite3";
+const db: Database.Database = new Database("mydb.sqlite");
 
-// @photostructure/sqlite  
-import { DatabaseSync } from '@photostructure/sqlite';
-const db = new DatabaseSync('mydb.sqlite');
+// @photostructure/sqlite
+import { DatabaseSync } from "@photostructure/sqlite";
+const db = new DatabaseSync("mydb.sqlite");
 ```
 
 ## Common Gotchas
