@@ -51,6 +51,16 @@ This project employs multiple layers of automated security scanning:
 3. **OSV Scanner** - Google's Open Source Vulnerabilities scanner
 4. **CodeQL** - GitHub's semantic code analysis for both JavaScript/TypeScript and C++
 5. **TruffleHog** - Secrets detection in code
+6. **ESLint Security Plugin** - Static analysis for JavaScript/TypeScript security patterns
+
+### CodeQL Configuration
+
+Our CodeQL setup is configured to focus on security issues in our own code:
+
+- **JavaScript/TypeScript**: Uses `paths-ignore` to exclude upstream and vendor directories
+- **C++**: Uses SARIF filtering to exclude upstream SQLite code after scanning
+
+This ensures we identify security issues in our code while filtering out alerts from upstream dependencies that we cannot directly control.
 
 These scans run automatically on:
 
