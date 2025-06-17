@@ -25,7 +25,7 @@ const patterns =
         // Standard: "at functionName (/path/file.js:1:1)"
         /\bat\s.+?\((?<path>\/.+?):\d+:\d+\)$/,
         // Anonymous or direct: "at /path/file.js:1:1"
-        /\bat\s(.+[^/]\s)?(?<path>\/.+?):\d+:\d+$/,
+        /\bat\s(?:[^\s()]+\s)?(?<path>\/[^:]+):\d+:\d+$/,
       ];
 
 const MaybeUrlRE = /^[a-z]{2,5}:\/\//i;
