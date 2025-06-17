@@ -162,7 +162,9 @@ ${filesToSync.map((f) => `  ${f.src} -> ${f.dest}`).join("\n")}
 
 function ensureDir(filePath: string) {
   const dir = path.dirname(filePath);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is from controlled mappings
   if (!fs.existsSync(dir)) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is from controlled mappings
     fs.mkdirSync(dir, { recursive: true });
   }
 }
@@ -173,11 +175,13 @@ async function checkRemoteFileChanged(
 ): Promise<boolean> {
   try {
     // Check if local file exists
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is from controlled mappings
     if (!fs.existsSync(localPath)) {
       return true; // File doesn't exist locally, need to download
     }
 
     // Get local file stats
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is from controlled mappings
     const localStats = fs.statSync(localPath);
 
     // Make HEAD request to check remote file info
@@ -201,12 +205,14 @@ async function checkRemoteFileChanged(
         // Ignore cache errors
       }
 
+      // eslint-disable-next-line security/detect-object-injection -- URL is from controlled source
       const cachedEtag = cache[url];
       if (cachedEtag === etag) {
         return false; // ETags match, no change
       }
 
       // Update cache with new ETag
+      // eslint-disable-next-line security/detect-object-injection -- URL is from controlled source
       cache[url] = etag;
       try {
         fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2));
@@ -248,6 +254,7 @@ async function downloadFile(
     const content = await response.text();
 
     ensureDir(destPath);
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is from controlled mappings
     fs.writeFileSync(destPath, content, "utf8");
 
     const sizeKB = (content.length / 1024).toFixed(1);

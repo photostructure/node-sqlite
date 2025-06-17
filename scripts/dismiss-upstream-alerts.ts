@@ -53,6 +53,7 @@ async function main() {
   // Group by file for summary
   const byFile = upstreamAlerts.reduce((acc: any, alert: any) => {
     const path = alert.most_recent_instance.location.path;
+    // eslint-disable-next-line security/detect-object-injection -- Path comes from GitHub API
     acc[path] = (acc[path] || 0) + 1;
     return acc;
   }, {});
@@ -129,26 +130,35 @@ async function main() {
     { encoding: "utf8" },
   );
   const remainingAlerts = JSON.parse(remainingAlertsJson);
-  const remainingCount = remainingAlerts.filter((alert: any) => alert.state === "open").length;
+  const remainingCount = remainingAlerts.filter(
+    (alert: any) => alert.state === "open",
+  ).length;
 
   console.log(`📊 Remaining open alerts: ${remainingCount}`);
 
   // Get summary of remaining alerts
   const allRemainingJson = execFileSync(
     "gh",
-    ["api", "repos/photostructure/node-sqlite/code-scanning/alerts", "--paginate"],
+    [
+      "api",
+      "repos/photostructure/node-sqlite/code-scanning/alerts",
+      "--paginate",
+    ],
     { encoding: "utf8" },
   );
   const allRemaining = JSON.parse(allRemainingJson);
-  const openAlerts = allRemaining.filter((alert: any) => alert.state === "open");
-  
+  const openAlerts = allRemaining.filter(
+    (alert: any) => alert.state === "open",
+  );
+
   // Group by path and get top 10
   const pathCounts = openAlerts.reduce((acc: any, alert: any) => {
     const path = alert.most_recent_instance.location.path;
+    // eslint-disable-next-line security/detect-object-injection -- Path comes from GitHub API
     acc[path] = (acc[path] || 0) + 1;
     return acc;
   }, {});
-  
+
   const remainingSummary = Object.entries(pathCounts)
     .map(([path, count]) => ({ path, count }))
     .sort((a: any, b: any) => b.count - a.count)

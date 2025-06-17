@@ -96,6 +96,7 @@ function findClangTidy(): string {
         encoding: "utf8",
       }).trim();
       const llvmClangTidy = join(llvmPrefix, "bin", "clang-tidy");
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path comes from brew output
       if (existsSync(llvmClangTidy)) {
         const versionInfo = execFileSync(llvmClangTidy, ["--version"], {
           encoding: "utf8",
@@ -176,6 +177,7 @@ async function runClangTidyOnFile(
         "/Library/Developer/CommandLineTools/usr/lib/clang/15/include",
       ];
 
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Checking predefined system paths
       let clangInclude = clangVersionDirs.find((dir) => existsSync(dir));
       if (!clangInclude) {
         // Find it dynamically

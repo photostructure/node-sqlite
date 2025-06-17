@@ -13,12 +13,18 @@ async function main() {
   // Get all upstream alerts in one batch
   const allAlertsJson = execFileSync(
     "gh",
-    ["api", "repos/photostructure/node-sqlite/code-scanning/alerts", "--paginate"],
+    [
+      "api",
+      "repos/photostructure/node-sqlite/code-scanning/alerts",
+      "--paginate",
+    ],
     { encoding: "utf8" },
   );
   const allAlerts = JSON.parse(allAlertsJson);
   const upstreamAlerts = allAlerts
-    .filter((alert: any) => alert.most_recent_instance.location.path.startsWith("src/upstream/"))
+    .filter((alert: any) =>
+      alert.most_recent_instance.location.path.startsWith("src/upstream/"),
+    )
     .map((alert: any) => alert.number);
 
   console.log(`Found ${upstreamAlerts.length} upstream alerts to dismiss`);
@@ -82,7 +88,9 @@ async function main() {
     { encoding: "utf8" },
   );
   const remainingAlerts = JSON.parse(remainingAlertsJson);
-  const remainingOpen = remainingAlerts.filter((alert: any) => alert.state === "open").length;
+  const remainingOpen = remainingAlerts.filter(
+    (alert: any) => alert.state === "open",
+  ).length;
 
   console.log(`📊 Remaining open alerts: ${remainingOpen}`);
 
@@ -90,13 +98,16 @@ async function main() {
     console.log(
       "\nRemaining alerts should now be from your own code that needs attention:",
     );
-    const openAlerts = remainingAlerts.filter((alert: any) => alert.state === "open");
+    const openAlerts = remainingAlerts.filter(
+      (alert: any) => alert.state === "open",
+    );
     const pathCounts = openAlerts.reduce((acc: any, alert: any) => {
       const path = alert.most_recent_instance.location.path;
+      // eslint-disable-next-line security/detect-object-injection -- Path comes from GitHub API
       acc[path] = (acc[path] || 0) + 1;
       return acc;
     }, {});
-    
+
     Object.entries(pathCounts)
       .sort(([, a]: any, [, b]: any) => b - a)
       .slice(0, 10)

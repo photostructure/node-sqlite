@@ -114,6 +114,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
           reject(new Error(`HTTP ${res.statusCode}: ${url}`));
           return;
         }
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path is from controlled source
         const file = createWriteStream(dest);
         pipeline(res, file)
           .then(() => resolve())

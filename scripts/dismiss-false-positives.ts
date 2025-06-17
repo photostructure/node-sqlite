@@ -73,7 +73,7 @@ async function main() {
     ["api", "repos/photostructure/node-sqlite/code-scanning/alerts"],
     { encoding: "utf8" },
   );
-  
+
   const allAlerts = JSON.parse(alertsJson);
   const remaining = allAlerts.filter((alert: any) => alert.state === "open");
 
