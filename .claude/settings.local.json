@@ -73,7 +73,8 @@
       "Bash(npx typedoc:*)",
       "Bash(gh api:*)",
       "Bash(mv:*)",
-      "Bash(git diff:*)"
+      "Bash(git diff:*)",
+      "Bash(git add:*)"
     ]
   },
   "enableAllProjectMcpServers": false
