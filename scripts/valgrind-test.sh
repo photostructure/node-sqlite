@@ -27,7 +27,7 @@ fi
 echo -e "${GREEN}Running valgrind memory leak detection...${NC}"
 
 # Path to the dedicated valgrind test script
-VALGRIND_TEST="$SCRIPT_DIR/valgrind-test.mjs"
+VALGRIND_TEST="$SCRIPT_DIR/valgrind-test.ts"
 
 # Ensure the test script exists
 if [ ! -f "$VALGRIND_TEST" ]; then
@@ -43,9 +43,9 @@ fi
 
 # Pre-flight check: run the test script without valgrind first
 echo "Running pre-flight check..."
-if ! node "$VALGRIND_TEST" > /dev/null 2>&1; then
+if ! npx tsx "$VALGRIND_TEST" > /dev/null 2>&1; then
     echo -e "${RED}Error: Test script failed to run. Running again to show error:${NC}"
-    node "$VALGRIND_TEST"
+    npx tsx "$VALGRIND_TEST"
     exit 1
 fi
 echo -e "${GREEN}✓ Pre-flight check passed${NC}"
@@ -63,7 +63,7 @@ fi
 VALGRIND_OPTS="--leak-check=full --show-leak-kinds=definite,indirect,possible --track-origins=yes --suppressions=$SUPP_FILE"
 
 echo "Running valgrind tests..."
-if valgrind $VALGRIND_OPTS node "$VALGRIND_TEST" 2>&1 | tee "$ROOT_DIR/valgrind.log"; then
+if valgrind $VALGRIND_OPTS npx tsx "$VALGRIND_TEST" 2>&1 | tee "$ROOT_DIR/valgrind.log"; then
     # Check the log for actual leaks
     if grep -q "definitely lost: 0 bytes in 0 blocks" "$ROOT_DIR/valgrind.log" && \
        grep -q "indirectly lost: 0 bytes in 0 blocks" "$ROOT_DIR/valgrind.log"; then
