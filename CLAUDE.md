@@ -269,6 +269,12 @@ db.close();
 
 ## Important Implementation Notes
 
+### Git Staging Reminder
+
+**CRITICAL**: After editing any file that was already staged with `git add`, you MUST run `git add` again on that file to stage the new changes. Otherwise, the old version will be committed instead of your edited version.
+
+**Always verify staged changes before committing** by running `git diff --cached` or `git status -v`.
+
 ### Aggregate Functions and V8 HandleScope
 
 **Problem**: When implementing SQLite aggregate functions, we encountered "Invalid argument" errors that were caused by V8 HandleScope lifetime issues.

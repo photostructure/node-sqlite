@@ -282,12 +282,12 @@ async function main() {
 
   let successCount = 0;
   let skippedCount = 0;
-  let totalCount = filesToSync.length;
+  const totalCount = filesToSync.length;
   let nodeSqliteVersion: string | null = null;
   let nodeVersion: string | null = null;
   let nodeCommitSha: string | null = null;
-  let currentSqliteVersion = await getCurrentSqliteVersion();
-  let sqliteFiles = [
+  const currentSqliteVersion = await getCurrentSqliteVersion();
+  const sqliteFiles = [
     "deps/sqlite/sqlite3.c",
     "deps/sqlite/sqlite3.h",
     "deps/sqlite/sqlite3ext.h",
@@ -366,7 +366,7 @@ async function main() {
           }
         }
       }
-    } catch (error) {
+    } catch {
       // Ignore errors during version check
     }
   }

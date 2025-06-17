@@ -17,7 +17,7 @@ if (majorVersion !== 24) {
 try {
   execSync("tsc -p scripts/tsconfig.api-check.json", { stdio: "inherit" });
   console.log("API compatibility check passed");
-} catch (error) {
+} catch {
   console.error("API compatibility check failed");
   process.exit(1);
 }

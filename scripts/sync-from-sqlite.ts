@@ -320,7 +320,7 @@ async function main() {
       await fs.access(src);
       await fs.copyFile(src, dest);
       console.log(`  Copied ${file}`);
-    } catch (err) {
+    } catch {
       console.log(`  Skipped ${file} (not found in amalgamation)`);
     }
   }

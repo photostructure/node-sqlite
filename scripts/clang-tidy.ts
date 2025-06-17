@@ -1,5 +1,9 @@
 #!/usr/bin/env tsx
-import { exec as execCallback, execSync } from "node:child_process";
+import {
+  exec as execCallback,
+  execFileSync,
+  execSync,
+} from "node:child_process";
 import { existsSync } from "node:fs";
 import { cpus, platform } from "node:os";
 import { dirname, join, relative } from "node:path";
@@ -29,7 +33,7 @@ const colors = {
 // Check for required tools
 function checkCommand(command: string, installHint: string): boolean {
   try {
-    execSync(`which ${command}`, { stdio: "ignore" });
+    execFileSync("which", [command], { stdio: "ignore" });
     return true;
   } catch {
     console.error(`Error: '${command}' not found in PATH.`);
@@ -88,12 +92,12 @@ function findClangTidy(): string {
   // First check if LLVM is installed via Homebrew on macOS
   if (platform() === "darwin") {
     try {
-      const llvmPrefix = execSync("brew --prefix llvm 2>/dev/null", {
+      const llvmPrefix = execFileSync("brew", ["--prefix", "llvm"], {
         encoding: "utf8",
       }).trim();
       const llvmClangTidy = join(llvmPrefix, "bin", "clang-tidy");
       if (existsSync(llvmClangTidy)) {
-        const versionInfo = execSync(`${llvmClangTidy} --version`, {
+        const versionInfo = execFileSync(llvmClangTidy, ["--version"], {
           encoding: "utf8",
         });
         console.log(
@@ -109,7 +113,7 @@ function findClangTidy(): string {
   const versions = ["", "-18", "-17", "-16", "-15", "-14"];
   for (const version of versions) {
     try {
-      const versionInfo = execSync(`clang-tidy${version} --version`, {
+      const versionInfo = execFileSync(`clang-tidy${version}`, ["--version"], {
         encoding: "utf8",
       });
       if (versionInfo.includes("LLVM") || versionInfo.includes("clang-tidy")) {
@@ -171,26 +175,30 @@ async function runClangTidyOnFile(
         "/Library/Developer/CommandLineTools/usr/lib/clang/16/include",
         "/Library/Developer/CommandLineTools/usr/lib/clang/15/include",
       ];
-      
-      let clangInclude = clangVersionDirs.find(dir => existsSync(dir));
+
+      let clangInclude = clangVersionDirs.find((dir) => existsSync(dir));
       if (!clangInclude) {
         // Find it dynamically
         try {
-          const clangVersion = execSync("clang --version | head -1 | awk '{print $NF}' | cut -d. -f1", {
-            encoding: "utf8",
-            shell: "/bin/sh"
-          }).trim();
+          const clangVersion = execSync(
+            "clang --version | head -1 | awk '{print $NF}' | cut -d. -f1",
+            {
+              encoding: "utf8",
+              shell: "/bin/sh",
+            },
+          ).trim();
           clangInclude = `/Library/Developer/CommandLineTools/usr/lib/clang/${clangVersion}/include`;
         } catch {
           clangInclude = clangVersionDirs[0]; // fallback
         }
       }
-      
-      extraArgs = `--extra-arg=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 ` +
-                  `--extra-arg=-isystem${clangInclude} ` +
-                  `--extra-arg=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include`;
+
+      extraArgs =
+        `--extra-arg=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 ` +
+        `--extra-arg=-isystem${clangInclude} ` +
+        `--extra-arg=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include`;
     }
-    
+
     const { stdout, stderr } = await exec(
       `${clangTidy} -p ${projectRoot} ${extraArgs} "${file}" 2>&1`,
     );

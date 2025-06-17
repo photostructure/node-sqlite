@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { platform } from "node:os";
 
 const isLinux = platform() === "linux";
@@ -7,8 +7,10 @@ const isMacOS = platform() === "darwin";
 function run(command: string, description: string) {
   console.log(`\n▶ ${description || command}`);
   try {
-    execSync(command, { stdio: "inherit" });
-  } catch (error) {
+    // Use npm to run the commands for better cross-platform compatibility
+    const [cmd, ...args] = command.split(" ");
+    execFileSync(cmd, args, { stdio: "inherit", shell: false });
+  } catch {
     console.error(`✗ Failed: ${description || command}`);
     process.exit(1);
   }

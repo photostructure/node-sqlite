@@ -35,7 +35,7 @@ export async function getCurrentSqliteVersion(): Promise<string | null> {
     if (packageJson.versions?.sqlite) {
       return packageJson.versions.sqlite;
     }
-  } catch (err) {
+  } catch {
     // Package.json read failed
   }
 
@@ -49,7 +49,7 @@ export async function getCurrentSqliteVersion(): Promise<string | null> {
     if (versionMatch) {
       return versionMatch[1];
     }
-  } catch (err) {
+  } catch {
     // File doesn't exist or can't be read
   }
 
