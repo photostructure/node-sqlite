@@ -11,13 +11,13 @@ npm install @photostructure/sqlite
 ## Quick Start
 
 ```javascript
-import { DatabaseSync } from '@photostructure/sqlite';
+import { DatabaseSync } from "@photostructure/sqlite";
 
-const db = new DatabaseSync(':memory:');
-db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)');
-const insert = db.prepare('INSERT INTO users (name) VALUES (?)');
-insert.run('Alice');
-const users = db.prepare('SELECT * FROM users').all();
+const db = new DatabaseSync(":memory:");
+db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
+const insert = db.prepare("INSERT INTO users (name) VALUES (?)");
+insert.run("Alice");
+const users = db.prepare("SELECT * FROM users").all();
 console.log(users); // [{ id: 1, name: 'Alice' }]
 db.close();
 ```
@@ -40,16 +40,19 @@ db.close();
 ## Documentation
 
 **Getting Started**
+
 - [Installation & Setup](./doc/getting-started.md)
 - [Migrating from node:sqlite](./doc/migrating-from-node-sqlite.md)
 - [Migrating from better-sqlite3](./doc/migrating-from-better-sqlite3.md)
 
 **Using SQLite**
+
 - [Working with Data](./doc/working-with-data.md)
 - [Extending SQLite](./doc/extending-sqlite.md)
 - [Advanced Patterns](./doc/advanced-patterns.md)
 
 **Reference**
+
 - [API Reference](./doc/api-reference.md)
 - [All Features](./doc/features.md)
 - [Library Comparison](./doc/library-comparison.md)
