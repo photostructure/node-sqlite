@@ -472,10 +472,13 @@ describe("Session Lifecycle Management (RAII)", () => {
         const db = new DatabaseSync(":memory:");
         db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY)");
 
+        // Create a prepared statement outside the loop to avoid creating many statements
+        const stmt = db.prepare("INSERT INTO test VALUES (?)");
+
         // Create and destroy many sessions
         for (let i = 0; i < 100; i++) {
           const session = db.createSession();
-          db.prepare("INSERT INTO test VALUES (?)").run(i);
+          stmt.run(i);
           const changeset = session.changeset();
           if (!(changeset instanceof Buffer)) {
             throw new Error("Expected changeset to be a Buffer");
@@ -486,6 +489,8 @@ describe("Session Lifecycle Management (RAII)", () => {
           session.close();
         }
 
+        // Finalize the statement to ensure cleanup
+        stmt.finalize();
         db.close();
       },
       {
