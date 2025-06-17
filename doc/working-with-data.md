@@ -237,6 +237,64 @@ try {
 }
 ```
 
+## Error Handling
+
+SQLite operations can throw errors for various reasons. This package provides enhanced error information to help with debugging and error recovery.
+
+### Enhanced Error Properties
+
+When an SQLite error occurs, the thrown `Error` object includes additional properties:
+
+#### Always Present
+
+- **`sqliteCode`** (number): The primary SQLite error code (e.g., `14` for `SQLITE_CANTOPEN`)
+- **`sqliteExtendedCode`** (number): The extended error code providing more specific information (e.g., `2067` for `SQLITE_CONSTRAINT_UNIQUE`)
+- **`code`** (string): The SQLite error constant name (e.g., `"SQLITE_CANTOPEN"`, `"SQLITE_CONSTRAINT"`)
+- **`sqliteErrorString`** (string): Human-readable description of the error (e.g., `"unable to open database file"`)
+
+#### Optional
+
+- **`systemErrno`** (number): The underlying OS error number for I/O operations. Only present when the error involves file system operations.
+
+### Example Error Handling
+
+```javascript
+import { DatabaseSync } from '@photostructure/sqlite';
+
+try {
+  const db = new DatabaseSync('/nonexistent/path/database.db', { readOnly: true });
+} catch (error) {
+  console.log(error.message);          // "Failed to open database: unable to open database file"
+  console.log(error.sqliteCode);       // 14
+  console.log(error.sqliteExtendedCode); // 14
+  console.log(error.code);             // "SQLITE_CANTOPEN"
+  console.log(error.sqliteErrorString); // "unable to open database file"
+  console.log(error.systemErrno);      // 2 (ENOENT on Unix)
+}
+
+// Handling constraint violations
+try {
+  const stmt = db.prepare("INSERT INTO users (id, email) VALUES (?, ?)");
+  stmt.run(1, "duplicate@email.com"); // This email already exists
+} catch (error) {
+  if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
+    console.log("Email already exists:", error.sqliteErrorString);
+  }
+}
+```
+
+### Common Error Codes
+
+| Code | Name | Description |
+|------|------|-------------|
+| 1 | `SQLITE_ERROR` | Generic error |
+| 5 | `SQLITE_BUSY` | Database is locked |
+| 8 | `SQLITE_READONLY` | Attempt to write a readonly database |
+| 14 | `SQLITE_CANTOPEN` | Unable to open database file |
+| 19 | `SQLITE_CONSTRAINT` | Constraint violation |
+| 2067 | Extended: `SQLITE_CONSTRAINT_UNIQUE` | UNIQUE constraint failed |
+| 1555 | Extended: `SQLITE_CONSTRAINT_PRIMARYKEY` | PRIMARY KEY constraint failed |
+
 ## NULL Handling
 
 ```javascript
