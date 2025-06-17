@@ -5,6 +5,7 @@
 #include <climits>
 #include <cmath>
 #include <iostream>
+#include <limits>
 
 #include "aggregate_function.h"
 #include "shims/sqlite_errors.h"
@@ -1749,7 +1750,9 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
       }
     } else if (param.IsNumber()) {
       double val = param.As<Napi::Number>().DoubleValue();
-      if (val == std::floor(val) && val >= INT32_MIN && val <= INT32_MAX) {
+      if (std::abs(val - std::floor(val)) <
+              std::numeric_limits<double>::epsilon() &&
+          val >= INT32_MIN && val <= INT32_MAX) {
         sqlite3_bind_int(statement_, param_index,
                          param.As<Napi::Number>().Int32Value());
       } else {

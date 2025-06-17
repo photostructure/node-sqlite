@@ -51,7 +51,7 @@ describe("Enhanced SQLite Error Information", () => {
   test("should include system errno for permission denied", () => {
     // Skip on Windows as permission handling is different
     if (process.platform === "win32") return;
-    
+
     // Skip on Alpine Linux as SQLite silently falls back to read-only mode
     // instead of throwing an error when opening a read-only file with write mode.
     // This is by design - since SQLite 3.34.0, opening with SQLITE_OPEN_READWRITE

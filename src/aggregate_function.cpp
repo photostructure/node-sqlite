@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 #include "shims/node_errors.h"
 #include "sqlite_impl.h"
@@ -313,7 +314,8 @@ void CustomAggregate::JSValueToSqliteResult(sqlite3_context *ctx,
     double num_val = value.As<Napi::Number>().DoubleValue();
     // Note: We cast INT64_MIN/MAX to double to avoid implicit conversion
     // warnings
-    if (floor(num_val) == num_val &&
+    if (std::abs(num_val - std::floor(num_val)) <
+            std::numeric_limits<double>::epsilon() &&
         num_val >= static_cast<double>(INT64_MIN) &&
         num_val <= static_cast<double>(INT64_MAX)) {
       sqlite3_result_int64(ctx, static_cast<sqlite3_int64>(num_val));

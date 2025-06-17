@@ -2,6 +2,7 @@
 
 #include <climits>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 #include "sqlite_impl.h"
@@ -186,7 +187,8 @@ void UserDefinedFunction::JSValueToSqliteResult(sqlite3_context *ctx,
     // Check if it's an integer value
     // Note: We cast INT64_MIN/MAX to double to avoid implicit conversion
     // warnings
-    if (std::floor(num_val) == num_val &&
+    if (std::abs(num_val - std::floor(num_val)) <
+            std::numeric_limits<double>::epsilon() &&
         num_val >= static_cast<double>(INT64_MIN) &&
         num_val <= static_cast<double>(INT64_MAX)) {
       sqlite3_result_int64(ctx, static_cast<sqlite3_int64>(num_val));
