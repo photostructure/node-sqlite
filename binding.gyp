@@ -50,7 +50,7 @@
         "SQLITE_OMIT_SHARED_CACHE",
         "SQLITE_SOUNDEX",
         "SQLITE_THREADSAFE=2",
-        "SQLITE_USE_URI=1" // https://www.sqlite.org/uri.html
+        "SQLITE_USE_URI=1" # https://www.sqlite.org/uri.html
       ],
       # cflags apply only to C files (not C++), so these warnings suppressions
       # are specific to SQLite's C code and don't affect our C++ code:
