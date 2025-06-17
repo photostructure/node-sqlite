@@ -48,6 +48,7 @@ All notable changes to this project will be documented in this file.
 - **Safe integer handling**: JavaScript-safe integer conversion with overflow detection
 - **Multi-process support**: Safe concurrent access from multiple Node.js processes
 - **Worker thread support**: Full functionality in worker threads
+- **URI filename support**: Full SQLite URI syntax support for advanced database configuration
 - **Strict tables**: Support for SQLite's strict table mode
 - **Double-quoted strings**: Configurable SQL syntax compatibility
 

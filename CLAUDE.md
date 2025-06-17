@@ -11,7 +11,7 @@ This is @photostructure/sqlite - a standalone npm package that extracts the expe
 - **Node.js API Compatible**: Exact same interface as Node.js built-in SQLite module
 - **better-sqlite3 Drop-in Replacement**: Goal to provide API compatibility with better-sqlite3 for easy migration
 - **Synchronous Operations**: DatabaseSync and StatementSync classes for blocking database operations
-- **Full SQLite Feature Set**: Includes FTS, JSON functions, math functions, spatial extensions, and session support
+- **Full SQLite Feature Set**: Includes FTS, JSON functions, math functions, spatial extensions, session support, and URI filename support
 - **Native Performance**: Direct SQLite C library integration without additional overhead
 - **TypeScript Support**: Complete type definitions for all APIs
 - **Cross-Platform**: Support for Windows, macOS, and Linux on x64 and ARM64
