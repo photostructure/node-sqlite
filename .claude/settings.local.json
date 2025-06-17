@@ -70,7 +70,10 @@
       "Bash(brew list:*)",
       "Bash(brew:*)",
       "Bash(/opt/homebrew/opt/llvm/bin/clang++:*)",
-      "Bash(npx typedoc:*)"
+      "Bash(npx typedoc:*)",
+      "Bash(gh api:*)",
+      "Bash(mv:*)",
+      "Bash(git diff:*)"
     ]
   },
   "enableAllProjectMcpServers": false
