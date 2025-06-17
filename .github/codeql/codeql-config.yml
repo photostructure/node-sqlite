@@ -1,0 +1,26 @@
+# CodeQL Configuration
+# Note: paths-ignore only works for interpreted languages (JS, Python, Ruby)
+# For C++, use SARIF filtering or custom build steps
+
+name: "SQLite Security Analysis"
+
+# Use security and quality queries
+queries:
+  - uses: security-and-quality
+
+# This only works for JavaScript/TypeScript, not C++
+# paths-ignore:
+#   - '**/src/upstream/**'
+#   - '**/node_modules/**'
+#   - '**/build/**'
+#   - '**/prebuilds/**'
+
+# Filter specific query results if needed
+query-filters:
+  - exclude:
+      # Exclude specific rules that aren't relevant for SQLite
+      tags:
+        - "external/dependency"
+  # Example: exclude specific queries by ID
+  # - exclude:
+  #     id: cpp/commented-out-code
