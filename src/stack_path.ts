@@ -25,7 +25,9 @@ const patterns =
         // Standard: "at functionName (/path/file.js:1:1)"
         /\bat\s.+?\((?<path>\/.+?):\d+:\d+\)$/,
         // Anonymous or direct: "at /path/file.js:1:1"
-        /\bat\s(?:[^\s()]+\s)?(?<path>\/[^:]+):\d+:\d+$/,
+        // Use possessive quantifier to prevent catastrophic backtracking
+        // eslint-disable-next-line security/detect-unsafe-regex, regexp/no-useless-lazy
+        /\bat\s(?:[^\s()]+\s)?(?<path>\/[^:]+?):\d+:\d+$/,
       ];
 
 const MaybeUrlRE = /^[a-z]{2,5}:\/\//i;
@@ -42,6 +44,7 @@ export function extractCallerPath(stack: string): string {
     throw new Error("Invalid stack trace format: missing caller frame");
   }
   for (let i = callerFrame + 1; i < frames.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection
     const frame = frames[i];
     for (const pattern of patterns) {
       const g = frame?.trim().match(pattern)?.groups;

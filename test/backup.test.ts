@@ -277,6 +277,7 @@ describe("Backup functionality", () => {
     await rm(sourcePath);
 
     // Simulate "restore" by renaming backup to original location
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     fs.renameSync(backupPath, sourcePath);
 
     // Open the restored database
@@ -545,6 +546,7 @@ describe("Backup functionality", () => {
       // Verify progress is incremental
       for (let i = 1; i < progressCalls.length; i++) {
         const prev = progressCalls[i - 1];
+        // eslint-disable-next-line security/detect-object-injection
         const curr = progressCalls[i];
 
         // Total pages should remain constant

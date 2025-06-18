@@ -89,6 +89,7 @@ function parseArgs() {
   };
 
   for (let i = 2; i < process.argv.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection
     const arg = process.argv[i];
 
     switch (arg) {
