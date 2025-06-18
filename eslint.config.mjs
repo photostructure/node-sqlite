@@ -99,4 +99,16 @@ export default [
       "no-restricted-syntax": "off", // These scripts use GitHub CLI safely
     },
   },
+  // Disable security rules for test files - all inputs are controlled test data
+  {
+    files: ["test/**/*.ts", "test/**/*.js", "test/**/*.cjs"],
+    rules: {
+      "security/detect-object-injection": "off",
+      "security/detect-non-literal-fs-filename": "off",
+      "security/detect-child-process": "off",
+      "security/detect-non-literal-require": "off",
+      "security/detect-non-literal-regexp": "off",
+      "security/detect-unsafe-regex": "off",
+    },
+  },
 ];

@@ -11,13 +11,15 @@ const shouldRunMemoryTests = process.env.TEST_MEMORY === "1";
 const describeMemoryTests = shouldRunMemoryTests ? describe : describe.skip;
 
 // Check if we're in ESM mode
-const isESM =
+const _isESM =
   process.env.TEST_ESM === "1" ||
   process.env.NODE_OPTIONS?.includes("--experimental-vm-modules");
 
-// Note: Memory tests should be run in CJS mode only due to a Jest issue
-// where ESM tests don't properly exit after completion. This is a known
-// limitation of Jest's experimental ESM support with native modules.
+// Note: Memory tests require --forceExit flag due to a Jest issue with native
+// modules where the process doesn't exit cleanly even though all tests complete.
+// This is a known limitation of Jest's handling of native addons. The tests
+// themselves complete successfully and properly clean up all resources.
+// See: https://github.com/facebook/jest/issues/7287
 
 describeMemoryTests("Memory Tests", () => {
   beforeAll(() => {
@@ -85,18 +87,26 @@ describeMemoryTests("Memory Tests", () => {
       const dbPath = join(tempDir, "test.db");
       const tableName = getUniqueTableName("test");
 
-      const db = new DatabaseSync(dbPath);
-      db.exec(`CREATE TABLE ${tableName} (id INTEGER PRIMARY KEY, data TEXT)`);
+      try {
+        const db = new DatabaseSync(dbPath);
+        db.exec(
+          `CREATE TABLE ${tableName} (id INTEGER PRIMARY KEY, data TEXT)`,
+        );
 
-      const insert = db.prepare(`INSERT INTO ${tableName} (data) VALUES (?)`);
-      for (let i = 0; i < 50; i++) {
-        insert.run(`data_${i}`);
+        const insert = db.prepare(`INSERT INTO ${tableName} (data) VALUES (?)`);
+        for (let i = 0; i < 50; i++) {
+          insert.run(`data_${i}`);
+        }
+
+        db.close();
+      } finally {
+        // Ensure cleanup happens even if test fails
+        try {
+          await rm(tempDir);
+        } catch {
+          // Ignore cleanup errors
+        }
       }
-
-      db.close();
-
-      // Cleanup
-      await rm(tempDir);
     },
     {
       targetDurationMs: 5_000, // Shorter duration for file operations
@@ -496,11 +506,10 @@ describeMemoryTests("Memory Tests", () => {
     { maxMemoryGrowthKBPerSecond: 800 }, // Standard growth allowance
   );
 
-  // Add a simple test at the end to verify Jest reaches the end
-  test("final test marker", () => {
-    console.log(
-      `[Test Suite] All memory tests completed (${isESM ? "ESM" : "CJS"} mode)`,
-    );
+  // Marker test to verify test suite completion
+  test("test suite completion marker", () => {
+    // No console logs here - they can cause Jest to not exit cleanly
+    // Just a simple assertion to mark the end of the suite
     expect(true).toBe(true);
   });
 });

@@ -53,7 +53,6 @@ async function main() {
   // Group by file for summary
   const byFile = upstreamAlerts.reduce((acc: any, alert: any) => {
     const path = alert.most_recent_instance.location.path;
-    // eslint-disable-next-line security/detect-object-injection -- Path comes from GitHub API
     acc[path] = (acc[path] || 0) + 1;
     return acc;
   }, {});
@@ -154,7 +153,6 @@ async function main() {
   // Group by path and get top 10
   const pathCounts = openAlerts.reduce((acc: any, alert: any) => {
     const path = alert.most_recent_instance.location.path;
-    // eslint-disable-next-line security/detect-object-injection -- Path comes from GitHub API
     acc[path] = (acc[path] || 0) + 1;
     return acc;
   }, {});

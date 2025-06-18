@@ -176,9 +176,7 @@ describe("File-based Database Tests", () => {
 
     expect(db).toBeInstanceOf(DatabaseSync);
     expect(db.isOpen).toBe(true);
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     expect(db.location()).toBe(fs.realpathSync(dbPath));
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     expect(fs.existsSync(dbPath)).toBe(true);
 
     db.close();
@@ -192,7 +190,6 @@ describe("File-based Database Tests", () => {
     db.close();
 
     // Verify file exists
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     expect(fs.existsSync(dbPath)).toBe(true);
     expect(fs.statSync(dbPath).size).toBeGreaterThan(0);
   });

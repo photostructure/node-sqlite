@@ -75,7 +75,15 @@
       "Bash(mv:*)",
       "Bash(git diff:*)",
       "Bash(git add:*)",
-      "Bash(gh:*)"
+      "Bash(gh:*)",
+      "Bash(TEST_MEMORY=1 node --expose-gc node_modules/jest/bin/jest.js --no-coverage --runInBand --forceExit test/memory.test.ts 2 >& 1)",
+      "Bash(for file in /home/mrm/src/node-sqlite/test/*.test.ts /home/mrm/src/node-sqlite/test/test-utils.ts)",
+      "Bash(do)",
+      "Bash(if grep -q \"eslint-disable.*security\" \"$file\")",
+      "Bash(then)",
+      "Bash(echo \"Processing: $file\")",
+      "Bash(fi)",
+      "Bash(done)"
     ]
   },
   "enableAllProjectMcpServers": false

@@ -207,6 +207,7 @@ describe("File-based Database Tests", () => {
 
     // Note: This is a simple copy approach since backup() function isn't implemented yet
     sourceDb.close();
+
     fs.copyFileSync(dbPath, backupPath);
 
     // Verify backup contains same data

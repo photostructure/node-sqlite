@@ -59,7 +59,6 @@ describe("Concurrent Access Patterns Tests", () => {
 
       const complexResults = readers.map((db, index) => {
         if (index < complexQueries.length) {
-          // eslint-disable-next-line security/detect-object-injection
           const stmt = db.prepare(complexQueries[index]);
           return stmt.all();
         }

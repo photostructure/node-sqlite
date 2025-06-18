@@ -203,6 +203,7 @@ describe("Multi-Process Database Access", () => {
       const results = stmt.all();
 
       expect(results).toHaveLength(1);
+
       expect(results[0].data).toBe("commit_data");
 
       verifyDb.close();

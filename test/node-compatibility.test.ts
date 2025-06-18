@@ -414,8 +414,11 @@ describe("Node.js API Compatibility Tests", () => {
         const result = stmt.get();
 
         expect(receivedArgs[0]).toBe(5); // integer
+
         expect(receivedArgs[1]).toBeCloseTo(3.14); // float
+
         expect(receivedArgs[2]).toBe("foo"); // string
+
         expect(receivedArgs[3]).toBe(null); // null
         expect(result.result).toBe(42);
 

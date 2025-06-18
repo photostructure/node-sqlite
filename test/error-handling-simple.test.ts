@@ -616,6 +616,7 @@ describe("Error Handling Tests - Safe Edition", () => {
 
     test("handles readonly database write attempts", async () => {
       // Create a database file first
+
       const tempDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "sqlite-readonly-test-"),
       );

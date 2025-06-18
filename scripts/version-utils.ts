@@ -98,9 +98,7 @@ export function compareSqliteVersions(
   const v2Parts = version2.split(".").map((n) => parseInt(n));
 
   for (let i = 0; i < Math.max(v1Parts.length, v2Parts.length); i++) {
-    // eslint-disable-next-line security/detect-object-injection -- Array index from loop counter
     const p1 = v1Parts[i] || 0;
-    // eslint-disable-next-line security/detect-object-injection -- Array index from loop counter
     const p2 = v2Parts[i] || 0;
 
     if (p1 > p2) return 1;

@@ -29,7 +29,6 @@ const excludeDirs = new Set([
 const fileExtensions = new Set([".js", ".mjs", ".ts", ".tsx"]);
 
 async function* walkFiles(dir: string): AsyncGenerator<string> {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Starting from current directory or user-provided path
   const entries = await readdir(dir, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -57,7 +56,6 @@ async function findSecurityIssues(): Promise<void> {
 
   for await (const file of walkFiles(".")) {
     try {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- File paths from directory walk
       const content = readFileSync(file, "utf-8");
       const lines = content.split("\n");
 

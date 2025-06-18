@@ -78,8 +78,10 @@ afterEach(async () => {
   );
 });
 
-// Remove afterAll hook - not needed and can cause Jest to hang
-// The afterEach cleanup is sufficient for resource management
+afterAll(async () => {
+  // Final cleanup to ensure Jest can exit cleanly
+  await new Promise((resolve) => setImmediate(resolve));
+});
 
 // Handle unhandled rejections in tests
 process.on("unhandledRejection", (reason, promise) => {

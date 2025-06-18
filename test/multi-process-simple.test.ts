@@ -23,6 +23,7 @@ describe("Simple Multi-Process Tests", () => {
     // Add timestamp and random suffix to ensure uniqueness
     const timestamp = Date.now();
     const randomSuffix = Math.random().toString(36).substring(2, 8);
+
     tempDir = fs.mkdtempSync(
       path.join(os.tmpdir(), `sqlite-simple-mp-${timestamp}-${randomSuffix}-`),
     );

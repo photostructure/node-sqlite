@@ -103,7 +103,6 @@ async function main() {
     );
     const pathCounts = openAlerts.reduce((acc: any, alert: any) => {
       const path = alert.most_recent_instance.location.path;
-      // eslint-disable-next-line security/detect-object-injection -- Path comes from GitHub API
       acc[path] = (acc[path] || 0) + 1;
       return acc;
     }, {});

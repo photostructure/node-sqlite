@@ -392,39 +392,51 @@ export function testMemoryBenchmark(
   test(
     testName,
     async () => {
-      // Show when test starts
-      console.log(`\n🔬 Starting memory test: ${testName}`);
+      let result: MemoryBenchmarkResult | undefined;
 
-      // Add debug output to track test progress in ESM mode
-      if (process.env.DEBUG_ESM_TESTS) {
-        console.log(`[ESM Debug] Starting test: ${testName}`);
-      }
+      try {
+        // Show when test starts
+        console.log(`\n🔬 Starting memory test: ${testName}`);
 
-      const result = await runMemoryBenchmark(operation, options);
+        // Add debug output to track test progress in ESM mode
+        if (process.env.DEBUG_ESM_TESTS) {
+          console.log(`[ESM Debug] Starting test: ${testName}`);
+        }
 
-      if (process.env.DEBUG_ESM_TESTS) {
-        console.log(`[ESM Debug] Completed test: ${testName}`);
-      }
+        result = await runMemoryBenchmark(operation, options);
 
-      // Log results - only if we successfully got results
-      if (result) {
-        const leakStatus = result.hasMemoryLeak
-          ? "❌ LEAK DETECTED"
-          : "✅ No leak";
-        console.log(
-          `  ${leakStatus}: ${result.iterations} iterations in ${(result.totalDurationMs / 1000).toFixed(1)}s`,
-        );
-        console.log(
-          `  Memory: ${(result.initialMemoryBytes / 1024 / 1024).toFixed(1)}MB → ${(result.finalMemoryBytes / 1024 / 1024).toFixed(1)}MB (${result.memoryGrowthKBPerSecond.toFixed(1)} KB/s growth, R²=${result.rSquared.toFixed(3)})`,
-        );
-      }
+        if (process.env.DEBUG_ESM_TESTS) {
+          console.log(`[ESM Debug] Completed test: ${testName}`);
+        }
 
-      if (result?.hasMemoryLeak) {
-        throw new Error(
-          `Memory leak detected: ${result.memoryGrowthKBPerSecond.toFixed(2)} KB/second ` +
-            `(max allowed: ${benchmarkOptions.maxMemoryGrowthKBPerSecond ?? 500} KB/second, ` +
-            `R²: ${result.rSquared.toFixed(4)})`,
-        );
+        // Log results - only if we successfully got results
+        if (result) {
+          const leakStatus = result.hasMemoryLeak
+            ? "❌ LEAK DETECTED"
+            : "✅ No leak";
+          console.log(
+            `  ${leakStatus}: ${result.iterations} iterations in ${(result.totalDurationMs / 1000).toFixed(1)}s`,
+          );
+          console.log(
+            `  Memory: ${(result.initialMemoryBytes / 1024 / 1024).toFixed(1)}MB → ${(result.finalMemoryBytes / 1024 / 1024).toFixed(1)}MB (${result.memoryGrowthKBPerSecond.toFixed(1)} KB/s growth, R²=${result.rSquared.toFixed(3)})`,
+          );
+        }
+
+        if (result?.hasMemoryLeak) {
+          throw new Error(
+            `Memory leak detected: ${result.memoryGrowthKBPerSecond.toFixed(2)} KB/second ` +
+              `(max allowed: ${benchmarkOptions.maxMemoryGrowthKBPerSecond ?? 500} KB/second, ` +
+              `R²: ${result.rSquared.toFixed(4)})`,
+          );
+        }
+      } catch (error) {
+        console.error(`Memory test "${testName}" failed:`, error);
+        throw error;
+      } finally {
+        // Ensure cleanup happens even if test fails
+        if (global.gc && process.platform === "win32") {
+          global.gc();
+        }
       }
     },
     jestTimeout,

@@ -352,7 +352,6 @@ describe("Backup Restoration", () => {
     await sourceDb.backup(backupFile);
 
     // Corrupt the backup file by writing invalid data
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     fs.writeFileSync(
       backupFile,
       Buffer.from("This is not a valid SQLite database file!"),
