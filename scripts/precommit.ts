@@ -9,9 +9,9 @@ function run(command: string, description: string) {
   try {
     // Use npm to run the commands for better cross-platform compatibility
     const [cmd, ...args] = command.split(" ");
-    execFileSync(cmd, args, { stdio: "inherit", shell: false });
-  } catch {
-    console.error(`✗ Failed: ${description || command}`);
+    execFileSync(cmd, args, { stdio: "inherit", shell: true });
+  } catch (error) {
+    console.error(`✗ Failed`, { description, command, error });
     process.exit(1);
   }
 }
