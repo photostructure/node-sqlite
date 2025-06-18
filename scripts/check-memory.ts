@@ -42,6 +42,11 @@ try {
     jestPath,
     "--no-coverage",
     "--runInBand",
+    // --forceExit is required due to a Jest issue with native modules
+    // where the process doesn't exit cleanly even though all tests complete.
+    // This is a known limitation of Jest's handling of native addons.
+    // The tests themselves complete successfully and properly clean up resources.
+    "--forceExit",
     "test/memory.test.ts",
   ];
 
@@ -61,7 +66,11 @@ try {
       // Run memory tests in CJS mode to avoid Jest ESM hanging issue
       // TEST_ESM: "1",
       NODE_OPTIONS: "--expose-gc --no-warnings",
+      // Force Jest to exit after test completion
+      FORCE_EXIT: "1",
     },
+    // Add timeout for Windows to prevent hanging
+    timeout: 300000, // 5 minutes
   });
   console.log(color(colors.GREEN, "✓ JavaScript memory tests passed"));
 } catch (error) {

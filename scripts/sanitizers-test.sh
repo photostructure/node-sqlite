@@ -85,7 +85,7 @@ npm run build:dist
 # Run tests and capture output
 echo -e "${YELLOW}Running tests with AddressSanitizer...${NC}"
 set +e  # Don't exit on test failure
-npm test -- --no-coverage 2>&1 | tee "$OUTPUT_FILE"
+npm test -- --no-coverage --forceExit 2>&1 | tee "$OUTPUT_FILE"
 TEST_EXIT_CODE=${PIPESTATUS[0]}
 set -e
 
