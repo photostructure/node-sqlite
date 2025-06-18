@@ -137,6 +137,12 @@ fi
 # Report results
 EXIT_CODE=0
 
+# First check if tests themselves failed
+if [[ "$TEST_EXIT_CODE" -ne 0 ]]; then
+    echo -e "${RED}\n✗ Tests failed with exit code: $TEST_EXIT_CODE${NC}"
+    EXIT_CODE=1
+fi
+
 if [[ "$OUR_ERRORS" -eq 1 ]]; then
     echo -e "${RED}\n✗ AddressSanitizer found errors in sqlite code:${NC}"
     grep -E "(ERROR: AddressSanitizer|ERROR: LeakSanitizer)" "$OUTPUT_FILE" | grep -E "(phstr_sqlite\.node|/src/)" | head -20
