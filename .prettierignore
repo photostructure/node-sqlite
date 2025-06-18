@@ -1,3 +1,5 @@
+# https://prettier.io/docs/ignore.html
+
 # We _want_ tests/, src/, scripts/, and benchmark/ to be formatted, but...
 
 # Ignore upstream files synced from Node.js repository
