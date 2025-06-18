@@ -49,6 +49,7 @@
     "c",
     "json",
     "bash",
-    "sql"
+    "sql",
+    "yaml"
   ]
 }
