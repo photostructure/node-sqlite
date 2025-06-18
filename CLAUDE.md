@@ -119,6 +119,7 @@ node-sqlite/
 The project maintains two distinct documentation directories:
 
 - **`doc/`**: Manually written documentation files checked into git
+
   - Contains architecture documents, API guides, and design notes
   - These files are version-controlled and maintained by developers
   - Referenced by TypeDoc as additional project documents

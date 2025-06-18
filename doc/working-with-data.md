@@ -259,17 +259,19 @@ When an SQLite error occurs, the thrown `Error` object includes additional prope
 ### Example Error Handling
 
 ```javascript
-import { DatabaseSync } from '@photostructure/sqlite';
+import { DatabaseSync } from "@photostructure/sqlite";
 
 try {
-  const db = new DatabaseSync('/nonexistent/path/database.db', { readOnly: true });
+  const db = new DatabaseSync("/nonexistent/path/database.db", {
+    readOnly: true,
+  });
 } catch (error) {
-  console.log(error.message);          // "Failed to open database: unable to open database file"
-  console.log(error.sqliteCode);       // 14
+  console.log(error.message); // "Failed to open database: unable to open database file"
+  console.log(error.sqliteCode); // 14
   console.log(error.sqliteExtendedCode); // 14
-  console.log(error.code);             // "SQLITE_CANTOPEN"
+  console.log(error.code); // "SQLITE_CANTOPEN"
   console.log(error.sqliteErrorString); // "unable to open database file"
-  console.log(error.systemErrno);      // 2 (ENOENT on Unix)
+  console.log(error.systemErrno); // 2 (ENOENT on Unix)
 }
 
 // Handling constraint violations
@@ -285,15 +287,15 @@ try {
 
 ### Common Error Codes
 
-| Code | Name | Description |
-|------|------|-------------|
-| 1 | `SQLITE_ERROR` | Generic error |
-| 5 | `SQLITE_BUSY` | Database is locked |
-| 8 | `SQLITE_READONLY` | Attempt to write a readonly database |
-| 14 | `SQLITE_CANTOPEN` | Unable to open database file |
-| 19 | `SQLITE_CONSTRAINT` | Constraint violation |
-| 2067 | Extended: `SQLITE_CONSTRAINT_UNIQUE` | UNIQUE constraint failed |
-| 1555 | Extended: `SQLITE_CONSTRAINT_PRIMARYKEY` | PRIMARY KEY constraint failed |
+| Code | Name                                     | Description                          |
+| ---- | ---------------------------------------- | ------------------------------------ |
+| 1    | `SQLITE_ERROR`                           | Generic error                        |
+| 5    | `SQLITE_BUSY`                            | Database is locked                   |
+| 8    | `SQLITE_READONLY`                        | Attempt to write a readonly database |
+| 14   | `SQLITE_CANTOPEN`                        | Unable to open database file         |
+| 19   | `SQLITE_CONSTRAINT`                      | Constraint violation                 |
+| 2067 | Extended: `SQLITE_CONSTRAINT_UNIQUE`     | UNIQUE constraint failed             |
+| 1555 | Extended: `SQLITE_CONSTRAINT_PRIMARYKEY` | PRIMARY KEY constraint failed        |
 
 ## NULL Handling
 
