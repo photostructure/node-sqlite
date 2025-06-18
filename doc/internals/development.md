@@ -40,7 +40,7 @@ While AI significantly accelerated development, all code underwent:
 - Human review before merging
 - Comprehensive automated testing
 - Memory leak detection (Valgrind, ASAN)
-- Security scanning (npm audit, Snyk, OSV, CodeQL)
+- Security scanning (npm audit, OSV, CodeQL)
 - Performance benchmarking
 
 This approach demonstrates how AI-assisted development can accelerate complex system programming while maintaining high code quality through comprehensive testing and human oversight.
