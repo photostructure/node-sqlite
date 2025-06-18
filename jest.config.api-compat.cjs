@@ -1,6 +1,5 @@
 // @ts-check
 
-
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 const config = {
   displayName: `API Compatibility Test`,

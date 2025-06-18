@@ -23,7 +23,7 @@ run-name: ${{ github.event_name == 'workflow_dispatch' && format('Release - {0}'
 jobs:
   lint:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30  # Extend timeout to 30 minutes (default is 6 hours for a job)
+    timeout-minutes: 30 # Extend timeout to 30 minutes (default is 6 hours for a job)
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update
@@ -35,7 +35,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build:dist
       - run: npm run lint
-        timeout-minutes: 20  # Give the lint step more time
+        timeout-minutes: 20 # Give the lint step more time
 
   prebuild-mac-x64:
     runs-on: macos-13-large # Intel x64 runner
@@ -142,7 +142,13 @@ jobs:
           path: prebuilds/
 
   test-mac-win:
-    needs: [prebuild-mac-x64, prebuild-mac-arm64, prebuild-win-x64, prebuild-win-arm64]
+    needs:
+      [
+        prebuild-mac-x64,
+        prebuild-mac-arm64,
+        prebuild-win-x64,
+        prebuild-win-arm64,
+      ]
     strategy:
       fail-fast: false
       matrix:
@@ -239,7 +245,8 @@ jobs:
   publish:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
-    needs: [test-mac-win, test-ubuntu, test-alpine, lint, test-api-compatibility]
+    needs:
+      [test-mac-win, test-ubuntu, test-alpine, lint, test-api-compatibility]
     permissions:
       contents: write
       packages: write
@@ -306,4 +313,3 @@ jobs:
             --title "Release v$NEW_VERSION" \
             --generate-notes \
             --verify-tag
-
