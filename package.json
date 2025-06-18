@@ -81,7 +81,7 @@
     "security:audit-fix": "npm audit fix --force",
     "security:code": "tsx scripts/security-check.ts",
     "security:dismiss-upstream": "tsx scripts/dismiss-upstream-alerts-minimal.ts",
-    "security:osv": "if command -v osv-scanner >/dev/null 2>&1; then osv-scanner scan source --recursive .; else echo 'OSV Scanner not installed. Install with: go install github.com/google/osv-scanner/cmd/osv-scanner@latest'; fi"
+    "security:osv": "tsx scripts/run-osv-scanner.ts"
   },
   "gypfile": true,
   "publishConfig": {
