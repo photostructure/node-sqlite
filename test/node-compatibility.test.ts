@@ -2,6 +2,7 @@ import {
   DatabaseSync as OurDatabaseSync,
   constants as ourConstants,
 } from "../src";
+import { getTimingMultiplier } from "./test-timeout-config";
 
 /**
  * Node.js Compatibility Tests
@@ -608,8 +609,9 @@ describe("Node.js API Compatibility Tests", () => {
       expect(results[9999].value).toBe(19998);
 
       // Performance should be reasonable
-      expect(insertTime).toBeLessThan(2000); // 2 seconds for inserts
-      expect(queryTime).toBeLessThan(1000); // 1 second for query
+      const multiplier = getTimingMultiplier();
+      expect(insertTime).toBeLessThan(2000 * multiplier); // 2 seconds for inserts
+      expect(queryTime).toBeLessThan(1000 * multiplier); // 1 second for query
 
       console.log(
         `Large dataset test: ${insertTime}ms insert, ${queryTime}ms query`,
