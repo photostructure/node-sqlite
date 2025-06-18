@@ -53,7 +53,8 @@ export function getTimingMultiplier(): number {
   if (isEmulated()) multiplier *= 10;
 
   // Windows is slow to fork and file operations
-  if (platform === "win32") multiplier *= 6;
+  // Especially slow for memory-intensive operations
+  if (platform === "win32") multiplier *= 8;
 
   // MacOS VMs are glacial:
   if (platform === "darwin") multiplier *= 4;
