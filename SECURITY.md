@@ -47,11 +47,10 @@ Please include the following information in your report:
 This project employs multiple layers of automated security scanning:
 
 1. **npm audit** - Scans for known vulnerabilities in dependencies
-2. **Snyk** - Advanced vulnerability detection and remediation
-3. **OSV Scanner** - Google's Open Source Vulnerabilities scanner
-4. **CodeQL** - GitHub's semantic code analysis for both JavaScript/TypeScript and C++
-5. **TruffleHog** - Secrets detection in code
-6. **ESLint Security Plugin** - Static analysis for JavaScript/TypeScript security patterns
+2. **OSV Scanner** - Google's Open Source Vulnerabilities scanner
+3. **CodeQL** - GitHub's semantic code analysis for both JavaScript/TypeScript and C++
+4. **TruffleHog** - Secrets detection in code
+5. **ESLint Security Plugin** - Static analysis for JavaScript/TypeScript security patterns
 
 ### CodeQL Configuration
 
