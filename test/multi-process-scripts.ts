@@ -149,7 +149,7 @@ export const lockHolderScript = `
     console.log("LOCK_ACQUIRED");
     console.error("Lock acquired at:", new Date().toISOString());
     
-    // Hold lock for specified time
+    // Hold lock for specified time using setTimeout
     setTimeout(() => {
       try {
         // Final update before releasing
@@ -195,17 +195,15 @@ export const lockWriterScript = `
   let db;
   
   try {
-    // Use very short timeout to fail fast when database is locked
-    db = new DatabaseSync(process.env.DB_PATH, { timeout: 50 });
+    // Use VERY short timeout (1ms) to ensure we get immediate feedback on lock status
+    db = new DatabaseSync(process.env.DB_PATH, { timeout: 1 });
     
     console.error("Writer attempting at:", new Date().toISOString());
     
-    // Try to start an immediate transaction - this should fail if another process has exclusive lock
-    db.exec("BEGIN IMMEDIATE");
-    
-    // If we got here, the database wasn't locked
-    db.exec("UPDATE lock_test SET value = 111 WHERE id = 1");
-    db.exec("COMMIT");
+    // Try to write directly without explicit BEGIN - SQLite will try to get a write lock
+    // This is more likely to detect the EXCLUSIVE lock from the other process
+    const stmt = db.prepare("UPDATE lock_test SET value = 111 WHERE id = 1");
+    stmt.run();
     
     console.log("WRITE_SUCCESS");
     console.error("Writer succeeded unexpectedly");
@@ -219,7 +217,8 @@ export const lockWriterScript = `
         errorMsg.includes("busy") || 
         errorMsg.includes("sqlite_busy") ||
         errorMsg.includes("database is locked") ||
-        errorMsg.includes("database table is locked")) {
+        errorMsg.includes("database table is locked") ||
+        errorMsg.includes("timeout")) {
       console.log("DATABASE_LOCKED");
     } else {
       console.log("UNEXPECTED_ERROR:", error.message);
