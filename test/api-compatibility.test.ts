@@ -26,7 +26,7 @@
  * - Run by npm run lint:api-compat which is called during precommit checks
  */
 
-import * as OurSqlite from "./index";
+import * as OurSqlite from "../src/index";
 
 // Only import node:sqlite types on Node.js 24+
 import * as NodeSqlite from "node:sqlite";

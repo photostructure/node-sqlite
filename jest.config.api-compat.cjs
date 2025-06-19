@@ -4,7 +4,7 @@
 const config = {
   displayName: `API Compatibility Test`,
   testEnvironment: "jest-environment-node",
-  roots: ["<rootDir>/src"],
+  roots: ["<rootDir>/src", "<rootDir>/test"],
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
   verbose: true,
   silent: false,
