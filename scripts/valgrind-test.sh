@@ -60,13 +60,20 @@ if [ ! -f "$SUPP_FILE" ]; then
 fi
 
 # Run valgrind with appropriate options
-VALGRIND_OPTS="--leak-check=full --show-leak-kinds=definite,indirect,possible --track-origins=yes --suppressions=$SUPP_FILE"
+VALGRIND_OPTS="--leak-check=full --show-leak-kinds=definite,indirect,possible --track-origins=yes --suppressions=$SUPP_FILE --gen-suppressions=all"
 
 echo "Running valgrind tests..."
 if valgrind $VALGRIND_OPTS npx tsx "$VALGRIND_TEST" 2>&1 | tee "$ROOT_DIR/valgrind.log"; then
-    # Check the log for actual leaks
-    if grep -q "definitely lost: 0 bytes in 0 blocks" "$ROOT_DIR/valgrind.log" && \
-       grep -q "indirectly lost: 0 bytes in 0 blocks" "$ROOT_DIR/valgrind.log"; then
+    # Extract leak counts from the LEAK SUMMARY
+    DEFINITELY_LOST=$(grep "definitely lost:" "$ROOT_DIR/valgrind.log" | sed -E 's/.*definitely lost: ([0-9,]+) bytes.*/\1/' | tr -d ',')
+    INDIRECTLY_LOST=$(grep "indirectly lost:" "$ROOT_DIR/valgrind.log" | sed -E 's/.*indirectly lost: ([0-9,]+) bytes.*/\1/' | tr -d ',')
+    
+    # Debug output
+    echo "Definitely lost: ${DEFINITELY_LOST:-0} bytes"
+    echo "Indirectly lost: ${INDIRECTLY_LOST:-0} bytes"
+    
+    # Check if we have actual leaks (not suppressed)
+    if [[ "${DEFINITELY_LOST:-0}" -eq 0 ]] && [[ "${INDIRECTLY_LOST:-0}" -eq 0 ]]; then
         echo -e "${GREEN}✓ No memory leaks detected${NC}"
         RESULT=0
     else
@@ -79,7 +86,12 @@ else
     RESULT=1
 fi
 
-# Cleanup log file only (keep the committed suppression file)
-rm -f "$ROOT_DIR/valgrind.log"
+# Keep log file for debugging in CI
+if [[ -n "${GITHUB_ACTIONS}" ]]; then
+    echo -e "${YELLOW}Valgrind log saved to: $ROOT_DIR/valgrind.log${NC}"
+else
+    # Cleanup log file only in local development
+    rm -f "$ROOT_DIR/valgrind.log"
+fi
 
 exit $RESULT

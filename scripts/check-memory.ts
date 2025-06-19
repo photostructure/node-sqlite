@@ -98,6 +98,19 @@ if (os.platform() === "linux") {
   try {
     execFileSync("which", ["valgrind"], { stdio: "ignore" });
     console.log(color(colors.YELLOW, "\nRunning valgrind memory analysis..."));
+    
+    // Run debug script first in CI to gather more information
+    if (process.env.GITHUB_ACTIONS) {
+      console.log("Running debug memory leak script...");
+      try {
+        const debugScript = path.join(__dirname, "debug-memory-leak.sh");
+        execFileSync("/bin/bash", [debugScript], { stdio: "inherit" });
+      } catch {
+        // Don't fail on debug script errors
+        console.log("Debug script failed (continuing anyway)");
+      }
+    }
+    
     try {
       const valgrindScript = path.join(__dirname, "valgrind-test.sh");
       execFileSync("/bin/bash", [valgrindScript], { stdio: "inherit" });
