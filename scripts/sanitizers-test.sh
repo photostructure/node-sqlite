@@ -164,38 +164,34 @@ if [[ "$OUR_LEAKS" -gt 0 ]]; then
     EXIT_CODE=1
 fi
 
-if [[ "$EXIT_CODE" -eq 0 ]]; then
-    echo -e "${GREEN}\n✓ AddressSanitizer and LeakSanitizer tests passed (no issues in sqlite code)${NC}"
-    
-    # Report suppressed leaks if any
-    if [[ "$TOTAL_LEAKS" -gt 0 ]]; then
-        echo -e "${YELLOW}\n   Suppressed/Ignored leaks:${NC}"
-        if [[ "$PYTHON_LEAKS" -gt 0 ]]; then
-            echo -e "${YELLOW}   - Python/build tools: $PYTHON_LEAKS leak(s)${NC}"
-        fi
-        if [[ "$SYSTEM_LEAKS" -gt 0 ]]; then
-            echo -e "${YELLOW}   - System/Node.js/Dependencies: $SYSTEM_LEAKS leak(s)${NC}"
-        fi
-        echo -e "${BLUE}   Total: $TOTAL_LEAKS leak(s) (not from our code)${NC}"
-        
-        # Don't show the SUMMARY line for non-our-code leaks
-        echo -e "${BLUE}\n   Note: These leaks are from Python build tools, system libraries,${NC}"
-        echo -e "${BLUE}   or npm dependencies - not from the @photostructure/sqlite code.${NC}"
-    fi
-else
+# Check if we detected actual memory issues in our code
+if [[ "$OUR_ERRORS" -eq 1 ]] || [[ "$OUR_LEAKS" -gt 0 ]]; then
+    # We found actual memory safety issues in our code
     echo -e "${RED}\n✗ Memory safety issues detected in @photostructure/sqlite code!${NC}"
     echo -e "${YELLOW}See $OUTPUT_FILE for full details${NC}"
-    
-    # Still report other leaks for context
-    if [[ "$PYTHON_LEAKS" -gt 0 ]] || [[ "$SYSTEM_LEAKS" -gt 0 ]]; then
-        echo -e "${YELLOW}\nAdditional suppressed leaks:${NC}"
-        if [[ "$PYTHON_LEAKS" -gt 0 ]]; then
-            echo -e "${YELLOW}   - Python/build tools: $PYTHON_LEAKS leak(s)${NC}"
-        fi
-        if [[ "$SYSTEM_LEAKS" -gt 0 ]]; then
-            echo -e "${YELLOW}   - System/Node.js/Dependencies: $SYSTEM_LEAKS leak(s)${NC}"
-        fi
+elif [[ "$TEST_EXIT_CODE" -ne 0 ]]; then
+    # Tests failed but no memory issues in our code
+    echo -e "${YELLOW}\n⚠ Tests failed, but no memory safety issues found in @photostructure/sqlite code${NC}"
+    echo -e "${YELLOW}Check test output above for test failures${NC}"
+else
+    # Everything passed
+    echo -e "${GREEN}\n✓ AddressSanitizer and LeakSanitizer tests passed (no issues in sqlite code)${NC}"
+fi
+
+# Report suppressed leaks regardless of outcome
+if [[ "$TOTAL_LEAKS" -gt 0 ]]; then
+    echo -e "${YELLOW}\n   Suppressed/Ignored leaks:${NC}"
+    if [[ "$PYTHON_LEAKS" -gt 0 ]]; then
+        echo -e "${YELLOW}   - Python/build tools: $PYTHON_LEAKS leak(s)${NC}"
     fi
+    if [[ "$SYSTEM_LEAKS" -gt 0 ]]; then
+        echo -e "${YELLOW}   - System/Node.js/Dependencies: $SYSTEM_LEAKS leak(s)${NC}"
+    fi
+    echo -e "${BLUE}   Total: $TOTAL_LEAKS leak(s) (not from our code)${NC}"
+    
+    # Don't show the SUMMARY line for non-our-code leaks
+    echo -e "${BLUE}\n   Note: These leaks are from Python build tools, system libraries,${NC}"
+    echo -e "${BLUE}   or npm dependencies - not from the @photostructure/sqlite code.${NC}"
 fi
 
 # Show ASAN statistics if verbose
