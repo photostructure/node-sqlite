@@ -10,6 +10,7 @@ import { execFileSync } from "node:child_process";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getTimingMultiplier } from "../test/test-timeout-config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,6 +59,13 @@ try {
   console.log("Debug: Platform:", os.platform());
   console.log("Debug: Node version:", process.version);
 
+  // Calculate platform-aware timeout
+  const baseTimeout = 300000; // 5 minutes base
+  const multiplier = getTimingMultiplier();
+  const timeout = baseTimeout * multiplier;
+  
+  console.log(`Debug: Using timeout: ${timeout}ms (${baseTimeout}ms base × ${multiplier} multiplier)`);
+  
   execFileSync(nodeExe, args, {
     stdio: "inherit",
     env: {
@@ -69,8 +77,8 @@ try {
       // Force Jest to exit after test completion
       FORCE_EXIT: "1",
     },
-    // Add timeout for Windows to prevent hanging
-    timeout: 300000, // 5 minutes
+    // Platform-aware timeout to prevent hanging
+    timeout,
   });
   console.log(color(colors.GREEN, "✓ JavaScript memory tests passed"));
 } catch (error) {
