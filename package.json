@@ -81,7 +81,10 @@
     "security:audit-fix": "npm audit fix --force",
     "security:code": "tsx scripts/security-check.ts",
     "security:dismiss-upstream": "tsx scripts/dismiss-upstream-alerts-minimal.ts",
-    "security:osv": "tsx scripts/run-osv-scanner.ts"
+    "update": "run-p update:*",
+    "update:deps": "ncu -u",
+    "pinact:install": "go install github.com/suzuki-shunsuke/pinact/cmd/pinact@latest",
+    "update:actions": "pinact run -u"
   },
   "gypfile": true,
   "publishConfig": {
@@ -130,6 +133,7 @@
     "globals": "^16.2.0",
     "jest": "^30.0.0",
     "node-gyp": "^11.2.0",
+    "npm-check-updates": "^18.0.1",
     "npm-run-all": "4.1.5",
     "prebuildify": "^6.0.1",
     "prettier": "^3.5.3",
