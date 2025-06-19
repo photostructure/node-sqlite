@@ -6,7 +6,7 @@ import {
 } from "node:child_process";
 import { existsSync } from "node:fs";
 import { cpus, platform } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -95,13 +95,22 @@ function findClangTidy(): string {
       const llvmPrefix = execFileSync("brew", ["--prefix", "llvm"], {
         encoding: "utf8",
       }).trim();
+      if (!isAbsolute(llvmPrefix)) {
+        // This should not happen with homebrew, but as a security precaution,
+        // we ensure the path is absolute before using it.
+        throw new Error(
+          `brew --prefix llvm returned a non-absolute path: ${llvmPrefix}`,
+        );
+      }
       const llvmClangTidy = join(llvmPrefix, "bin", "clang-tidy");
       if (existsSync(llvmClangTidy)) {
         const versionInfo = execFileSync(llvmClangTidy, ["--version"], {
           encoding: "utf8",
         });
         console.log(
-          `${colors.dim}Found clang-tidy: ${versionInfo.split("\n")[0]}${colors.reset}`,
+          `${colors.dim}Found clang-tidy: ${versionInfo.split("\n")[0]}${
+            colors.reset
+          }`,
         );
         return llvmClangTidy;
       }
