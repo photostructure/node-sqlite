@@ -12,6 +12,10 @@ export function getCallerDirname(): string {
 const patterns =
   process.platform === "win32"
     ? [
+        // File URLs: "at functionName (file:///C:/path/file.js:1:1)"
+        /\bat\s.+?\((?<path>file:\/\/\/.+?):\d+:\d+\)$/,
+        // File URLs direct: "at file:///C:/path/file.js:1:1"
+        /\bat\s(?<path>file:\/\/\/.+?):\d+:\d+$/,
         // Standard: "at functionName (C:\path\file.js:1:1)"
         /\bat\s.+?\((?<path>[A-Z]:\\.+):\d+:\d+\)$/,
         // direct: "at C:\path\file.js:1:1"
