@@ -149,30 +149,38 @@ export const lockHolderScript = `
     console.log("LOCK_ACQUIRED");
     console.error("Lock acquired at:", new Date().toISOString());
     
-    // Hold lock for specified time using setTimeout
-    setTimeout(() => {
-      try {
-        // Final update before releasing
-        db.exec("UPDATE lock_test SET value = 999 WHERE id = 1");
-        db.exec("COMMIT");
-        console.log("LOCK_RELEASED");
-        console.error("Lock released at:", new Date().toISOString());
-      } catch (e) {
-        console.error("Error during commit:", e.message);
+    // Keep process alive until we're done
+    let keepAlive = true;
+    
+    // Hold lock for specified time
+    const startTime = Date.now();
+    const checkInterval = setInterval(() => {
+      if (Date.now() - startTime >= lockHoldTime) {
+        clearInterval(checkInterval);
         try {
-          db.exec("ROLLBACK");
-        } catch (rollbackError) {
-          console.error("Error during rollback:", rollbackError.message);
+          // Final update before releasing
+          db.exec("UPDATE lock_test SET value = 999 WHERE id = 1");
+          db.exec("COMMIT");
+          console.log("LOCK_RELEASED");
+          console.error("Lock released at:", new Date().toISOString());
+        } catch (e) {
+          console.error("Error during commit:", e.message);
+          try {
+            db.exec("ROLLBACK");
+          } catch (rollbackError) {
+            console.error("Error during rollback:", rollbackError.message);
+          }
+        } finally {
+          try {
+            db.close();
+          } catch (closeError) {
+            console.error("Error closing database:", closeError.message);
+          }
+          keepAlive = false;
+          process.exit(0);
         }
-      } finally {
-        try {
-          db.close();
-        } catch (closeError) {
-          console.error("Error closing database:", closeError.message);
-        }
-        process.exit(0);
       }
-    }, lockHoldTime);
+    }, 10); // Check every 10ms
     
   } catch (e) {
     console.error("Error acquiring lock:", e.message);
