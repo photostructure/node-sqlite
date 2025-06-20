@@ -4,13 +4,12 @@
 #include <cstring>
 #include <limits>
 
-#include "shims/node_errors.h"
 #include "sqlite_impl.h"
 
-namespace photostructure {
-namespace sqlite {
+namespace photostructure::sqlite {
 
-CustomAggregate::CustomAggregate(Napi::Env env, DatabaseSync *db,
+CustomAggregate::CustomAggregate(Napi::Env env,
+                                 [[maybe_unused]] DatabaseSync *db,
                                  bool use_bigint_args, Napi::Value start,
                                  Napi::Function step_fn,
                                  Napi::Function inverse_fn,
@@ -414,5 +413,4 @@ Napi::Value CustomAggregate::RawValueToJS(AggregateData *agg) {
   }
 }
 
-} // namespace sqlite
-} // namespace photostructure
+} // namespace photostructure::sqlite

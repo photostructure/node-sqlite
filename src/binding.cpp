@@ -1,15 +1,14 @@
-#include <memory>
 #include <mutex>
 #include <napi.h>
 #include <set>
 
 #include "sqlite_impl.h"
 
-namespace photostructure {
-namespace sqlite {
+namespace photostructure::sqlite {
 
 // Cleanup function for worker termination
-void CleanupAddonData(napi_env env, void *finalize_data, void *finalize_hint) {
+void CleanupAddonData([[maybe_unused]] napi_env env, void *finalize_data,
+                      [[maybe_unused]] void *finalize_hint) {
   AddonData *addon_data = static_cast<AddonData *>(finalize_data);
 
   // Clean up any remaining database connections
@@ -148,8 +147,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   return exports;
 }
 
-} // namespace sqlite
-} // namespace photostructure
+} // namespace photostructure::sqlite
 
 // Module initialization function
 Napi::Object InitSqlite(Napi::Env env, Napi::Object exports) {

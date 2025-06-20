@@ -4,7 +4,6 @@
 #include <cctype>
 #include <climits>
 #include <cmath>
-#include <iostream>
 #include <limits>
 
 #include "aggregate_function.h"
@@ -12,8 +11,7 @@
 #include "sqlite_exception.h"
 #include "user_function.h"
 
-namespace photostructure {
-namespace sqlite {
+namespace photostructure::sqlite {
 
 // JavaScript safe integer limits (2^53 - 1)
 constexpr int64_t JS_MAX_SAFE_INTEGER = 9007199254740991LL;
@@ -2455,5 +2453,4 @@ bool StatementSync::ValidateThread(Napi::Env env) const {
   return true;
 }
 
-} // namespace sqlite
-} // namespace photostructure
+} // namespace photostructure::sqlite
