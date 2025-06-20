@@ -1,16 +1,10 @@
 #!/usr/bin/env tsx
-import {
-  exec as execCallback,
-  execFileSync,
-  execSync,
-} from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cpus, platform } from "node:os";
+import { platform } from "node:os";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 
-const exec = promisify(execCallback);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..");
 
@@ -103,6 +97,7 @@ function findClangTidy(): string {
         );
       }
       const llvmClangTidy = join(llvmPrefix, "bin", "clang-tidy");
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (existsSync(llvmClangTidy)) {
         const versionInfo = execFileSync(llvmClangTidy, ["--version"], {
           encoding: "utf8",
@@ -169,14 +164,17 @@ interface TidyResult {
   warnings: number;
 }
 
-// Run clang-tidy on a single file
+// Run clang-tidy on a single file with streaming output
 async function runClangTidyOnFile(
   clangTidy: string,
   file: string,
+  showDetails: boolean = true,
 ): Promise<TidyResult> {
-  try {
+  return new Promise((resolve) => {
+    // Build arguments
+    const args = ["-p", projectRoot];
+
     // On macOS, we need to explicitly add system include paths
-    let extraArgs = "";
     if (platform() === "darwin") {
       // Try to find the correct clang version directory
       const clangVersionDirs = [
@@ -185,6 +183,7 @@ async function runClangTidyOnFile(
         "/Library/Developer/CommandLineTools/usr/lib/clang/15/include",
       ];
 
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       let clangInclude = clangVersionDirs.find((dir) => existsSync(dir));
       if (!clangInclude) {
         // Find it dynamically
@@ -202,41 +201,70 @@ async function runClangTidyOnFile(
         }
       }
 
-      extraArgs =
-        `--extra-arg=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 ` +
-        `--extra-arg=-isystem${clangInclude} ` +
-        `--extra-arg=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include`;
+      args.push(
+        "--extra-arg=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1",
+        `--extra-arg=-isystem${clangInclude}`,
+        "--extra-arg=-isystem/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
+      );
     }
 
-    const { stdout, stderr } = await exec(
-      `${clangTidy} -p ${projectRoot} ${extraArgs} "${file}" 2>&1`,
-    );
-    const output = stdout + stderr;
+    args.push(file);
 
+    const proc = spawn(clangTidy, args);
+    let output = "";
     let errors = 0;
     let warnings = 0;
-    const lines = output.split("\n");
+    const warningLines: string[] = [];
+    const errorLines: string[] = [];
 
-    for (const line of lines) {
-      if (line.includes(" warning:")) warnings++;
-      if (line.includes(" error:")) errors++;
-    }
+    // Process output line by line
+    const processLine = (line: string) => {
+      output += line + "\n";
 
-    return { file, output, errors, warnings };
-  } catch (error: any) {
-    // clang-tidy returns non-zero on errors, capture output
-    const output = error.stdout || error.stderr || error.message;
-    let errors = 0;
-    let warnings = 0;
+      if (line.includes(" warning:")) {
+        warnings++;
+        warningLines.push(line);
+        // When running in parallel, show warnings with file context
+        if (showDetails && warningLines.length <= 3) {
+          console.log(
+            `${colors.yellow}⚠${colors.reset} ${colors.dim}${line}${colors.reset}`,
+          );
+        }
+      } else if (line.includes(" error:")) {
+        errors++;
+        errorLines.push(line);
+        // Always show errors immediately
+        console.log(
+          `${colors.red}✗${colors.reset} ${colors.dim}${line}${colors.reset}`,
+        );
+      }
+    };
 
-    const lines = output.split("\n");
-    for (const line of lines) {
-      if (line.includes(" warning:")) warnings++;
-      if (line.includes(" error:")) errors++;
-    }
+    let buffer = "";
 
-    return { file, output, errors, warnings };
-  }
+    proc.stdout.on("data", (data) => {
+      buffer += data.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      lines.forEach(processLine);
+    });
+
+    proc.stderr.on("data", (data) => {
+      buffer += data.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      lines.forEach(processLine);
+    });
+
+    proc.on("close", () => {
+      // Process any remaining buffer
+      if (buffer) {
+        processLine(buffer);
+      }
+
+      resolve({ file, output, errors, warnings });
+    });
+  });
 }
 
 // Main function
@@ -254,66 +282,36 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `${colors.dim}Checking ${files.length} files...${colors.reset}\n`,
+    `${colors.dim}Checking ${files.length} files in parallel...${colors.reset}\n`,
   );
 
-  // Run clang-tidy on files in parallel
-  const parallelism = Math.min(cpus().length, 8);
-  const results: TidyResult[] = [];
+  // Run clang-tidy on all files in parallel
+  const results = await Promise.all(
+    files.map((file) => runClangTidyOnFile(clangTidy, file)),
+  );
 
-  // Process files in chunks
-  for (let i = 0; i < files.length; i += parallelism) {
-    const chunk = files.slice(i, i + parallelism);
-    const chunkResults = await Promise.all(
-      chunk.map((file) => runClangTidyOnFile(clangTidy, file)),
-    );
-    results.push(...chunkResults);
-
-    // Show progress
-    for (const result of chunkResults) {
-      const relPath = relative(projectRoot, result.file);
-      if (result.errors > 0) {
-        console.log(
-          `${colors.red}✗${colors.reset} ${relPath} (${result.errors} errors, ${result.warnings} warnings)`,
-        );
-        // Show actual errors
-        const errorLines = result.output
-          .split("\n")
-          .filter(
-            (line) => line.includes(" error:") || line.includes(" warning:"),
-          );
-        errorLines.forEach((line) =>
-          console.log(`  ${colors.dim}${line}${colors.reset}`),
-        );
-      } else if (result.warnings > 0) {
-        console.log(
-          `${colors.yellow}⚠${colors.reset} ${relPath} (${result.warnings} warnings)`,
-        );
-        // Show warning details
-        const warningLines = result.output
-          .split("\n")
-          .filter((line) => line.includes(" warning:"));
-        warningLines
-          .slice(0, 5)
-          .forEach((line) =>
-            console.log(`  ${colors.dim}${line}${colors.reset}`),
-          );
-        if (warningLines.length > 5) {
-          console.log(
-            `  ${colors.dim}... and ${warningLines.length - 5} more warnings${colors.reset}`,
-          );
-        }
-      } else {
-        console.log(`${colors.green}✓${colors.reset} ${relPath}`);
-      }
+  // Print file summaries
+  console.log(`\n${colors.blue}=== File Summary ===${colors.reset}`);
+  for (const result of results) {
+    const relPath = relative(projectRoot, result.file);
+    if (result.errors > 0) {
+      console.log(
+        `${colors.red}✗${colors.reset} ${relPath}: ${result.errors} errors, ${result.warnings} warnings`,
+      );
+    } else if (result.warnings > 0) {
+      console.log(
+        `${colors.yellow}⚠${colors.reset} ${relPath}: ${result.warnings} warnings`,
+      );
+    } else {
+      console.log(`${colors.green}✓${colors.reset} ${relPath}: clean`);
     }
   }
 
-  // Summary
+  // Overall summary
   const totalErrors = results.reduce((sum, r) => sum + r.errors, 0);
   const totalWarnings = results.reduce((sum, r) => sum + r.warnings, 0);
 
-  console.log(`\n${colors.blue}=== Summary ===${colors.reset}`);
+  console.log(`\n${colors.blue}=== Overall Summary ===${colors.reset}`);
   if (totalErrors > 0) {
     console.log(`${colors.red}✗ ${totalErrors} errors found${colors.reset}`);
   }
@@ -323,7 +321,7 @@ async function main(): Promise<void> {
     );
   }
   if (totalErrors === 0 && totalWarnings === 0) {
-    console.log(`${colors.green}✓ No issues found${colors.reset}`);
+    console.log(`${colors.green}✓ All files are clean${colors.reset}`);
   }
 
   process.exit(totalErrors > 0 ? 1 : 0);
