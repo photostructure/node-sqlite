@@ -22,6 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { githubFetch } from "./github-api";
 import {
   compareSqliteVersions,
   getCurrentSqliteVersion,
@@ -296,9 +297,10 @@ async function main() {
 
   // Fetch Node.js version and commit info
   try {
-    // Get commit SHA
+    // Get commit SHA using authenticated fetch
     const commitUrl = `https://api.github.com/repos/${args.repo}/commits/${args.branch}`;
-    const commitResponse = await fetch(commitUrl);
+    const commitResponse = await githubFetch(commitUrl);
+
     if (commitResponse.ok) {
       const commitData = (await commitResponse.json()) as any;
       nodeCommitSha = commitData.sha?.substring(0, 7); // Short SHA

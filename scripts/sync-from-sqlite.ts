@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { githubFetchUrl } from "./github-api";
 import {
   compareSqliteVersions,
   getCurrentSqliteVersion,
@@ -20,36 +21,6 @@ const UPSTREAM_DIR = path.join(__dirname, "../src/upstream");
 const TEMP_DIR = path.join(__dirname, "../.temp-sqlite-download");
 
 /**
- * Fetch a URL and return its content
- */
-async function fetchUrl(
-  url: string,
-  headers: Record<string, string> = {},
-): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const options = {
-      headers: {
-        "User-Agent": "node-sqlite-sync-script",
-        ...headers,
-      },
-    };
-
-    https
-      .get(url, options, (res) => {
-        if (res.statusCode !== 200) {
-          reject(new Error(`HTTP ${res.statusCode}: ${url}`));
-          return;
-        }
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => resolve(data));
-        res.on("error", reject);
-      })
-      .on("error", reject);
-  });
-}
-
-/**
  * Get the latest release version from GitHub tags
  */
 async function getLatestReleaseVersion(): Promise<{
@@ -58,7 +29,7 @@ async function getLatestReleaseVersion(): Promise<{
 } | null> {
   try {
     console.log("Fetching SQLite tags from GitHub...");
-    const tagsJson = await fetchUrl(SQLITE_TAGS_URL);
+    const tagsJson = await githubFetchUrl(SQLITE_TAGS_URL);
     const tags = JSON.parse(tagsJson);
 
     // Filter for version tags (e.g., "version-3.50.0")
