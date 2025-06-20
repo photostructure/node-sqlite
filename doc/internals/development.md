@@ -130,6 +130,25 @@ The project maintains synchronization with:
 - Node.js SQLite implementation
 - SQLite amalgamation source
 
+### GitHub API Authentication
+
+To avoid rate limiting when syncing from GitHub (60 requests/hour for unauthenticated requests), set up authentication:
+
+```bash
+# Set your GitHub personal access token
+export GITHUB_TOKEN=your_personal_access_token
+
+# Now sync commands will use authentication (5000 requests/hour)
+npm run sync:node
+npm run sync:sqlite
+```
+
+You can create a personal access token at: https://github.com/settings/tokens
+
+The token only needs public repository read access.
+
+### Sync Commands
+
 ```bash
 # Sync from Node.js
 npm run sync:node
