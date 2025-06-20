@@ -66,11 +66,6 @@ export interface MemoryBenchmarkOptions extends BenchmarkOptions {
   minRSquaredForLeak?: number;
 
   /**
-   * Whether to force garbage collection between iterations (default: true)
-   */
-  forceGC?: boolean;
-
-  /**
    * How often to force GC (every N iterations, default: 10)
    */
   gcFrequency?: number;
@@ -254,11 +249,11 @@ export async function runAdaptiveBenchmark(
 }
 
 /**
- * Gets the current heap memory usage, optionally forcing garbage collection first
+ * Gets the current heap memory usage, forcing garbage collection first if available
  */
-function getMemoryUsage(forceGC = true): number {
+function getMemoryUsage(runGC = true): number {
   const gc = global.gc;
-  if (forceGC && gc) gc();
+  if (runGC && gc) gc();
   return process.memoryUsage().heapUsed;
 }
 
@@ -276,16 +271,15 @@ export async function runMemoryBenchmark(
   const {
     maxMemoryGrowthKBPerSecond = 500,
     minRSquaredForLeak = 0.5,
-    forceGC = true,
     gcFrequency = 10,
     debug = false,
     ...benchmarkOptions
   } = options;
 
   const gc = global.gc;
-  if (!gc && forceGC) {
+  if (!gc) {
     throw new Error(
-      "Memory benchmarks require --expose-gc flag when forceGC is enabled",
+      "Memory benchmarks require --expose-gc flag for accurate measurements",
     );
   }
 
@@ -294,13 +288,13 @@ export async function runMemoryBenchmark(
   // Wrapper to collect memory measurements
   let iteration = 0;
   const measurementOperation = async () => {
-    getMemoryUsage(forceGC);
+    getMemoryUsage(true);
     await operation();
     const memory = getMemoryUsage(false); // Don't force GC after operation
     measurements.push(memory);
 
     // Periodic GC
-    if (forceGC && gc && ++iteration % gcFrequency === 0) {
+    if (gc && ++iteration % gcFrequency === 0) {
       gc();
     }
   };
