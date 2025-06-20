@@ -1,6 +1,3 @@
-import { execFileSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 
 describe("stack_path", () => {
   describe("extractCallerPath", () => {
@@ -144,37 +141,12 @@ describe("stack_path", () => {
   });
 
   describe("getCallerDirname integration", () => {
-    const fixturesDir = join(
-      __dirname,
-      "stack-path-fixtures-" + Math.random().toString(36).slice(2),
-    );
-    const callerScript = join(fixturesDir, "caller.js");
-    const testScript = join(fixturesDir, "test-get-caller.js");
-
-    beforeAll(() => {
-      mkdirSync(fixturesDir, { recursive: true });
-
-      // Create a script that calls getCallerDirname from the actual module
-      writeFileSync(
-        testScript,
-        `const { getCallerDirname } = require('${join(__dirname, "../dist/stack_path.js").replace(/\\/g, "\\\\")}')
-process.stdout.write(getCallerDirname());`,
-      );
-
-      // Create a caller script that requires the test script
-      writeFileSync(callerScript, `require('./test-get-caller');`);
-    });
-
-    afterAll(() => {
-      rmSync(fixturesDir, { recursive: true, force: true });
-    });
-
-    it("returns the directory of the calling script", () => {
-      const result = execFileSync("node", [callerScript], {
-        encoding: "utf8",
-        cwd: fixturesDir,
-      });
-      expect(result).toBe(fixturesDir);
+    it("returns the correct directory when called from a module", async () => {
+      // Import and test the actual function
+      const { getCallerDirname } = await import("../src/stack_path");
+      const result = getCallerDirname();
+      // Should return the directory of this test file
+      expect(result).toBe(__dirname);
     });
   });
 });
