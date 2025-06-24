@@ -114,6 +114,10 @@ inline void ThrowEnhancedSqliteError(Napi::Env env, sqlite3 *db,
   error.ThrowAsJavaScriptException();
 }
 
+// Database-aware version available when sqlite_impl.h is included
+// This will be specialized in sqlite_impl.cpp to avoid forward declaration
+// issues
+
 // Helper to create enhanced error from just a message (when we have the db
 // handle)
 inline void ThrowSqliteError(Napi::Env env, sqlite3 *db,

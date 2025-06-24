@@ -38,6 +38,10 @@ inline void THROW_ERR_SQLITE_ERROR(Napi::Env env,
   Napi::Error::New(env, msg).ThrowAsJavaScriptException();
 }
 
+// Database-aware version available when sqlite_impl.h is included
+// This will be specialized in sqlite_impl.cpp to avoid forward declaration
+// issues
+
 inline void THROW_ERR_CONSTRUCT_CALL_REQUIRED(Napi::Env env) {
   Napi::TypeError::New(env, "Class constructor cannot be invoked without 'new'")
       .ThrowAsJavaScriptException();
