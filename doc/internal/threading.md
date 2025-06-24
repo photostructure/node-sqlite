@@ -40,7 +40,6 @@ ThreadSafeFunction tsfn = ThreadSafeFunction::New(
 ```
 
 2. **Thread Management**:
-
    - Always check return status of `Acquire()` and `BlockingCall()`
    - Handle `napi_closing` status during shutdown
    - Ensure `Release()` is the last call from a thread
@@ -73,7 +72,6 @@ deferred.Reject(error);
 ## Thread Safety Rules
 
 1. **Main Thread Only**:
-
    - All operations requiring `Napi::Env`, `Napi::Value`, or `Napi::Reference`
    - Promise resolution/rejection
    - JavaScript function calls (except via ThreadSafeFunction)
