@@ -2,6 +2,8 @@
 
 Native SQLite for Node.js 20+ without the experimental flag. Drop-in replacement for `node:sqlite`.
 
+> **Note**: DataView parameter binding is not currently supported. Use Buffer instead for binary data.
+
 ## Installation
 
 ```bash
