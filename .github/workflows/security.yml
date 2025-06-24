@@ -63,6 +63,7 @@ jobs:
               - '**/dist/**'
               - '**/coverage/**'
               - '**/vendored/**'
+              - '**/third-party/**'
               - '**/test/**'
               - '**/test-directory/**'
 
