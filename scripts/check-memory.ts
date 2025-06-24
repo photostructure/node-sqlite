@@ -63,9 +63,11 @@ try {
   const baseTimeout = 300000; // 5 minutes base
   const multiplier = getTimingMultiplier();
   const timeout = baseTimeout * multiplier;
-  
-  console.log(`Debug: Using timeout: ${timeout}ms (${baseTimeout}ms base × ${multiplier} multiplier)`);
-  
+
+  console.log(
+    `Debug: Using timeout: ${timeout}ms (${baseTimeout}ms base × ${multiplier} multiplier)`,
+  );
+
   execFileSync(nodeExe, args, {
     stdio: "inherit",
     env: {
@@ -73,7 +75,8 @@ try {
       TEST_MEMORY: "1",
       // Run memory tests in CJS mode to avoid Jest ESM hanging issue
       // TEST_ESM: "1",
-      NODE_OPTIONS: "--expose-gc --no-warnings",
+      NODE_OPTIONS:
+        (process.env.NODE_OPTIONS ?? "") + " --expose-gc --no-warnings",
       // Force Jest to exit after test completion
       FORCE_EXIT: "1",
     },
@@ -98,7 +101,7 @@ if (os.platform() === "linux") {
   try {
     execFileSync("which", ["valgrind"], { stdio: "ignore" });
     console.log(color(colors.YELLOW, "\nRunning valgrind memory analysis..."));
-    
+
     // Run debug script first in CI to gather more information
     if (process.env.GITHUB_ACTIONS) {
       console.log("Running debug memory leak script...");
@@ -110,7 +113,7 @@ if (os.platform() === "linux") {
         console.log("Debug script failed (continuing anyway)");
       }
     }
-    
+
     try {
       const valgrindScript = path.join(__dirname, "valgrind-test.sh");
       execFileSync("/bin/bash", [valgrindScript], { stdio: "inherit" });
