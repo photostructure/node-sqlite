@@ -29,7 +29,7 @@ build/
 *.tsbuildinfo
 
 # Development and vendored files
-vendored/
+third-party/
 benchmark/
 coverage/
 examples/

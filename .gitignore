@@ -74,13 +74,16 @@ test/*.db
 # Generated documentation is now in build/docs/ (covered by build/ ignore)
 
 # third-party libraries for reference
-vendored/
+third-party/
+third-party/
 
 # Temporary directories
 .temp-sqlite-download/
+packages/better-sqlite3-compat/temp/
 
 # Sync cache files
 .sync-cache.json
 
 # Dynamically created by Bear and fed to clang-tidy:
 compile_commands*.json
+

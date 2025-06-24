@@ -66,7 +66,7 @@ describe("Multi-Process Database Access", () => {
         setupDb.close();
 
         // Spawn multiple child processes to read simultaneously
-        const promises = [];
+        const promises: Array<ReturnType<typeof execScript>> = [];
         for (let i = 0; i < 5; i++) {
           promises.push(execScript("readerScript"));
         }
@@ -100,7 +100,7 @@ describe("Multi-Process Database Access", () => {
         setupDb.close();
 
         // Spawn multiple writer processes
-        const promises = [];
+        const promises: Array<ReturnType<typeof execScript>> = [];
         for (let i = 0; i < 3; i++) {
           promises.push(
             execScript("writerScript", { PROCESS_ID: i.toString() }),
@@ -218,7 +218,7 @@ describe("Multi-Process Database Access", () => {
         // when multiple processes try to write to the database simultaneously.
         // The exact timing of when locks are acquired/released can vary, but the
         // important thing is that the data remains consistent.
-        
+
         // Use reasonable timeouts even on slower CI platforms
         const multiplier = getTimingMultiplier();
         // Use shorter base time but allow platform multiplier
@@ -369,7 +369,7 @@ describe("Multi-Process Database Access", () => {
         const totalAttempts = lockedCount + successCount;
         expect(totalAttempts).toBeGreaterThan(0);
         expect(totalAttempts).toBeLessThanOrEqual(maxRetries);
-        
+
         console.log(
           `Locking behavior verified: ${lockedCount} blocked, ${successCount} succeeded.`,
         );
@@ -411,17 +411,17 @@ describe("Multi-Process Database Access", () => {
           "SELECT value FROM lock_test WHERE id = 1",
         );
         const { value } = stmt.get();
-        
+
         // The value should be either:
         // - 999 (lock holder's final value) if writer was blocked
         // - 111 (writer's value) if writer succeeded before lock was fully established
         // Both are acceptable outcomes as long as there's no data corruption
         expect([111, 999]).toContain(value);
-        
+
         console.log(
-          `Final value: ${value} (${value === 999 ? "lock holder won" : "writer won"})`
+          `Final value: ${value} (${value === 999 ? "lock holder won" : "writer won"})`,
         );
-        
+
         verifyDb.close();
       },
       getTestTimeout(60000), // Base timeout of 60s for this complex multi-process test
@@ -475,7 +475,7 @@ describe("Multi-Process Database Access", () => {
 
         // Spawn many processes
         const processCount = 10;
-        const promises = [];
+        const promises: Array<ReturnType<typeof execScript>> = [];
         for (let i = 0; i < processCount; i++) {
           promises.push(
             execScript("incrementScript", { PROCESS_ID: i.toString() }),
@@ -530,7 +530,7 @@ describe("Multi-Process Database Access", () => {
 
       // Run stress test with multiple processes
       const processCount = 5;
-      const promises = [];
+      const promises: Array<ReturnType<typeof execScript>> = [];
       for (let i = 0; i < processCount; i++) {
         promises.push(
           execScript("stressTestScript", { PROCESS_ID: i.toString() }),

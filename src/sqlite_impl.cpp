@@ -8,6 +8,38 @@
 
 #include "aggregate_function.h"
 #include "shims/sqlite_errors.h"
+
+// Database-aware error handling functions to avoid forward declaration issues
+namespace {
+inline void
+THROW_ERR_SQLITE_ERROR_WITH_DB(Napi::Env env,
+                               photostructure::sqlite::DatabaseSync *db,
+                               const char *message = nullptr) {
+  // Check if we should ignore this SQLite error due to pending JavaScript
+  // exception
+  if (db && db->ShouldIgnoreSQLiteError()) {
+    db->SetIgnoreNextSQLiteError(false);
+    return; // Don't throw SQLite error, JavaScript exception takes precedence
+  }
+
+  const char *msg = message ? message : "SQLite error";
+  Napi::Error::New(env, msg).ThrowAsJavaScriptException();
+}
+
+inline void ThrowEnhancedSqliteErrorWithDB(
+    Napi::Env env, photostructure::sqlite::DatabaseSync *db_sync, sqlite3 *db,
+    int sqlite_code, const std::string &message) {
+  // Check if we should ignore this SQLite error due to pending JavaScript
+  // exception
+  if (db_sync && db_sync->ShouldIgnoreSQLiteError()) {
+    db_sync->SetIgnoreNextSQLiteError(false);
+    return; // Don't throw SQLite error, JavaScript exception takes precedence
+  }
+
+  // Call the original function
+  node::ThrowEnhancedSqliteError(env, db, sqlite_code, message);
+}
+} // namespace
 #include "sqlite_exception.h"
 #include "user_function.h"
 
@@ -267,7 +299,8 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
 
 DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
     : Napi::ObjectWrap<DatabaseSync>(info),
-      creation_thread_(std::this_thread::get_id()), env_(info.Env()) {
+      creation_thread_(std::this_thread::get_id()), env_(info.Env()),
+      config_("") {
   // Register this instance for cleanup tracking
   RegisterDatabaseInstance(info.Env(), this);
 
@@ -324,6 +357,34 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
           options.Get("allowExtension").IsBoolean()) {
         allow_load_extension_ =
             options.Get("allowExtension").As<Napi::Boolean>().Value();
+      }
+
+      if (options.Has("readBigInts") &&
+          options.Get("readBigInts").IsBoolean()) {
+        config.set_read_big_ints(
+            options.Get("readBigInts").As<Napi::Boolean>().Value());
+      }
+
+      if (options.Has("returnArrays") &&
+          options.Get("returnArrays").IsBoolean()) {
+        config.set_return_arrays(
+            options.Get("returnArrays").As<Napi::Boolean>().Value());
+      }
+
+      if (options.Has("allowBareNamedParameters") &&
+          options.Get("allowBareNamedParameters").IsBoolean()) {
+        config.set_allow_bare_named_params(
+            options.Get("allowBareNamedParameters")
+                .As<Napi::Boolean>()
+                .Value());
+      }
+
+      if (options.Has("allowUnknownNamedParameters") &&
+          options.Get("allowUnknownNamedParameters").IsBoolean()) {
+        config.set_allow_unknown_named_params(
+            options.Get("allowUnknownNamedParameters")
+                .As<Napi::Boolean>()
+                .Value());
       }
     }
 
@@ -403,6 +464,32 @@ Napi::Value DatabaseSync::Open(const Napi::CallbackInfo &info) {
       config_obj.Get("allowExtension").IsBoolean()) {
     allow_load_extension_ =
         config_obj.Get("allowExtension").As<Napi::Boolean>().Value();
+  }
+
+  if (config_obj.Has("readBigInts") &&
+      config_obj.Get("readBigInts").IsBoolean()) {
+    config.set_read_big_ints(
+        config_obj.Get("readBigInts").As<Napi::Boolean>().Value());
+  }
+
+  if (config_obj.Has("returnArrays") &&
+      config_obj.Get("returnArrays").IsBoolean()) {
+    config.set_return_arrays(
+        config_obj.Get("returnArrays").As<Napi::Boolean>().Value());
+  }
+
+  if (config_obj.Has("allowBareNamedParameters") &&
+      config_obj.Get("allowBareNamedParameters").IsBoolean()) {
+    config.set_allow_bare_named_params(
+        config_obj.Get("allowBareNamedParameters").As<Napi::Boolean>().Value());
+  }
+
+  if (config_obj.Has("allowUnknownNamedParameters") &&
+      config_obj.Get("allowUnknownNamedParameters").IsBoolean()) {
+    config.set_allow_unknown_named_params(
+        config_obj.Get("allowUnknownNamedParameters")
+            .As<Napi::Boolean>()
+            .Value());
   }
 
   try {
@@ -549,8 +636,10 @@ Napi::Value DatabaseSync::IsTransactionGetter(const Napi::CallbackInfo &info) {
 }
 
 void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
-  location_ = config.location();
-  read_only_ = config.get_read_only();
+  // Store configuration for later use by statements
+  config_ = std::move(config);
+  location_ = config_.location();
+  read_only_ = config_.get_read_only();
 
   int flags = SQLITE_OPEN_CREATE;
   if (read_only_) {
@@ -574,17 +663,17 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
   }
 
   // Configure database
-  if (config.get_enable_foreign_keys()) {
+  if (config_.get_enable_foreign_keys()) {
     sqlite3_exec(connection(), "PRAGMA foreign_keys = ON", nullptr, nullptr,
                  nullptr);
   }
 
-  if (config.get_timeout() > 0) {
-    sqlite3_busy_timeout(connection(), config.get_timeout());
+  if (config_.get_timeout() > 0) {
+    sqlite3_busy_timeout(connection(), config_.get_timeout());
   }
 
   // Configure double-quoted string literals
-  if (config.get_enable_dqs()) {
+  if (config_.get_enable_dqs()) {
     int dqs_enable = 1;
     result = sqlite3_db_config(connection(), SQLITE_DBCONFIG_DQS_DML,
                                dqs_enable, nullptr);
@@ -724,7 +813,7 @@ Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo &info) {
     delete user_data; // Clean up on failure
     std::string error = "Failed to create function: ";
     error += sqlite3_errmsg(connection());
-    node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+    THROW_ERR_SQLITE_ERROR_WITH_DB(env, this, error.c_str());
   }
 
   return env.Undefined();
@@ -1133,19 +1222,30 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
         callbacks.conflictCallback = [env,
                                       conflictFunc](int conflictType) -> int {
           Napi::HandleScope scope(env);
-          Napi::Value result =
-              conflictFunc.Call({Napi::Number::New(env, conflictType)});
+          try {
+            Napi::Value result =
+                conflictFunc.Call({Napi::Number::New(env, conflictType)});
 
-          if (env.IsExceptionPending()) {
-            // If callback threw, abort the changeset apply
+            if (env.IsExceptionPending()) {
+              // Clear the exception to prevent propagation
+              env.GetAndClearPendingException();
+              // If callback threw, abort the changeset apply
+              return SQLITE_CHANGESET_ABORT;
+            }
+
+            if (!result.IsNumber()) {
+              // If the callback returns a non-numeric value, treat it as ABORT
+              return SQLITE_CHANGESET_ABORT;
+            }
+
+            return result.As<Napi::Number>().Int32Value();
+          } catch (...) {
+            // Catch any C++ exceptions
+            if (env.IsExceptionPending()) {
+              env.GetAndClearPendingException();
+            }
             return SQLITE_CHANGESET_ABORT;
           }
-
-          if (!result.IsNumber()) {
-            return -1; // Invalid value
-          }
-
-          return result.As<Napi::Number>().Int32Value();
         };
       }
     }
@@ -1163,15 +1263,25 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
       callbacks.filterCallback = [env,
                                   filterFunc](std::string tableName) -> bool {
         Napi::HandleScope scope(env);
-        Napi::Value result =
-            filterFunc.Call({Napi::String::New(env, tableName)});
+        try {
+          Napi::Value result =
+              filterFunc.Call({Napi::String::New(env, tableName)});
 
-        if (env.IsExceptionPending()) {
-          // If callback threw, exclude the table
+          if (env.IsExceptionPending()) {
+            // Clear the exception to prevent propagation
+            env.GetAndClearPendingException();
+            // If callback threw, exclude the table
+            return false;
+          }
+
+          return result.ToBoolean().Value();
+        } catch (...) {
+          // Catch any C++ exceptions
+          if (env.IsExceptionPending()) {
+            env.GetAndClearPendingException();
+          }
           return false;
         }
-
-        return result.ToBoolean().Value();
       };
     }
   }
@@ -1243,6 +1353,12 @@ void StatementSync::InitStatement(DatabaseSync *database,
   database_ = database;
   source_sql_ = sql;
 
+  // Apply database-level defaults
+  use_big_ints_ = database->config_.get_read_big_ints();
+  return_arrays_ = database->config_.get_return_arrays();
+  allow_bare_named_params_ = database->config_.get_allow_bare_named_params();
+  // Note: allow_unknown_named_params_ is not implemented yet in StatementSync
+
   // Prepare the statement
   const char *tail = nullptr;
   int result = sqlite3_prepare_v2(database->connection(), sql.c_str(), -1,
@@ -1290,8 +1406,8 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
 
     if (result != SQLITE_DONE && result != SQLITE_ROW) {
       std::string error = sqlite3_errmsg(database_->connection());
-      node::ThrowEnhancedSqliteError(env, database_->connection(), result,
-                                     error);
+      ThrowEnhancedSqliteErrorWithDB(env, database_, database_->connection(),
+                                     result, error);
       return env.Undefined();
     }
 
@@ -1314,7 +1430,7 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
 
     return result_obj;
   } catch (const std::exception &e) {
-    node::THROW_ERR_SQLITE_ERROR(env, e.what());
+    THROW_ERR_SQLITE_ERROR_WITH_DB(env, database_, e.what());
     return env.Undefined();
   }
 }
@@ -1353,12 +1469,12 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
       return env.Undefined();
     } else {
       std::string error = sqlite3_errmsg(database_->connection());
-      node::ThrowEnhancedSqliteError(env, database_->connection(), result,
-                                     error);
+      ThrowEnhancedSqliteErrorWithDB(env, database_, database_->connection(),
+                                     result, error);
       return env.Undefined();
     }
   } catch (const std::exception &e) {
-    node::THROW_ERR_SQLITE_ERROR(env, e.what());
+    THROW_ERR_SQLITE_ERROR_WITH_DB(env, database_, e.what());
     return env.Undefined();
   }
 }
@@ -1768,9 +1884,41 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
       Napi::Buffer<uint8_t> buffer = param.As<Napi::Buffer<uint8_t>>();
       sqlite3_bind_blob(statement_, param_index, buffer.Data(),
                         static_cast<int>(buffer.Length()), SQLITE_TRANSIENT);
+    } else if (param.IsArrayBuffer() || param.IsTypedArray()) {
+      // Handle TypedArray and ArrayBuffer as binary data
+      Napi::ArrayBuffer arrayBuffer;
+      size_t byteOffset = 0;
+      size_t byteLength = 0;
+
+      if (param.IsArrayBuffer()) {
+        arrayBuffer = param.As<Napi::ArrayBuffer>();
+        byteLength = arrayBuffer.ByteLength();
+      } else if (param.IsTypedArray()) {
+        Napi::TypedArray typedArray = param.As<Napi::TypedArray>();
+        arrayBuffer = typedArray.ArrayBuffer();
+        byteOffset = typedArray.ByteOffset();
+        byteLength = typedArray.ByteLength();
+      }
+
+      if (!arrayBuffer.IsEmpty() && arrayBuffer.Data() != nullptr) {
+        const uint8_t *data =
+            static_cast<const uint8_t *>(arrayBuffer.Data()) + byteOffset;
+        sqlite3_bind_blob(statement_, param_index, data,
+                          static_cast<int>(byteLength), SQLITE_TRANSIENT);
+      } else {
+        // Empty or invalid buffer - bind as NULL
+        sqlite3_bind_null(statement_, param_index);
+      }
     } else if (param.IsFunction()) {
       // Functions cannot be stored in SQLite - bind as NULL
       sqlite3_bind_null(statement_, param_index);
+    } else if (param.IsDataView()) {
+      // DataView is not fully supported in N-API
+      // Convert to string like other objects
+      Napi::String str_value = param.ToString();
+      std::string str = str_value.Utf8Value();
+      sqlite3_bind_text(statement_, param_index, str.c_str(), -1,
+                        SQLITE_TRANSIENT);
     } else if (param.IsObject()) {
       // Try to convert object to string
       Napi::String str_value = param.ToString();
@@ -1843,8 +1991,13 @@ Napi::Value StatementSync::CreateResult() {
       case SQLITE_BLOB: {
         const void *blob_data = sqlite3_column_blob(statement_, i);
         int blob_size = sqlite3_column_bytes(statement_, i);
-        value = Napi::Buffer<uint8_t>::Copy(
-            env, static_cast<const uint8_t *>(blob_data), blob_size);
+        if (blob_size == 0) {
+          // Handle empty blob - create empty buffer
+          value = Napi::Buffer<uint8_t>::New(env, 0);
+        } else {
+          value = Napi::Buffer<uint8_t>::Copy(
+              env, static_cast<const uint8_t *>(blob_data), blob_size);
+        }
         break;
       }
       default:
@@ -1895,8 +2048,13 @@ Napi::Value StatementSync::CreateResult() {
       case SQLITE_BLOB: {
         const void *blob_data = sqlite3_column_blob(statement_, i);
         int blob_size = sqlite3_column_bytes(statement_, i);
-        value = Napi::Buffer<uint8_t>::Copy(
-            env, static_cast<const uint8_t *>(blob_data), blob_size);
+        if (blob_size == 0) {
+          // Handle empty blob - create empty buffer
+          value = Napi::Buffer<uint8_t>::New(env, 0);
+        } else {
+          value = Napi::Buffer<uint8_t>::Copy(
+              env, static_cast<const uint8_t *>(blob_data), blob_size);
+        }
         break;
       }
       default:

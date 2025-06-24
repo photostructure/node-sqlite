@@ -35,7 +35,7 @@ Checks: '
   -readability-magic-numbers,
   -readability-named-parameter,
   -readability-function-cognitive-complexity,
-  -readability-identifier-length,
+  -readability-identifier-length
 '
 
 # Treat warnings as errors for CI

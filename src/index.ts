@@ -37,6 +37,29 @@ export interface DatabaseSyncOptions {
   readonly timeout?: number;
   /** If true, enables loading of SQLite extensions. @default false */
   readonly allowExtension?: boolean;
+  /**
+   * If true, SQLite integers are returned as JavaScript BigInt values.
+   * If false, integers are returned as JavaScript numbers.
+   * @default false
+   */
+  readonly readBigInts?: boolean;
+  /**
+   * If true, query results are returned as arrays instead of objects.
+   * @default false
+   */
+  readonly returnArrays?: boolean;
+  /**
+   * If true, allows binding named parameters without the prefix character.
+   * For example, allows using 'foo' instead of ':foo' or '$foo'.
+   * @default true
+   */
+  readonly allowBareNamedParameters?: boolean;
+  /**
+   * If true, unknown named parameters are ignored during binding.
+   * If false, an exception is thrown for unknown named parameters.
+   * @default false
+   */
+  readonly allowUnknownNamedParameters?: boolean;
 }
 
 /**
@@ -61,6 +84,7 @@ export interface StatementSyncInstance {
   /**
    * This method executes a prepared statement and returns an object.
    * @param parameters Optional named and anonymous parameters to bind to the statement.
+   *                   Note: DataView is not supported for binary data - use Buffer instead.
    * @returns An object with the number of changes and the last insert rowid.
    */
   run(...parameters: any[]): {
@@ -70,12 +94,14 @@ export interface StatementSyncInstance {
   /**
    * This method executes a prepared statement and returns the first result row.
    * @param parameters Optional named and anonymous parameters to bind to the statement.
+   *                   Note: DataView is not supported for binary data - use Buffer instead.
    * @returns The first row from the query results, or undefined if no rows.
    */
   get(...parameters: any[]): any;
   /**
    * This method executes a prepared statement and returns all results as an array.
    * @param parameters Optional named and anonymous parameters to bind to the statement.
+   *                   Note: DataView is not supported for binary data - use Buffer instead.
    * @returns An array of row objects from the query results.
    */
   all(...parameters: any[]): any[];
@@ -83,6 +109,7 @@ export interface StatementSyncInstance {
    * This method executes a prepared statement and returns an iterable iterator of objects.
    * Each object represents a row from the query results.
    * @param parameters Optional named and anonymous parameters to bind to the statement.
+   *                   Note: DataView is not supported for binary data - use Buffer instead.
    * @returns An iterable iterator of row objects.
    */
   iterate(...parameters: any[]): IterableIterator<any>;

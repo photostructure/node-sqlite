@@ -12,4 +12,7 @@ prebuilds/
 
 # Dependencies
 node_modules/
-vendored/
+third-party/
+
+*.c*
+*.h*

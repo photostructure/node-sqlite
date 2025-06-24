@@ -26,7 +26,9 @@ public:
 private:
   Napi::Env env_;
   Napi::FunctionReference fn_;
+  DatabaseSync *db_;
   bool use_bigint_args_;
+  napi_async_context async_context_;
 
   // Helper methods
   Napi::Value SqliteValueToJS(sqlite3_value *value);

@@ -82,12 +82,34 @@ public:
   void set_timeout(int timeout) { timeout_ = timeout; }
   int get_timeout() const { return timeout_; }
 
+  bool get_read_big_ints() const { return read_big_ints_; }
+  void set_read_big_ints(bool flag) { read_big_ints_ = flag; }
+
+  bool get_return_arrays() const { return return_arrays_; }
+  void set_return_arrays(bool flag) { return_arrays_ = flag; }
+
+  bool get_allow_bare_named_params() const { return allow_bare_named_params_; }
+  void set_allow_bare_named_params(bool flag) {
+    allow_bare_named_params_ = flag;
+  }
+
+  bool get_allow_unknown_named_params() const {
+    return allow_unknown_named_params_;
+  }
+  void set_allow_unknown_named_params(bool flag) {
+    allow_unknown_named_params_ = flag;
+  }
+
 private:
   std::string location_;
   bool read_only_ = false;
   bool enable_foreign_keys_ = true;
   bool enable_dqs_ = false;
   int timeout_ = 0;
+  bool read_big_ints_ = false;
+  bool return_arrays_ = false;
+  bool allow_bare_named_params_ = true;
+  bool allow_unknown_named_params_ = false;
 };
 
 // Main database class
@@ -137,6 +159,12 @@ public:
   void RemoveSession(Session *session);
   void DeleteAllSessions();
 
+  // Error handling for user functions
+  void SetIgnoreNextSQLiteError(bool ignore) {
+    ignore_next_sqlite_error_ = ignore;
+  }
+  bool ShouldIgnoreSQLiteError() const { return ignore_next_sqlite_error_; }
+
 private:
   void InternalOpen(DatabaseOpenConfiguration config);
   void InternalClose();
@@ -150,10 +178,15 @@ private:
   std::set<Session *> sessions_;      // Track all active sessions
   mutable std::mutex sessions_mutex_; // Protect sessions_ for thread safety
   std::thread::id creation_thread_;
-  napi_env env_; // Store for cleanup purposes
+  napi_env env_;                          // Store for cleanup purposes
+  bool ignore_next_sqlite_error_ = false; // For user function error handling
+
+  // Store database-level defaults for statement options
+  DatabaseOpenConfiguration config_;
 
   bool ValidateThread(Napi::Env env) const;
   friend class Session;
+  friend class StatementSync;
 };
 
 // Statement class

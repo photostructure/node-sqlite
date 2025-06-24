@@ -10,17 +10,34 @@
 namespace photostructure::sqlite {
 
 UserDefinedFunction::UserDefinedFunction(Napi::Env env, Napi::Function fn,
-                                         [[maybe_unused]] DatabaseSync *db,
-                                         bool use_bigint_args)
-    : env_(env), fn_(Napi::Reference<Napi::Function>::New(fn, 1)),
-      use_bigint_args_(use_bigint_args) {
-  // No need for SuppressDestruct when using reference count
+                                         DatabaseSync *db, bool use_bigint_args)
+    : env_(env), fn_(Napi::Reference<Napi::Function>::New(fn, 1)), db_(db),
+      use_bigint_args_(use_bigint_args), async_context_(nullptr) {
+  // Create async context for callbacks
+  napi_status status = napi_async_init(
+      env, nullptr, Napi::String::New(env, "SQLiteUserFunction"),
+      &async_context_);
+  if (status != napi_ok) {
+    Napi::Error::New(env, "Failed to create async context")
+        .ThrowAsJavaScriptException();
+  }
 }
 
 UserDefinedFunction::~UserDefinedFunction() {
   // Clean up the persistent function reference
   if (!fn_.IsEmpty()) {
     fn_.Reset();
+  }
+
+  // Cleanup async context - check if environment is still valid
+  if (async_context_ != nullptr) {
+    // Use try-catch to handle cases where environment might be shutting down
+    try {
+      napi_async_destroy(env_, async_context_);
+    } catch (...) {
+      // Ignore errors during shutdown - environment may be cleaning up
+    }
+    async_context_ = nullptr;
   }
 }
 
@@ -36,6 +53,7 @@ void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
 
   try {
     Napi::HandleScope scope(self->env_);
+    Napi::CallbackScope callback_scope(self->env_, self->async_context_);
 
     // Check if function reference is still valid
     if (self->fn_.IsEmpty()) {
@@ -69,34 +87,33 @@ void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
       js_args.push_back(js_val);
     }
 
-    // Call the JavaScript function
-    Napi::Value result = fn.Call(js_args);
+    // Call the JavaScript function with safer exception handling
+    napi_value js_result;
+    napi_value js_func = fn;
+    napi_value this_arg = self->env_.Undefined();
 
-    // Check if there's a pending exception after the call
-    if (self->env_.IsExceptionPending()) {
-      Napi::Error error = self->env_.GetAndClearPendingException();
-      std::string error_msg = error.Message();
-      try {
-        sqlite3_result_error(ctx, error_msg.c_str(),
-                             SafeCastToInt(error_msg.length()));
-      } catch (const std::overflow_error &) {
-        sqlite3_result_error(ctx, "Error message too long", -1);
+    napi_status status =
+        napi_call_function(self->env_, this_arg, js_func, js_args.size(),
+                           js_args.data(), &js_result);
+
+    if (status != napi_ok || self->env_.IsExceptionPending()) {
+      // Handle JavaScript exception by setting a generic SQLite error
+      if (self->env_.IsExceptionPending()) {
+        sqlite3_result_error(ctx, "JavaScript exception in user function", -1);
+      } else {
+        sqlite3_result_error(ctx, "Failed to call user function", -1);
       }
       return;
     }
+
+    Napi::Value result(self->env_, js_result);
 
     // Convert result back to SQLite
     self->JSValueToSqliteResult(ctx, result);
 
   } catch (const Napi::Error &e) {
-    // Handle JavaScript exceptions
-    std::string error_msg = e.Message();
-    try {
-      sqlite3_result_error(ctx, error_msg.c_str(),
-                           SafeCastToInt(error_msg.length()));
-    } catch (const std::overflow_error &) {
-      sqlite3_result_error(ctx, "Error message too long", -1);
-    }
+    // Handle JavaScript errors by setting a generic SQLite error
+    sqlite3_result_error(ctx, "JavaScript exception in user function", -1);
   } catch (const std::exception &e) {
     sqlite3_result_error(ctx, e.what(), -1);
   } catch (...) {

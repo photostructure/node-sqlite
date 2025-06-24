@@ -2,11 +2,51 @@
 
 #include <cmath>
 #include <cstring>
+#include <iomanip>
 #include <limits>
+#include <sstream>
+#include <vector>
 
 #include "sqlite_impl.h"
 
 namespace photostructure::sqlite {
+
+// Static member definitions for ValueStorage
+std::unordered_map<int32_t, Napi::Reference<Napi::Value>>
+    ValueStorage::storage_;
+std::mutex ValueStorage::mutex_;
+std::atomic<int32_t> ValueStorage::next_id_{0};
+
+// ValueStorage implementation
+int32_t ValueStorage::Store(Napi::Env env, Napi::Value value) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  int32_t id = ++next_id_;
+
+  // Try direct napi_value persistence instead of Napi::Reference
+  try {
+    storage_[id] = Napi::Reference<Napi::Value>::New(value, 1);
+  } catch (...) {
+    // If Reference creation fails, throw to let caller handle
+    throw;
+  }
+
+  return id;
+}
+
+Napi::Value ValueStorage::Get(Napi::Env env, int32_t id) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto it = storage_.find(id);
+  return (it != storage_.end()) ? it->second.Value() : env.Undefined();
+}
+
+void ValueStorage::Remove(int32_t id) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto it = storage_.find(id);
+  if (it != storage_.end()) {
+    it->second.Reset();
+    storage_.erase(it);
+  }
+}
 
 CustomAggregate::CustomAggregate(Napi::Env env,
                                  [[maybe_unused]] DatabaseSync *db,
@@ -20,6 +60,10 @@ CustomAggregate::CustomAggregate(Napi::Env env,
     start_type_ = PRIMITIVE_NULL;
   } else if (start.IsUndefined()) {
     start_type_ = PRIMITIVE_UNDEFINED;
+  } else if (start.IsFunction()) {
+    start_type_ = FUNCTION;
+    start_fn_ =
+        Napi::Reference<Napi::Function>::New(start.As<Napi::Function>(), 1);
   } else if (start.IsNumber()) {
     start_type_ = PRIMITIVE_NUMBER;
     number_value_ = start.As<Napi::Number>().DoubleValue();
@@ -48,40 +92,44 @@ CustomAggregate::CustomAggregate(Napi::Env env,
     result_fn_ = Napi::Reference<Napi::Function>::New(result_fn, 1);
   }
 
-  // Create async context for callbacks
-  napi_status status = napi_async_init(
-      env, nullptr, Napi::String::New(env, "SQLiteAggregate"), &async_context_);
-  if (status != napi_ok) {
-    Napi::Error::New(env, "Failed to create async context")
-        .ThrowAsJavaScriptException();
-  }
+  // Don't create async context immediately - we'll create it lazily if needed
+  async_context_ = nullptr;
 }
 
 CustomAggregate::~CustomAggregate() {
+  // Only clean up our own function references
+  // Do NOT touch any aggregate contexts - SQLite owns those
+  if (!step_fn_.IsEmpty()) {
+    step_fn_.Reset();
+  }
+  if (!inverse_fn_.IsEmpty()) {
+    inverse_fn_.Reset();
+  }
+  if (!result_fn_.IsEmpty()) {
+    result_fn_.Reset();
+  }
+  if (!start_fn_.IsEmpty()) {
+    start_fn_.Reset();
+  }
   if (start_type_ == OBJECT && !object_ref_.IsEmpty()) {
     object_ref_.Reset();
   }
-  if (!step_fn_.IsEmpty())
-    step_fn_.Reset();
-  if (!inverse_fn_.IsEmpty())
-    inverse_fn_.Reset();
-  if (!result_fn_.IsEmpty())
-    result_fn_.Reset();
 
-  // Cleanup async context
+  // Clean up async context if it was created
   if (async_context_ != nullptr) {
     napi_async_destroy(env_, async_context_);
+    async_context_ = nullptr;
   }
 }
 
 void CustomAggregate::xStep(sqlite3_context *ctx, int argc,
                             sqlite3_value **argv) {
-  xStepBase(ctx, argc, argv, false);
+  xStepBase(ctx, argc, argv, &CustomAggregate::step_fn_);
 }
 
 void CustomAggregate::xInverse(sqlite3_context *ctx, int argc,
                                sqlite3_value **argv) {
-  xStepBase(ctx, argc, argv, true);
+  xStepBase(ctx, argc, argv, &CustomAggregate::inverse_fn_);
 }
 
 void CustomAggregate::xFinal(sqlite3_context *ctx) { xValueBase(ctx, true); }
@@ -94,139 +142,315 @@ void CustomAggregate::xDestroy(void *self) {
   }
 }
 
-void CustomAggregate::xStepBase(sqlite3_context *ctx, int argc,
-                                sqlite3_value **argv, bool use_inverse) {
-  void *user_data = sqlite3_user_data(ctx);
-  if (!user_data) {
-    sqlite3_result_error(ctx, "Invalid user data in aggregate function", -1);
-    return;
-  }
-
-  CustomAggregate *self = static_cast<CustomAggregate *>(user_data);
+void CustomAggregate::xStepBase(
+    sqlite3_context *ctx, int argc, sqlite3_value **argv,
+    Napi::Reference<Napi::Function> CustomAggregate::*mptr) {
+  CustomAggregate *self =
+      static_cast<CustomAggregate *>(sqlite3_user_data(ctx));
   if (!self) {
     sqlite3_result_error(ctx, "No user data", -1);
     return;
   }
 
-  // Create HandleScope and CallbackScope for this operation
+  // Create HandleScope for N-API operations
   Napi::HandleScope scope(self->env_);
-  Napi::CallbackScope callback_scope(self->env_, self->async_context_);
 
-  try {
-    auto agg = self->GetAggregate(ctx);
-    if (!agg) {
-      sqlite3_result_error(ctx, "Failed to get aggregate context", -1);
-      return;
-    }
+  AggregateValue *state = static_cast<AggregateValue *>(
+      sqlite3_aggregate_context(ctx, sizeof(AggregateValue)));
 
-    // Choose the right function
-    Napi::Function func;
-    if (use_inverse) {
-      if (self->inverse_fn_.IsEmpty()) {
-        sqlite3_result_error(ctx, "Inverse function not provided", -1);
-        return;
-      }
-      func = self->inverse_fn_.Value();
-    } else {
-      if (self->step_fn_.IsEmpty()) {
-        sqlite3_result_error(ctx, "Step function is empty", -1);
-        return;
-      }
-      func = self->step_fn_.Value();
-    }
-
-    // Prepare arguments for JavaScript function call
-    std::vector<Napi::Value> js_argv;
-
-    // First argument is the current aggregate value
-    Napi::Value agg_val;
-    if (agg->first_call) {
-      agg_val = self->GetStartValue();
-      // Store the start value as raw data for future reference
-      self->StoreJSValueAsRaw(agg, agg_val);
-      agg->first_call = false;
-    } else {
-      agg_val = self->RawValueToJS(agg);
-    }
-    js_argv.push_back(agg_val);
-
-    // Add the SQLite arguments
-    for (int i = 0; i < argc; ++i) {
-      Napi::Value js_val = self->SqliteValueToJS(argv[i]);
-      js_argv.push_back(js_val);
-    }
-
-    // Call the JavaScript function
-    Napi::Value result;
-    try {
-      // Debug: Log the call
-      result = func.Call(js_argv);
-      if (result.IsEmpty() || result.IsUndefined()) {
-        sqlite3_result_error(ctx, "Step function returned empty/undefined", -1);
-        return;
-      }
-    } catch (const std::exception &e) {
-      throw;
-    }
-
-    // Update the aggregate value
-    self->StoreJSValueAsRaw(agg, result);
-
-  } catch (const Napi::Error &e) {
-    // More detailed error message
-    std::string error_msg = "Aggregate step error: ";
-    error_msg += e.what();
-    sqlite3_result_error(ctx, error_msg.c_str(), -1);
-  } catch (const std::exception &e) {
-    // Catch any other exceptions
-    std::string error_msg = "Aggregate step exception: ";
-    error_msg += e.what();
-    sqlite3_result_error(ctx, error_msg.c_str(), -1);
-  }
-}
-
-void CustomAggregate::xValueBase(sqlite3_context *ctx, bool finalize) {
-  void *user_data = sqlite3_user_data(ctx);
-  if (!user_data) {
-    sqlite3_result_error(ctx, "Invalid user data in aggregate value function",
-                         -1);
+  if (!state) {
+    sqlite3_result_error(ctx, "Failed to get aggregate state", -1);
     return;
   }
 
-  CustomAggregate *self = static_cast<CustomAggregate *>(user_data);
+  if (!state->is_initialized) {
+    // Initialize with the proper start value
+    Napi::Value start_val = self->GetStartValue();
 
-  // Create HandleScope and CallbackScope for this operation
+    // Store the start value in the appropriate type
+    if (start_val.IsNumber()) {
+      state->type = AggregateValue::NUMBER;
+      state->number_value = start_val.As<Napi::Number>().DoubleValue();
+    } else if (start_val.IsString()) {
+      state->type = AggregateValue::STRING;
+      std::string str_val = start_val.As<Napi::String>().Utf8Value();
+      size_t copy_len =
+          std::min(str_val.length(), sizeof(state->string_buffer) - 1);
+      memcpy(state->string_buffer, str_val.c_str(), copy_len);
+      state->string_buffer[copy_len] = '\0';
+      state->string_length = copy_len;
+    } else if (start_val.IsBigInt()) {
+      state->type = AggregateValue::BIGINT;
+      bool lossless;
+      state->bigint_value = start_val.As<Napi::BigInt>().Int64Value(&lossless);
+    } else if (start_val.IsBoolean()) {
+      state->type = AggregateValue::BOOLEAN;
+      state->bool_value = start_val.As<Napi::Boolean>().Value();
+    } else if (start_val.IsBuffer()) {
+      state->type = AggregateValue::BUFFER;
+      Napi::Buffer<uint8_t> buffer = start_val.As<Napi::Buffer<uint8_t>>();
+      size_t copy_len =
+          std::min(buffer.Length(), sizeof(state->string_buffer) - 1);
+      memcpy(state->string_buffer, buffer.Data(), copy_len);
+      state->string_length = copy_len;
+    } else if (start_val.IsObject() && !start_val.IsArray() &&
+               !start_val.IsBuffer()) {
+      // Store objects as JSON strings
+      state->type = AggregateValue::OBJECT_JSON;
+      // Use JSON.stringify to serialize the object
+      Napi::Object global = self->env_.Global();
+      Napi::Object json = global.Get("JSON").As<Napi::Object>();
+      Napi::Function stringify = json.Get("stringify").As<Napi::Function>();
+      Napi::Value json_result = stringify.Call({start_val});
+      std::string json_str = json_result.As<Napi::String>().Utf8Value();
+
+      // If JSON is too long, use a simpler representation
+      if (json_str.length() >= sizeof(state->string_buffer) - 1) {
+        const char *fallback = "{\"_truncated\":true}";
+        size_t fallback_len = strlen(fallback);
+        memcpy(state->string_buffer, fallback, fallback_len);
+        state->string_buffer[fallback_len] = '\0';
+        state->string_length = fallback_len;
+      } else {
+        memcpy(state->string_buffer, json_str.c_str(), json_str.length());
+        state->string_buffer[json_str.length()] = '\0';
+        state->string_length = json_str.length();
+      }
+    } else {
+      state->type = AggregateValue::NULL_VAL;
+    }
+
+    state->is_initialized = true;
+  }
+
+  // Get the JavaScript function
+  if ((self->*mptr).IsEmpty()) {
+    sqlite3_result_error(ctx, "Function not defined", -1);
+    return;
+  }
+  Napi::Function func = (self->*mptr).Value();
+
+  // Build arguments for the JavaScript function
+  std::vector<Napi::Value> js_args;
+  js_args.reserve(argc + 1);
+
+  // First argument: current aggregate value (convert from stored type)
+  Napi::Value current_value;
+  switch (state->type) {
+  case AggregateValue::NUMBER:
+    current_value = Napi::Number::New(self->env_, state->number_value);
+    break;
+  case AggregateValue::STRING:
+    current_value = Napi::String::New(self->env_, state->string_buffer,
+                                      state->string_length);
+    break;
+  case AggregateValue::BIGINT:
+    current_value = Napi::BigInt::New(self->env_, state->bigint_value);
+    break;
+  case AggregateValue::BOOLEAN:
+    current_value = Napi::Boolean::New(self->env_, state->bool_value);
+    break;
+  case AggregateValue::BUFFER:
+    current_value = Napi::Buffer<uint8_t>::Copy(
+        self->env_, reinterpret_cast<const uint8_t *>(state->string_buffer),
+        state->string_length);
+    break;
+  case AggregateValue::OBJECT_JSON: {
+    // Parse JSON back to object using JSON.parse
+    try {
+      Napi::Object global = self->env_.Global();
+      Napi::Object json = global.Get("JSON").As<Napi::Object>();
+      Napi::Function parse = json.Get("parse").As<Napi::Function>();
+      Napi::String json_str = Napi::String::New(
+          self->env_, state->string_buffer, state->string_length);
+      current_value = parse.Call({json_str});
+    } catch (...) {
+      // If JSON parsing fails, return the string instead
+      current_value = Napi::String::New(self->env_, state->string_buffer,
+                                        state->string_length);
+    }
+    break;
+  }
+  case AggregateValue::NULL_VAL:
+  default:
+    current_value = self->env_.Null();
+    break;
+  }
+  js_args.push_back(current_value);
+
+  // Convert SQLite values to JavaScript
+  for (int i = 0; i < argc; ++i) {
+    js_args.push_back(self->SqliteValueToJS(argv[i]));
+  }
+
+  // Convert to napi_value array
+  std::vector<napi_value> raw_args;
+  for (const auto &arg : js_args) {
+    raw_args.push_back(arg);
+  }
+
+  // Call the JavaScript function
+  napi_value result;
+  napi_status status =
+      napi_call_function(self->env_, self->env_.Undefined(), func,
+                         raw_args.size(), raw_args.data(), &result);
+
+  if (status != napi_ok) {
+    sqlite3_result_error(ctx, "Error calling aggregate step function", -1);
+    return;
+  }
+
+  // Convert result back and store in appropriate type
+  Napi::Value result_val(self->env_, result);
+
+  // Check for Promise (from async functions) first
+  if (result_val.IsObject() && !result_val.IsArray() && !result_val.IsBuffer()) {
+    Napi::Object obj = result_val.As<Napi::Object>();
+    // Check if it's a Promise by looking for 'then' method
+    if (obj.Has("then") && obj.Get("then").IsFunction()) {
+      sqlite3_result_error(ctx, "User-defined function returned invalid type", -1);
+      return;
+    }
+  }
+
+  if (result_val.IsNumber()) {
+    state->type = AggregateValue::NUMBER;
+    state->number_value = result_val.As<Napi::Number>().DoubleValue();
+  } else if (result_val.IsString()) {
+    state->type = AggregateValue::STRING;
+    std::string str_val = result_val.As<Napi::String>().Utf8Value();
+    size_t copy_len =
+        std::min(str_val.length(), sizeof(state->string_buffer) - 1);
+    memcpy(state->string_buffer, str_val.c_str(), copy_len);
+    state->string_buffer[copy_len] = '\0';
+    state->string_length = copy_len;
+  } else if (result_val.IsBigInt()) {
+    state->type = AggregateValue::BIGINT;
+    bool lossless;
+    state->bigint_value = result_val.As<Napi::BigInt>().Int64Value(&lossless);
+  } else if (result_val.IsBoolean()) {
+    state->type = AggregateValue::BOOLEAN;
+    state->bool_value = result_val.As<Napi::Boolean>().Value();
+  } else if (result_val.IsBuffer()) {
+    state->type = AggregateValue::BUFFER;
+    Napi::Buffer<uint8_t> buffer = result_val.As<Napi::Buffer<uint8_t>>();
+    size_t copy_len =
+        std::min(buffer.Length(), sizeof(state->string_buffer) - 1);
+    memcpy(state->string_buffer, buffer.Data(), copy_len);
+    state->string_length = copy_len;
+  } else if (result_val.IsObject() && !result_val.IsArray() &&
+             !result_val.IsBuffer()) {
+    // Store objects as JSON strings
+    state->type = AggregateValue::OBJECT_JSON;
+    // Use JSON.stringify to serialize the object
+    Napi::Object global = self->env_.Global();
+    Napi::Object json = global.Get("JSON").As<Napi::Object>();
+    Napi::Function stringify = json.Get("stringify").As<Napi::Function>();
+    Napi::Value json_result = stringify.Call({result_val});
+    std::string json_str = json_result.As<Napi::String>().Utf8Value();
+
+    // If JSON is too long, use a simpler representation
+    if (json_str.length() >= sizeof(state->string_buffer) - 1) {
+      const char *fallback = "{\"_truncated\":true}";
+      size_t fallback_len = strlen(fallback);
+      memcpy(state->string_buffer, fallback, fallback_len);
+      state->string_buffer[fallback_len] = '\0';
+      state->string_length = fallback_len;
+    } else {
+      memcpy(state->string_buffer, json_str.c_str(), json_str.length());
+      state->string_buffer[json_str.length()] = '\0';
+      state->string_length = json_str.length();
+    }
+  } else if (result_val.IsNull() || result_val.IsUndefined()) {
+    state->type = AggregateValue::NULL_VAL;
+  }
+}
+
+void CustomAggregate::xValueBase(sqlite3_context *ctx, bool is_final) {
+  CustomAggregate *self =
+      static_cast<CustomAggregate *>(sqlite3_user_data(ctx));
+  if (!self) {
+    sqlite3_result_error(ctx, "No user data", -1);
+    return;
+  }
+
   Napi::HandleScope scope(self->env_);
-  Napi::CallbackScope callback_scope(self->env_, self->async_context_);
 
-  try {
-    auto agg = self->GetAggregate(ctx);
-    if (!agg) {
-      sqlite3_result_null(ctx);
+  // Get the same AggregateValue struct used in xStepBase
+  AggregateValue *state = static_cast<AggregateValue *>(
+      sqlite3_aggregate_context(ctx, sizeof(AggregateValue)));
+
+  if (!state || !state->is_initialized) {
+    // No rows processed, return null
+    sqlite3_result_null(ctx);
+    return;
+  }
+
+  // Convert the stored value to JavaScript first
+  Napi::Value current_value;
+  switch (state->type) {
+  case AggregateValue::NUMBER:
+    current_value = Napi::Number::New(self->env_, state->number_value);
+    break;
+  case AggregateValue::STRING:
+    current_value = Napi::String::New(self->env_, state->string_buffer,
+                                      state->string_length);
+    break;
+  case AggregateValue::BIGINT:
+    current_value = Napi::BigInt::New(self->env_, state->bigint_value);
+    break;
+  case AggregateValue::BOOLEAN:
+    current_value = Napi::Boolean::New(self->env_, state->bool_value);
+    break;
+  case AggregateValue::BUFFER:
+    current_value = Napi::Buffer<uint8_t>::Copy(
+        self->env_, reinterpret_cast<const uint8_t *>(state->string_buffer),
+        state->string_length);
+    break;
+  case AggregateValue::OBJECT_JSON: {
+    // Parse JSON back to object using JSON.parse
+    try {
+      Napi::Object global = self->env_.Global();
+      Napi::Object json = global.Get("JSON").As<Napi::Object>();
+      Napi::Function parse = json.Get("parse").As<Napi::Function>();
+      Napi::String json_str = Napi::String::New(
+          self->env_, state->string_buffer, state->string_length);
+      current_value = parse.Call({json_str});
+    } catch (...) {
+      // If JSON parsing fails, return the string instead
+      current_value = Napi::String::New(self->env_, state->string_buffer,
+                                        state->string_length);
+    }
+    break;
+  }
+  case AggregateValue::NULL_VAL:
+  default:
+    current_value = self->env_.Null();
+    break;
+  }
+
+  // Apply result function if provided
+  Napi::Value final_value = current_value;
+  if (!self->result_fn_.IsEmpty()) {
+    Napi::Function result_func = self->result_fn_.Value();
+
+    std::vector<napi_value> args = {current_value};
+    napi_value result;
+
+    napi_status status =
+        napi_call_function(self->env_, self->env_.Undefined(), result_func, 1,
+                           args.data(), &result);
+
+    if (status != napi_ok) {
+      sqlite3_result_error(ctx, "Error calling aggregate result function", -1);
       return;
     }
 
-    Napi::Value final_value = self->RawValueToJS(agg);
-
-    // If we have a result function, call it
-    if (!self->result_fn_.IsEmpty()) {
-      Napi::Function result_func = self->result_fn_.Value();
-      final_value = result_func.Call({final_value});
-    }
-
-    // Convert to SQLite result
-    self->JSValueToSqliteResult(ctx, final_value);
-
-    // Clean up if this is finalization
-    if (finalize) {
-      // Properly destroy the C++ object constructed with placement new
-      // This will call the destructor for Napi::Reference members
-      agg->~AggregateData();
-    }
-
-  } catch (const Napi::Error &e) {
-    sqlite3_result_error(ctx, e.what(), -1);
+    final_value = Napi::Value(self->env_, result);
   }
+
+  // Convert the final JavaScript value to SQLite result
+  self->JSValueToSqliteResult(ctx, final_value);
 }
 
 CustomAggregate::AggregateData *
@@ -234,111 +458,133 @@ CustomAggregate::GetAggregate(sqlite3_context *ctx) {
   AggregateData *agg = static_cast<AggregateData *>(
       sqlite3_aggregate_context(ctx, sizeof(AggregateData)));
 
-  // sqlite3_aggregate_context only returns NULL if size is 0 or memory
-  // allocation fails
   if (!agg) {
+    sqlite3_result_error(ctx, "Failed to allocate aggregate context", -1);
     return nullptr;
   }
 
-  // Check if this is uninitialized memory by testing if initialized flag is
-  // false or garbage We need to be careful because the memory might contain
-  // random values Check if this memory has been initialized as a C++ object
-  if (agg->initialized != true) {
-    // First call - use placement new to properly construct the C++ object
-    new (agg) AggregateData();
-    agg->value_type = AggregateData::TYPE_NULL;
-    agg->number_val = 0.0;
-    agg->boolean_val = false;
-    agg->bigint_val = 0;
+  if (!agg->initialized) {
+    Napi::Value start_value;
+
+    if (start_type_ == FUNCTION) {
+      // Call start function
+      Napi::Function start_func = start_fn_.Value();
+      napi_value result;
+      napi_async_context async_ctx = GetAsyncContext();
+
+      napi_status status = napi_make_callback(env_, async_ctx, env_.Undefined(),
+                                              start_func, 0, nullptr, &result);
+
+      if (status != napi_ok) {
+        sqlite3_result_error(ctx, "Error calling aggregate start function", -1);
+        return nullptr;
+      }
+
+      start_value = Napi::Value(env_, result);
+    } else {
+      start_value = GetStartValue();
+    }
+
+    agg->value_id = ValueStorage::Store(env_, start_value);
     agg->initialized = true;
     agg->is_window = false;
-    agg->first_call = true; // Mark that we need to initialize with start value
   }
 
   return agg;
 }
 
+void CustomAggregate::DestroyAggregateData(sqlite3_context *ctx) {
+  AggregateData *agg = static_cast<AggregateData *>(
+      sqlite3_aggregate_context(ctx, sizeof(AggregateData)));
+
+  if (agg && agg->initialized) {
+    ValueStorage::Remove(agg->value_id);
+    agg->initialized = false;
+  }
+}
+
 Napi::Value CustomAggregate::SqliteValueToJS(sqlite3_value *value) {
-  // Don't create HandleScope here - let the caller manage it
-
-  int type = sqlite3_value_type(value);
-
-  switch (type) {
-  case SQLITE_INTEGER: {
-    sqlite3_int64 int_val = sqlite3_value_int64(value);
-    if (use_bigint_args_) {
-      return Napi::BigInt::New(env_, static_cast<int64_t>(int_val));
-    } else {
-      return Napi::Number::New(env_, static_cast<double>(int_val));
-    }
-    break;
-  }
-  case SQLITE_FLOAT: {
-    double float_val = sqlite3_value_double(value);
-    return Napi::Number::New(env_, float_val);
-  }
-  case SQLITE_TEXT: {
-    const char *text_val =
-        reinterpret_cast<const char *>(sqlite3_value_text(value));
-    return Napi::String::New(env_, text_val);
-  }
-  case SQLITE_BLOB: {
-    const void *blob_data = sqlite3_value_blob(value);
-    int blob_size = sqlite3_value_bytes(value);
-    return Napi::Buffer<uint8_t>::Copy(
-        env_, static_cast<const uint8_t *>(blob_data), blob_size);
-  }
+  switch (sqlite3_value_type(value)) {
   case SQLITE_NULL:
-  default:
     return env_.Null();
+
+  case SQLITE_INTEGER:
+    if (use_bigint_args_) {
+      return Napi::BigInt::New(
+          env_, static_cast<int64_t>(sqlite3_value_int64(value)));
+    } else {
+      return Napi::Number::New(env_, sqlite3_value_int64(value));
+    }
+
+  case SQLITE_FLOAT:
+    return Napi::Number::New(env_, sqlite3_value_double(value));
+
+  case SQLITE_TEXT: {
+    const char *text =
+        reinterpret_cast<const char *>(sqlite3_value_text(value));
+    return Napi::String::New(env_, text ? text : "");
+  }
+
+  case SQLITE_BLOB: {
+    const void *blob = sqlite3_value_blob(value);
+    int bytes = sqlite3_value_bytes(value);
+    if (blob && bytes > 0) {
+      return Napi::Buffer<uint8_t>::Copy(
+          env_, static_cast<const uint8_t *>(blob), static_cast<size_t>(bytes));
+    } else {
+      return Napi::Buffer<uint8_t>::New(env_, 0);
+    }
+  }
+
+  default:
+    return env_.Undefined();
   }
 }
 
 void CustomAggregate::JSValueToSqliteResult(sqlite3_context *ctx,
                                             Napi::Value value) {
-  if (value.IsNull() || value.IsUndefined()) {
+  if (value.IsNull()) {
     sqlite3_result_null(ctx);
+  } else if (value.IsUndefined()) {
+    sqlite3_result_null(ctx);
+  } else if (value.IsNumber()) {
+    double num = value.As<Napi::Number>().DoubleValue();
+    if (std::isnan(num)) {
+      sqlite3_result_null(ctx);
+    } else if (std::floor(num) == num &&
+               num >= std::numeric_limits<int64_t>::min() &&
+               num <= std::numeric_limits<int64_t>::max()) {
+      sqlite3_result_int64(ctx, static_cast<int64_t>(num));
+    } else {
+      sqlite3_result_double(ctx, num);
+    }
   } else if (value.IsBoolean()) {
-    bool bool_val = value.As<Napi::Boolean>().Value();
-    sqlite3_result_int(ctx, bool_val ? 1 : 0);
+    sqlite3_result_int(ctx, value.As<Napi::Boolean>().Value() ? 1 : 0);
   } else if (value.IsBigInt()) {
     bool lossless;
-    int64_t bigint_val = value.As<Napi::BigInt>().Int64Value(&lossless);
+    int64_t val = value.As<Napi::BigInt>().Int64Value(&lossless);
     if (lossless) {
-      sqlite3_result_int64(ctx, static_cast<sqlite3_int64>(bigint_val));
+      sqlite3_result_int64(ctx, val);
     } else {
-      sqlite3_result_error(ctx, "BigInt value too large for SQLite", -1);
-    }
-  } else if (value.IsNumber()) {
-    double num_val = value.As<Napi::Number>().DoubleValue();
-    // Note: We cast INT64_MIN/MAX to double to avoid implicit conversion
-    // warnings
-    if (std::abs(num_val - std::floor(num_val)) <
-            std::numeric_limits<double>::epsilon() &&
-        num_val >= static_cast<double>(INT64_MIN) &&
-        num_val <= static_cast<double>(INT64_MAX)) {
-      sqlite3_result_int64(ctx, static_cast<sqlite3_int64>(num_val));
-    } else {
-      sqlite3_result_double(ctx, num_val);
+      sqlite3_result_error(ctx, "BigInt value is too large for SQLite", -1);
     }
   } else if (value.IsString()) {
-    std::string str_val = value.As<Napi::String>().Utf8Value();
-    sqlite3_result_text(ctx, str_val.c_str(), str_val.length(),
+    std::string str = value.As<Napi::String>().Utf8Value();
+    sqlite3_result_text(ctx, str.c_str(), static_cast<int>(str.length()),
                         SQLITE_TRANSIENT);
   } else if (value.IsBuffer()) {
     Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
-    sqlite3_result_blob(ctx, buffer.Data(), buffer.Length(), SQLITE_TRANSIENT);
+    sqlite3_result_blob(ctx, buffer.Data(), static_cast<int>(buffer.Length()),
+                        SQLITE_TRANSIENT);
   } else {
-    // Convert to string as fallback
-    std::string str_val = value.ToString().Utf8Value();
-    sqlite3_result_text(ctx, str_val.c_str(), str_val.length(),
+    // For other types (objects, functions, etc.), convert to string
+    std::string str = value.ToString().Utf8Value();
+    sqlite3_result_text(ctx, str.c_str(), static_cast<int>(str.length()),
                         SQLITE_TRANSIENT);
   }
 }
 
 Napi::Value CustomAggregate::GetStartValue() {
-  // Don't create HandleScope here - let the caller manage it
-
   switch (start_type_) {
   case PRIMITIVE_NULL:
     return env_.Null();
@@ -354,63 +600,25 @@ Napi::Value CustomAggregate::GetStartValue() {
     return Napi::BigInt::New(env_, bigint_value_);
   case OBJECT:
     return object_ref_.Value();
-  default:
-    return env_.Null();
-  }
-}
-
-void CustomAggregate::StoreJSValueAsRaw(AggregateData *agg, Napi::Value value) {
-  // Always clean up previous object reference if it exists
-  if (agg->value_type == AggregateData::TYPE_OBJECT &&
-      !agg->object_ref.IsEmpty()) {
-    agg->object_ref.Reset();
-  }
-
-  if (value.IsNull()) {
-    agg->value_type = AggregateData::TYPE_NULL;
-  } else if (value.IsUndefined()) {
-    agg->value_type = AggregateData::TYPE_UNDEFINED;
-  } else if (value.IsNumber()) {
-    agg->value_type = AggregateData::TYPE_NUMBER;
-    agg->number_val = value.As<Napi::Number>().DoubleValue();
-  } else if (value.IsString()) {
-    agg->value_type = AggregateData::TYPE_STRING;
-    agg->string_val = value.As<Napi::String>().Utf8Value();
-  } else if (value.IsBoolean()) {
-    agg->value_type = AggregateData::TYPE_BOOLEAN;
-    agg->boolean_val = value.As<Napi::Boolean>().Value();
-  } else if (value.IsBigInt()) {
-    agg->value_type = AggregateData::TYPE_BIGINT;
-    bool lossless;
-    agg->bigint_val = value.As<Napi::BigInt>().Int64Value(&lossless);
-  } else {
-    // Complex object - this still requires Persistent reference
-    agg->value_type = AggregateData::TYPE_OBJECT;
-    agg->object_ref = Napi::Reference<Napi::Value>::New(value, 1);
-  }
-}
-
-Napi::Value CustomAggregate::RawValueToJS(AggregateData *agg) {
-  // Don't create HandleScope here - it should be managed by the caller
-
-  switch (agg->value_type) {
-  case AggregateData::TYPE_NULL:
-    return env_.Null();
-  case AggregateData::TYPE_UNDEFINED:
+  case FUNCTION:
+    // This shouldn't be called for FUNCTION type - it's handled separately
     return env_.Undefined();
-  case AggregateData::TYPE_NUMBER:
-    return Napi::Number::New(env_, agg->number_val);
-  case AggregateData::TYPE_STRING:
-    return Napi::String::New(env_, agg->string_val);
-  case AggregateData::TYPE_BOOLEAN:
-    return Napi::Boolean::New(env_, agg->boolean_val);
-  case AggregateData::TYPE_BIGINT:
-    return Napi::BigInt::New(env_, agg->bigint_val);
-  case AggregateData::TYPE_OBJECT:
-    return agg->object_ref.Value();
   default:
-    return env_.Null();
+    return env_.Undefined();
   }
+}
+
+napi_async_context CustomAggregate::GetAsyncContext() {
+  if (async_context_ == nullptr) {
+    napi_async_context context;
+    napi_status status =
+        napi_async_init(env_, env_.Null(),
+                        Napi::String::New(env_, "sqlite_aggregate"), &context);
+    if (status == napi_ok) {
+      async_context_ = context;
+    }
+  }
+  return async_context_;
 }
 
 } // namespace photostructure::sqlite
