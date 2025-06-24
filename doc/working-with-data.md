@@ -58,6 +58,8 @@ for (const user of iter) {
 
 ## Parameter Binding
 
+> **Note**: DataView parameter binding is not currently supported. Use Buffer instead for binary data.
+
 ### Positional Parameters (?)
 
 ```javascript
@@ -100,13 +102,13 @@ SQLite supports several data types, and this library handles JavaScript type con
 
 ### Type Mapping
 
-| SQLite Type | JavaScript Type  | Notes                                        |
-| ----------- | ---------------- | -------------------------------------------- |
-| NULL        | null             |                                              |
-| INTEGER     | number or bigint | BigInt for values outside safe integer range |
-| REAL        | number           |                                              |
-| TEXT        | string           |                                              |
-| BLOB        | Buffer           | Node.js Buffer objects                       |
+| SQLite Type | JavaScript Type  | Notes                                           |
+| ----------- | ---------------- | ----------------------------------------------- |
+| NULL        | null             |                                                 |
+| INTEGER     | number or bigint | BigInt for values outside safe integer range    |
+| REAL        | number           |                                                 |
+| TEXT        | string           |                                                 |
+| BLOB        | Buffer           | Node.js Buffer objects (DataView not supported) |
 
 ### Working with Different Types
 

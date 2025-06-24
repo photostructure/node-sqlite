@@ -132,7 +132,6 @@ db.close(); // Clean up when done
    ```
 
 2. **Cleanup Sequence**:
-
    - Worker thread termination triggers cleanup hook
    - All statements are finalized
    - All database connections are closed
@@ -170,19 +169,16 @@ class DatabaseSync {
 ### Test Categories
 
 1. **Basic Functionality**:
-
    - Create database in worker thread
    - Execute SQL operations
    - Clean shutdown
 
 2. **Concurrency Tests**:
-
    - Multiple workers accessing same file
    - Concurrent read/write operations
    - Worker thread pools
 
 3. **Error Scenarios**:
-
    - Cross-thread usage attempts
    - Premature worker termination
    - Resource exhaustion
@@ -283,19 +279,16 @@ class DatabaseSync {
 While worker thread support is fully functional, potential future enhancements could include:
 
 1. **Thread-Safe Function support**
-
    - Implement `Napi::ThreadSafeFunction` for cross-thread callbacks
    - Add async callback mechanisms from worker threads
    - Support for progress notifications across threads
 
 2. **Worker pool utilities**
-
    - Helper classes for managing worker thread pools
    - Load balancing for database operations
    - Connection pooling strategies
 
 3. **Performance optimizations**
-
    - Further optimize for multi-threaded scenarios
    - Reduce lock contention where possible
    - Memory allocation optimizations
