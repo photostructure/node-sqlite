@@ -18,7 +18,7 @@ This is @photostructure/sqlite - a standalone npm package that extracts the expe
 
 ### Project Status
 
-✅ **Core and Advanced Functionality Complete** - As per TODO.md, core SQLite functionality and most advanced features are now working with 89 tests passing.
+✅ **Core and Advanced Functionality Complete** - As per TODO.md, core SQLite functionality and most advanced features are now working with 495 tests passing.
 
 **What Works:**
 
@@ -30,16 +30,16 @@ This is @photostructure/sqlite - a standalone npm package that extracts the expe
 - ✅ Package structure and TypeScript setup
 - ✅ Automated sync from Node.js source
 - ✅ Multi-platform CI/CD with prebuilds
-- ✅ Comprehensive test coverage (89 tests passing)
+- ✅ Comprehensive test coverage (495 tests passing)
 - ✅ User-defined functions with all options
 - ✅ Aggregate functions with window function support
 - ✅ Statement iterator implementation with full protocol
 
 **What's Missing:**
 
-- 🚧 SQLite sessions and changesets
-- 🚧 Backup functionality
-- 🚧 Extension loading
+- ✅ SQLite sessions and changesets (now implemented)
+- ✅ Backup functionality (now implemented)
+- ✅ Extension loading (now implemented)
 
 ## Architecture Overview
 
@@ -62,7 +62,7 @@ node-sqlite/
 │       ├── node_mem.h        # Memory management utilities
 │       ├── util.h            # Node.js utility functions
 │       └── ...               # Other Node.js internal headers
-├── vendored/                 # Reference implementations for compatibility
+├── third-party/                 # Reference implementations for compatibility
 │   ├── node/                 # Complete Node.js repository (source of upstream/)
 │   ├── better-sqlite3/       # better-sqlite3 package for API reference
 │   └── node-sqlite3/         # node-sqlite3 package for compatibility testing
@@ -104,14 +104,14 @@ node-sqlite/
 - Loads native binding and exports typed interfaces
 - Handles Symbol.dispose integration
 
-**Vendored Reference Implementations** (`vendored/`):
+**Vendored Reference Implementations** (`third-party/`):
 
-- **`vendored/node/`**: Complete Node.js repository used as source for `src/upstream/` sync
-- **`vendored/better-sqlite3/`**: Reference implementation for better-sqlite3 API compatibility
+- **`third-party/node/`**: Complete Node.js repository used as source for `src/upstream/` sync
+- **`third-party/better-sqlite3/`**: Reference implementation for better-sqlite3 API compatibility
   - Contains full source code, documentation, and comprehensive test suite
   - Used for API reference when implementing better-sqlite3 drop-in replacement features
   - Test suite provides validation that our implementation matches expected behavior
-- **`vendored/node-sqlite3/`**: node-sqlite3 package for additional compatibility testing
+- **`third-party/node-sqlite3/`**: node-sqlite3 package for additional compatibility testing
   - Provides reference for async SQLite patterns and additional API coverage
 
 ### Documentation Structure
@@ -119,7 +119,6 @@ node-sqlite/
 The project maintains two distinct documentation directories:
 
 - **`doc/`**: Manually written documentation files checked into git
-
   - Contains architecture documents, API guides, and design notes
   - These files are version-controlled and maintained by developers
   - Referenced by TypeDoc as additional project documents
@@ -174,6 +173,17 @@ Scripts follow an `action:target` pattern where:
 - **Memory Tests**: Ensure no leaks in native code
 - **Platform Tests**: Multi-platform and multi-architecture validation
 
+### Error Testing Philosophy
+
+For error handling tests, we prioritize **functional behavior** over exact error message matching. See [doc/testing-philosophy.md](doc/testing-philosophy.md) for detailed guidelines on:
+
+- When and how to test errors effectively
+- Avoiding brittle message matching patterns
+- Cross-platform compatibility considerations
+- Memory and resource testing approaches
+
+This approach reduces test brittleness while ensuring error handling works correctly across different environments.
+
 ### Upstream Synchronization
 
 - Node.js SQLite is experimental and may change frequently
@@ -216,8 +226,8 @@ Scripts follow an `action:target` pattern where:
 - **Main implementation** is in `src/sqlite_impl.{h,cpp}` (ported from Node.js)
 - **Shims** in `src/shims/` provide Node.js internal API compatibility
 - **User functions** are implemented in `src/user_function.{h,cpp}`
-- **Use `vendored/better-sqlite3/` for API reference** when implementing better-sqlite3 compatibility
-- **Validate against `vendored/better-sqlite3/test/`** to ensure drop-in replacement behavior
+- **Use `third-party/better-sqlite3/` for API reference** when implementing better-sqlite3 compatibility
+- **Validate against `third-party/better-sqlite3/test/`** to ensure drop-in replacement behavior
 
 ### Testing Requirements
 
@@ -592,7 +602,6 @@ testMemoryBenchmark(
   {
     maxMemoryGrowthKBPerSecond: 500, // Adjust based on operation
     minRSquaredForLeak: 0.5, // Statistical confidence
-    forceGC: true, // Consistent GC behavior
     maxTimeoutMs: 60000, // Generous timeout
   },
 );
@@ -617,7 +626,6 @@ await waitForOutput(proc, "READY"); // Wait for process to be ready
 ### CI Environment Considerations
 
 1. **GitHub Actions runners vary significantly**:
-
    - Ubuntu: Fast and reliable
    - Windows: 4x slower process operations
    - macOS: 4x slower in VMs
