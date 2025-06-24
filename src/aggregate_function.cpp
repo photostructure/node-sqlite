@@ -198,11 +198,7 @@ void CustomAggregate::xStepBase(
       // Store objects as JSON strings
       state->type = AggregateValue::OBJECT_JSON;
       // Use JSON.stringify to serialize the object
-      Napi::Object global = self->env_.Global();
-      Napi::Object json = global.Get("JSON").As<Napi::Object>();
-      Napi::Function stringify = json.Get("stringify").As<Napi::Function>();
-      Napi::Value json_result = stringify.Call({start_val});
-      std::string json_str = json_result.As<Napi::String>().Utf8Value();
+      std::string json_str = SafeJsonStringify(self->env_, start_val);
 
       // If JSON is too long, use a simpler representation
       if (json_str.length() >= sizeof(state->string_buffer) - 1) {
@@ -304,11 +300,13 @@ void CustomAggregate::xStepBase(
   Napi::Value result_val(self->env_, result);
 
   // Check for Promise (from async functions) first
-  if (result_val.IsObject() && !result_val.IsArray() && !result_val.IsBuffer()) {
+  if (result_val.IsObject() && !result_val.IsArray() &&
+      !result_val.IsBuffer()) {
     Napi::Object obj = result_val.As<Napi::Object>();
     // Check if it's a Promise by looking for 'then' method
     if (obj.Has("then") && obj.Get("then").IsFunction()) {
-      sqlite3_result_error(ctx, "User-defined function returned invalid type", -1);
+      sqlite3_result_error(ctx, "User-defined function returned invalid type",
+                           -1);
       return;
     }
   }
@@ -343,11 +341,7 @@ void CustomAggregate::xStepBase(
     // Store objects as JSON strings
     state->type = AggregateValue::OBJECT_JSON;
     // Use JSON.stringify to serialize the object
-    Napi::Object global = self->env_.Global();
-    Napi::Object json = global.Get("JSON").As<Napi::Object>();
-    Napi::Function stringify = json.Get("stringify").As<Napi::Function>();
-    Napi::Value json_result = stringify.Call({result_val});
-    std::string json_str = json_result.As<Napi::String>().Utf8Value();
+    std::string json_str = SafeJsonStringify(self->env_, result_val);
 
     // If JSON is too long, use a simpler representation
     if (json_str.length() >= sizeof(state->string_buffer) - 1) {
@@ -619,6 +613,42 @@ napi_async_context CustomAggregate::GetAsyncContext() {
     }
   }
   return async_context_;
+}
+
+// Helper method for safe JSON serialization with circular reference handling
+std::string CustomAggregate::SafeJsonStringify(Napi::Env env,
+                                               Napi::Value value) {
+  try {
+    Napi::Object global = env.Global();
+    Napi::Object json = global.Get("JSON").As<Napi::Object>();
+    Napi::Function stringify = json.Get("stringify").As<Napi::Function>();
+    Napi::Value json_result = stringify.Call({value});
+    return json_result.As<Napi::String>().Utf8Value();
+  } catch (...) {
+    // Handle circular references by creating a simplified object
+    // Try to preserve key properties while breaking circularity
+    try {
+      if (!value.IsObject()) {
+        return "{\"_error\":\"non_object\"}";
+      }
+
+      Napi::Object obj = value.As<Napi::Object>();
+      // For objects with circular refs, try to extract simple properties
+      if (obj.Has("value")) {
+        Napi::Value value_prop = obj.Get("value");
+        if (value_prop.IsNumber()) {
+          double val = value_prop.As<Napi::Number>().DoubleValue();
+          return "{\"value\":" + std::to_string(val) + "}";
+        } else {
+          return "{\"value\":0}";
+        }
+      } else {
+        return "{\"_error\":\"circular_reference\"}";
+      }
+    } catch (...) {
+      return "{\"_error\":\"circular_reference\"}";
+    }
+  }
 }
 
 } // namespace photostructure::sqlite

@@ -83,6 +83,9 @@ private:
   static void xStepBase(sqlite3_context *ctx, int argc, sqlite3_value **argv,
                         Napi::Reference<Napi::Function> CustomAggregate::*mptr);
   static void xValueBase(sqlite3_context *ctx, bool is_final);
+
+  // Helper method for safe JSON serialization with circular reference handling
+  static std::string SafeJsonStringify(Napi::Env env, Napi::Value value);
   static void DestroyAggregateData(sqlite3_context *ctx);
 
   AggregateData *GetAggregate(sqlite3_context *ctx);
