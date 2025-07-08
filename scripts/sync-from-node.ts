@@ -23,12 +23,6 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { githubFetch } from "./github-api";
-import {
-  compareSqliteVersions,
-  getCurrentSqliteVersion,
-  getSqliteVersionFromContent,
-  updateSqliteVersion,
-} from "./version-utils";
 
 const execAsync = promisify(exec);
 
@@ -36,8 +30,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const packageRoot = path.join(__dirname, "..");
 
+type SyncedFile = {
+  src: string; // Source path in Node.js repo
+  dest: string; // Destination path in this package
+  description: string; // Description of the file
+};
+
 // Files to sync from Node.js repo
-const filesToSync = [
+// Note: SQLite amalgamation files (sqlite3.c, sqlite3.h, sqlite3ext.h) are NOT included
+// because we always use the latest SQLite from SQLite.org instead of Node.js's version
+const filesToSync: SyncedFile[] = [
   // JavaScript interface
   {
     src: "lib/sqlite.js",
@@ -55,23 +57,7 @@ const filesToSync = [
     dest: "src/upstream/node_sqlite.cc",
     description: "Node.js SQLite C++ implementation",
   },
-  // SQLite library
-  {
-    src: "deps/sqlite/sqlite3.c",
-    dest: "src/upstream/sqlite3.c",
-    description: "SQLite3 amalgamation source",
-  },
-  {
-    src: "deps/sqlite/sqlite3.h",
-    dest: "src/upstream/sqlite3.h",
-    description: "SQLite3 header file",
-  },
-  {
-    src: "deps/sqlite/sqlite3ext.h",
-    dest: "src/upstream/sqlite3ext.h",
-    description: "SQLite3 extension header",
-  },
-  // Build config
+  // Build config only (SQLite amalgamation files are synced from SQLite.org)
   {
     src: "deps/sqlite/sqlite.gyp",
     dest: "src/upstream/sqlite.gyp",
@@ -165,6 +151,69 @@ function ensureDir(filePath: string) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+type SyncCache = {
+  sha: string;
+  timestamp: number;
+  branch: string;
+  repo: string;
+};
+
+function shouldSkipSync(
+  repo: string,
+  branch: string,
+  currentSha: string,
+  force: boolean,
+): boolean {
+  if (force) {
+    return false; // Never skip if force is enabled
+  }
+
+  if (!currentSha) {
+    return false; // Can't skip without SHA
+  }
+
+  try {
+    const cacheFile = path.join(packageRoot, ".sync-cache.json");
+    if (!fs.existsSync(cacheFile)) {
+      return false; // No cache file, need to sync
+    }
+
+    const cache: SyncCache = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+
+    // Check if we have the same repo, branch, and SHA
+    if (
+      cache.repo === repo &&
+      cache.branch === branch &&
+      cache.sha === currentSha
+    ) {
+      const hoursSinceSync = (Date.now() - cache.timestamp) / (1000 * 60 * 60);
+      console.log(
+        `Last sync was ${hoursSinceSync.toFixed(1)} hours ago with same SHA (${currentSha.substring(0, 7)})`,
+      );
+      return true; // Skip sync
+    }
+
+    return false; // Different SHA or repo/branch, need to sync
+  } catch {
+    return false; // Error reading cache, need to sync
+  }
+}
+
+function updateSyncCache(repo: string, branch: string, sha: string) {
+  try {
+    const cacheFile = path.join(packageRoot, ".sync-cache.json");
+    const cache: SyncCache = {
+      sha,
+      timestamp: Date.now(),
+      branch,
+      repo,
+    };
+    fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2));
+  } catch (error) {
+    console.warn("Failed to update sync cache:", error);
   }
 }
 
@@ -282,18 +331,9 @@ async function main() {
   }
 
   let successCount = 0;
-  let skippedCount = 0;
   const totalCount = filesToSync.length;
-  let nodeSqliteVersion: string | null = null;
   let nodeVersion: string | null = null;
   let nodeCommitSha: string | null = null;
-  const currentSqliteVersion = await getCurrentSqliteVersion();
-  const sqliteFiles = [
-    "deps/sqlite/sqlite3.c",
-    "deps/sqlite/sqlite3.h",
-    "deps/sqlite/sqlite3ext.h",
-  ];
-  let skipSqliteFiles = false;
 
   // Fetch Node.js version and commit info
   try {
@@ -303,11 +343,12 @@ async function main() {
 
     if (commitResponse.ok) {
       const commitData = (await commitResponse.json()) as any;
-      nodeCommitSha = commitData.sha?.substring(0, 7); // Short SHA
+      nodeCommitSha = commitData.sha; // Full SHA for file fetching
     }
 
-    // Get Node.js version from src/node_version.h
-    const versionUrl = `https://raw.githubusercontent.com/${args.repo}/${args.branch}/src/node_version.h`;
+    // Get Node.js version from src/node_version.h using the commit SHA for consistency
+    const versionRef = nodeCommitSha || args.branch;
+    const versionUrl = `https://raw.githubusercontent.com/${args.repo}/${versionRef}/src/node_version.h`;
     const versionResponse = await fetch(versionUrl);
     if (versionResponse.ok) {
       const versionContent = await versionResponse.text();
@@ -332,57 +373,24 @@ async function main() {
   }
 
   console.log(
-    `Node.js version: ${nodeVersion || "unknown"} (${nodeCommitSha || args.branch})`,
+    `Node.js version: ${nodeVersion || "unknown"} (${nodeCommitSha?.substring(0, 7) || args.branch})`,
   );
 
-  // First, check if we should skip SQLite files by checking the version
-  if (currentSqliteVersion && !args.force) {
-    // Download sqlite3.c temporarily to check version
-    const sqliteUrl = `https://raw.githubusercontent.com/${args.repo}/${args.branch}/deps/sqlite/sqlite3.c`;
-    try {
-      const response = await fetch(sqliteUrl);
-      if (response.ok) {
-        const content = await response.text();
-        nodeSqliteVersion = getSqliteVersionFromContent(content);
-
-        if (nodeSqliteVersion) {
-          const comparison = compareSqliteVersions(
-            currentSqliteVersion,
-            nodeSqliteVersion,
-          );
-          if (comparison > 0) {
-            console.log(
-              `\n⚠️  WARNING: Current SQLite version (${currentSqliteVersion}) is newer than Node.js version (${nodeSqliteVersion})!`,
-            );
-            if (!args.force) {
-              console.log(
-                "  Skipping SQLite amalgamation files (sqlite3.c, sqlite3.h, sqlite3ext.h)",
-              );
-              console.log("  To sync these files anyway, use --force");
-              console.log();
-              skipSqliteFiles = true;
-            } else {
-              console.log("  Forcing sync of SQLite files as requested");
-              console.log();
-            }
-          }
-        }
-      }
-    } catch {
-      // Ignore errors during version check
-    }
+  // Check if we should skip the entire sync based on SHA
+  if (
+    nodeCommitSha &&
+    shouldSkipSync(args.repo, args.branch, nodeCommitSha, args.force)
+  ) {
+    console.log("✅ No sync needed - files are already up to date");
+    return;
   }
 
-  for (const file of filesToSync) {
-    // Skip SQLite files if version is newer
-    if (skipSqliteFiles && sqliteFiles.includes(file.src)) {
-      console.log(`Skipping: ${file.description} (current version is newer)`);
-      skippedCount++;
-      console.log();
-      continue;
-    }
+  // Note: SQLite version checking removed since we sync SQLite files from SQLite.org, not Node.js
 
-    const url = `https://raw.githubusercontent.com/${args.repo}/${args.branch}/${file.src}`;
+  for (const file of filesToSync) {
+    // Use commit SHA for consistency, fallback to branch if SHA not available
+    const ref = nodeCommitSha || args.branch;
+    const url = `https://raw.githubusercontent.com/${args.repo}/${ref}/${file.src}`;
     const destPath = path.join(packageRoot, file.dest);
 
     if (args.dryRun) {
@@ -394,7 +402,6 @@ async function main() {
       const hasChanged = await checkRemoteFileChanged(url, destPath);
       if (!hasChanged && !args.force) {
         console.log(`Skipping: ${file.description} (no changes detected)`);
-        skippedCount++;
         console.log();
         continue;
       }
@@ -407,22 +414,18 @@ async function main() {
     console.log();
   }
 
-  const actualTotal = totalCount - skippedCount;
   console.log(
-    `${args.dryRun ? "Would sync" : "Synced"} ${successCount}/${actualTotal} files successfully`,
+    `${args.dryRun ? "Would sync" : "Synced"} ${successCount}/${totalCount} files successfully`,
   );
-  if (skippedCount > 0) {
-    console.log(`Skipped ${skippedCount} files (current version is newer)`);
-  }
 
-  if (!args.dryRun && successCount === actualTotal) {
+  if (!args.dryRun && successCount === totalCount) {
     // Update versions in package.json
     if (nodeVersion || nodeCommitSha) {
       // Always update Node.js version if we have it
       try {
         const nodeVersionString =
           (nodeVersion || args.branch) +
-          (nodeCommitSha ? `@${nodeCommitSha}` : "");
+          (nodeCommitSha ? `@${nodeCommitSha.substring(0, 7)}` : "");
         await execAsync(`npm pkg set versions.nodejs="${nodeVersionString}"`, {
           cwd: packageRoot,
         });
@@ -434,27 +437,19 @@ async function main() {
       }
     }
 
-    if (nodeSqliteVersion && !skipSqliteFiles) {
-      // Update SQLite version only if we synced SQLite files
-      await updateSqliteVersion(nodeSqliteVersion, "node", {
-        branch: args.branch,
-        nodeVersion: nodeVersion || undefined,
-        commitSha: nodeCommitSha || undefined,
-      });
+    // Note: SQLite version update removed since we sync SQLite files from SQLite.org, not Node.js
+
+    // Update sync cache with the current SHA
+    if (nodeCommitSha) {
+      updateSyncCache(args.repo, args.branch, nodeCommitSha);
     }
 
     console.log("\n✅ Sync complete!");
-    if (skippedCount > 0) {
-      console.log(
-        `\nNote: ${skippedCount} SQLite amalgamation files were skipped because the current version is newer.`,
-      );
-      console.log("Use --force to sync these files anyway.");
-    }
     console.log("\nNext steps:");
     console.log("1. Run `npm run build:native` to ensure the native addon ");
     console.log("2. Run `npm test` to verify everything works");
-  } else if (!args.dryRun && successCount < actualTotal) {
-    console.log(`\n⚠️  ${actualTotal - successCount} files failed to download`);
+  } else if (!args.dryRun && successCount < totalCount) {
+    console.log(`\n⚠️  ${totalCount - successCount} files failed to download`);
     console.log("Some files may be missing from the specified branch/tag.");
     console.log("Try using a different branch with --branch option.");
     process.exit(1);

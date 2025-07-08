@@ -73,9 +73,8 @@ test/*.db
 
 # Generated documentation is now in build/docs/ (covered by build/ ignore)
 
-# third-party libraries for reference
-third-party/
-third-party/
+# third-party libraries for reference (submodules are tracked)
+# Note: submodules are tracked in .gitmodules, not ignored
 
 # Temporary directories
 .temp-sqlite-download/

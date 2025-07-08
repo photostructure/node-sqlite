@@ -1,0 +1,3 @@
+[submodule "third-party/better-sqlite3"]
+	path = third-party/better-sqlite3
+	url = https://github.com/WiseLibs/better-sqlite3.git
