@@ -2,9 +2,8 @@
 
 #include <cmath>
 #include <cstring>
-#include <iomanip>
 #include <limits>
-#include <sstream>
+#include <unordered_map>
 #include <vector>
 
 #include "sqlite_impl.h"
