@@ -57,7 +57,6 @@
       "Bash(npx typedoc:*)",
       "Bash(rg:*)",
       "Bash(sed:*)",
-      "Bash(sudo rm:*)",
       "Bash(tail:*)",
       "Bash(then)",
       "Bash(timeout:*)",
@@ -76,7 +75,9 @@
       "WebFetch(domain:osv.dev)",
       "WebFetch(domain:sqlite.org)",
       "WebFetch(domain:stackoverflow.com)",
-      "WebFetch(domain:www.sqlite.org)"
+      "WebFetch(domain:www.sqlite.org)",
+      "Bash(npx node-gyp:*)",
+      "WebFetch(domain:docs.npmjs.com)"
     ]
   },
   "enableAllProjectMcpServers": false
