@@ -237,8 +237,8 @@ export const describeIf = (condition: boolean) =>
 export const isWindows = process.platform === "win32";
 export const isMacOS = process.platform === "darwin";
 export const isLinux = process.platform === "linux";
-export const isCI = process.env.CI === "true";
-export const isGitHubActions = process.env.GITHUB_ACTIONS === "true";
+export const isCI = process.env["CI"] === "true";
+export const isGitHubActions = process.env["GITHUB_ACTIONS"] === "true";
 
 // Environment-specific test configuration
 export const skipOnWindows = testIf(!isWindows);

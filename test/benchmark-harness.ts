@@ -345,8 +345,8 @@ export async function runMemoryBenchmark(
 
   const memoryResult: MemoryBenchmarkResult = {
     ...result,
-    initialMemoryBytes: measurements[0],
-    finalMemoryBytes: measurements[n - 1],
+    initialMemoryBytes: measurements[0] ?? 0,
+    finalMemoryBytes: measurements[n - 1] ?? 0,
     memoryGrowthKBPerSecond,
     memoryGrowthKBPerIteration: slopeKBPerIteration,
     rSquared,
@@ -356,10 +356,10 @@ export async function runMemoryBenchmark(
 
   if (debug) {
     console.log(
-      `[Memory] Initial: ${(measurements[0] / 1024 / 1024).toFixed(2)} MB`,
+      `[Memory] Initial: ${((measurements[0] ?? 0) / 1024 / 1024).toFixed(2)} MB`,
     );
     console.log(
-      `[Memory] Final: ${(measurements[n - 1] / 1024 / 1024).toFixed(2)} MB`,
+      `[Memory] Final: ${((measurements[n - 1] ?? 0) / 1024 / 1024).toFixed(2)} MB`,
     );
     console.log(
       `[Memory] Growth rate: ${memoryGrowthKBPerSecond.toFixed(2)} KB/s`,
@@ -393,13 +393,13 @@ export function testMemoryBenchmark(
         console.log(`\n🔬 Starting memory test: ${testName}`);
 
         // Add debug output to track test progress in ESM mode
-        if (process.env.DEBUG_ESM_TESTS) {
+        if (process.env["DEBUG_ESM_TESTS"]) {
           console.log(`[ESM Debug] Starting test: ${testName}`);
         }
 
         result = await runMemoryBenchmark(operation, options);
 
-        if (process.env.DEBUG_ESM_TESTS) {
+        if (process.env["DEBUG_ESM_TESTS"]) {
           console.log(`[ESM Debug] Completed test: ${testName}`);
         }
 

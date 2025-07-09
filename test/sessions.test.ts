@@ -13,7 +13,7 @@ describe("SQLite Sessions", () => {
   let db: DatabaseSyncInstance;
 
   beforeEach(() => {
-    db = new DatabaseSync();
+    db = new DatabaseSync(":memory:", { open: false });
   });
 
   afterEach(() => {
@@ -22,7 +22,7 @@ describe("SQLite Sessions", () => {
 
   describe("createSession", () => {
     beforeEach(() => {
-      db.open({ location: ":memory:" });
+      db.open();
       // Create test table
       db.exec(`
         CREATE TABLE users (
@@ -103,7 +103,7 @@ describe("SQLite Sessions", () => {
     let session: Session;
 
     beforeEach(() => {
-      db.open({ location: ":memory:" });
+      db.open();
       db.exec(`
         CREATE TABLE test (
           id INTEGER PRIMARY KEY,
@@ -697,8 +697,8 @@ describe("SQLite Sessions", () => {
 
       expect(result).toBe(true);
       expect(conflicts.length).toBe(2); // Should have 2 conflicts
-      expect(conflicts[0].type).toBe(constants.SQLITE_CHANGESET_DATA); // UPDATE/UPDATE conflict
-      expect(conflicts[1].type).toBe(constants.SQLITE_CHANGESET_NOTFOUND); // UPDATE on deleted row
+      expect(conflicts[0]?.type).toBe(constants.SQLITE_CHANGESET_DATA); // UPDATE/UPDATE conflict
+      expect(conflicts[1]?.type).toBe(constants.SQLITE_CHANGESET_NOTFOUND); // UPDATE on deleted row
 
       // Verify final state
       const users = targetDb.prepare("SELECT * FROM users ORDER BY id").all();
@@ -794,7 +794,7 @@ describe("SQLite Sessions", () => {
 
   describe("Session lifecycle", () => {
     it("should handle multiple sessions", () => {
-      db.open({ location: ":memory:" });
+      db.open();
       db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)");
 
       const session1 = db.createSession({ table: "test" });
@@ -814,7 +814,7 @@ describe("SQLite Sessions", () => {
     });
 
     it("should clean up sessions when database is closed", () => {
-      db.open({ location: ":memory:" });
+      db.open();
       db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)");
 
       const session = db.createSession({ table: "test" });

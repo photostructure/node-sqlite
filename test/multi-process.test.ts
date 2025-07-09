@@ -225,7 +225,7 @@ describe("Multi-Process Database Access", () => {
         const lockHoldTime = 500 * multiplier;
 
         console.log(
-          `Test environment: CI=${process.env.CI}, Alpine=${isAlpineLinux()}, Emulated=${isEmulated()}, multiplier=${multiplier}, lockHoldTime=${lockHoldTime}ms`,
+          `Test environment: CI=${process.env["CI"]}, Alpine=${isAlpineLinux()}, Emulated=${isEmulated()}, multiplier=${multiplier}, lockHoldTime=${lockHoldTime}ms`,
         );
 
         const setupDb = new DatabaseSync(dbPath);

@@ -54,12 +54,12 @@ describe("Double-Quoted String Literals Tests", () => {
       db.close();
     });
 
-    test("enabled via open method - double quotes can be strings", () => {
-      const db = new DatabaseSync();
-      db.open({
-        location: ":memory:",
+    test("enabled via manual open - double quotes can be strings", () => {
+      const db = new DatabaseSync(":memory:", {
+        open: false,
         enableDoubleQuotedStringLiterals: true,
       });
+      db.open();
 
       // Create a table
       db.exec("CREATE TABLE test (value TEXT)");

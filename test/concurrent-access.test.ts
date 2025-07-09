@@ -59,8 +59,11 @@ describe("Concurrent Access Patterns Tests", () => {
 
       const complexResults = readers.map((db, index) => {
         if (index < complexQueries.length) {
-          const stmt = db.prepare(complexQueries[index]);
-          return stmt.all();
+          const query = complexQueries[index];
+          if (query) {
+            const stmt = db.prepare(query);
+            return stmt.all();
+          }
         }
         return [];
       });
@@ -300,14 +303,16 @@ describe("Concurrent Access Patterns Tests", () => {
       ];
 
       // Prepare statements for each reader
-      const statements = readers.map((db, index) =>
-        db.prepare(queries[index % queries.length]),
-      );
+      const statements = readers.map((db, index) => {
+        const query = queries[index % queries.length];
+        return query ? db.prepare(query) : null;
+      });
 
       // Execute rapid queries
       const results = [];
       for (let round = 0; round < 100; round++) {
         statements.forEach((stmt, index) => {
+          if (!stmt) return; // Skip null statements
           try {
             let result;
             switch (index % queries.length) {

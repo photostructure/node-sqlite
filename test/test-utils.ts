@@ -151,7 +151,7 @@ export class TempDir {
         }
       } catch (err) {
         // Log but don't throw during cleanup
-        if (process.platform === "win32" || process.env.DEBUG_CLEANUP) {
+        if (process.platform === "win32" || process.env["DEBUG_CLEANUP"]) {
           console.log(`Warning: Error closing database: ${err}`);
         }
       }
@@ -239,7 +239,7 @@ export async function rm(
     });
   } catch (err: any) {
     // Only log errors if debugging or on Windows
-    if (process.env.DEBUG_CLEANUP || process.platform === "win32") {
+    if (process.env["DEBUG_CLEANUP"] || process.platform === "win32") {
       console.log(`Warning: Failed to remove file ${filePath}: ${err.message}`);
     }
     // Don't throw - just log and continue (OS will clean up eventually)

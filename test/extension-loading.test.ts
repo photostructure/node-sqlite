@@ -67,11 +67,11 @@ describe("Extension Loading Tests", () => {
     });
 
     test("allowExtension option works with open method", () => {
-      const db = new DatabaseSync();
-      db.open({
-        location: ":memory:",
+      const db = new DatabaseSync(":memory:", {
         allowExtension: true,
+        open: false,
       });
+      db.open();
 
       // Should be able to enable extension loading
       expect(() => {

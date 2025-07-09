@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "@jest/globals";
-import { constants, DatabaseSync } from "../dist/index.cjs";
+import { constants, DatabaseSync } from "../src/index";
 
 describe("Session callback error handling", () => {
   let sourceDb: InstanceType<typeof DatabaseSync>;

@@ -612,23 +612,23 @@ describe("Database Configuration Tests", () => {
     db.close();
   });
 
-  test("configuration via open method works", () => {
+  test("configuration via constructor and manual open works", () => {
     // Create initial database
     let db = new DatabaseSync(dbPath);
     db.exec("CREATE TABLE test (id INTEGER)");
     db.close();
 
-    // Create database without opening
-    db = new DatabaseSync();
-    expect(db.isOpen).toBe(false);
-
-    // Open with configuration
-    db.open({
-      location: dbPath,
+    // Create database with configuration but don't open yet
+    db = new DatabaseSync(dbPath, {
+      open: false,
       readOnly: true,
       enableForeignKeyConstraints: false,
       timeout: 500,
     });
+    expect(db.isOpen).toBe(false);
+
+    // Open with previously configured settings
+    db.open();
 
     expect(db.isOpen).toBe(true);
     expect(db.location()).toBe(fs.realpathSync(dbPath));
@@ -650,15 +650,9 @@ describe("Database Configuration Tests", () => {
     // Test opening already open database
     const db = new DatabaseSync(":memory:");
     expect(() => {
-      db.open({ location: ":memory:" });
+      db.open();
     }).toThrow(/already open/i);
     db.close();
-
-    // Test missing location in open
-    const db2 = new DatabaseSync();
-    expect(() => {
-      db2.open({} as any);
-    }).toThrow(/location/i);
 
     // Test invalid readonly on non-existent file
     const nonExistentPath = path.join(tempDir, "does-not-exist.db");

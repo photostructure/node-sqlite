@@ -12,11 +12,12 @@ describe("API Surface Tests", () => {
     });
 
     test("constructor overloads work", () => {
-      // No args - database not opened yet
-      const db1 = new DatabaseSync();
+      // Database with open: false - not opened yet
+      const db1 = new DatabaseSync(":memory:", { open: false });
       expect(db1.isOpen).toBe(false);
-      db1.open({ location: ":memory:" });
+      db1.open(); // open() takes no arguments
       expect(db1.location()).toBeNull(); // in-memory database should return null
+      expect(db1.isOpen).toBe(true);
       db1.close();
 
       // Path only

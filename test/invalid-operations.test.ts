@@ -146,15 +146,15 @@ describe("Invalid Operations Tests", () => {
       // Statement with named parameters
       const stmt = db.prepare("INSERT INTO test VALUES (:id, :name)");
 
-      // Missing named parameters
+      // Missing named parameters (should bind NULL for missing params)
       expect(() => {
         stmt.run({ id: 1 }); // Missing :name
       }).not.toThrow(); // SQLite binds NULL for missing params
 
-      // Wrong parameter names
+      // Wrong parameter names should throw by default (Node.js behavior)
       expect(() => {
         stmt.run({ wrong: 1, keys: "test" });
-      }).not.toThrow(); // SQLite binds NULL for unmatched params
+      }).toThrow(/Unknown named parameter/); // Node.js throws for unknown params
 
       // Mix of named and positional might be allowed in some implementations
       // Let's test what actually happens
@@ -514,24 +514,33 @@ describe("Invalid Operations Tests", () => {
 
       const stmt = db.prepare("INSERT INTO test VALUES (?, ?)");
 
-      // Various invalid blob inputs
-      const invalidBlobs = [
-        { value: "not a buffer" },
-        { value: 12345 },
-        { value: { data: [1, 2, 3] } },
-        { value: [1, 2, 3] },
+      // Test valid types (Node.js should accept these)
+      const validValues = [
+        { value: "not a buffer", description: "string" },
+        { value: 12345, description: "number" },
       ];
 
-      // SQLite is very permissive - it will convert most types
-      invalidBlobs.forEach(({ value }) => {
+      validValues.forEach(({ value }, index) => {
         expect(() => {
-          stmt.run(1, value);
-        }).not.toThrow(); // SQLite accepts these and converts them
+          stmt.run(index + 1, value);
+        }).not.toThrow(); // Node.js accepts these types
       });
 
-      // Verify what was actually stored
+      // Test invalid types (Node.js should throw for these)
+      const invalidValues = [
+        { value: { data: [1, 2, 3] }, description: "object" },
+        { value: [1, 2, 3], description: "array" },
+      ];
+
+      invalidValues.forEach(({ value }, index) => {
+        expect(() => {
+          stmt.run(index + 100, value);
+        }).toThrow(/Provided value cannot be bound to SQLite parameter/);
+      });
+
+      // Verify that only valid data was stored
       const results = db.prepare("SELECT * FROM test").all();
-      expect(results.length).toBe(invalidBlobs.length);
+      expect(results.length).toBe(validValues.length);
 
       db.close();
     });
@@ -1066,7 +1075,9 @@ describe("Invalid Operations Tests", () => {
         // If it succeeds, that's fine
       } catch (error: any) {
         // If it fails, it should be our error
-        expect(error.message).toMatch(/toString called multiple times/);
+        expect(error.message).toMatch(
+          /toString called multiple times|Provided value cannot be bound to SQLite parameter/,
+        );
       }
 
       db.close();
@@ -1093,9 +1104,9 @@ describe("Invalid Operations Tests", () => {
         expect(statements.length).toBe(statementCount);
 
         // Use some of them
-        statements[0].get("test");
-        statements[500].get("test");
-        statements[999].get("test");
+        statements[0]?.get("test");
+        statements[500]?.get("test");
+        statements[999]?.get("test");
       } finally {
         // Clean up
         for (const stmt of statements) {
@@ -1227,7 +1238,7 @@ describe("Invalid Operations Tests", () => {
         ];
 
         // Start some operations
-        stmts[0].run(i);
+        stmts[0]?.run(i);
 
         // Immediately close (simulating race condition)
         db.close();
@@ -1320,10 +1331,11 @@ describe("Invalid Operations Tests", () => {
       const circular: any = { a: 1 };
       circular.self = circular;
 
-      // Pass it as a parameter (SQLite will convert to string or null)
+      // Pass it as a parameter - objects as first arg are treated as named parameters
       const stmt = db.prepare("SELECT handle_circular(?)");
-      const result = stmt.get(circular);
-      expect(result).toBeDefined();
+      expect(() => {
+        stmt.get(circular);
+      }).toThrow(/Unknown named parameter/); // Objects with unknown named parameters should throw
 
       db.close();
     });
@@ -1484,7 +1496,7 @@ describe("Invalid Operations Tests", () => {
       const iterators = [stmt.iterate(), stmt.iterate(), stmt.iterate()];
 
       // Advance first iterator
-      iterators[0].next();
+      iterators[0]?.next();
 
       // Finalize statement while iterators exist
       stmt.finalize();

@@ -203,8 +203,8 @@ describe("Session Lifecycle Management (RAII)", () => {
 
         // Randomly close some sessions
         if (i % 3 === 0) {
-          sessions[0].close();
-          sessions[2].close();
+          sessions[0]?.close();
+          sessions[2]?.close();
         }
 
         db.close();
@@ -503,7 +503,7 @@ describe("Session Lifecycle Management (RAII)", () => {
         // Without --expose-gc, they show higher apparent memory growth rates
         // Node 24 also has different GC behavior that causes higher apparent memory growth
         maxMemoryGrowthKBPerSecond:
-          (process.platform === "darwin" && process.env.CI) ||
+          (process.platform === "darwin" && process.env["CI"]) ||
           process.version.startsWith("v24.")
             ? 5000
             : 500,

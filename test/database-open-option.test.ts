@@ -141,7 +141,7 @@ describe("DatabaseSync open option", () => {
       // but open is false - the database should be created but not opened
       // SQLite treats empty paths as temporary databases
       const db = new DatabaseSync("", { open: false });
-      
+
       // Should not throw during construction
       expect(db.isOpen).toBe(false);
 
@@ -149,7 +149,7 @@ describe("DatabaseSync open option", () => {
       db.open();
       expect(db.isOpen).toBe(true);
       expect(db.location()).toBe(null); // Empty path results in null location
-      
+
       db.close();
     });
   });

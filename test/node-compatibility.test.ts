@@ -26,7 +26,10 @@ let nodeAvailable = false;
 
 // Check Node.js version - only run on Node.js 24+ where node:sqlite is available
 const nodeVersion = process.version;
-const majorVersion = parseInt(nodeVersion.split(".")[0].substring(1), 10);
+const majorVersion = parseInt(
+  nodeVersion.split(".")[0]?.substring(1) ?? "0",
+  10,
+);
 const hasNodeSqlite = majorVersion >= 24;
 
 if (hasNodeSqlite) {
@@ -185,8 +188,8 @@ describe("Node.js API Compatibility Tests", () => {
 
         expect(results.length).toBe(3);
         results.forEach((row: any, index: number) => {
-          expect(row.name).toBe(testData[index][0]);
-          expect(row.value).toBe(testData[index][1]);
+          expect(row.name).toBe(testData[index]?.[0]);
+          expect(row.value).toBe(testData[index]?.[1]);
         });
 
         db.close();

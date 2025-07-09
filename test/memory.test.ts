@@ -6,14 +6,9 @@ import { testMemoryBenchmark } from "./benchmark-harness";
 import { getUniqueTableName, rm } from "./test-utils";
 
 // Only run memory tests when explicitly requested
-const shouldRunMemoryTests = process.env.TEST_MEMORY === "1";
+const shouldRunMemoryTests = process.env["TEST_MEMORY"] === "1";
 
 const describeMemoryTests = shouldRunMemoryTests ? describe : describe.skip;
-
-// Check if we're in ESM mode
-const _isESM =
-  process.env.TEST_ESM === "1" ||
-  process.env.NODE_OPTIONS?.includes("--experimental-vm-modules");
 
 // Note: Memory tests require --forceExit flag due to a Jest issue with native
 // modules where the process doesn't exit cleanly even though all tests complete.

@@ -121,8 +121,8 @@ describe("Backup functionality", () => {
       const firstCall = progressCalls[0];
       expect(firstCall).toHaveProperty("totalPages");
       expect(firstCall).toHaveProperty("remainingPages");
-      expect(firstCall.totalPages).toBe(totalPages);
-      expect(firstCall.remainingPages).toBeLessThanOrEqual(totalPages);
+      expect(firstCall?.totalPages).toBe(totalPages);
+      expect(firstCall?.remainingPages).toBeLessThanOrEqual(totalPages);
     }
 
     // Verify the backup completed
@@ -304,10 +304,10 @@ describe("Backup functionality", () => {
       )
       .all() as { name: string; sql: string }[];
     expect(indexes.length).toBe(3);
-    expect(indexes[0].name).toBe("idx_config_key_value");
-    expect(indexes[0].sql).toContain("UNIQUE"); // Verify it's a UNIQUE index
-    expect(indexes[1].name).toBe("idx_products_price");
-    expect(indexes[2].name).toBe("idx_users_email");
+    expect(indexes[0]?.name).toBe("idx_config_key_value");
+    expect(indexes[0]?.sql).toContain("UNIQUE"); // Verify it's a UNIQUE index
+    expect(indexes[1]?.name).toBe("idx_products_price");
+    expect(indexes[2]?.name).toBe("idx_users_email");
 
     // Verify trigger exists and its definition
     const triggers = restoredDb
@@ -316,8 +316,8 @@ describe("Backup functionality", () => {
       )
       .all() as { name: string; sql: string }[];
     expect(triggers.length).toBe(1);
-    expect(triggers[0].name).toBe("update_timestamp");
-    expect(triggers[0].sql).toContain("AFTER UPDATE ON config");
+    expect(triggers[0]?.name).toBe("update_timestamp");
+    expect(triggers[0]?.sql).toContain("AFTER UPDATE ON config");
 
     // Verify CHECK constraints by examining table schema
     const ordersSql = restoredDb
@@ -548,25 +548,28 @@ describe("Backup functionality", () => {
         const curr = progressCalls[i];
 
         // Total pages should remain constant
-        expect(curr.totalPages).toBe(prev.totalPages);
+        expect(curr?.totalPages).toBe(prev?.totalPages);
 
         // Remaining pages should decrease
-        expect(curr.remainingPages).toBeLessThan(prev.remainingPages);
+        expect(curr?.remainingPages ?? 0).toBeLessThan(
+          prev?.remainingPages ?? 0,
+        );
 
         // With AsyncWorker, pages may be processed in larger chunks than requested
         // Just verify that progress is being made
-        const pagesProcessed = prev.remainingPages - curr.remainingPages;
+        const pagesProcessed =
+          (prev?.remainingPages ?? 0) - (curr?.remainingPages ?? 0);
         expect(pagesProcessed).toBeGreaterThan(0);
       }
 
       // Verify callbacks contain valid data
       if (progressCalls.length > 0) {
         const firstCall = progressCalls[0];
-        expect(firstCall.totalPages).toBe(totalPages);
+        expect(firstCall?.totalPages).toBe(totalPages);
         // With AsyncWorker, the first callback might show any amount of progress
         // Just verify it's a valid number
-        expect(firstCall.remainingPages).toBeGreaterThanOrEqual(0);
-        expect(firstCall.remainingPages).toBeLessThanOrEqual(totalPages);
+        expect(firstCall?.remainingPages).toBeGreaterThanOrEqual(0);
+        expect(firstCall?.remainingPages).toBeLessThanOrEqual(totalPages);
       }
 
       // Verify timing - with small page sizes, the backup should take some measurable time
@@ -747,11 +750,13 @@ describe("Backup functionality", () => {
         // With AsyncWorker, the exact page decrease per callback is not guaranteed
         // Just verify that progress is being made (remaining pages decrease)
         const decrease2 =
-          progressInfo2[0].remaining - progressInfo2[1].remaining;
+          (progressInfo2[0]?.remaining ?? 0) -
+          (progressInfo2[1]?.remaining ?? 0);
         expect(decrease2).toBeGreaterThan(0);
 
         const decrease3 =
-          progressInfo3[0].remaining - progressInfo3[1].remaining;
+          (progressInfo3[0]?.remaining ?? 0) -
+          (progressInfo3[1]?.remaining ?? 0);
         expect(decrease3).toBeGreaterThan(0);
 
         // The actual behavior we care about: different rates should result in

@@ -689,7 +689,7 @@ describe("Error Handling Tests - Safe Edition", () => {
         // If it doesn't throw, that's okay too
       } catch (error: any) {
         expect(error.message).toMatch(
-          /cannot bind|invalid|unsupported|symbol/i,
+          /cannot bind|invalid|unsupported|symbol|Provided value cannot be bound to SQLite parameter/i,
         );
       }
 

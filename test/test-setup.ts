@@ -50,14 +50,14 @@ export function unregisterCleanup(cleanup: () => Promise<void> | void): void {
 // Global test setup
 beforeAll(async () => {
   // Ensure we're in test mode
-  process.env.NODE_ENV = "test";
+  process.env["NODE_ENV"] = "test";
 
   // Set stable timezone for consistent test results
   process.env.TZ = "UTC";
 
   // Configure memory tests flag if not set
-  if (!process.env.TEST_MEMORY) {
-    process.env.TEST_MEMORY = "0"; // Default to disabled
+  if (!process.env["TEST_MEMORY"]) {
+    process.env["TEST_MEMORY"] = "0"; // Default to disabled
   }
 });
 
@@ -103,9 +103,9 @@ console.error = (...args: any[]) => {
 };
 
 // Environment detection helpers
-export const isCI = process.env.CI === "true";
-export const isGitHubActions = process.env.GITHUB_ACTIONS === "true";
-export const isMemoryTest = process.env.TEST_MEMORY === "1";
+export const isCI = process.env["CI"] === "true";
+export const isGitHubActions = process.env["GITHUB_ACTIONS"] === "true";
+export const isMemoryTest = process.env["TEST_MEMORY"] === "1";
 
 // Platform-specific test configuration
 export const testConfig = {

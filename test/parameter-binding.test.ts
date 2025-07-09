@@ -427,28 +427,21 @@ describe("Parameter Binding Tests", () => {
 
       // Functions should bind as NULL
       const func = () => "test";
-      let result = stmt.run(func);
-      let row = db
+      const result = stmt.run(func);
+      const row = db
         .prepare("SELECT value_text FROM test_params WHERE id = ?")
         .get(result.lastInsertRowid);
       expect(row.value_text).toBeNull();
 
-      // Objects currently bind as NULL (limitation of current implementation)
-      // TODO: Fix object to string conversion in native code
+      // Objects should throw error for unknown named parameters (Node.js behavior)
       const obj = { foo: "bar", num: 123 };
-      result = stmt.run(obj);
-      row = db
-        .prepare("SELECT value_text FROM test_params WHERE id = ?")
-        .get(result.lastInsertRowid);
-      expect(row.value_text).toBeNull();
+      expect(() => stmt.run(obj)).toThrow("Unknown named parameter 'foo'");
 
-      // Arrays do convert to string properly
+      // Arrays should throw error when used as positional parameters (Node.js behavior)
       const arr = [1, 2, 3];
-      result = stmt.run(arr);
-      row = db
-        .prepare("SELECT value_text FROM test_params WHERE id = ?")
-        .get(result.lastInsertRowid);
-      expect(row.value_text).toBe("1,2,3");
+      expect(() => stmt.run(arr)).toThrow(
+        "Provided value cannot be bound to SQLite parameter",
+      );
     });
 
     // Commented out as our implementation may allow mixing parameters

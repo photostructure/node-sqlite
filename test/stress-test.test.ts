@@ -1,13 +1,13 @@
 // Test for stress test functionality
 
-import { createDriver } from "../benchmark/drivers.js";
+import { createDriver } from "../benchmark/drivers";
 import {
   createStressSchema,
   generateLargeDataset,
   getStressScenarios,
   NaturalDataGenerator,
-} from "../benchmark/stress-scenarios.js";
-import { TempDir } from "./test-utils.js";
+} from "../benchmark/stress-scenarios";
+import { TempDir } from "./test-utils";
 
 describe("Stress Test Components", () => {
   const tempDirMgr = TempDir.perTest();
@@ -108,13 +108,31 @@ describe("Stress Test Components", () => {
         expect(tableNames).toContain(table);
       });
 
-      // Check that FTS table works
-      const ftsTest = driver.prepare(`
-        INSERT INTO posts_fts(rowid, title, excerpt, content) 
-        VALUES (1, 'Test Title', 'Test excerpt', 'Test content')
+      // Check that FTS table works by inserting a real post first
+      // (FTS5 with content=posts requires a corresponding row in posts table)
+
+      // First insert required dependencies
+      const userInsert = driver.prepare(`
+        INSERT INTO users (first_name, last_name, email, created_at, updated_at)
+        VALUES ('Test', 'User', 'test@example.com', ?, ?)
       `);
-      expect(() => ftsTest.run()).not.toThrow();
-      ftsTest.finalize();
+      const userId = userInsert.run(Date.now(), Date.now()).lastInsertRowid;
+      userInsert.finalize();
+
+      const categoryInsert = driver.prepare(`
+        INSERT INTO categories (name, slug, created_at)
+        VALUES ('Test Category', 'test-category', ?)
+      `);
+      const categoryId = categoryInsert.run(Date.now()).lastInsertRowid;
+      categoryInsert.finalize();
+
+      // Now insert a post (this will automatically populate FTS via trigger)
+      const postInsert = driver.prepare(`
+        INSERT INTO posts (user_id, category_id, title, slug, excerpt, content, status, created_at, updated_at)
+        VALUES (?, ?, 'Test Title', 'test-title', 'Test excerpt', 'Test content', 'published', ?, ?)
+      `);
+      postInsert.run(userId, categoryId, Date.now(), Date.now());
+      postInsert.finalize();
 
       // Check FTS search works
       const search = driver
