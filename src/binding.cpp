@@ -9,11 +9,11 @@ namespace photostructure::sqlite {
 // Cleanup function for worker termination
 void CleanupAddonData([[maybe_unused]] napi_env env, void *finalize_data,
                       [[maybe_unused]] void *finalize_hint) {
-  AddonData *addon_data = static_cast<AddonData *>(finalize_data);
+  auto *addon_data = static_cast<AddonData *>(finalize_data);
 
   // Clean up any remaining database connections
   {
-    std::lock_guard<std::mutex> lock(addon_data->mutex);
+    const std::lock_guard<std::mutex> lock(addon_data->mutex);
     addon_data->databases.clear();
   }
 
@@ -48,7 +48,7 @@ AddonData *GetAddonData(napi_env env) {
 void RegisterDatabaseInstance(Napi::Env env, DatabaseSync *database) {
   AddonData *addon_data = GetAddonData(env);
   if (addon_data) {
-    std::lock_guard<std::mutex> lock(addon_data->mutex);
+    const std::lock_guard<std::mutex> lock(addon_data->mutex);
     addon_data->databases.insert(database);
   }
 }
@@ -57,7 +57,7 @@ void RegisterDatabaseInstance(Napi::Env env, DatabaseSync *database) {
 void UnregisterDatabaseInstance(Napi::Env env, DatabaseSync *database) {
   AddonData *addon_data = GetAddonData(env);
   if (addon_data) {
-    std::lock_guard<std::mutex> lock(addon_data->mutex);
+    const std::lock_guard<std::mutex> lock(addon_data->mutex);
     addon_data->databases.erase(database);
   }
 }
