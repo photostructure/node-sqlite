@@ -34,7 +34,8 @@
     "sync:sqlite": "tsx scripts/sync-from-sqlite.ts",
     "node-gyp-rebuild": "node-gyp rebuild",
     "build": "run-p build:native build:dist",
-    "build:native": "./scripts/prebuildify-wrapper.sh",
+    "build:native": "tsx scripts/build-native.ts",
+    "// build:linux-glibc": "called by GHA build.yml",
     "build:linux-glibc": "bash scripts/prebuild-linux-glibc.sh",
     "build:dist": "tsup && node scripts/post-build.mjs",
     "// pretests": "builds everything before running full test suite",
@@ -65,6 +66,7 @@
     "lint:ts": "tsc --noEmit",
     "lint:ts-build": "tsc -p tsconfig.build.json --noEmit",
     "lint:ts-scripts": "tsc --noEmit --module esnext --target es2022 --moduleResolution node --project scripts/tsconfig.json",
+    "lint:ts-benchmark": "cd benchmark && tsc --noEmit",
     "lint:eslint": "eslint src/ test/ scripts/",
     "// lint:api-compat": "run by the api compatibility CI workflow",
     "lint:api-compat": "tsx scripts/check-api-compat.ts",
@@ -151,7 +153,7 @@
     "typescript-eslint": "^8.36.0"
   },
   "versions": {
-    "nodejs": "v24.2.1@a1529d5",
+    "nodejs": "v24.4.1@ed2b509",
     "sqlite": "3.50.2"
   }
 }
