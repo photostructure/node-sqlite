@@ -286,59 +286,19 @@ db.close();
 
 **Always verify staged changes before committing** by running `git diff --cached` or `git status -v`.
 
-### Aggregate Functions and V8 HandleScope
+### Aggregate Functions Implementation
 
-**Problem**: When implementing SQLite aggregate functions, we encountered "Invalid argument" errors that were caused by V8 HandleScope lifetime issues.
+**Status**: ✅ Fully implemented and tested (21 tests passing)
 
-**Root Cause**: SQLite aggregate callbacks (`xStep`, `xFinal`) are called from SQLite's context, not directly from JavaScript. Creating a HandleScope in helper methods like `GetStartValue()` or `SqliteValueToJS()` caused the scope to be destroyed before the JavaScript values were used, resulting in values becoming `<the_hole_value>`.
+Aggregate functions presented unique challenges due to N-API constraints in SQLite callback contexts. The implementation is now complete with full type support and comprehensive error handling.
 
-**Solution**:
+**Key Implementation Details**:
 
-1. Don't create HandleScope in methods that return JavaScript values - let the caller manage the scope
-2. Store aggregate values as raw C++ data instead of JavaScript objects to avoid cross-context issues
-3. Use placement new for proper C++ object initialization in SQLite-allocated memory
+1. **N-API Constraints**: Cannot use `Napi::Reference` from SQLite callbacks - must use immediate value conversion
+2. **Memory Management**: Store only POD types in SQLite's aggregate context, use JSON serialization for complex objects
+3. **Error Handling**: Proper early returns after errors (fixed missing return bug from Node.js source)
 
-**Key Code Pattern**:
-
-```cpp
-// DON'T do this:
-Napi::Value GetStartValue() {
-  Napi::HandleScope scope(env_);  // This scope will be destroyed before value is used!
-  return Napi::Number::New(env_, 0);
-}
-
-// DO this instead:
-Napi::Value GetStartValue() {
-  // No HandleScope - let the caller manage it
-  return Napi::Number::New(env_, 0);
-}
-```
-
-### Aggregate Function Argument Count
-
-**Problem**: SQLite determines the number of arguments for aggregate functions based on the JavaScript function's `length` property.
-
-**Key Behavior**:
-
-- For a step function `(acc) => acc + 1`, length is 1, so SQLite expects 0 SQL arguments
-- For a step function `(acc, value) => acc + value`, length is 2, so SQLite expects 1 SQL argument
-- The first parameter is always the accumulator, additional parameters map to SQL arguments
-
-**Example**:
-
-```javascript
-// This expects my_count() with no arguments
-db.aggregate("my_count", {
-  start: 0,
-  step: (acc) => acc + 1,
-});
-
-// This expects my_sum(value) with one argument
-db.aggregate("my_sum", {
-  start: 0,
-  step: (acc, value) => acc + value,
-});
-```
+For detailed implementation history and lessons learned, see: `doc/archive/aggregate-function-implementation-summary.md`
 
 ### Async Cleanup Anti-Patterns
 
