@@ -61,8 +61,8 @@ std::optional<std::string> ValidateDatabasePath(Napi::Env env, Napi::Value path,
       return location;
     }
   } else if (path.IsBuffer()) {
-    Napi::Buffer<uint8_t> buffer = path.As<Napi::Buffer<uint8_t>>();
-    size_t length = buffer.Length();
+    const auto buffer = path.As<Napi::Buffer<uint8_t>>();
+    const size_t length = buffer.Length();
     const uint8_t *data = buffer.Data();
 
     // Check for null bytes in buffer
@@ -426,7 +426,7 @@ Napi::Value DatabaseSync::Open(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "Database is already open");
+    node::THROW_ERR_INVALID_STATE(env, "database is already open");
     return env.Undefined();
   }
 
@@ -1340,6 +1340,11 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
     Reset();
     BindParameters(info);
 
+    // Check if BindParameters set a pending exception
+    if (env.IsExceptionPending()) {
+      return env.Undefined();
+    }
+
     int result = sqlite3_step(statement_);
 
     if (result != SQLITE_DONE && result != SQLITE_ROW) {
@@ -1399,6 +1404,11 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
     Reset();
     BindParameters(info);
 
+    // Check if BindParameters set a pending exception
+    if (env.IsExceptionPending()) {
+      return env.Undefined();
+    }
+
     int result = sqlite3_step(statement_);
 
     if (result == SQLITE_ROW) {
@@ -1438,6 +1448,11 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
   try {
     Reset();
     BindParameters(info);
+
+    // Check if BindParameters set a pending exception
+    if (env.IsExceptionPending()) {
+      return env.Undefined();
+    }
 
     Napi::Array results = Napi::Array::New(env);
     uint32_t index = 0;
@@ -1490,6 +1505,11 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
 
   // Bind parameters if provided
   BindParameters(info, 0);
+
+  // Check if BindParameters set a pending exception
+  if (info.Env().IsExceptionPending()) {
+    return info.Env().Undefined();
+  }
 
   // Create and return iterator
   return StatementSyncIterator::Create(info.Env(), this);
@@ -1827,6 +1847,17 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
       Napi::Buffer<uint8_t> buffer = param.As<Napi::Buffer<uint8_t>>();
       sqlite3_bind_blob(statement_, param_index, buffer.Data(),
                         static_cast<int>(buffer.Length()), SQLITE_TRANSIENT);
+    } else if (param.IsFunction()) {
+      // Functions cannot be stored in SQLite - bind as NULL
+      sqlite3_bind_null(statement_, param_index);
+    } else if (param.IsObject() && !param.IsArrayBuffer() &&
+               !param.IsTypedArray() && !param.IsDataView()) {
+      // Objects and arrays should throw error like Node.js does
+      // Note: ArrayBuffer, TypedArray, and DataView are also objects, so we
+      // check them separately
+      throw Napi::Error::New(
+          Env(), "Provided value cannot be bound to SQLite parameter " +
+                     std::to_string(param_index) + ".");
     } else if (param.IsArrayBuffer() || param.IsTypedArray()) {
       // Handle TypedArray and ArrayBuffer as binary data
       Napi::ArrayBuffer arrayBuffer;
@@ -1852,9 +1883,6 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
         // Empty or invalid buffer - bind as NULL
         sqlite3_bind_null(statement_, param_index);
       }
-    } else if (param.IsFunction()) {
-      // Functions cannot be stored in SQLite - bind as NULL
-      sqlite3_bind_null(statement_, param_index);
     } else if (param.IsDataView()) {
       // DataView is not fully supported in N-API
       // Convert to string like other objects
@@ -1862,12 +1890,11 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
       std::string str = str_value.Utf8Value();
       sqlite3_bind_text(statement_, param_index, str.c_str(), -1,
                         SQLITE_TRANSIENT);
-    } else if (param.IsObject()) {
-      // Objects and arrays should throw error like Node.js does
-      throw Napi::Error::New(Env(), "Provided value cannot be bound to SQLite parameter " + std::to_string(param_index) + ".");
     } else {
       // For any other type, throw error like Node.js does
-      throw Napi::Error::New(Env(), "Provided value cannot be bound to SQLite parameter " + std::to_string(param_index) + ".");
+      throw Napi::Error::New(
+          Env(), "Provided value cannot be bound to SQLite parameter " +
+                     std::to_string(param_index) + ".");
     }
   } catch (const Napi::Error &e) {
     // Re-throw Napi errors

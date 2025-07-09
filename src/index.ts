@@ -60,6 +60,11 @@ export interface DatabaseSyncOptions {
    * @default false
    */
   readonly allowUnknownNamedParameters?: boolean;
+  /**
+   * If true, the database is opened immediately. If false, the database is not opened until the first operation.
+   * @default true
+   */
+  readonly open?: boolean;
 }
 
 /**
@@ -223,11 +228,10 @@ export interface DatabaseSyncInstance {
   readonly isTransaction: boolean;
 
   /**
-   * Opens a database connection. This method is called automatically when creating
-   * a DatabaseSync instance, so typically should not be called directly.
-   * @param configuration Optional configuration for opening the database.
+   * Opens a database connection. This method should only be used when the database
+   * was created with { open: false }. An exception is thrown if the database is already open.
    */
-  open(configuration?: DatabaseSyncOptions): void;
+  open(): void;
   /**
    * Closes the database connection. This method should be called to ensure that
    * the database connection is properly cleaned up. Once a database is closed,

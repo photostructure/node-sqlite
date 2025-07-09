@@ -14,7 +14,7 @@ UserDefinedFunction::UserDefinedFunction(Napi::Env env, Napi::Function fn,
     : env_(env), fn_(Napi::Reference<Napi::Function>::New(fn, 1)), db_(db),
       use_bigint_args_(use_bigint_args), async_context_(nullptr) {
   // Create async context for callbacks
-  napi_status status = napi_async_init(
+  const napi_status status = napi_async_init(
       env, nullptr, Napi::String::New(env, "SQLiteUserFunction"),
       &async_context_);
   if (status != napi_ok) {
@@ -23,7 +23,7 @@ UserDefinedFunction::UserDefinedFunction(Napi::Env env, Napi::Function fn,
   }
 }
 
-UserDefinedFunction::~UserDefinedFunction() {
+UserDefinedFunction::~UserDefinedFunction() noexcept {
   // Clean up the persistent function reference
   if (!fn_.IsEmpty()) {
     fn_.Reset();
@@ -36,6 +36,7 @@ UserDefinedFunction::~UserDefinedFunction() {
       napi_async_destroy(env_, async_context_);
     } catch (...) {
       // Ignore errors during shutdown - environment may be cleaning up
+      // This is intentional - we cannot propagate exceptions from destructor
     }
     async_context_ = nullptr;
   }

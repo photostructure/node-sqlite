@@ -13,7 +13,7 @@ void CleanupAddonData([[maybe_unused]] napi_env env, void *finalize_data,
 
   // Clean up any remaining database connections
   {
-    const std::lock_guard<std::mutex> lock(addon_data->mutex);
+    const std::lock_guard<std::mutex> mutex_lock(addon_data->mutex);
     addon_data->databases.clear();
   }
 
@@ -37,7 +37,7 @@ void CleanupAddonData([[maybe_unused]] napi_env env, void *finalize_data,
 // Helper to get addon data for current environment
 AddonData *GetAddonData(napi_env env) {
   void *data = nullptr;
-  napi_status status = napi_get_instance_data(env, &data);
+  const napi_status status = napi_get_instance_data(env, &data);
   if (status != napi_ok || data == nullptr) {
     return nullptr;
   }
@@ -47,8 +47,8 @@ AddonData *GetAddonData(napi_env env) {
 // Register a database instance for cleanup tracking
 void RegisterDatabaseInstance(Napi::Env env, DatabaseSync *database) {
   AddonData *addon_data = GetAddonData(env);
-  if (addon_data) {
-    const std::lock_guard<std::mutex> lock(addon_data->mutex);
+  if (addon_data != nullptr) {
+    const std::lock_guard<std::mutex> mutex_lock(addon_data->mutex);
     addon_data->databases.insert(database);
   }
 }
@@ -56,8 +56,8 @@ void RegisterDatabaseInstance(Napi::Env env, DatabaseSync *database) {
 // Unregister a database instance
 void UnregisterDatabaseInstance(Napi::Env env, DatabaseSync *database) {
   AddonData *addon_data = GetAddonData(env);
-  if (addon_data) {
-    const std::lock_guard<std::mutex> lock(addon_data->mutex);
+  if (addon_data != nullptr) {
+    const std::lock_guard<std::mutex> mutex_lock(addon_data->mutex);
     addon_data->databases.erase(database);
   }
 }

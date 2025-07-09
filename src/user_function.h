@@ -17,7 +17,7 @@ class UserDefinedFunction {
 public:
   UserDefinedFunction(Napi::Env env, Napi::Function fn, DatabaseSync *db,
                       bool use_bigint_args);
-  ~UserDefinedFunction();
+  ~UserDefinedFunction() noexcept;
 
   // SQLite callback functions
   static void xFunc(sqlite3_context *ctx, int argc, sqlite3_value **argv);

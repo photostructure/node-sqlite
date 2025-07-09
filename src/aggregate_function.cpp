@@ -17,9 +17,9 @@ std::mutex ValueStorage::mutex_;
 std::atomic<int32_t> ValueStorage::next_id_{0};
 
 // ValueStorage implementation
-int32_t ValueStorage::Store(Napi::Env env, Napi::Value value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  int32_t id = ++next_id_;
+int32_t ValueStorage::Store([[maybe_unused]] Napi::Env env, Napi::Value value) {
+  const std::lock_guard<std::mutex> lock(mutex_);
+  const int32_t id = ++next_id_;
 
   // Try direct napi_value persistence instead of Napi::Reference
   try {
@@ -33,13 +33,13 @@ int32_t ValueStorage::Store(Napi::Env env, Napi::Value value) {
 }
 
 Napi::Value ValueStorage::Get(Napi::Env env, int32_t id) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   auto it = storage_.find(id);
   return (it != storage_.end()) ? it->second.Value() : env.Undefined();
 }
 
 void ValueStorage::Remove(int32_t id) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   auto it = storage_.find(id);
   if (it != storage_.end()) {
     it->second.Reset();
