@@ -64,6 +64,7 @@
     "benchmark:full": "cd benchmark && npm install && npm run bench && npm run bench:memory",
     "stress-test": "cd benchmark && npm install && cd .. && tsx scripts/stress-test.ts",
     "stress-test:validate": "npm run tests:cjs -- --no-coverage test/stress-test.test.ts",
+    "stress-test:ci": "cd benchmark && npm install && cd .. && tsx scripts/stress-test.ts --ci --output-file stress-test-results.json",
     "lint": "run-p lint:*",
     "lint:ts": "tsc --noEmit",
     "lint:ts-build": "tsc -p tsconfig.build.json --noEmit",
@@ -129,7 +130,7 @@
   "devDependencies": {
     "@eslint/js": "^9.30.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.0.12",
+    "@types/node": "^24.0.13",
     "@typescript-eslint/eslint-plugin": "^8.36.0",
     "@typescript-eslint/parser": "^8.36.0",
     "better-sqlite3": "^12.2.0",
