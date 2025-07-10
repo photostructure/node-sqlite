@@ -136,6 +136,58 @@ export const rollbackScript = `
 export const lockHolderScript = `
   const { DatabaseSync } = require(${getModulePath()});
   let db;
+  let timeoutHandle;
+  let processExiting = false;
+  
+  // Force exit function with maximum timeout
+  function forceExit(code) {
+    if (processExiting) return;
+    processExiting = true;
+    
+    // Clear any pending timeouts
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+      timeoutHandle = null;
+    }
+    
+    // Try to close database if still open
+    if (db) {
+      try {
+        db.close();
+      } catch (e) {
+        // Ignore errors during forced exit
+      }
+    }
+    
+    // Force immediate exit
+    process.exit(code);
+  }
+  
+  // Graceful shutdown handler
+  function gracefulShutdown() {
+    console.error("Graceful shutdown initiated");
+    
+    if (db) {
+      try {
+        db.exec("ROLLBACK");
+      } catch (e) {
+        console.error("Error during shutdown rollback:", e.message);
+      }
+    }
+    
+    forceExit(0);
+  }
+  
+  // Handle termination signals
+  process.on('SIGTERM', gracefulShutdown);
+  process.on('SIGINT', gracefulShutdown);
+  
+  // Absolute maximum runtime failsafe (2x lock hold time + buffer)
+  const maxRuntime = (parseInt(process.env.LOCK_HOLD_TIME) || 1000) * 2 + 2000;
+  const failsafeTimer = setTimeout(() => {
+    console.error("Failsafe timer triggered - forcing exit");
+    forceExit(1);
+  }, maxRuntime);
   
   try {
     db = new DatabaseSync(process.env.DB_PATH);
@@ -149,49 +201,44 @@ export const lockHolderScript = `
     console.log("LOCK_ACQUIRED");
     console.error("Lock acquired at:", new Date().toISOString());
     
-    // Keep process alive until we're done
-    let keepAlive = true;
-    
-    // Hold lock for specified time
-    const startTime = Date.now();
-    const checkInterval = setInterval(() => {
-      if (Date.now() - startTime >= lockHoldTime) {
-        clearInterval(checkInterval);
+    // Hold lock for specified time using setTimeout
+    timeoutHandle = setTimeout(() => {
+      try {
+        // Final update before releasing
+        db.exec("UPDATE lock_test SET value = 999 WHERE id = 1");
+        db.exec("COMMIT");
+        console.log("LOCK_RELEASED");
+        console.error("Lock released at:", new Date().toISOString());
+        
+        db.close();
+        db = null; // Clear reference
+        
+        // Clear failsafe timer
+        clearTimeout(failsafeTimer);
+        
+        // Exit immediately
+        forceExit(0);
+      } catch (e) {
+        console.error("Error during lock release:", e.message);
+        
         try {
-          // Final update before releasing
-          db.exec("UPDATE lock_test SET value = 999 WHERE id = 1");
-          db.exec("COMMIT");
-          console.log("LOCK_RELEASED");
-          console.error("Lock released at:", new Date().toISOString());
-        } catch (e) {
-          console.error("Error during commit:", e.message);
-          try {
-            db.exec("ROLLBACK");
-          } catch (rollbackError) {
-            console.error("Error during rollback:", rollbackError.message);
-          }
-        } finally {
-          try {
-            db.close();
-          } catch (closeError) {
-            console.error("Error closing database:", closeError.message);
-          }
-          keepAlive = false;
-          process.exit(0);
+          db.exec("ROLLBACK");
+        } catch (rollbackError) {
+          console.error("Error during rollback:", rollbackError.message);
         }
+        
+        // Clear failsafe timer
+        clearTimeout(failsafeTimer);
+        
+        // Force exit on error
+        forceExit(1);
       }
-    }, 10); // Check every 10ms
+    }, lockHoldTime);
     
   } catch (e) {
     console.error("Error acquiring lock:", e.message);
-    if (db) {
-      try {
-        db.close();
-      } catch (closeError) {
-        console.error("Error closing database after failure:", closeError.message);
-      }
-    }
-    process.exit(1);
+    clearTimeout(failsafeTimer);
+    forceExit(1);
   }
 `;
 
