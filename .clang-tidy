@@ -12,6 +12,7 @@ Checks: '
   clang-analyzer-*,
   cppcoreguidelines-*,
   -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-owning-memory,
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -cppcoreguidelines-pro-type-reinterpret-cast,
   -cppcoreguidelines-pro-type-union-access,
@@ -25,6 +26,7 @@ Checks: '
   -hicpp-special-member-functions,
   -hicpp-signed-bitwise,
   misc-*,
+  -misc-include-cleaner,
   -misc-non-private-member-variables-in-classes,
   modernize-*,
   -modernize-use-trailing-return-type,
@@ -58,6 +60,10 @@ CheckOptions:
   - key: readability-identifier-naming.VariableCase
     value: lower_case
   - key: readability-identifier-naming.ConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.ConstexprVariableCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.StaticConstantCase
     value: UPPER_CASE
   - key: readability-identifier-naming.MemberCase
     value: lower_case_
