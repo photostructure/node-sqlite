@@ -70,6 +70,8 @@ Thumbs.db
 test-results/
 coverage/
 test/*.db
+stress-test-results.json
+stress-test-results.md
 
 # Generated documentation is now in build/docs/ (covered by build/ ignore)
 
