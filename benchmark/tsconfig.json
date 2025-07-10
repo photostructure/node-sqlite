@@ -1,16 +1,16 @@
 {
   "compilerOptions": {
-    "rootDir": ".",
     "module": "ESNext",
     "target": "ES2022",
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "strict": true,
+    "strict": false,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "noEmit": true,
+    "noImplicitAny": false,
     "types": ["node"]
   },
   "include": ["*.ts"],

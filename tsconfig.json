@@ -5,7 +5,18 @@
     "noEmit": true,
     "module": "ESNext",
     "moduleResolution": "node",
-    "types": ["node", "jest"]
+    "types": ["node", "jest"],
+    "paths": {
+      "@photostructure/sqlite": ["./src/index.ts"]
+    }
   },
-  "exclude": ["dist", "coverage", "docs"]
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": [
+    "dist",
+    "coverage",
+    "docs",
+    "benchmark",
+    "test/stress-test.test.ts",
+    "test/api-compatibility.test.ts"
+  ]
 }

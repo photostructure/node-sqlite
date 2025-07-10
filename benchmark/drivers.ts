@@ -1,21 +1,24 @@
-import { DatabaseSync } from "@photostructure/sqlite";
 import Database from "better-sqlite3";
 import deasync from "deasync";
 import { promisify } from "node:util";
 import sqlite3 from "sqlite3";
+import { DatabaseSync } from "../src/index";
 
 // Track if node:sqlite is available
 let nodeSqliteAvailable = false;
 let NodeSqliteDatabase: any = null;
 
-try {
-  // Try to import node:sqlite
-  const nodeSqlite = await import("node:sqlite");
-  NodeSqliteDatabase = nodeSqlite.DatabaseSync;
-  nodeSqliteAvailable = true;
-} catch (e) {
-  // node:sqlite not available
-}
+// Initialize node:sqlite availability asynchronously
+(async () => {
+  try {
+    // Try to import node:sqlite
+    const nodeSqlite = await import("node:sqlite");
+    NodeSqliteDatabase = nodeSqlite.DatabaseSync;
+    nodeSqliteAvailable = true;
+  } catch (e) {
+    // node:sqlite not available
+  }
+})();
 
 // Types
 export interface Statement {

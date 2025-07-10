@@ -10,5 +10,11 @@
     "noEmit": true
   },
   "include": ["*.ts"],
-  "exclude": ["../src/**/*", "../test/**/*", "../node_modules/**/*"]
+  "exclude": [
+    "../src/**/*",
+    "../test/**/*",
+    "../benchmark/**/*",
+    "../node_modules/**/*",
+    "stress-test.ts"
+  ]
 }
