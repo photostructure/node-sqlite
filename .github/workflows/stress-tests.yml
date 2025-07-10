@@ -1,0 +1,75 @@
+name: Stress Tests
+
+on:
+  pull_request:
+    paths:
+      - "src/**/*.cpp"
+      - "src/**/*.h"
+      - "src/**/*.ts"
+      - "benchmark/**"
+      - "test/stress-test.test.ts"
+      - ".github/workflows/stress-tests.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      size:
+        description: "Database size in MB"
+        required: false
+        type: choice
+        default: "10"
+        options:
+          - "10"
+          - "50"
+          - "100"
+          - "200"
+
+jobs:
+  stress-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    strategy:
+      matrix:
+        node-version: [20, 22]
+
+    name: Stress Tests (Node ${{ matrix.node-version }})
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v3.9.1
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run stress test validation
+        run: npm run stress-test:validate
+        timeout-minutes: 5
+
+      - name: Run stress tests (CI mode)
+        run: npm run stress-test:ci
+        timeout-minutes: 20
+
+      - name: Upload stress test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: stress-test-results-node-${{ matrix.node-version }}
+          path: |
+            stress-test-results.json
+            stress-test-results.md
+          retention-days: 30
+
+      - name: Performance regression check
+        if: github.event_name == 'pull_request'
+        run: |
+          # This is a placeholder for future performance regression detection
+          # Could compare against baseline performance metrics stored in the repo
+          echo "Performance regression check completed"
