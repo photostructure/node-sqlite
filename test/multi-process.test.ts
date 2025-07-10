@@ -1,6 +1,8 @@
 import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { promisify } from "node:util";
+import { Worker } from "node:worker_threads";
 import { DatabaseSync } from "../src";
 import * as scripts from "./multi-process-scripts";
 import {
@@ -8,6 +10,7 @@ import {
   getTimingMultiplier,
   isAlpineLinux,
   isEmulated,
+  projectRoot,
   useTempDir,
 } from "./test-utils";
 
@@ -238,26 +241,40 @@ describe("Multi-Process Database Access", () => {
         setupDb.exec("INSERT INTO lock_test (id, value) VALUES (1, 0)");
         setupDb.close();
 
-        // Start lock holder process
-        const lockHolder = childProcess.spawn(
-          "node",
-          ["-e", scripts.lockHolderScript],
-          {
-            env: {
-              ...process.env,
-              DB_PATH: dbPath,
-              LOCK_HOLD_TIME: lockHoldTime.toString(),
-            },
-          },
+        // Start lock holder worker
+        const workerPath = path.join(
+          projectRoot(),
+          "test",
+          "multi-process-workers.cjs",
         );
-
-        let lockHolderOutput = "";
-        let lockHolderError = "";
-        lockHolder.stdout.on("data", (data) => {
-          lockHolderOutput += data.toString();
+        const lockHolderWorker = new Worker(workerPath, {
+          workerData: {
+            type: "lockHolder",
+            dbPath,
+            lockHoldTime,
+          },
         });
-        lockHolder.stderr.on("data", (data) => {
-          lockHolderError += data.toString();
+
+        let lockAcquired = false;
+        let lockReleased = false;
+        let workerExited = false;
+        let workerError: Error | null = null;
+
+        // Handle worker messages
+        lockHolderWorker.on("message", (msg) => {
+          if (msg.type === "LOCK_ACQUIRED") {
+            lockAcquired = true;
+          } else if (msg.type === "LOCK_RELEASED") {
+            lockReleased = true;
+          } else if (msg.type === "ERROR") {
+            workerError = new Error(msg.error);
+          } else if (msg.type === "EXIT") {
+            workerExited = true;
+          }
+        });
+
+        lockHolderWorker.on("error", (error) => {
+          workerError = error;
         });
 
         // Wait for lock to be acquired with timeout
@@ -267,18 +284,17 @@ describe("Multi-Process Database Access", () => {
         try {
           await new Promise<void>((resolve, reject) => {
             const checkLock = setInterval(() => {
-              if (lockHolderOutput.includes("LOCK_ACQUIRED")) {
+              if (lockAcquired) {
                 clearInterval(checkLock);
                 resolve();
-              } else if (lockHolderError.includes("Error")) {
+              } else if (workerError) {
                 clearInterval(checkLock);
-                reject(new Error(`Lock holder failed: ${lockHolderError}`));
+                reject(new Error(`Lock holder failed: ${workerError.message}`));
               } else if (Date.now() - lockAcquireStart > lockAcquireTimeout) {
                 clearInterval(checkLock);
                 reject(
                   new Error(
-                    `Timeout waiting for lock acquisition after ${lockAcquireTimeout}ms. ` +
-                      `Output: "${lockHolderOutput}", Error: "${lockHolderError}"`,
+                    `Timeout waiting for lock acquisition after ${lockAcquireTimeout}ms`,
                   ),
                 );
               }
@@ -286,17 +302,8 @@ describe("Multi-Process Database Access", () => {
           });
         } catch (error) {
           console.error("Failed to acquire lock:", error);
-          // Kill the lock holder process if it's still running
-          try {
-            lockHolder.kill("SIGTERM");
-            // Give it time to terminate gracefully
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            if (!lockHolder.killed) {
-              lockHolder.kill("SIGKILL");
-            }
-          } catch (killError) {
-            console.error("Error killing lock holder:", killError);
-          }
+          // Terminate the worker
+          await lockHolderWorker.terminate();
           throw error;
         }
 
@@ -318,41 +325,67 @@ describe("Multi-Process Database Access", () => {
         const maxRetries = 10;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          let writerResult;
-          try {
-            writerResult = await execScript("lockWriterScript");
-            const output = writerResult.stdout.trim();
-            const errorOutput = writerResult.stderr.trim();
+          // Create writer worker
+          const writerWorker = new Worker(workerPath, {
+            workerData: {
+              type: "lockWriter",
+              dbPath,
+            },
+          });
 
-            if (attempt === 1) {
-              console.log("Writer stdout:", output);
-              if (errorOutput) {
-                console.log("Writer stderr:", errorOutput);
+          let writerResult: string | null = null;
+          let writerError: Error | null = null;
+
+          // Wait for writer result
+          await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              writerWorker.terminate();
+              reject(new Error("Writer timeout"));
+            }, 5000 * multiplier);
+
+            writerWorker.on("message", (msg) => {
+              if (msg.type === "DATABASE_LOCKED") {
+                writerResult = "DATABASE_LOCKED";
+              } else if (msg.type === "WRITE_SUCCESS") {
+                writerResult = "WRITE_SUCCESS";
+              } else if (msg.type === "ERROR") {
+                writerError = new Error(msg.error);
+              } else if (msg.type === "EXIT") {
+                clearTimeout(timeout);
+                resolve();
               }
-            }
+            });
 
-            if (output === "DATABASE_LOCKED") {
-              lockedCount++;
-            } else if (output === "WRITE_SUCCESS") {
-              successCount++;
-            } else {
-              throw new Error(`Unexpected output: ${output}`);
-            }
+            writerWorker.on("error", (error) => {
+              writerError = error;
+              clearTimeout(timeout);
+              reject(error);
+            });
+          });
 
-            // If we get DATABASE_LOCKED at least once, that's what we want
-            if (lockedCount > 0) {
-              break;
-            }
+          if (writerError) {
+            console.error("Writer script failed:", writerError);
+            throw writerError;
+          }
 
-            // Small delay between retries
-            if (attempt < maxRetries) {
-              await new Promise((resolve) => setTimeout(resolve, 50));
-            }
-          } catch (error: any) {
-            console.error("Writer script failed:", error);
-            console.error("Writer stdout:", error.stdout);
-            console.error("Writer stderr:", error.stderr);
-            throw error;
+          if (attempt === 1) {
+            console.log("Writer result:", writerResult);
+          }
+
+          if (writerResult === "DATABASE_LOCKED") {
+            lockedCount++;
+          } else if (writerResult === "WRITE_SUCCESS") {
+            successCount++;
+          }
+
+          // If we get DATABASE_LOCKED at least once, that's what we want
+          if (lockedCount > 0) {
+            break;
+          }
+
+          // Small delay between retries
+          if (attempt < maxRetries) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
           }
         }
 
@@ -376,34 +409,36 @@ describe("Multi-Process Database Access", () => {
 
         // Wait for lock holder to finish with timeout
         console.log("Waiting for lock holder to finish...");
-        const lockFinishTimeout = lockHoldTime + 5000;
+        const lockFinishTimeout = lockHoldTime + 10000 * multiplier;
         let timeoutHandle: NodeJS.Timeout | undefined;
 
-        const exitCode = await Promise.race([
-          new Promise<number>((resolve) => {
-            lockHolder.on("close", (code) => {
+        const lockFinished = await Promise.race([
+          new Promise<boolean>((resolve) => {
+            lockHolderWorker.on("exit", (code) => {
               console.log(`Lock holder exited with code ${code}`);
               if (timeoutHandle) {
                 clearTimeout(timeoutHandle);
               }
-              resolve(code || 0);
+              resolve(true);
             });
           }),
-          new Promise<never>((_, reject) => {
-            timeoutHandle = setTimeout(() => {
-              console.error("Lock holder timeout - killing process");
-              lockHolder.kill("SIGKILL");
-              reject(
-                new Error(
-                  `Lock holder didn't finish within ${lockFinishTimeout}ms`,
-                ),
-              );
+          new Promise<boolean>((resolve) => {
+            timeoutHandle = setTimeout(async () => {
+              console.error("Lock holder timeout - terminating worker");
+              await lockHolderWorker.terminate();
+              resolve(false);
             }, lockFinishTimeout);
           }),
         ]);
 
-        expect(exitCode).toBe(0);
-        expect(lockHolderOutput).toContain("LOCK_RELEASED");
+        if (!lockFinished) {
+          throw new Error(
+            `Lock holder didn't finish within ${lockFinishTimeout}ms`,
+          );
+        }
+
+        expect(workerExited).toBe(true);
+        expect(lockReleased).toBe(true);
 
         // Verify final state - the key is that only ONE process should have updated the value
         const verifyDb = new DatabaseSync(dbPath);

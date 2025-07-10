@@ -1,11 +1,16 @@
 import { describe, expect, it } from "@jest/globals";
 import * as path from "path";
 import { Worker } from "worker_threads";
-import { createTestDb, getDirname, useTempDir } from "./test-utils";
+import { createTestDb, projectRoot, useTempDir } from "./test-utils";
 
 describe("Simple Worker Thread Test", () => {
-  const { getDbPath, writeWorkerScript } = useTempDir("sqlite-worker-simple-");
+  const { getDbPath } = useTempDir("sqlite-worker-simple-");
   let dbPath: string;
+  const workerPath = path.join(
+    projectRoot(),
+    "test",
+    "worker-test-helpers.cjs",
+  );
 
   beforeEach(() => {
     dbPath = getDbPath("test.db");
@@ -22,27 +27,11 @@ describe("Simple Worker Thread Test", () => {
   });
 
   it("should read from database in worker thread", async () => {
-    const workerCode = `
-const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-
-try {
-  const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
-  const stmt = db.prepare('SELECT * FROM test');
-  const rows = stmt.all();
-  stmt.finalize();
-  db.close();
-  
-  parentPort.postMessage({ success: true, rows });
-} catch (error) {
-  parentPort.postMessage({ success: false, error: error.message ?? String(error) });
-}
-`;
-
-    const workerPath = writeWorkerScript("simple-worker.js", workerCode);
-
     const worker = new Worker(workerPath, {
-      workerData: { dbPath },
+      workerData: {
+        operation: "read",
+        dbPath,
+      },
     });
 
     const result = await new Promise<any>((resolve, reject) => {
@@ -60,28 +49,13 @@ try {
   });
 
   it("should handle two concurrent workers", async () => {
-    const workerCode = `
-const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-
-try {
-  const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
-  const stmt = db.prepare('SELECT COUNT(*) as count FROM test');
-  const result = stmt.get();
-  stmt.finalize();
-  db.close();
-  
-  parentPort.postMessage({ success: true, count: result.count, threadId: workerData.threadId });
-} catch (error) {
-  parentPort.postMessage({ success: false, error: error.message ?? String(error), threadId: workerData.threadId });
-}
-`;
-
-    const workerPath = writeWorkerScript("count-worker.js", workerCode);
-
     const workers = [
-      new Worker(workerPath, { workerData: { dbPath, threadId: 1 } }),
-      new Worker(workerPath, { workerData: { dbPath, threadId: 2 } }),
+      new Worker(workerPath, {
+        workerData: { operation: "count", dbPath, threadId: 1 },
+      }),
+      new Worker(workerPath, {
+        workerData: { operation: "count", dbPath, threadId: 2 },
+      }),
     ];
 
     const results = await Promise.all(

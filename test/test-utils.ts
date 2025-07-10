@@ -15,6 +15,25 @@ import {
 export { getTestTimeout, getTimingMultiplier, isAlpineLinux, isEmulated };
 
 /**
+ * Get the project root directory (where package.json is located)
+ * This is useful for accessing files relative to the project root in both CJS and ESM
+ */
+export function projectRoot(): string {
+  // Start from the test directory and go up to find package.json
+  let dir = getDirname();
+
+  // Go up until we find package.json
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, "package.json"))) {
+      return dir;
+    }
+    dir = path.dirname(dir);
+  }
+
+  throw new Error("Could not find project root (no package.json found)");
+}
+
+/**
  * Helper to get __dirname in both CJS and ESM environments
  * Call it without arguments and it will auto-detect the environment
  */

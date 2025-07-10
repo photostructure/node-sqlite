@@ -6,12 +6,18 @@ import {
   createTestDb,
   getDirname,
   getTestTimeout,
+  projectRoot,
   useTempDir,
 } from "./test-utils";
 
 describe("Worker Thread Initialization Test", () => {
   const { getDbPath, writeWorkerScript } = useTempDir("sqlite-worker-init-");
   let dbPath: string;
+  const workerPath = path.join(
+    projectRoot(),
+    "test",
+    "worker-test-helpers.cjs",
+  );
 
   beforeEach(() => {
     dbPath = getDbPath("test.db");
@@ -39,38 +45,12 @@ describe("Worker Thread Initialization Test", () => {
 
     // Run multiple workers concurrently after main thread initialization
     const workerPromises = Array.from({ length: numWorkers }, (_, i) => {
-      const workerCode = `
-const { parentPort, workerData } = require('worker_threads');
-const { DatabaseSync } = require(${JSON.stringify(path.resolve(getDirname(), "../dist/index.cjs"))});
-
-try {
-  console.log('Worker ${i} starting...');
-  const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
-  const stmt = db.prepare('SELECT COUNT(*) as count FROM test');
-  const result = stmt.get();
-  stmt.finalize();
-  db.close();
-  console.log('Worker ${i} completed successfully');
-  
-  parentPort.postMessage({ 
-    success: true, 
-    count: result.count, 
-    workerId: ${i}
-  });
-} catch (error) {
-  console.error('Worker ${i} failed:', error.message);
-  parentPort.postMessage({ 
-    success: false, 
-    error: error.message ?? String(error),
-    workerId: ${i}
-  });
-}
-`;
-
-      const workerPath = writeWorkerScript(`init-worker-${i}.js`, workerCode);
-
       const worker = new Worker(workerPath, {
-        workerData: { dbPath, workerId: i },
+        workerData: {
+          operation: "count",
+          dbPath,
+          workerId: i,
+        },
       });
 
       return new Promise<any>((resolve, reject) => {
@@ -130,9 +110,12 @@ try {
 }
 `;
 
-        const workerPath = writeWorkerScript(`seq-worker-${i}.js`, workerCode);
+        const customWorkerPath = writeWorkerScript(
+          `seq-worker-${i}.js`,
+          workerCode,
+        );
 
-        const worker = new Worker(workerPath, {
+        const worker = new Worker(customWorkerPath, {
           workerData: { dbPath, workerId: i },
         });
 
@@ -190,12 +173,12 @@ try {
 }
 `;
 
-          const workerPath = writeWorkerScript(
+          const controlWorkerPath = writeWorkerScript(
             `control-worker-${i}.js`,
             workerCode,
           );
 
-          const worker = new Worker(workerPath, {
+          const worker = new Worker(controlWorkerPath, {
             workerData: { dbPath, workerId: i },
           });
 
