@@ -33,7 +33,7 @@ jobs:
 
   osv-scanner:
     name: OSV Scanner
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@40a8940a65eab1544a6af759e43d936201a131a2 # v2.0.3
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@456ceb78310755116e0a3738121351006286b797 # v2.2.1
     permissions:
       actions: read
       security-events: write
