@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, jest, test } from "@jest/globals";
 import { DatabaseSync } from "../src/index";
 import { getTestTimeout } from "./test-utils";
 
@@ -152,7 +152,7 @@ describe("Disposable Interface", () => {
 
           expect(db.isOpen).toBe(false);
         }
-      } catch (error) {
+      } catch {
         // If using is not supported, that's okay - this is a future feature
         console.log("using statement not supported in this environment");
       }
@@ -178,11 +178,9 @@ describe("Disposable Interface", () => {
 
             // Statement should be finalized
             expect(() => stmt.get()).toThrow();
-
           } finally {
             // This represents the end of the inner using block
           }
-
         } finally {
           // Outer using would dispose db here
           db[Symbol.dispose]();

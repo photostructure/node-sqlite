@@ -36,7 +36,7 @@ When choosing a SQLite library for Node.js, you have several excellent options. 
 
 ### 🏷️ [`node:sqlite`](https://nodejs.org/docs/latest/api/sqlite.html) — Node.js Built-in Module
 
-_The official SQLite module included with Node.js 22.5.0+ (experimental)_
+_The official SQLite module included with Node.js 25.0.0+ (experimental)_
 
 **✨ Pros:**
 
@@ -48,7 +48,7 @@ _The official SQLite module included with Node.js 22.5.0+ (experimental)_
 **⚠️ Cons:**
 
 - **Experimental status** — Not yet stable for production use
-- **Requires Node.js 22.5.0+** — Won't work on older versions
+- **Requires Node.js 25.0.0+** — Won't work on older versions
 - **Flag required** — Must use `--experimental-sqlite` to enable
 - **API may change** — Breaking changes possible before stable release
 - **Limited real-world usage** — Few production deployments to learn from
@@ -105,27 +105,27 @@ _The original asynchronous SQLite binding for Node.js_
 
 ## Feature Matrix
 
-| Feature                 | @photostructure/sqlite | node:sqlite  | better-sqlite3   | sqlite3       |
-| ----------------------- | ---------------------- | ------------ | ---------------- | ------------- |
-| **API Compatibility**   | node:sqlite            | -            | Custom           | Custom        |
-| **Min Node.js Version** | 20.0.0                 | 22.5.0       | 14.0.0           | 10.0.0        |
-| **Experimental Flag**   | ❌ Not needed          | ✅ Required  | ❌ Not needed    | ❌ Not needed |
-| **Synchronous API**     | ✅                     | ✅           | ✅               | ❌            |
-| **Asynchronous API**    | ❌                     | ❌           | ❌               | ✅            |
-| **TypeScript Types**    | ✅ Built-in            | ✅ Built-in  | ✅ Via @types    | ✅ Via @types |
-| **Custom Functions**    | ✅                     | ✅           | ✅               | ✅            |
-| **Aggregate Functions** | ✅                     | ✅           | ✅               | ❌            |
-| **Window Functions**    | ✅                     | ✅           | ✅               | ❌            |
-| **Sessions/Changesets** | ✅                     | ✅           | ❌               | ❌            |
-| **Backup API**          | ✅                     | ✅           | ✅ Different API | ✅            |
-| **Extension Loading**   | ✅                     | ✅           | ✅               | ✅            |
-| **Worker Threads**      | ✅                     | ✅           | ✅               | ⚠️ Limited    |
-| **FTS5**                | ✅                     | ✅           | ✅               | ✅            |
-| **JSON Functions**      | ✅                     | ✅           | ✅               | ✅            |
-| **R\*Tree**             | ✅                     | ✅           | ✅               | ✅            |
-| **Node-API**            | ✅                     | N/A          | ❌ V8-specific   | ✅            |
-| **Disposable Interface** | ✅ Symbol.dispose     | ✅ Symbol.dispose | ❌               | ❌            |
-| **Build Size**          | ~2MB                   | 0 (built-in) | ~2MB             | ~3MB          |
+| Feature                  | @photostructure/sqlite | node:sqlite   | better-sqlite3   | sqlite3       |
+| ------------------------ | ---------------------- | ------------- | ---------------- | ------------- |
+| **API Compatibility**    | node:sqlite            | -             | Custom           | Custom        |
+| **Min Node.js Version**  | 20.0.0                 | 25.0.0        | 14.0.0           | 10.0.0        |
+| **Experimental Flag**    | ❌ Not needed          | ✅ Required   | ❌ Not needed    | ❌ Not needed |
+| **Synchronous API**      | ✅                     | ✅            | ✅               | ❌            |
+| **Asynchronous API**     | ❌                     | ❌            | ❌               | ✅            |
+| **TypeScript Types**     | ✅ Built-in            | ✅ Built-in   | ✅ Via @types    | ✅ Via @types |
+| **Custom Functions**     | ✅                     | ✅            | ✅               | ✅            |
+| **Aggregate Functions**  | ✅                     | ✅            | ✅               | ❌            |
+| **Window Functions**     | ✅                     | ✅            | ✅               | ❌            |
+| **Sessions/Changesets**  | ✅                     | ✅            | ❌               | ❌            |
+| **Backup API**           | ✅                     | ✅            | ✅ Different API | ✅            |
+| **Extension Loading**    | ✅                     | ✅            | ✅               | ✅            |
+| **Worker Threads**       | ✅                     | ✅            | ✅               | ⚠️ Limited    |
+| **FTS5**                 | ✅                     | ✅            | ✅               | ✅            |
+| **JSON Functions**       | ✅                     | ✅            | ✅               | ✅            |
+| **R\*Tree**              | ✅                     | ✅            | ✅               | ✅            |
+| **Node-API**             | ✅                     | N/A           | ❌ V8-specific   | ✅            |
+| **Disposable Interface** | ✅ Native C++          | ✅ Native C++ | ❌               | ❌            |
+| **Build Size**           | ~2MB                   | 0 (built-in)  | ~2MB             | ~3MB          |
 
 ## Performance Comparison
 

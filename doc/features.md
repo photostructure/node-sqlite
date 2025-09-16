@@ -14,7 +14,7 @@ Comprehensive list of features and capabilities in @photostructure/sqlite.
 
 ## SQLite Version
 
-This package includes SQLite 3.46.1 (or later) with the following compile-time options enabled:
+This package includes SQLite 3.50.4 with the following compile-time options enabled:
 
 ## Enabled SQLite Features
 
@@ -43,6 +43,7 @@ This package includes SQLite 3.46.1 (or later) with the following compile-time o
 
 - `SQLITE_ENABLE_SESSION` - Session and changeset support
 - `SQLITE_ENABLE_PREUPDATE_HOOK` - Pre-update hooks for sessions
+- **Session class exposed** - Full access to SQLite sessions for advanced workflows
 - Database replication capabilities
 - Change tracking and synchronization
 
@@ -122,7 +123,7 @@ This package includes SQLite 3.46.1 (or later) with the following compile-time o
 
 ### Resource Management
 
-- **Automatic disposal** - DatabaseSync and StatementSync implement `Symbol.dispose`
+- **Automatic disposal** - DatabaseSync and StatementSync implement `Symbol.dispose` natively in C++
 - **`using` statement support** - Automatic cleanup with explicit resource management
 - **Manual cleanup** - Traditional close()/finalize() methods
 - **Exception safety** - Resources cleaned up even when errors occur

@@ -125,6 +125,7 @@ public:
   // Database operations
   Napi::Value Open(const Napi::CallbackInfo &info);
   Napi::Value Close(const Napi::CallbackInfo &info);
+  Napi::Value Dispose(const Napi::CallbackInfo &info);
   Napi::Value Prepare(const Napi::CallbackInfo &info);
   Napi::Value Exec(const Napi::CallbackInfo &info);
 
@@ -208,6 +209,7 @@ public:
   Napi::Value All(const Napi::CallbackInfo &info);
   Napi::Value Iterate(const Napi::CallbackInfo &info);
   Napi::Value FinalizeStatement(const Napi::CallbackInfo &info);
+  Napi::Value Dispose(const Napi::CallbackInfo &info);
 
   // Properties
   Napi::Value SourceSQLGetter(const Napi::CallbackInfo &info);
@@ -279,6 +281,7 @@ public:
   Napi::Value Changeset(const Napi::CallbackInfo &info);
   Napi::Value Patchset(const Napi::CallbackInfo &info);
   Napi::Value Close(const Napi::CallbackInfo &info);
+  Napi::Value Dispose(const Napi::CallbackInfo &info);
 
   // Get the underlying SQLite session
   sqlite3_session *GetSession() const { return session_; }

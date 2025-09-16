@@ -270,6 +270,7 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
       env, "DatabaseSync",
       {InstanceMethod("open", &DatabaseSync::Open),
        InstanceMethod("close", &DatabaseSync::Close),
+       InstanceMethod("dispose", &DatabaseSync::Dispose),
        InstanceMethod("prepare", &DatabaseSync::Prepare),
        InstanceMethod("exec", &DatabaseSync::Exec),
        InstanceMethod("function", &DatabaseSync::CustomFunction),
@@ -290,6 +291,21 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
   if (addon_data) {
     addon_data->databaseSyncConstructor =
         Napi::Reference<Napi::Function>::New(func);
+  }
+
+  // Add Symbol.dispose to the prototype (Node.js v25+ compatibility)
+  Napi::Value symbolDispose =
+      env.Global().Get("Symbol").As<Napi::Object>().Get("dispose");
+  if (!symbolDispose.IsUndefined()) {
+    func.Get("prototype")
+        .As<Napi::Object>()
+        .Set(symbolDispose,
+             Napi::Function::New(
+                 env, [](const Napi::CallbackInfo &info) -> Napi::Value {
+                   DatabaseSync *db =
+                       DatabaseSync::Unwrap(info.This().As<Napi::Object>());
+                   return db->Dispose(info);
+                 }));
   }
 
   exports.Set("DatabaseSync", func);
@@ -457,6 +473,26 @@ Napi::Value DatabaseSync::Close(const Napi::CallbackInfo &info) {
     InternalClose();
   } catch (const std::exception &e) {
     node::THROW_ERR_SQLITE_ERROR(env, e.what());
+  }
+
+  return env.Undefined();
+}
+
+Napi::Value DatabaseSync::Dispose(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
+
+  // Try to close, but ignore errors during disposal (matches Node.js v25
+  // behavior)
+  try {
+    if (IsOpen()) {
+      InternalClose();
+    }
+  } catch (...) {
+    // Ignore errors during disposal
   }
 
   return env.Undefined();
@@ -1256,6 +1292,7 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("all", &StatementSync::All),
        InstanceMethod("iterate", &StatementSync::Iterate),
        InstanceMethod("finalize", &StatementSync::FinalizeStatement),
+       InstanceMethod("dispose", &StatementSync::Dispose),
        InstanceMethod("setReadBigInts", &StatementSync::SetReadBigInts),
        InstanceMethod("setReturnArrays", &StatementSync::SetReturnArrays),
        InstanceMethod("setAllowBareNamedParameters",
@@ -1270,6 +1307,21 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
   if (addon_data) {
     addon_data->statementSyncConstructor =
         Napi::Reference<Napi::Function>::New(func);
+  }
+
+  // Add Symbol.dispose to the prototype (Node.js v25+ compatibility)
+  Napi::Value symbolDispose =
+      env.Global().Get("Symbol").As<Napi::Object>().Get("dispose");
+  if (!symbolDispose.IsUndefined()) {
+    func.Get("prototype")
+        .As<Napi::Object>()
+        .Set(symbolDispose,
+             Napi::Function::New(
+                 env, [](const Napi::CallbackInfo &info) -> Napi::Value {
+                   StatementSync *stmt =
+                       StatementSync::Unwrap(info.This().As<Napi::Object>());
+                   return stmt->Dispose(info);
+                 }));
   }
 
   exports.Set("StatementSync", func);
@@ -1522,6 +1574,21 @@ Napi::Value StatementSync::FinalizeStatement(const Napi::CallbackInfo &info) {
     sqlite3_finalize(statement_);
     statement_ = nullptr;
     finalized_ = true;
+  }
+  return info.Env().Undefined();
+}
+
+Napi::Value StatementSync::Dispose(const Napi::CallbackInfo &info) {
+  // Try to finalize, but ignore errors during disposal (matches Node.js v25
+  // behavior)
+  try {
+    if (statement_ && !finalized_) {
+      sqlite3_finalize(statement_);
+      statement_ = nullptr;
+      finalized_ = true;
+    }
+  } catch (...) {
+    // Ignore errors during disposal
   }
   return info.Env().Undefined();
 }
@@ -2179,12 +2246,28 @@ Napi::Object Session::Init(Napi::Env env, Napi::Object exports) {
       DefineClass(env, "Session",
                   {InstanceMethod("changeset", &Session::Changeset),
                    InstanceMethod("patchset", &Session::Patchset),
-                   InstanceMethod("close", &Session::Close)});
+                   InstanceMethod("close", &Session::Close),
+                   InstanceMethod("dispose", &Session::Dispose)});
 
   // Store constructor in per-instance addon data instead of static variable
   AddonData *addon_data = GetAddonData(env);
   if (addon_data) {
     addon_data->sessionConstructor = Napi::Reference<Napi::Function>::New(func);
+  }
+
+  // Add Symbol.dispose to the prototype (Node.js v25+ compatibility)
+  Napi::Value symbolDispose =
+      env.Global().Get("Symbol").As<Napi::Object>().Get("dispose");
+  if (!symbolDispose.IsUndefined()) {
+    func.Get("prototype")
+        .As<Napi::Object>()
+        .Set(symbolDispose,
+             Napi::Function::New(
+                 env, [](const Napi::CallbackInfo &info) -> Napi::Value {
+                   Session *session =
+                       Session::Unwrap(info.This().As<Napi::Object>());
+                   return session->Dispose(info);
+                 }));
   }
 
   exports.Set("Session", func);
@@ -2294,6 +2377,19 @@ Napi::Value Session::Close(const Napi::CallbackInfo &info) {
 
   Delete();
   return env.Undefined();
+}
+
+Napi::Value Session::Dispose(const Napi::CallbackInfo &info) {
+  // Try to close, but ignore errors during disposal (matches Node.js v25
+  // behavior)
+  try {
+    if (session_ != nullptr) {
+      Delete();
+    }
+  } catch (...) {
+    // Ignore errors during disposal
+  }
+  return info.Env().Undefined();
 }
 
 // Static members for tracking active jobs

@@ -405,26 +405,8 @@ export interface SqliteModule {
   };
 }
 
-// Add Symbol.dispose to the native classes
-if (binding.DatabaseSync && typeof Symbol.dispose !== "undefined") {
-  binding.DatabaseSync.prototype[Symbol.dispose] = function () {
-    try {
-      this.close();
-    } catch {
-      // Ignore errors during disposal
-    }
-  };
-}
-
-if (binding.StatementSync && typeof Symbol.dispose !== "undefined") {
-  binding.StatementSync.prototype[Symbol.dispose] = function () {
-    try {
-      this.finalize();
-    } catch {
-      // Ignore errors during disposal
-    }
-  };
-}
+// Symbol.dispose is now implemented natively in C++ (Node.js v25+)
+// No longer need JavaScript implementation
 
 // Export the native binding with TypeScript types
 

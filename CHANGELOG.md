@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Node.js v25 compatibility**: Updated to Node.js v25.0.0 for latest features and API compatibility
+  - Native Symbol.dispose implementation moved from JavaScript to C++ for better performance
+  - Session class now exposed in public API for advanced replication workflows
+  - SQLite 3.50.4 with latest performance improvements and features
+  - Future-proofing for continued Node.js compatibility
+
 - **Enhanced error information**: SQLite errors now include additional diagnostic properties:
   - `sqliteCode`: The primary SQLite error code (e.g., `14` for `SQLITE_CANTOPEN`)
   - `sqliteExtendedCode`: Extended error code for more specific information
@@ -19,7 +25,7 @@ All notable changes to this project will be documented in this file.
   - Windows ARM64 with cross-compilation support
   - Improved CI/CD pipeline with separate build jobs for Intel and ARM architectures
 
-## [0.1.0] - 2025-01-06
+## [0.0.1] - 2025-06-13
 
 ### Added
 

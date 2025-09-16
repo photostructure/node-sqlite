@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, jest, test } from "@jest/globals";
 import { DatabaseSync, type DatabaseSyncInstance } from "../src/index";
 import { getTestTimeout } from "./test-utils";
 
@@ -59,7 +59,6 @@ describe("Using Syntax (Explicit Resource Management)", () => {
 
       // Statement should now be finalized and throw on use
       expect(() => stmtRef.get(1)).toThrow();
-
     } finally {
       db.close();
     }
@@ -86,7 +85,7 @@ describe("Using Syntax (Explicit Resource Management)", () => {
         expect(alice).toEqual({ id: 1, name: "Alice" });
 
         const bob = selectStmt.get("Bob");
-        expect(bob).toEqual({ id:2, name: "Bob" });
+        expect(bob).toEqual({ id: 2, name: "Bob" });
       }
       // Inner using block ends - selectStmt should be finalized
 
@@ -160,12 +159,16 @@ describe("Using Syntax (Explicit Resource Management)", () => {
       using db = new DatabaseSync(":memory:");
       dbRef = db;
 
-      db.exec("CREATE TABLE async_test (id INTEGER PRIMARY KEY, timestamp INTEGER)");
+      db.exec(
+        "CREATE TABLE async_test (id INTEGER PRIMARY KEY, timestamp INTEGER)",
+      );
 
       // Simulate some async work while holding the resource
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
-      const insertStmt = db.prepare("INSERT INTO async_test (timestamp) VALUES (?)");
+      const insertStmt = db.prepare(
+        "INSERT INTO async_test (timestamp) VALUES (?)",
+      );
       insertStmt.run(Date.now());
       insertStmt.finalize();
 

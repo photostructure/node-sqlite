@@ -81,7 +81,7 @@ db.close();
 [Symbol.dispose](): void
 ```
 
-Implements the disposable interface for automatic resource management. Calls `close()` internally, ignoring any errors during disposal.
+Implements the disposable interface for automatic resource management. Calls `close()` internally, ignoring any errors during disposal. Implemented natively in C++ for better performance.
 
 ```javascript
 // Automatic cleanup with using statement
@@ -408,7 +408,7 @@ stmt.finalize();
 [Symbol.dispose](): void
 ```
 
-Implements the disposable interface for automatic resource management. Calls `finalize()` internally, ignoring any errors during disposal.
+Implements the disposable interface for automatic resource management. Calls `finalize()` internally, ignoring any errors during disposal. Implemented natively in C++ for better performance.
 
 ```javascript
 // Automatic cleanup with using statement

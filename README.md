@@ -1,8 +1,6 @@
 # @photostructure/sqlite
 
-Native SQLite for Node.js 20+ without the experimental flag. Drop-in replacement for `node:sqlite`.
-
-> **Note**: DataView parameter binding is not currently supported. Use Buffer instead for binary data.
+Native SQLite for Node.js 20+ without the experimental flag. Drop-in replacement for `node:sqlite`. Updated to Node.js v25 for latest features and native Symbol.dispose resource management.
 
 ## Installation
 
@@ -26,18 +24,24 @@ db.close();
 
 ## Features
 
-• 100% compatible with Node.js built-in sqlite module  
-• Zero dependencies - native SQLite implementation  
-• Synchronous API - no async overhead  
-• Performance matches leading SQLite libraries  
-• Full SQLite feature set ([details](./doc/features.md))  
-• TypeScript support with complete type definitions  
-• Cross-platform prebuilt binaries (Windows/macOS/Linux, x64/ARM64)  
-• User-defined functions and aggregates  
-• Database backups and session/changeset support  
-• URI filename support for advanced configuration  
-• Worker thread safe  
-• [Compare with other libraries →](./doc/library-comparison.md)
+- 100% compatible with Node.js v25 built-in sqlite module
+- Zero dependencies - native SQLite implementation
+- Synchronous API - no async overhead
+- Performance matches leading SQLite libraries
+- Full SQLite feature set ([details](./doc/features.md))
+- TypeScript support with complete type definitions
+- Cross-platform prebuilt binaries (Windows/macOS/Linux, x64/ARM64)
+- User-defined functions and aggregates
+- Database backups and session/changeset support
+- Session class exposed for advanced replication workflows
+- Native Symbol.dispose for improved resource management
+- URI filename support for advanced configuration
+- Worker thread safe
+- [Compare with other libraries →](./doc/library-comparison.md)
+
+## Note
+
+- DataView parameter binding is not currently supported. Use Buffer instead for binary data.
 
 ## Documentation
 

@@ -69,7 +69,7 @@ const filesToSync: SyncedFile[] = [
 function parseArgs() {
   const args = {
     help: false,
-    branch: "v24.x-staging",
+    branch: "v25.x-staging",
     repo: "nodejs/node",
     dryRun: false,
     force: false,

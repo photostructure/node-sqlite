@@ -7,7 +7,7 @@
 Simply change your import statement:
 
 ```javascript
-// Before: Using Node.js built-in SQLite (requires Node.js 22.5.0+ and --experimental-sqlite flag)
+// Before: Using Node.js built-in SQLite (requires Node.js 25.0.0+ and --experimental-sqlite flag)
 const { DatabaseSync } = require("node:sqlite");
 
 // After: Using @photostructure/sqlite (works on Node.js 20+ without any flags)
@@ -40,7 +40,7 @@ node app.js
 
 ### Broader Node.js Version Support
 
-- **node:sqlite**: Requires Node.js 22.5.0 or higher
+- **node:sqlite**: Requires Node.js 25.0.0 or higher
 - **@photostructure/sqlite**: Works with Node.js 20.0.0 or higher
 
 ### Same API, Same Behavior
@@ -53,6 +53,8 @@ All classes, methods, and properties are identical:
 - Same error handling
 - Same return values
 - Same SQLite features enabled
+- Native Symbol.dispose implementation for improved resource management
+- Session class exposed for advanced replication workflows
 
 ## Example: Identical Code Works in Both
 

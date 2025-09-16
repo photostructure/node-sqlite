@@ -5,7 +5,7 @@
     "esModuleInterop": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
-    "lib": ["ES2022", "ES2018.RegExp"],
+    "lib": ["ES2022", "ES2018.RegExp", "ESNext.Disposable"],
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "noImplicitReturns": true,
