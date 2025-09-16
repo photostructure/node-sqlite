@@ -1,0 +1,16 @@
+# npm-check-updates configuration
+# See: https://github.com/raineorshine/npm-check-updates#configuration-files
+
+# Reject specific packages to prevent version conflicts
+reject:
+  # TypeScript ESLint packages must stay in sync to prevent peer dependency conflicts
+  # These packages have strict peer dependency requirements and must be updated together
+  # to the same version. When updating, remove them from this list temporarily, update
+  # all together with: npm install @typescript-eslint/eslint-plugin@latest
+  # @typescript-eslint/parser@latest typescript-eslint@latest --save-dev
+  - "@typescript-eslint/eslint-plugin"
+  - "@typescript-eslint/parser"
+  - "typescript-eslint"
+
+# Target semver range (default)
+target: "latest"

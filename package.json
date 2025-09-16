@@ -124,39 +124,39 @@
     "performance"
   ],
   "dependencies": {
-    "node-addon-api": "^8.4.0",
+    "node-addon-api": "^8.5.0",
     "node-gyp-build": "^4.8.4"
   },
   "devDependencies": {
-    "@eslint/js": "^9.30.1",
+    "@eslint/js": "^9.35.0",
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.0.13",
-    "@typescript-eslint/eslint-plugin": "^8.36.0",
-    "@typescript-eslint/parser": "^8.36.0",
+    "@types/node": "^24.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.44.0",
+    "@typescript-eslint/parser": "^8.44.0",
     "better-sqlite3": "^12.2.0",
-    "cross-env": "^7.0.3",
+    "cross-env": "^10.0.0",
     "del-cli": "^6.0.0",
-    "eslint": "^9.30.1",
-    "eslint-plugin-regexp": "^2.9.0",
+    "eslint": "^9.35.0",
+    "eslint-plugin-regexp": "^2.10.0",
     "eslint-plugin-security": "^3.0.1",
-    "globals": "^16.3.0",
-    "jest": "^30.0.4",
-    "node-gyp": "^11.2.0",
-    "npm-check-updates": "^18.0.1",
+    "globals": "^16.4.0",
+    "jest": "^30.1.3",
+    "node-gyp": "^11.4.2",
+    "npm-check-updates": "^18.1.1",
     "npm-run-all": "4.1.5",
     "prebuildify": "^6.0.1",
     "prettier": "^3.6.2",
-    "prettier-plugin-organize-imports": "^4.1.0",
-    "release-it": "^19.0.3",
-    "ts-jest": "^29.4.0",
+    "prettier-plugin-organize-imports": "^4.2.0",
+    "release-it": "^19.0.4",
+    "ts-jest": "^29.4.2",
     "tsup": "^8.5.0",
-    "tsx": "^4.20.3",
-    "typedoc": "^0.28.7",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.36.0"
+    "tsx": "^4.20.5",
+    "typedoc": "^0.28.13",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.44.0"
   },
   "versions": {
-    "nodejs": "v24.4.1@ed2b509",
-    "sqlite": "3.50.2"
+    "nodejs": "v25.0.0@7c2cb67",
+    "sqlite": "3.50.4"
   }
 }
