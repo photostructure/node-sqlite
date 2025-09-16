@@ -120,6 +120,13 @@ This package includes SQLite 3.46.1 (or later) with the following compile-time o
 - NULL (null)
 - Automatic BigInt for large integers
 
+### Resource Management
+
+- **Automatic disposal** - DatabaseSync and StatementSync implement `Symbol.dispose`
+- **`using` statement support** - Automatic cleanup with explicit resource management
+- **Manual cleanup** - Traditional close()/finalize() methods
+- **Exception safety** - Resources cleaned up even when errors occur
+
 ### Error Handling
 
 - Enhanced error information

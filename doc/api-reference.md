@@ -75,6 +75,23 @@ Closes the database connection. All prepared statements are finalized automatica
 db.close();
 ```
 
+#### [Symbol.dispose]()
+
+```typescript
+[Symbol.dispose](): void
+```
+
+Implements the disposable interface for automatic resource management. Calls `close()` internally, ignoring any errors during disposal.
+
+```javascript
+// Automatic cleanup with using statement
+using db = new DatabaseSync("myapp.db");
+// db.close() called automatically when leaving scope
+
+// Or explicit disposal
+db[Symbol.dispose]();
+```
+
 #### exec()
 
 ```typescript
@@ -383,6 +400,23 @@ Finalizes the statement and frees resources.
 
 ```javascript
 stmt.finalize();
+```
+
+#### [Symbol.dispose]()
+
+```typescript
+[Symbol.dispose](): void
+```
+
+Implements the disposable interface for automatic resource management. Calls `finalize()` internally, ignoring any errors during disposal.
+
+```javascript
+// Automatic cleanup with using statement
+using stmt = db.prepare("SELECT * FROM users WHERE id = ?");
+// stmt.finalize() called automatically when leaving scope
+
+// Or explicit disposal
+stmt[Symbol.dispose]();
 ```
 
 ### Properties

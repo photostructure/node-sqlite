@@ -124,6 +124,7 @@ _The original asynchronous SQLite binding for Node.js_
 | **JSON Functions**      | ✅                     | ✅           | ✅               | ✅            |
 | **R\*Tree**             | ✅                     | ✅           | ✅               | ✅            |
 | **Node-API**            | ✅                     | N/A          | ❌ V8-specific   | ✅            |
+| **Disposable Interface** | ✅ Symbol.dispose     | ✅ Symbol.dispose | ❌               | ❌            |
 | **Build Size**          | ~2MB                   | 0 (built-in) | ~2MB             | ~3MB          |
 
 ## Performance Comparison

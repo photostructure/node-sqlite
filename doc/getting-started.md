@@ -144,6 +144,26 @@ try {
 }
 ```
 
+### Automatic Resource Management with `using`
+
+For Node.js 20+ with `--experimental-explicit-resource-management` flag, or TypeScript 5.2+ with disposable support, you can use the `using` statement for automatic cleanup:
+
+```javascript
+// Database is automatically closed when leaving scope
+using db = new DatabaseSync("myapp.db");
+
+// Create and use statements
+using insert = db.prepare("INSERT INTO users (name, email) VALUES (?, ?)");
+using select = db.prepare("SELECT * FROM users WHERE id = ?");
+
+insert.run("Alice", "alice@example.com");
+const user = select.get(1);
+
+// No need to call db.close() or insert.finalize() - happens automatically!
+```
+
+This pattern ensures resources are always cleaned up, even if an exception occurs. Both `DatabaseSync` and `StatementSync` implement the disposable interface (`Symbol.dispose`).
+
 ### Transactions
 
 ```javascript
