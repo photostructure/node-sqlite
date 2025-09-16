@@ -106,13 +106,10 @@ node-sqlite/
 
 **Vendored Reference Implementations** (`third-party/`):
 
-- **`third-party/node/`**: Complete Node.js repository used as source for `src/upstream/` sync
 - **`third-party/better-sqlite3/`**: Reference implementation for better-sqlite3 API compatibility
   - Contains full source code, documentation, and comprehensive test suite
   - Used for API reference when implementing better-sqlite3 drop-in replacement features
   - Test suite provides validation that our implementation matches expected behavior
-- **`third-party/node-sqlite3/`**: node-sqlite3 package for additional compatibility testing
-  - Provides reference for async SQLite patterns and additional API coverage
 
 ### Documentation Structure
 
