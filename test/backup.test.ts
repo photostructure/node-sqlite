@@ -198,6 +198,42 @@ describe("Backup functionality", () => {
     ).rejects.toThrow("must be a function");
   });
 
+  it(
+    "should handle backup_init failure without leaking database handle",
+    async () => {
+      // This test reproduces Issue 1 from CRITICAL-FIXES-PLAN.md
+      // When sqlite3_open_v2() succeeds but sqlite3_backup_init() fails,
+      // the destination database handle must be properly closed.
+
+      // Attempt backup with invalid source database name
+      // This will cause:
+      // 1. sqlite3_open_v2() to succeed (dest file opens)
+      // 2. sqlite3_backup_init() to fail (source db "nonexistent" doesn't exist)
+      await expect(
+        sourceDb.backup(destPath, { source: "nonexistent" }),
+      ).rejects.toThrow("Failed to initialize backup");
+
+      // Verify that the destination file was created (sqlite3_open_v2 succeeded)
+      // but the backup didn't complete (sqlite3_backup_init failed)
+      const destExists = fs.existsSync(destPath);
+      expect(destExists).toBe(true);
+
+      // Verify subsequent backup operations work correctly
+      // This ensures no resource leak is preventing new operations
+      const totalPages = await sourceDb.backup(destPath, { source: "main" });
+      expect(totalPages).toBeGreaterThan(0);
+
+      // Verify the backup completed successfully
+      const destDb = new DatabaseSync(destPath);
+      testDatabases.add(destDb);
+      const count = destDb
+        .prepare("SELECT COUNT(*) as count FROM users")
+        .get() as { count: number };
+      expect(count.count).toBe(3);
+    },
+    getTestTimeout(15000),
+  );
+
   it("should handle concurrent backups", async () => {
     const destPath2 = getDbPath("destination2.db");
 

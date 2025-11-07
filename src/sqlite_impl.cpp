@@ -2535,6 +2535,12 @@ void BackupJob::Execute(const ExecutionProgress &progress) {
 
   if (!backup_) {
     SetError("Failed to initialize backup");
+    // Clean up the destination database handle to prevent resource leak
+    // (OnError will also call Cleanup, but we clean up immediately per RAII)
+    if (dest_) {
+      sqlite3_close_v2(dest_);
+      dest_ = nullptr;
+    }
     return;
   }
 
