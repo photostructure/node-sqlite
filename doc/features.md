@@ -14,7 +14,7 @@ Comprehensive list of features and capabilities in @photostructure/sqlite.
 
 ## SQLite Version
 
-This package includes SQLite 3.50.4 with the following compile-time options enabled:
+This package includes SQLite 3.50.4 with extensive compile-time options enabled. For complete build flag documentation, comparison with Node.js, and customization options, see [Build Flags & Configuration](./build-flags.md).
 
 ## Enabled SQLite Features
 
@@ -197,5 +197,6 @@ See our [detailed comparison](./library-comparison.md) with:
 ## Next Steps
 
 - [Getting Started](./getting-started.md) - Installation and first database
+- [Build Flags & Configuration](./build-flags.md) - Complete build flag documentation
 - [API Reference](./api-reference.md) - Complete API documentation
 - [Advanced Patterns](./advanced-patterns.md) - Performance optimization tips
