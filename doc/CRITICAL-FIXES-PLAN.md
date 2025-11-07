@@ -8,8 +8,7 @@ This document outlines critical issues discovered during comprehensive code revi
 
 ## Required pre-research
 
-- read ./TDD.md
-- read ./SIMPLE-DESIGN.md
+You must read .../doc/reference/TDD.md and .../doc/reference/SIMPLE-DESIGN.md
 
 Engineers that do not follow these docs will have their PR rejected--don't waste everyone's time!
 
