@@ -89,7 +89,6 @@ export interface StatementSyncInstance {
   /**
    * This method executes a prepared statement and returns an object.
    * @param parameters Optional named and anonymous parameters to bind to the statement.
-   *                   Note: DataView is not supported for binary data - use Buffer instead.
    * @returns An object with the number of changes and the last insert rowid.
    */
   run(...parameters: any[]): {
@@ -99,14 +98,12 @@ export interface StatementSyncInstance {
   /**
    * This method executes a prepared statement and returns the first result row.
    * @param parameters Optional named and anonymous parameters to bind to the statement.
-   *                   Note: DataView is not supported for binary data - use Buffer instead.
    * @returns The first row from the query results, or undefined if no rows.
    */
   get(...parameters: any[]): any;
   /**
    * This method executes a prepared statement and returns all results as an array.
    * @param parameters Optional named and anonymous parameters to bind to the statement.
-   *                   Note: DataView is not supported for binary data - use Buffer instead.
    * @returns An array of row objects from the query results.
    */
   all(...parameters: any[]): any[];
@@ -114,7 +111,6 @@ export interface StatementSyncInstance {
    * This method executes a prepared statement and returns an iterable iterator of objects.
    * Each object represents a row from the query results.
    * @param parameters Optional named and anonymous parameters to bind to the statement.
-   *                   Note: DataView is not supported for binary data - use Buffer instead.
    * @returns An iterable iterator of row objects.
    */
   iterate(...parameters: any[]): IterableIterator<any>;
@@ -128,6 +124,11 @@ export interface StatementSyncInstance {
    * @param allowBareNamedParameters If true, allows bare named parameters. @default false
    */
   setAllowBareNamedParameters(allowBareNamedParameters: boolean): void;
+  /**
+   * Set whether to allow unknown named parameters in SQL.
+   * @param enabled If true, unknown named parameters are ignored. If false, they throw an error. @default false
+   */
+  setAllowUnknownNamedParameters(enabled: boolean): void;
   /**
    * Set whether to return results as arrays rather than objects.
    * @param returnArrays If true, return results as arrays. @default false
