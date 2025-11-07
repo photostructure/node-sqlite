@@ -2115,14 +2115,20 @@ Napi::Value StatementSync::CreateResult() {
         break;
       case SQLITE_TEXT: {
         const unsigned char *text = sqlite3_column_text(statement_, i);
-        value = Napi::String::New(env, reinterpret_cast<const char *>(text));
+        // sqlite3_column_text() can return NULL on OOM or encoding errors
+        if (!text) {
+          value = Napi::String::New(env, "");
+        } else {
+          value = Napi::String::New(env, reinterpret_cast<const char *>(text));
+        }
         break;
       }
       case SQLITE_BLOB: {
         const void *blob_data = sqlite3_column_blob(statement_, i);
         int blob_size = sqlite3_column_bytes(statement_, i);
-        if (blob_size == 0) {
-          // Handle empty blob - create empty buffer
+        // sqlite3_column_blob() can return NULL for zero-length BLOBs or on OOM
+        if (!blob_data || blob_size == 0) {
+          // Handle empty/NULL blob - create empty buffer
           value = Napi::Buffer<uint8_t>::New(env, 0);
         } else {
           value = Napi::Buffer<uint8_t>::Copy(
@@ -2172,14 +2178,20 @@ Napi::Value StatementSync::CreateResult() {
         break;
       case SQLITE_TEXT: {
         const unsigned char *text = sqlite3_column_text(statement_, i);
-        value = Napi::String::New(env, reinterpret_cast<const char *>(text));
+        // sqlite3_column_text() can return NULL on OOM or encoding errors
+        if (!text) {
+          value = Napi::String::New(env, "");
+        } else {
+          value = Napi::String::New(env, reinterpret_cast<const char *>(text));
+        }
         break;
       }
       case SQLITE_BLOB: {
         const void *blob_data = sqlite3_column_blob(statement_, i);
         int blob_size = sqlite3_column_bytes(statement_, i);
-        if (blob_size == 0) {
-          // Handle empty blob - create empty buffer
+        // sqlite3_column_blob() can return NULL for zero-length BLOBs or on OOM
+        if (!blob_data || blob_size == 0) {
+          // Handle empty/NULL blob - create empty buffer
           value = Napi::Buffer<uint8_t>::New(env, 0);
         } else {
           value = Napi::Buffer<uint8_t>::Copy(
