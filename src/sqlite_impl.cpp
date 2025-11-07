@@ -1297,6 +1297,8 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("setReturnArrays", &StatementSync::SetReturnArrays),
        InstanceMethod("setAllowBareNamedParameters",
                       &StatementSync::SetAllowBareNamedParameters),
+       InstanceMethod("setAllowUnknownNamedParameters",
+                      &StatementSync::SetAllowUnknownNamedParameters),
        InstanceMethod("columns", &StatementSync::Columns),
        InstanceAccessor("sourceSQL", &StatementSync::SourceSQLGetter, nullptr),
        InstanceAccessor("expandedSQL", &StatementSync::ExpandedSQLGetter,
@@ -1347,7 +1349,8 @@ void StatementSync::InitStatement(DatabaseSync *database,
   use_big_ints_ = database->config_.get_read_big_ints();
   return_arrays_ = database->config_.get_return_arrays();
   allow_bare_named_params_ = database->config_.get_allow_bare_named_params();
-  // Note: allow_unknown_named_params_ is not implemented yet in StatementSync
+  allow_unknown_named_params_ =
+      database->config_.get_allow_unknown_named_params();
 
   // Prepare the statement
   const char *tail = nullptr;
@@ -1689,6 +1692,30 @@ StatementSync::SetAllowBareNamedParameters(const Napi::CallbackInfo &info) {
   return env.Undefined();
 }
 
+Napi::Value
+StatementSync::SetAllowUnknownNamedParameters(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (finalized_) {
+    node::THROW_ERR_INVALID_STATE(env, "The statement has been finalized");
+    return env.Undefined();
+  }
+
+  if (!database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
+  if (info.Length() < 1 || !info[0].IsBoolean()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The \"enabled\" argument must be a boolean.");
+    return env.Undefined();
+  }
+
+  allow_unknown_named_params_ = info[0].As<Napi::Boolean>().Value();
+  return env.Undefined();
+}
+
 Napi::Value StatementSync::Columns(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
@@ -1846,10 +1873,16 @@ void StatementSync::BindParameters(const Napi::CallbackInfo &info,
           return;
         }
       } else {
-        // Unknown named parameter - throw error like Node.js does
-        std::string msg = "Unknown named parameter '" + key_str + "'";
-        node::THROW_ERR_INVALID_ARG_VALUE(env, msg.c_str());
-        return;
+        // Unknown named parameter
+        if (allow_unknown_named_params_) {
+          // Skip unknown parameters when allowed (matches Node.js v25 behavior)
+          continue;
+        } else {
+          // Throw error when not allowed (default behavior)
+          std::string msg = "Unknown named parameter '" + key_str + "'";
+          node::THROW_ERR_INVALID_ARG_VALUE(env, msg.c_str());
+          return;
+        }
       }
     }
   } else {
@@ -1917,46 +1950,109 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
     } else if (param.IsFunction()) {
       // Functions cannot be stored in SQLite - bind as NULL
       sqlite3_bind_null(statement_, param_index);
-    } else if (param.IsObject() && !param.IsArrayBuffer() &&
-               !param.IsTypedArray() && !param.IsDataView()) {
-      // Objects and arrays should throw error like Node.js does
-      // Note: ArrayBuffer, TypedArray, and DataView are also objects, so we
-      // check them separately
-      throw Napi::Error::New(
-          Env(), "Provided value cannot be bound to SQLite parameter " +
-                     std::to_string(param_index) + ".");
-    } else if (param.IsArrayBuffer() || param.IsTypedArray()) {
-      // Handle TypedArray and ArrayBuffer as binary data
-      Napi::ArrayBuffer arrayBuffer;
-      size_t byteOffset = 0;
-      size_t byteLength = 0;
-
-      if (param.IsArrayBuffer()) {
-        arrayBuffer = param.As<Napi::ArrayBuffer>();
-        byteLength = arrayBuffer.ByteLength();
-      } else if (param.IsTypedArray()) {
-        Napi::TypedArray typedArray = param.As<Napi::TypedArray>();
-        arrayBuffer = typedArray.ArrayBuffer();
-        byteOffset = typedArray.ByteOffset();
-        byteLength = typedArray.ByteLength();
-      }
-
+    } else if (param.IsArrayBuffer()) {
+      // Handle ArrayBuffer as binary data
+      Napi::ArrayBuffer arrayBuffer = param.As<Napi::ArrayBuffer>();
       if (!arrayBuffer.IsEmpty() && arrayBuffer.Data() != nullptr) {
-        const uint8_t *data =
-            static_cast<const uint8_t *>(arrayBuffer.Data()) + byteOffset;
-        sqlite3_bind_blob(statement_, param_index, data,
-                          static_cast<int>(byteLength), SQLITE_TRANSIENT);
+        sqlite3_bind_blob(statement_, param_index, arrayBuffer.Data(),
+                          static_cast<int>(arrayBuffer.ByteLength()),
+                          SQLITE_TRANSIENT);
       } else {
-        // Empty or invalid buffer - bind as NULL
         sqlite3_bind_null(statement_, param_index);
       }
-    } else if (param.IsDataView()) {
-      // DataView is not fully supported in N-API
-      // Convert to string like other objects
-      Napi::String str_value = param.ToString();
-      std::string str = str_value.Utf8Value();
-      sqlite3_bind_text(statement_, param_index, str.c_str(), -1,
-                        SQLITE_TRANSIENT);
+    } else if (param.IsTypedArray() || param.IsDataView()) {
+      // Handle TypedArray and DataView as binary data (both are ArrayBufferView
+      // types)
+      if (param.IsTypedArray()) {
+        // Handle TypedArray using native methods
+        Napi::TypedArray typedArray = param.As<Napi::TypedArray>();
+        Napi::ArrayBuffer arrayBuffer = typedArray.ArrayBuffer();
+
+        if (!arrayBuffer.IsUndefined() && arrayBuffer.Data() != nullptr) {
+          const uint8_t *data =
+              static_cast<const uint8_t *>(arrayBuffer.Data()) +
+              typedArray.ByteOffset();
+          sqlite3_bind_blob(statement_, param_index, data,
+                            static_cast<int>(typedArray.ByteLength()),
+                            SQLITE_TRANSIENT);
+        } else {
+          sqlite3_bind_null(statement_, param_index);
+        }
+      } else {
+        // Handle DataView using Buffer.from(dataView.buffer, offset, length)
+        // conversion
+        try {
+          Napi::Env env = param.Env();
+          Napi::Object dataViewObj = param.As<Napi::Object>();
+
+          // Get DataView properties via JavaScript
+          Napi::Value bufferValue = dataViewObj.Get("buffer");
+          Napi::Value byteOffsetValue = dataViewObj.Get("byteOffset");
+          Napi::Value byteLengthValue = dataViewObj.Get("byteLength");
+
+          if (bufferValue.IsArrayBuffer() && byteOffsetValue.IsNumber() &&
+              byteLengthValue.IsNumber()) {
+            // Create Buffer from underlying ArrayBuffer with proper offset and
+            // length
+            Napi::Function bufferFrom = env.Global()
+                                            .Get("Buffer")
+                                            .As<Napi::Object>()
+                                            .Get("from")
+                                            .As<Napi::Function>();
+            Napi::Value buffer = bufferFrom.Call(
+                {bufferValue, byteOffsetValue, byteLengthValue});
+
+            if (buffer.IsBuffer()) {
+              Napi::Buffer<uint8_t> buf = buffer.As<Napi::Buffer<uint8_t>>();
+              if (buf.Length() > 0) {
+                sqlite3_bind_blob(statement_, param_index, buf.Data(),
+                                  static_cast<int>(buf.Length()),
+                                  SQLITE_TRANSIENT);
+              } else {
+                sqlite3_bind_null(statement_, param_index);
+              }
+            } else {
+              sqlite3_bind_null(statement_, param_index);
+            }
+          } else {
+            sqlite3_bind_null(statement_, param_index);
+          }
+        } catch (const Napi::Error &e) {
+          // Re-throw Napi errors (preserves error message)
+          throw;
+        } catch (const std::exception &e) {
+          // If conversion fails, bind as NULL
+          sqlite3_bind_null(statement_, param_index);
+        }
+      }
+    } else if (param.IsObject()) {
+      // Handle any other object that might be a DataView that wasn't caught
+      // This is a fallback for objects that aren't explicitly handled above
+      try {
+        // Try to see if this is a DataView by checking for DataView properties
+        Napi::Object obj = param.As<Napi::Object>();
+        Napi::Value constructorName =
+            obj.Get("constructor").As<Napi::Object>().Get("name");
+
+        if (constructorName.IsString() &&
+            constructorName.As<Napi::String>().Utf8Value() == "DataView") {
+          // TEMPORARY: Just bind DataView as NULL to test basic branching
+          sqlite3_bind_null(statement_, param_index);
+        } else {
+          // Objects and arrays should throw error like Node.js does
+          throw Napi::Error::New(
+              Env(), "Provided value cannot be bound to SQLite parameter " +
+                         std::to_string(param_index) + ".");
+        }
+      } catch (const Napi::Error &e) {
+        // Re-throw Napi errors (preserves error message)
+        throw;
+      } catch (const std::exception &e) {
+        // If any property access fails, treat as non-bindable object
+        throw Napi::Error::New(
+            Env(), "Provided value cannot be bound to SQLite parameter " +
+                       std::to_string(param_index) + ".");
+      }
     } else {
       // For any other type, throw error like Node.js does
       throw Napi::Error::New(

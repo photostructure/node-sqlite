@@ -219,6 +219,7 @@ public:
   Napi::Value SetReadBigInts(const Napi::CallbackInfo &info);
   Napi::Value SetReturnArrays(const Napi::CallbackInfo &info);
   Napi::Value SetAllowBareNamedParameters(const Napi::CallbackInfo &info);
+  Napi::Value SetAllowUnknownNamedParameters(const Napi::CallbackInfo &info);
 
   // Metadata methods
   Napi::Value Columns(const Napi::CallbackInfo &info);
@@ -239,6 +240,7 @@ private:
   bool use_big_ints_ = false;
   bool return_arrays_ = false;
   bool allow_bare_named_params_ = false;
+  bool allow_unknown_named_params_ = false;
 
   // Bare named parameters mapping (bare name -> full name with prefix)
   std::optional<std::map<std::string, std::string>> bare_named_params_;
