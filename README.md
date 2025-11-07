@@ -24,7 +24,7 @@ db.close();
 
 ## Features
 
-- 100% compatible with Node.js v25 built-in sqlite module
+- 100% compatible with Node.js v25 built-in `node:sqlite` module\*
 - Zero dependencies - native SQLite implementation
 - Synchronous API - no async overhead
 - Performance matches leading SQLite libraries
@@ -40,6 +40,8 @@ db.close();
 - [Compare with other libraries →](./doc/library-comparison.md)
 
 ## Note
+
+\*API-compatible with Node.js SQLite, but this library adopts SQLite-recommended features and security-enhancing build flags. See [build configuration details](./doc/build-flags.md).
 
 - DataView parameter binding is not currently supported. Use Buffer instead for binary data.
 
@@ -61,6 +63,7 @@ db.close();
 
 - [API Reference](./doc/api-reference.md)
 - [All Features](./doc/features.md)
+- [Build Flags & Configuration](./doc/build-flags.md)
 - [Library Comparison](./doc/library-comparison.md)
 
 ## Support

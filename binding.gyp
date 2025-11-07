@@ -19,13 +19,15 @@
       "dependencies": [
         "<!(node -p \"require('node-addon-api').gyp\")"
       ],
+      # SQLite build flags - see doc/build-flags.md for comprehensive documentation
+      # including comparison with Node.js configuration and rationale for our choices
       "defines": [
         "NAPI_CPP_EXCEPTIONS",
         "HAVE_STDINT_H=1",
         "HAVE_USLEEP=1",
-        "SQLITE_DEFAULT_CACHE_SIZE=-16000",
+        # "SQLITE_DEFAULT_CACHE_SIZE=-16000", # Default is 2000.
         "SQLITE_DEFAULT_FOREIGN_KEYS=1",
-        # "SQLITE_DEFAULT_MEMSTATUS=0", https://www.sqlite.org/forum/forumpost/c1cc8b057a
+        "SQLITE_DEFAULT_MEMSTATUS=0", # See https://www.sqlite.org/forum/forumpost/c1cc8b057a
         "SQLITE_DEFAULT_WAL_SYNCHRONOUS=1",
         "SQLITE_DQS=0",
         "SQLITE_ENABLE_COLUMN_METADATA",
@@ -49,7 +51,7 @@
         "SQLITE_OMIT_DEPRECATED",
         "SQLITE_OMIT_SHARED_CACHE",
         "SQLITE_SOUNDEX",
-        "SQLITE_THREADSAFE=2",
+        # "SQLITE_THREADSAFE=2", # default is SQLITE_THREADSAFE=1 (serialized)
         "SQLITE_USE_URI=1" # https://www.sqlite.org/uri.html
       ],
       # cflags apply only to C files (not C++), so these warnings suppressions
