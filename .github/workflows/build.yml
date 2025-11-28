@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30 # Extend timeout to 30 minutes (default is 6 hours for a job)
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - run: sudo apt-get update
       - run: sudo apt-get install -y clang-tidy bear build-essential
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -40,7 +40,7 @@ jobs:
   prebuild-mac-x64:
     runs-on: macos-13-large # Intel x64 runner
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: 20
@@ -55,7 +55,7 @@ jobs:
   prebuild-mac-arm64:
     runs-on: macos-14 # Apple Silicon ARM64 runner
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: 20
@@ -70,7 +70,7 @@ jobs:
   prebuild-win-x64:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: 20
@@ -87,7 +87,7 @@ jobs:
     env:
       TARGET_ARCH: arm64
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: 20
@@ -106,7 +106,7 @@ jobs:
         arch: [x64, arm64]
     runs-on: ubuntu-24.04 # Use newer runner for Docker support
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: ./.github/actions/setup-qemu
         with:
           arch: ${{ matrix.arch }}
@@ -124,7 +124,7 @@ jobs:
         arch: [x64, arm64]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: ./.github/actions/setup-qemu
         with:
           arch: ${{ matrix.arch }}
@@ -156,7 +156,7 @@ jobs:
         node-version: [20, 22, 23, 24]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           path: ./prebuilds
@@ -179,7 +179,7 @@ jobs:
         node-version: [20, 22, 23, 24]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: ./.github/actions/setup-qemu
         with:
           arch: ${{ matrix.arch }}
@@ -203,7 +203,7 @@ jobs:
         node-version: [20, 22, 23, 24]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: ./.github/actions/setup-qemu
         with:
           arch: ${{ matrix.arch }}
@@ -228,7 +228,7 @@ jobs:
         node-version: [24]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: ${{ matrix.node-version }}
@@ -250,8 +250,9 @@ jobs:
     permissions:
       contents: write
       packages: write
+      id-token: write # Required for NPM Trusted Publishing (OIDC)
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
         with:
           # Fetch full history for proper git operations
           fetch-depth: 0
@@ -275,6 +276,8 @@ jobs:
 
       - run: ls -laR ./prebuilds
 
+      - run: npm install -g npm@latest # Ensure latest npm for publishing
+
       - run: npm ci
 
       - run: npm run prepare-release
@@ -297,9 +300,10 @@ jobs:
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish
+        # Uses OIDC token from id-token: write permission (no NPM_TOKEN secret needed)
+        # Provenance generates signed attestation linking the package to this workflow
+        # See: https://docs.npmjs.com/generating-provenance-statements
+        run: npm publish --provenance --access public
 
       - name: Create GitHub Release
         env:

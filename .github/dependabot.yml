@@ -9,6 +9,11 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 8
+    # Group action updates to reduce PR noise and review burden
+    groups:
+      actions:
+        patterns:
+          - "*"
 
   # Maintain dependencies for npm
   - package-ecosystem: "npm"
@@ -17,3 +22,11 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 8
+    # Limit open PRs to prevent overwhelming and reduce attack surface
+    open-pull-requests-limit: 5
+    # Group updates to reduce attack surface from multiple PRs
+    groups:
+      production:
+        dependency-type: "production"
+      development:
+        dependency-type: "development"
