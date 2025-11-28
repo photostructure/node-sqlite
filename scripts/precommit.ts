@@ -22,7 +22,6 @@ run("npm run update", "Updating dependencies");
 run("npm run clean", "Start fresh");
 run("npm run sync:node", "Fetching upstream from Node.js");
 run("npm run sync:sqlite", "Fetching upstream from SQLite.org");
-run("npm run update:actions", "Updating GitHub Actions SHA hashes");
 run("npm run fmt", "Formatting code");
 run("npm run docs", "Generating documentation");
 run("npm run lint", "Running TypeScript, eslint, and clang-tidy");
