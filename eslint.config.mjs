@@ -111,4 +111,12 @@ export default [
       "security/detect-unsafe-regex": "off",
     },
   },
+  // Disable security rules for scripts - all inputs are controlled build/dev data
+  {
+    files: ["scripts/**/*.ts", "scripts/**/*.js", "scripts/**/*.mjs"],
+    rules: {
+      "security/detect-object-injection": "off",
+      "security/detect-non-literal-fs-filename": "off",
+    },
+  },
 ];
