@@ -143,12 +143,10 @@ jobs:
 
   test-mac-win:
     needs:
-      [
-        prebuild-mac-x64,
-        prebuild-mac-arm64,
-        prebuild-win-x64,
-        prebuild-win-arm64,
-      ]
+      - prebuild-mac-x64
+      - prebuild-mac-arm64
+      - prebuild-win-x64
+      - prebuild-win-arm64
     strategy:
       fail-fast: false
       matrix:
@@ -170,7 +168,8 @@ jobs:
       - run: npm test
 
   test-ubuntu:
-    needs: [prebuild-linux-glibc]
+    needs:
+      - prebuild-linux-glibc
     strategy:
       fail-fast: false
       matrix:
@@ -195,7 +194,8 @@ jobs:
       - run: npm test
 
   test-alpine:
-    needs: [prebuild-linux-musl]
+    needs:
+      - prebuild-linux-musl
     strategy:
       fail-fast: false
       matrix:
@@ -222,6 +222,13 @@ jobs:
   # Node.js compatibility tests require --experimental-sqlite flag and Node 22+
   # We test only on Node 24 as the experimental SQLite API may change between versions
   test-api-compatibility:
+    needs:
+      - prebuild-mac-x64
+      - prebuild-mac-arm64
+      - prebuild-win-x64
+      - prebuild-win-arm64
+      - prebuild-linux-glibc
+
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -229,6 +236,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          path: ./prebuilds
+          merge-multiple: true
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: ${{ matrix.node-version }}
@@ -246,7 +257,11 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
     needs:
-      [test-mac-win, test-ubuntu, test-alpine, lint, test-api-compatibility]
+      - lint
+      - test-mac-win
+      - test-ubuntu
+      - test-alpine
+      - test-api-compatibility
     permissions:
       contents: write
       packages: write
