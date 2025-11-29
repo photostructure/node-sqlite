@@ -68,6 +68,7 @@ try {
     // which resolves .cmd files. We build the command string safely since
     // these are controlled arguments (not user input).
     const cmd = `npx ${prebuildifyArgs.join(" ")}`;
+    // eslint-disable-next-line no-restricted-syntax -- Arguments are controlled, not user input
     execSync(cmd, { stdio: "inherit" });
   } else {
     // On Unix, we can use execFileSync directly
