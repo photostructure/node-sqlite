@@ -17,8 +17,13 @@ function run(command: string, description: string) {
 }
 
 // Always run these
-run("npm run install", "Installing dependencies");
-run("npm run update", "Updating dependencies");
+run("npm install", "Installing dependencies");
+run("npm run update:actions", "Updating GitHub Actions");
+run(
+  "npm-check-updates --upgrade --errorLevel 2 || npx snyk test --dev",
+  "Updating dependencies (security check if updates found)",
+);
+run("npm install --ignore-scripts=false", "Installing dependencies");
 run("npm run clean", "Start fresh");
 run("npm run sync:node", "Fetching upstream from Node.js");
 run("npm run sync:sqlite", "Fetching upstream from SQLite.org");
