@@ -97,7 +97,6 @@ function findClangTidy(): string {
         );
       }
       const llvmClangTidy = join(llvmPrefix, "bin", "clang-tidy");
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (existsSync(llvmClangTidy)) {
         const versionInfo = execFileSync(llvmClangTidy, ["--version"], {
           encoding: "utf8",
@@ -183,7 +182,6 @@ async function runClangTidyOnFile(
         "/Library/Developer/CommandLineTools/usr/lib/clang/15/include",
       ];
 
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       let clangInclude = clangVersionDirs.find((dir) => existsSync(dir));
       if (!clangInclude) {
         // Find it dynamically
