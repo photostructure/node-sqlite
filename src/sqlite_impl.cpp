@@ -308,6 +308,17 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
                  }));
   }
 
+  // Add Symbol.for('sqlite-type') property for type identification
+  // See: https://github.com/nodejs/node/pull/59405
+  Napi::Object symbolConstructor =
+      env.Global().Get("Symbol").As<Napi::Object>();
+  Napi::Function symbolFor = symbolConstructor.Get("for").As<Napi::Function>();
+  Napi::Value sqliteTypeSymbol = symbolFor.Call(
+      symbolConstructor, {Napi::String::New(env, "sqlite-type")});
+  func.Get("prototype")
+      .As<Napi::Object>()
+      .Set(sqliteTypeSymbol, Napi::String::New(env, "node:sqlite"));
+
   exports.Set("DatabaseSync", func);
   return exports;
 }

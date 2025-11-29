@@ -154,6 +154,18 @@ describe("DatabaseSync Tests", () => {
     db.close();
     expect(db.isOpen).toBe(false);
   });
+
+  // See: https://github.com/nodejs/node/pull/59405
+  test("has sqlite-type symbol property", () => {
+    const db = new DatabaseSync(":memory:");
+
+    const sqliteTypeSymbol = Symbol.for("sqlite-type");
+    expect((db as unknown as Record<symbol, string>)[sqliteTypeSymbol]).toBe(
+      "node:sqlite",
+    );
+
+    db.close();
+  });
 });
 
 describe("File-based Database Tests", () => {
