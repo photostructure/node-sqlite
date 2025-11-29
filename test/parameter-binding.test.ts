@@ -325,6 +325,53 @@ describe("Parameter Binding Tests", () => {
       expect(typeof row.value_bigint).toBe("bigint");
       expect(row.value_bigint).toBe(9007199254740993n);
     });
+
+    // Tests ported from Node.js PR #59350: handle ?NNN parameters as positional
+    // https://github.com/nodejs/node/pull/59350
+
+    test("binds ?NNN params by position", () => {
+      // Matches Node.js test: 'binds ?NNN params by position'
+      db.exec(
+        "CREATE TABLE data(key INTEGER PRIMARY KEY, val INTEGER NOT NULL) STRICT",
+      );
+      const stmt = db.prepare("INSERT INTO data (key, val) VALUES (?1, ?2)");
+      expect(stmt.run(1, 2)).toEqual({ changes: 1, lastInsertRowid: 1 });
+    });
+
+    test("SQLite defaults unbound ?NNN parameters", () => {
+      // Matches Node.js test: 'SQLite defaults unbound ?NNN parameters'
+      db.exec(
+        "CREATE TABLE data2(key INTEGER PRIMARY KEY, val INTEGER NOT NULL) STRICT",
+      );
+      const stmt = db.prepare("INSERT INTO data2 (key, val) VALUES (?1, ?3)");
+
+      // Only 1 arg - ?1 gets bound, ?3 remains NULL (default), violates NOT NULL
+      expect(() => stmt.run(1)).toThrow(/NOT NULL constraint/);
+    });
+
+    test("?NNN parameters with SELECT", () => {
+      // Additional test for SELECT behavior
+      const stmt = db.prepare("SELECT ?1 as a, ?2 as b");
+      const result = stmt.get(10, 20);
+      expect(result).toEqual({ a: 10, b: 20 });
+    });
+
+    test("?NNN with gap requires explicit NULL for middle param", () => {
+      // When using ?1 and ?3, sqlite3_bind_parameter_count returns 3
+      // Positional binding maps: arg0->param1, arg1->param2, arg2->param3
+      // So for ?1, ?3 query, must pass 3 args with middle one explicitly
+      const stmt = db.prepare(
+        "INSERT INTO test_params (value_int, value_text) VALUES (?1, ?3)",
+      );
+      const result = stmt.run(42, null, "hello");
+      expect(result.changes).toBe(1);
+
+      const row = db
+        .prepare("SELECT * FROM test_params WHERE id = ?")
+        .get(result.lastInsertRowid);
+      expect(row.value_int).toBe(42);
+      expect(row.value_text).toBe("hello");
+    });
   });
 
   describe("Named Parameters", () => {
