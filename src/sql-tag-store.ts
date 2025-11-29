@@ -131,6 +131,7 @@ export class SQLTagStore {
   private buildSQL(strings: TemplateStringsArray): string {
     let sql = strings[0] ?? "";
     for (let i = 1; i < strings.length; i++) {
+      // eslint-disable-next-line security/detect-object-injection -- Index is from controlled for-loop
       sql += "?" + (strings[i] ?? "");
     }
     return sql;
