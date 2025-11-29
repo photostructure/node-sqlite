@@ -297,6 +297,35 @@ Aggregate functions presented unique challenges due to N-API constraints in SQLi
 
 For detailed implementation history and lessons learned, see: `doc/archive/aggregate-function-implementation-summary.md`
 
+### N-API ArrayBufferView Type Checking
+
+**CRITICAL**: N-API's `IsBuffer()` returns `true` for ALL ArrayBufferView types, not just Node.js Buffer.
+
+This is because the underlying N-API implementation uses `IsArrayBufferView()`:
+- `Buffer` → IsBuffer: ✓, IsTypedArray: ✓, IsDataView: ✗
+- `Uint8Array` → IsBuffer: ✓, IsTypedArray: ✓, IsDataView: ✗
+- `DataView` → IsBuffer: ✓, IsTypedArray: ✗, IsDataView: ✓
+
+**The Problem**: If you check `IsBuffer()` before `IsDataView()`, DataView objects get caught by the Buffer check, but `Napi::Buffer<uint8_t>::As()` returns garbage (length=0, data=null) for DataView.
+
+**The Solution**: Always check `IsDataView()` BEFORE `IsBuffer()` in type-checking chains:
+
+```cpp
+// CORRECT ORDER:
+if (param.IsDataView()) {
+  // Handle DataView specifically
+} else if (param.IsBuffer()) {
+  // Handles Buffer and TypedArray (both work with Buffer cast)
+}
+
+// WRONG ORDER (DataView gets mishandled):
+if (param.IsBuffer()) {
+  // DataView matches here but Buffer::As() fails!
+} else if (param.IsDataView()) {
+  // Never reached for DataView
+}
+```
+
 ### Async Cleanup Anti-Patterns
 
 **IMPORTANT**: The following approaches are NOT valid solutions for async cleanup issues:

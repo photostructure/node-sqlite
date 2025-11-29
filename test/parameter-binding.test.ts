@@ -225,15 +225,13 @@ describe("Parameter Binding Tests", () => {
       });
     });
 
-    test.skip("DataView binding - Not Currently Supported", () => {
-      // NOTE: DataView parameter binding is not currently supported.
-      // Use Buffer instead for binary data binding.
+    test("DataView binding", () => {
       const stmt = db.prepare(
         "INSERT INTO test_params (value_blob) VALUES (?)",
       );
 
-      // Create a buffer with various data types
-      const buffer = new ArrayBuffer(20); // Increased size to accommodate all data
+      // Test case 1: Basic DataView with various data types
+      const buffer = new ArrayBuffer(20);
       const view = new DataView(buffer);
 
       // Write different values
@@ -243,7 +241,7 @@ describe("Parameter Binding Tests", () => {
       view.setUint16(4, 65535, true);
       view.setInt32(6, -2147483648, true);
       view.setUint32(10, 4294967295, true);
-      view.setFloat32(16, Math.PI, true); // Fixed offset to not overflow
+      view.setFloat32(16, Math.PI, true);
 
       const result = stmt.run(view);
       const row = db
@@ -261,6 +259,42 @@ describe("Parameter Binding Tests", () => {
       expect(resultView.getInt32(6, true)).toBe(-2147483648);
       expect(resultView.getUint32(10, true)).toBe(4294967295);
       expect(resultView.getFloat32(16, true)).toBeCloseTo(Math.PI);
+    });
+
+    test("DataView with offset and length", () => {
+      const stmt = db.prepare(
+        "INSERT INTO test_params (value_blob) VALUES (?)",
+      );
+
+      // Create a DataView that only uses part of the underlying buffer
+      const bytes = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]); // "Hello"
+      const offsetView = new DataView(bytes.buffer, 1, 3); // "ell"
+
+      const result = stmt.run(offsetView);
+      const row = db
+        .prepare("SELECT value_blob FROM test_params WHERE id = ?")
+        .get(result.lastInsertRowid);
+
+      expect(row.value_blob).toBeInstanceOf(Uint8Array);
+      expect(row.value_blob.length).toBe(3);
+      expect(Array.from(row.value_blob)).toEqual([0x65, 0x6c, 0x6c]); // "ell"
+    });
+
+    test("Empty DataView", () => {
+      const stmt = db.prepare(
+        "INSERT INTO test_params (value_blob) VALUES (?)",
+      );
+
+      const emptyBuffer = new ArrayBuffer(0);
+      const emptyView = new DataView(emptyBuffer);
+
+      const result = stmt.run(emptyView);
+      const row = db
+        .prepare("SELECT value_blob FROM test_params WHERE id = ?")
+        .get(result.lastInsertRowid);
+
+      // Empty DataView should bind as NULL
+      expect(row.value_blob).toBeNull();
     });
 
     test("multiple parameters of different types", () => {
@@ -479,8 +513,7 @@ describe("Parameter Binding Tests", () => {
         { value: Buffer.from([1, 2, 3]), expectedType: "blob" },
         { value: new Uint8Array([4, 5, 6]), expectedType: "blob" },
         { value: new Float32Array([1.1, 2.2]), expectedType: "blob" },
-        // DataView not supported yet - N-API limitation
-        // { value: new DataView(new ArrayBuffer(4)), expectedType: "blob" },
+        { value: new DataView(new ArrayBuffer(4)), expectedType: "blob" },
       ];
 
       testCases.forEach(({ value, expectedType }) => {
@@ -489,6 +522,48 @@ describe("Parameter Binding Tests", () => {
 
         expect(row.param_type).toBe(expectedType);
       });
+    });
+  });
+
+  describe("RETURNING clause metadata", () => {
+    // Regression test for: https://github.com/nodejs/node/issues/57344
+    // This test ensures that run() returns correct metadata when using RETURNING.
+    // The bug was that sqlite3_changes() was called before sqlite3_reset(),
+    // causing incorrect change counts on the first call.
+    test("returns correct metadata when using RETURNING clause", () => {
+      db.exec(
+        "CREATE TABLE returning_test (key INTEGER PRIMARY KEY, val INTEGER NOT NULL)",
+      );
+      const stmt = db.prepare(
+        "INSERT INTO returning_test (key, val) VALUES ($k, $v) RETURNING key",
+      );
+
+      // First insert - this was returning changes: 0 before the fix
+      const result1 = stmt.run({ $k: 1, $v: 10 });
+      expect(result1).toEqual({ changes: 1, lastInsertRowid: 1 });
+
+      // Subsequent inserts should also work correctly
+      const result2 = stmt.run({ $k: 2, $v: 20 });
+      expect(result2).toEqual({ changes: 1, lastInsertRowid: 2 });
+
+      const result3 = stmt.run({ $k: 3, $v: 30 });
+      expect(result3).toEqual({ changes: 1, lastInsertRowid: 3 });
+    });
+
+    test("returns correct metadata when reusing statement with RETURNING", () => {
+      db.exec(
+        "CREATE TABLE returning_reuse_test (id INTEGER PRIMARY KEY, value TEXT)",
+      );
+      const stmt = db.prepare(
+        "INSERT INTO returning_reuse_test (value) VALUES (?) RETURNING id",
+      );
+
+      // Run multiple times with different values
+      for (let i = 1; i <= 5; i++) {
+        const result = stmt.run(`value${i}`);
+        expect(result.changes).toBe(1);
+        expect(result.lastInsertRowid).toBe(i);
+      }
     });
   });
 });

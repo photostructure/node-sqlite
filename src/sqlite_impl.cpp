@@ -1400,9 +1400,15 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
       return env.Undefined();
     }
 
-    int result = sqlite3_step(statement_);
+    // Execute the statement
+    sqlite3_step(statement_);
+    // Reset immediately after step to ensure sqlite3_changes() returns
+    // correct value. This fixes an issue where RETURNING queries would
+    // report changes: 0 on the first call.
+    // See: https://github.com/nodejs/node/issues/57344
+    int result = sqlite3_reset(statement_);
 
-    if (result != SQLITE_DONE && result != SQLITE_ROW) {
+    if (result != SQLITE_OK) {
       std::string error = sqlite3_errmsg(database_->connection());
       ThrowEnhancedSqliteErrorWithDB(env, database_, database_->connection(),
                                      result, error);
@@ -1943,7 +1949,27 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
     } else if (param.IsBoolean()) {
       sqlite3_bind_int(statement_, param_index,
                        param.As<Napi::Boolean>().Value() ? 1 : 0);
+    } else if (param.IsDataView()) {
+      // IMPORTANT: Check DataView BEFORE IsBuffer() because N-API's IsBuffer()
+      // returns true for ALL ArrayBufferViews (including DataView), but
+      // Buffer::As() doesn't work correctly for DataView (returns length=0).
+      Napi::DataView dataView = param.As<Napi::DataView>();
+      Napi::ArrayBuffer arrayBuffer = dataView.ArrayBuffer();
+      size_t byteOffset = dataView.ByteOffset();
+      size_t byteLength = dataView.ByteLength();
+
+      if (arrayBuffer.Data() != nullptr && byteLength > 0) {
+        const uint8_t *data =
+            static_cast<const uint8_t *>(arrayBuffer.Data()) + byteOffset;
+        sqlite3_bind_blob(statement_, param_index, data,
+                          static_cast<int>(byteLength), SQLITE_TRANSIENT);
+      } else {
+        sqlite3_bind_null(statement_, param_index);
+      }
     } else if (param.IsBuffer()) {
+      // Handles Buffer and TypedArray (both are ArrayBufferViews that work
+      // correctly with Buffer cast - Buffer::Data() handles byte offsets
+      // internally)
       Napi::Buffer<uint8_t> buffer = param.As<Napi::Buffer<uint8_t>>();
       sqlite3_bind_blob(statement_, param_index, buffer.Data(),
                         static_cast<int>(buffer.Length()), SQLITE_TRANSIENT);
@@ -1960,99 +1986,13 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
       } else {
         sqlite3_bind_null(statement_, param_index);
       }
-    } else if (param.IsTypedArray() || param.IsDataView()) {
-      // Handle TypedArray and DataView as binary data (both are ArrayBufferView
-      // types)
-      if (param.IsTypedArray()) {
-        // Handle TypedArray using native methods
-        Napi::TypedArray typedArray = param.As<Napi::TypedArray>();
-        Napi::ArrayBuffer arrayBuffer = typedArray.ArrayBuffer();
-
-        if (!arrayBuffer.IsUndefined() && arrayBuffer.Data() != nullptr) {
-          const uint8_t *data =
-              static_cast<const uint8_t *>(arrayBuffer.Data()) +
-              typedArray.ByteOffset();
-          sqlite3_bind_blob(statement_, param_index, data,
-                            static_cast<int>(typedArray.ByteLength()),
-                            SQLITE_TRANSIENT);
-        } else {
-          sqlite3_bind_null(statement_, param_index);
-        }
-      } else {
-        // Handle DataView using Buffer.from(dataView.buffer, offset, length)
-        // conversion
-        try {
-          Napi::Env env = param.Env();
-          Napi::Object dataViewObj = param.As<Napi::Object>();
-
-          // Get DataView properties via JavaScript
-          Napi::Value bufferValue = dataViewObj.Get("buffer");
-          Napi::Value byteOffsetValue = dataViewObj.Get("byteOffset");
-          Napi::Value byteLengthValue = dataViewObj.Get("byteLength");
-
-          if (bufferValue.IsArrayBuffer() && byteOffsetValue.IsNumber() &&
-              byteLengthValue.IsNumber()) {
-            // Create Buffer from underlying ArrayBuffer with proper offset and
-            // length
-            Napi::Function bufferFrom = env.Global()
-                                            .Get("Buffer")
-                                            .As<Napi::Object>()
-                                            .Get("from")
-                                            .As<Napi::Function>();
-            Napi::Value buffer = bufferFrom.Call(
-                {bufferValue, byteOffsetValue, byteLengthValue});
-
-            if (buffer.IsBuffer()) {
-              Napi::Buffer<uint8_t> buf = buffer.As<Napi::Buffer<uint8_t>>();
-              if (buf.Length() > 0) {
-                sqlite3_bind_blob(statement_, param_index, buf.Data(),
-                                  static_cast<int>(buf.Length()),
-                                  SQLITE_TRANSIENT);
-              } else {
-                sqlite3_bind_null(statement_, param_index);
-              }
-            } else {
-              sqlite3_bind_null(statement_, param_index);
-            }
-          } else {
-            sqlite3_bind_null(statement_, param_index);
-          }
-        } catch (const Napi::Error &e) {
-          // Re-throw Napi errors (preserves error message)
-          throw;
-        } catch (const std::exception &e) {
-          // If conversion fails, bind as NULL
-          sqlite3_bind_null(statement_, param_index);
-        }
-      }
     } else if (param.IsObject()) {
-      // Handle any other object that might be a DataView that wasn't caught
-      // This is a fallback for objects that aren't explicitly handled above
-      try {
-        // Try to see if this is a DataView by checking for DataView properties
-        Napi::Object obj = param.As<Napi::Object>();
-        Napi::Value constructorName =
-            obj.Get("constructor").As<Napi::Object>().Get("name");
-
-        if (constructorName.IsString() &&
-            constructorName.As<Napi::String>().Utf8Value() == "DataView") {
-          // TEMPORARY: Just bind DataView as NULL to test basic branching
-          sqlite3_bind_null(statement_, param_index);
-        } else {
-          // Objects and arrays should throw error like Node.js does
-          throw Napi::Error::New(
-              Env(), "Provided value cannot be bound to SQLite parameter " +
-                         std::to_string(param_index) + ".");
-        }
-      } catch (const Napi::Error &e) {
-        // Re-throw Napi errors (preserves error message)
-        throw;
-      } catch (const std::exception &e) {
-        // If any property access fails, treat as non-bindable object
-        throw Napi::Error::New(
-            Env(), "Provided value cannot be bound to SQLite parameter " +
-                       std::to_string(param_index) + ".");
-      }
+      // Objects and arrays cannot be bound to SQLite parameters (same as
+      // Node.js behavior). Note: DataView, Buffer, TypedArray, and ArrayBuffer
+      // are handled above and don't reach this branch.
+      throw Napi::Error::New(
+          Env(), "Provided value cannot be bound to SQLite parameter " +
+                     std::to_string(param_index) + ".");
     } else {
       // For any other type, throw error like Node.js does
       throw Napi::Error::New(
