@@ -1,70 +1,107 @@
 import { execFileSync } from "node:child_process";
 import { platform } from "node:os";
 
+const isWin = platform() === "win32";
 const isLinux = platform() === "linux";
 const isMacOS = platform() === "darwin";
 
-function run(command: string, description: string) {
-  console.log(`\n▶ ${description || command}`);
+function run({
+  cmd,
+  desc,
+  optional,
+}: {
+  cmd: string;
+  desc: string;
+  /** If true, failure is non-fatal and just logs a warning */
+  optional?: boolean;
+}) {
+  console.log(`\n▶ ${desc || cmd}${optional ? " (optional)" : ""}`);
   try {
     // Use npm to run the commands for better cross-platform compatibility
-    const [cmd, ...args] = command.split(" ");
-    execFileSync(cmd, args, { stdio: "inherit", shell: true });
+    const [arg0, ...args] = cmd.split(" ");
+    execFileSync(arg0, args, { stdio: "inherit", shell: true });
   } catch (error) {
-    console.error(`✗ Failed`, { description, command, error });
-    process.exit(1);
+    if (optional) {
+      console.log(`⚠ Skipped (command not available)`);
+    } else {
+      console.error(`✗ Failed`, { description: desc, command: cmd, error });
+      process.exit(1);
+    }
   }
 }
 
 // Always run these
-run("npm install", "Installing dependencies");
-run("npm run update:actions", "Updating GitHub Actions");
-run(
-  "npm-check-updates --upgrade --errorLevel 2 || npx snyk test --dev",
-  "Updating dependencies (security check if updates found)",
-);
-run("npm install --ignore-scripts=false", "Installing dependencies");
-run("npm run clean", "Start fresh");
-run("npm run sync:node", "Fetching upstream from Node.js");
-run("npm run sync:sqlite", "Fetching upstream from SQLite.org");
-run("npm run fmt", "Formatting code");
-run("npm run docs", "Generating documentation");
-run("npm run lint", "Running TypeScript, eslint, and clang-tidy");
-run("npm run security", "Running security checks");
-run("npm run build:dist", "Building project");
-run(
-  "npm run build:" + (isLinux ? "linux-glibc" : "native"),
-  "Building native project for " +
+run({ cmd: "npm install", desc: "Installing dependencies" });
+run({
+  cmd: "npm run update:actions",
+  desc: "Updating GitHub Actions",
+  optional: isWin,
+});
+run({
+  cmd: "npm-check-updates --upgrade --errorLevel 2 || npx snyk test --dev",
+  desc: "Updating dependencies (security check if updates found)",
+});
+run({
+  cmd: "npm install --ignore-scripts=false",
+  desc: "Installing dependencies",
+});
+run({ cmd: "npm run clean", desc: "Start fresh" });
+run({
+  cmd: "npm run sync:node",
+  desc: "Fetching upstream from Node.js",
+});
+run({
+  cmd: "npm run sync:sqlite",
+  desc: "Fetching upstream from SQLite.org",
+});
+run({ cmd: "npm run fmt", desc: "Formatting code" });
+run({ cmd: "npm run docs", desc: "Generating documentation" });
+run({
+  cmd: "npm run lint",
+  desc: "Running TypeScript, eslint, and clang-tidy",
+});
+run({ cmd: "npm run security", desc: "Running security checks" });
+run({ cmd: "npm run build:dist", desc: "Building project" });
+run({
+  cmd: "npm run build:" + (isLinux ? "linux-glibc" : "native"),
+  desc:
+    "Building native project for " +
     (isLinux ? "Linux with portable GLIBC" : platform()),
-);
-run("npm run tests", "Running tests in CJS and ESM mode");
+});
+run({
+  cmd: "npm run tests",
+  desc: "Running tests in CJS and ESM mode",
+});
 
 // Check Node.js version for API compatibility tests
 const nodeVersion = process.version;
 const majorVersion = parseInt(nodeVersion.split(".")[0].substring(1), 10);
 if (majorVersion >= 22) {
-  run(
-    "npm run lint:api-compat",
-    "Check API compatibility types (TypeScript compile-time validation)",
-  );
-  run(
-    "npm run test:api-compat",
-    "Run API type compatibility tests (ensures our TypeScript types match node:sqlite)",
-  );
-  run(
-    "npm run test:node-compat",
-    "Run behavioral compatibility tests (validates runtime behavior matches node:sqlite)",
-  );
+  run({
+    cmd: "npm run lint:api-compat",
+    desc: "Check API compatibility types (TypeScript compile-time validation)",
+  });
+  run({
+    cmd: "npm run test:api-compat",
+    desc: "Run API type compatibility tests (ensures our TypeScript types match node:sqlite)",
+  });
+  run({
+    cmd: "npm run test:node-compat",
+    desc: "Run behavioral compatibility tests (validates runtime behavior matches node:sqlite)",
+  });
 } else {
   console.log("\n⚠ Skipping API compatibility checks (requires Node.js 22+)");
 }
 
 // Platform-specific checks
 if (isLinux || isMacOS) {
-  run("npm run lint:native", "Running clang-tidy");
+  run({ cmd: "npm run lint:native", desc: "Running clang-tidy" });
 }
 
 // Run comprehensive memory tests (cross-platform)
-run("npm run check:memory", "Comprehensive memory tests");
+run({
+  cmd: "npm run check:memory",
+  desc: "Comprehensive memory tests",
+});
 
 console.log("\n✅ All precommit checks passed!");
