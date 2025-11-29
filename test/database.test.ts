@@ -724,3 +724,79 @@ describe("Database Configuration Tests", () => {
     db.close();
   });
 });
+
+describe("Defensive Mode", () => {
+  /**
+   * Check if defensive mode is active by testing if journal_mode can be changed.
+   * When defensive mode is ON, changing journal_mode to OFF is blocked.
+   * This matches the test approach used in Node.js test-sqlite-config.js
+   */
+  function checkDefensiveMode(db: InstanceType<typeof DatabaseSync>): boolean {
+    const journalMode = (): string =>
+      (db.prepare("PRAGMA journal_mode").get() as { journal_mode: string })
+        .journal_mode;
+
+    // In-memory databases start with journal_mode = 'memory'
+    expect(journalMode()).toBe("memory");
+
+    // Try to change journal_mode to OFF
+    db.exec("PRAGMA journal_mode=OFF");
+
+    // If defensive mode is active, journal_mode stays 'memory'
+    // If defensive mode is off, journal_mode changes to 'off'
+    return journalMode() === "memory";
+  }
+
+  test("by default, defensive mode is off", () => {
+    const db = new DatabaseSync(":memory:");
+    expect(checkDefensiveMode(db)).toBe(false);
+    db.close();
+  });
+
+  test("when passing { defensive: true } as config, defensive mode is on", () => {
+    const db = new DatabaseSync(":memory:", {
+      defensive: true,
+    });
+    expect(checkDefensiveMode(db)).toBe(true);
+    db.close();
+  });
+
+  test("defensive mode on after calling db.enableDefensive(true)", () => {
+    const db = new DatabaseSync(":memory:");
+    db.enableDefensive(true);
+    expect(checkDefensiveMode(db)).toBe(true);
+    db.close();
+  });
+
+  test("defensive mode should be off after calling db.enableDefensive(false)", () => {
+    const db = new DatabaseSync(":memory:", {
+      defensive: true,
+    });
+    db.enableDefensive(false);
+    expect(checkDefensiveMode(db)).toBe(false);
+    db.close();
+  });
+
+  test("throws if options.defensive is provided but is not a boolean", () => {
+    expect(() => {
+      // @ts-expect-error - testing invalid type
+      new DatabaseSync(":memory:", { defensive: 42 });
+    }).toThrow(/boolean/);
+  });
+
+  test("enableDefensive throws if argument is not a boolean", () => {
+    const db = new DatabaseSync(":memory:");
+    expect(() => {
+      // @ts-expect-error - testing invalid type
+      db.enableDefensive("yes");
+    }).toThrow(/boolean/);
+    db.close();
+  });
+
+  test("enableDefensive throws if database is not open", () => {
+    const db = new DatabaseSync(":memory:", { open: false });
+    expect(() => {
+      db.enableDefensive(true);
+    }).toThrow(/not open/);
+  });
+});

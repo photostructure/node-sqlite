@@ -278,6 +278,7 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("enableLoadExtension",
                       &DatabaseSync::EnableLoadExtension),
        InstanceMethod("loadExtension", &DatabaseSync::LoadExtension),
+       InstanceMethod("enableDefensive", &DatabaseSync::EnableDefensive),
        InstanceMethod("createSession", &DatabaseSync::CreateSession),
        InstanceMethod("applyChangeset", &DatabaseSync::ApplyChangeset),
        InstanceMethod("backup", &DatabaseSync::Backup),
@@ -414,6 +415,20 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
             options.Get("allowUnknownNamedParameters")
                 .As<Napi::Boolean>()
                 .Value());
+      }
+
+      if (options.Has("defensive")) {
+        Napi::Value defensive_val = options.Get("defensive");
+        if (!defensive_val.IsUndefined()) {
+          if (!defensive_val.IsBoolean()) {
+            node::THROW_ERR_INVALID_ARG_TYPE(
+                info.Env(),
+                "The \"options.defensive\" argument must be a boolean.");
+            return;
+          }
+          config.set_enable_defensive(
+              defensive_val.As<Napi::Boolean>().Value());
+        }
       }
 
       // Handle the open option
@@ -677,6 +692,21 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
       std::string error = sqlite3_errmsg(connection());
       SqliteException ex(connection_, result,
                          "Failed to configure DQS_DDL: " + error);
+      sqlite3_close(connection_);
+      connection_ = nullptr;
+      throw ex;
+    }
+  }
+
+  // Configure defensive mode
+  if (config_.get_enable_defensive()) {
+    int defensive_enabled;
+    result = sqlite3_db_config(connection(), SQLITE_DBCONFIG_DEFENSIVE, 1,
+                               &defensive_enabled);
+    if (result != SQLITE_OK) {
+      std::string error = sqlite3_errmsg(connection());
+      SqliteException ex(connection_, result,
+                         "Failed to configure DEFENSIVE: " + error);
       sqlite3_close(connection_);
       connection_ = nullptr;
       throw ex;
@@ -1036,6 +1066,36 @@ Napi::Value DatabaseSync::LoadExtension(const Napi::CallbackInfo &info) {
     }
     node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
     return env.Undefined();
+  }
+
+  return env.Undefined();
+}
+
+Napi::Value DatabaseSync::EnableDefensive(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
+
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (info.Length() < 1 || !info[0].IsBoolean()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The \"active\" argument must be a boolean.");
+    return env.Undefined();
+  }
+
+  int enable = info[0].As<Napi::Boolean>().Value() ? 1 : 0;
+  int defensive_enabled;
+  int result = sqlite3_db_config(connection(), SQLITE_DBCONFIG_DEFENSIVE,
+                                 enable, &defensive_enabled);
+  if (result != SQLITE_OK) {
+    node::ThrowEnhancedSqliteError(env, connection(), result,
+                                   "Failed to set defensive mode");
   }
 
   return env.Undefined();

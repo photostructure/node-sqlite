@@ -100,6 +100,9 @@ public:
     allow_unknown_named_params_ = flag;
   }
 
+  bool get_enable_defensive() const { return defensive_; }
+  void set_enable_defensive(bool flag) { defensive_ = flag; }
+
 private:
   std::string location_;
   bool read_only_ = false;
@@ -110,6 +113,7 @@ private:
   bool return_arrays_ = false;
   bool allow_bare_named_params_ = true;
   bool allow_unknown_named_params_ = false;
+  bool defensive_ = false;
 };
 
 // Main database class
@@ -147,6 +151,9 @@ public:
   // Extension loading
   Napi::Value EnableLoadExtension(const Napi::CallbackInfo &info);
   Napi::Value LoadExtension(const Napi::CallbackInfo &info);
+
+  // Defensive mode
+  Napi::Value EnableDefensive(const Napi::CallbackInfo &info);
 
   // Session support
   Napi::Value CreateSession(const Napi::CallbackInfo &info);

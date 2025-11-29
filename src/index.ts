@@ -61,6 +61,15 @@ export interface DatabaseSyncOptions {
    */
   readonly allowUnknownNamedParameters?: boolean;
   /**
+   * If true, enables the defensive flag. When the defensive flag is enabled,
+   * language features that allow ordinary SQL to deliberately corrupt the
+   * database file are disabled. The defensive flag can also be set using
+   * `enableDefensive()`.
+   * @see https://sqlite.org/c3ref/c_dbconfig_defensive.html
+   * @default false
+   */
+  readonly defensive?: boolean;
+  /**
    * If true, the database is opened immediately. If false, the database is not opened until the first operation.
    * @default true
    */
@@ -305,6 +314,14 @@ export interface DatabaseSyncInstance {
    * @param entryPoint Optional entry point function name. If not provided, uses the default entry point.
    */
   loadExtension(path: string, entryPoint?: string): void;
+  /**
+   * Enables or disables the defensive flag. When the defensive flag is active,
+   * language features that allow ordinary SQL to deliberately corrupt the
+   * database file are disabled.
+   * @param active Whether to enable or disable the defensive flag.
+   * @see https://sqlite.org/c3ref/c_dbconfig_defensive.html
+   */
+  enableDefensive(active: boolean): void;
 
   /**
    * Makes a backup of the database. This method abstracts the sqlite3_backup_init(),
