@@ -2,6 +2,7 @@
 import nodeGypBuild from "node-gyp-build";
 import { join } from "node:path";
 import { _dirname } from "./dirname";
+import { SQLTagStore } from "./sql-tag-store";
 
 // Use _dirname() helper that works in both CJS/ESM and Jest
 const binding = nodeGypBuild(join(_dirname(), ".."));
@@ -95,6 +96,8 @@ export interface StatementSyncInstance {
   readonly sourceSQL: string;
   /** The expanded SQL string with bound parameters, if expandedSQL option was set. */
   readonly expandedSQL: string | undefined;
+  /** Whether this statement has been finalized. */
+  readonly finalized: boolean;
   /**
    * This method executes a prepared statement and returns an object.
    * @param parameters Optional named and anonymous parameters to bind to the statement.
@@ -212,6 +215,56 @@ export interface Session {
   close(): void;
 }
 
+/**
+ * SQLTagStore provides cached prepared statements via tagged template syntax.
+ * Statements are cached by their SQL string and reused across invocations.
+ */
+export interface SQLTagStoreInstance {
+  /** Returns the associated database instance. */
+  readonly db: DatabaseSyncInstance;
+  /** Returns the maximum capacity of the statement cache. */
+  readonly capacity: number;
+  /**
+   * Returns the current number of cached statements.
+   */
+  size(): number;
+  /**
+   * Clears all cached statements.
+   */
+  clear(): void;
+  /**
+   * Execute an INSERT, UPDATE, DELETE or other statement that doesn't return rows.
+   * @param strings Template literal strings array.
+   * @param values Values to bind to the placeholders.
+   * @returns An object with `changes` and `lastInsertRowid`.
+   */
+  run(
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+  ): { changes: number; lastInsertRowid: number | bigint };
+  /**
+   * Execute a query and return the first row, or undefined if no rows.
+   * @param strings Template literal strings array.
+   * @param values Values to bind to the placeholders.
+   */
+  get(strings: TemplateStringsArray, ...values: unknown[]): unknown;
+  /**
+   * Execute a query and return all rows as an array.
+   * @param strings Template literal strings array.
+   * @param values Values to bind to the placeholders.
+   */
+  all(strings: TemplateStringsArray, ...values: unknown[]): unknown[];
+  /**
+   * Execute a query and return an iterator over the rows.
+   * @param strings Template literal strings array.
+   * @param values Values to bind to the placeholders.
+   */
+  iterate(
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+  ): IterableIterator<unknown>;
+}
+
 export interface ChangesetApplyOptions {
   /**
    * Function called when a conflict is detected during changeset application.
@@ -296,6 +349,18 @@ export interface DatabaseSyncInstance {
    * @returns A Session object for recording changes.
    */
   createSession(options?: SessionOptions): Session;
+  /**
+   * Create a new SQLTagStore for cached prepared statements via tagged template syntax.
+   * @param capacity Optional maximum number of statements to cache. @default 1000
+   * @returns A SQLTagStore instance.
+   * @example
+   * ```typescript
+   * const sql = db.createTagStore();
+   * sql.run`INSERT INTO users VALUES (${id}, ${name})`;
+   * const user = sql.get`SELECT * FROM users WHERE id = ${id}`;
+   * ```
+   */
+  createTagStore(capacity?: number): SQLTagStoreInstance;
   /**
    * Apply a changeset to the database.
    * @param changeset The changeset data to apply.
@@ -449,6 +514,14 @@ export interface SqliteModule {
 export const DatabaseSync =
   binding.DatabaseSync as SqliteModule["DatabaseSync"];
 
+// Attach createTagStore method to DatabaseSync prototype
+(DatabaseSync.prototype as DatabaseSyncInstance).createTagStore = function (
+  this: DatabaseSyncInstance,
+  capacity?: number,
+): SQLTagStoreInstance {
+  return new SQLTagStore(this, capacity);
+};
+
 /**
  * The StatementSync class represents a prepared SQL statement.
  * This class should not be instantiated directly; use DatabaseSync.prepare() instead.
@@ -476,6 +549,19 @@ export const StatementSync =
  * ```
  */
 export const Session = binding.Session as SqliteModule["Session"];
+
+/**
+ * The SQLTagStore class for cached prepared statements via tagged template syntax.
+ * This class should not be instantiated directly; use DatabaseSync.createTagStore() instead.
+ *
+ * @example
+ * ```typescript
+ * const sql = db.createTagStore();
+ * sql.run`INSERT INTO users VALUES (${id}, ${name})`;
+ * const user = sql.get`SELECT * FROM users WHERE id = ${id}`;
+ * ```
+ */
+export { SQLTagStore };
 
 /**
  * SQLite constants for various operations and flags.

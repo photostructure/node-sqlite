@@ -221,6 +221,7 @@ public:
   // Properties
   Napi::Value SourceSQLGetter(const Napi::CallbackInfo &info);
   Napi::Value ExpandedSQLGetter(const Napi::CallbackInfo &info);
+  Napi::Value FinalizedGetter(const Napi::CallbackInfo &info);
 
   // Configuration methods
   Napi::Value SetReadBigInts(const Napi::CallbackInfo &info);

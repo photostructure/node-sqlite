@@ -1373,6 +1373,8 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("columns", &StatementSync::Columns),
        InstanceAccessor("sourceSQL", &StatementSync::SourceSQLGetter, nullptr),
        InstanceAccessor("expandedSQL", &StatementSync::ExpandedSQLGetter,
+                        nullptr),
+       InstanceAccessor("finalized", &StatementSync::FinalizedGetter,
                         nullptr)});
 
   // Store constructor in per-instance addon data instead of static variable
@@ -1697,6 +1699,10 @@ Napi::Value StatementSync::ExpandedSQLGetter(const Napi::CallbackInfo &info) {
     }
   }
   return info.Env().Undefined();
+}
+
+Napi::Value StatementSync::FinalizedGetter(const Napi::CallbackInfo &info) {
+  return Napi::Boolean::New(info.Env(), finalized_);
 }
 
 Napi::Value StatementSync::SetReadBigInts(const Napi::CallbackInfo &info) {
