@@ -34,12 +34,9 @@ This is @photostructure/sqlite - a standalone npm package that extracts the expe
 - ✅ User-defined functions with all options
 - ✅ Aggregate functions with window function support
 - ✅ Statement iterator implementation with full protocol
-
-**What's Missing:**
-
-- ✅ SQLite sessions and changesets (now implemented)
-- ✅ Backup functionality (now implemented)
-- ✅ Extension loading (now implemented)
+- ✅ SQLite sessions and changesets
+- ✅ Backup functionality
+- ✅ Extension loading
 
 ## Architecture Overview
 
@@ -302,6 +299,7 @@ For detailed implementation history and lessons learned, see: `doc/archive/aggre
 **CRITICAL**: N-API's `IsBuffer()` returns `true` for ALL ArrayBufferView types, not just Node.js Buffer.
 
 This is because the underlying N-API implementation uses `IsArrayBufferView()`:
+
 - `Buffer` → IsBuffer: ✓, IsTypedArray: ✓, IsDataView: ✗
 - `Uint8Array` → IsBuffer: ✓, IsTypedArray: ✓, IsDataView: ✗
 - `DataView` → IsBuffer: ✓, IsTypedArray: ✗, IsDataView: ✓
