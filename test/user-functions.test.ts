@@ -107,6 +107,44 @@ describe("User-defined Functions Tests", () => {
     db.close();
   });
 
+  test("user-defined functions - blob handling", () => {
+    const db = new DatabaseSync(":memory:");
+
+    // Register an identity function that passes through blobs
+    db.function("identity", (x: unknown) => x);
+
+    // Test with blob data
+    const blobData = Buffer.from([0x01, 0x02, 0x03, 0xff]);
+    const stmt = db.prepare("SELECT identity(?) as result");
+    const result = stmt.get(blobData);
+
+    expect(Buffer.isBuffer(result.result)).toBe(true);
+    expect(result.result).toEqual(blobData);
+
+    // Note: SQLite treats empty blobs (0-length Buffer) as NULL during binding
+    const emptyBlob = Buffer.alloc(0);
+    const emptyResult = stmt.get(emptyBlob);
+    expect(emptyResult.result).toBeNull();
+
+    db.close();
+  });
+
+  test("user-defined functions - empty string handling", () => {
+    const db = new DatabaseSync(":memory:");
+
+    // Register an identity function
+    db.function("identity", (x: unknown) => x);
+
+    // Test with empty string
+    const stmt = db.prepare("SELECT identity(?) as result");
+    const result = stmt.get("");
+
+    expect(typeof result.result).toBe("string");
+    expect(result.result).toBe("");
+
+    db.close();
+  });
+
   test("user-defined functions - error handling", () => {
     const db = new DatabaseSync(":memory:");
 
