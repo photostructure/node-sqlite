@@ -169,37 +169,95 @@ function _checkStatementMethodsExist() {
   }
 }
 
-// Check constants exist
+// Check constants exist - compile-time type checking for all 65 constants
 function _checkConstants() {
   if (OurSqlite.constants) {
-    // Open constants
+    // Database open flags (extension beyond node:sqlite)
     const _openReadonly: number = OurSqlite.constants.SQLITE_OPEN_READONLY;
     const _openReadwrite: number = OurSqlite.constants.SQLITE_OPEN_READWRITE;
     const _openCreate: number = OurSqlite.constants.SQLITE_OPEN_CREATE;
+    const _openDeleteOnClose: number =
+      OurSqlite.constants.SQLITE_OPEN_DELETEONCLOSE;
+    const _openExclusive: number = OurSqlite.constants.SQLITE_OPEN_EXCLUSIVE;
+    const _openAutoproxy: number = OurSqlite.constants.SQLITE_OPEN_AUTOPROXY;
+    const _openUri: number = OurSqlite.constants.SQLITE_OPEN_URI;
+    const _openMemory: number = OurSqlite.constants.SQLITE_OPEN_MEMORY;
+    const _openMainDb: number = OurSqlite.constants.SQLITE_OPEN_MAIN_DB;
+    const _openTempDb: number = OurSqlite.constants.SQLITE_OPEN_TEMP_DB;
+    const _openTransientDb: number =
+      OurSqlite.constants.SQLITE_OPEN_TRANSIENT_DB;
+    const _openMainJournal: number =
+      OurSqlite.constants.SQLITE_OPEN_MAIN_JOURNAL;
+    const _openTempJournal: number =
+      OurSqlite.constants.SQLITE_OPEN_TEMP_JOURNAL;
+    const _openSubjournal: number = OurSqlite.constants.SQLITE_OPEN_SUBJOURNAL;
+    const _openSuperJournal: number =
+      OurSqlite.constants.SQLITE_OPEN_SUPER_JOURNAL;
+    const _openNoMutex: number = OurSqlite.constants.SQLITE_OPEN_NOMUTEX;
+    const _openFullMutex: number = OurSqlite.constants.SQLITE_OPEN_FULLMUTEX;
+    const _openSharedCache: number =
+      OurSqlite.constants.SQLITE_OPEN_SHAREDCACHE;
+    const _openPrivateCache: number =
+      OurSqlite.constants.SQLITE_OPEN_PRIVATECACHE;
+    const _openWal: number = OurSqlite.constants.SQLITE_OPEN_WAL;
 
-    // Changeset constants
+    // Changeset conflict resolution constants
     const _omit: number = OurSqlite.constants.SQLITE_CHANGESET_OMIT;
     const _replace: number = OurSqlite.constants.SQLITE_CHANGESET_REPLACE;
     const _abort: number = OurSqlite.constants.SQLITE_CHANGESET_ABORT;
+
+    // Changeset conflict type constants
     const _data: number = OurSqlite.constants.SQLITE_CHANGESET_DATA;
     const _notfound: number = OurSqlite.constants.SQLITE_CHANGESET_NOTFOUND;
     const _conflict: number = OurSqlite.constants.SQLITE_CHANGESET_CONFLICT;
     const _constraint: number = OurSqlite.constants.SQLITE_CHANGESET_CONSTRAINT;
-    const _foreign_key: number =
+    const _foreignKey: number =
       OurSqlite.constants.SQLITE_CHANGESET_FOREIGN_KEY;
 
-    // Should have same values as node:sqlite
-    if (NodeSqlite.constants) {
-      const _omitMatch =
-        OurSqlite.constants.SQLITE_CHANGESET_OMIT ===
-        NodeSqlite.constants.SQLITE_CHANGESET_OMIT;
-      const _replaceMatch =
-        OurSqlite.constants.SQLITE_CHANGESET_REPLACE ===
-        NodeSqlite.constants.SQLITE_CHANGESET_REPLACE;
-      const _abortMatch =
-        OurSqlite.constants.SQLITE_CHANGESET_ABORT ===
-        NodeSqlite.constants.SQLITE_CHANGESET_ABORT;
-    }
+    // Authorization result codes
+    const _ok: number = OurSqlite.constants.SQLITE_OK;
+    const _deny: number = OurSqlite.constants.SQLITE_DENY;
+    const _ignore: number = OurSqlite.constants.SQLITE_IGNORE;
+
+    // Authorization action codes
+    const _createIndex: number = OurSqlite.constants.SQLITE_CREATE_INDEX;
+    const _createTable: number = OurSqlite.constants.SQLITE_CREATE_TABLE;
+    const _createTempIndex: number =
+      OurSqlite.constants.SQLITE_CREATE_TEMP_INDEX;
+    const _createTempTable: number =
+      OurSqlite.constants.SQLITE_CREATE_TEMP_TABLE;
+    const _createTempTrigger: number =
+      OurSqlite.constants.SQLITE_CREATE_TEMP_TRIGGER;
+    const _createTempView: number = OurSqlite.constants.SQLITE_CREATE_TEMP_VIEW;
+    const _createTrigger: number = OurSqlite.constants.SQLITE_CREATE_TRIGGER;
+    const _createView: number = OurSqlite.constants.SQLITE_CREATE_VIEW;
+    const _delete: number = OurSqlite.constants.SQLITE_DELETE;
+    const _dropIndex: number = OurSqlite.constants.SQLITE_DROP_INDEX;
+    const _dropTable: number = OurSqlite.constants.SQLITE_DROP_TABLE;
+    const _dropTempIndex: number = OurSqlite.constants.SQLITE_DROP_TEMP_INDEX;
+    const _dropTempTable: number = OurSqlite.constants.SQLITE_DROP_TEMP_TABLE;
+    const _dropTempTrigger: number =
+      OurSqlite.constants.SQLITE_DROP_TEMP_TRIGGER;
+    const _dropTempView: number = OurSqlite.constants.SQLITE_DROP_TEMP_VIEW;
+    const _dropTrigger: number = OurSqlite.constants.SQLITE_DROP_TRIGGER;
+    const _dropView: number = OurSqlite.constants.SQLITE_DROP_VIEW;
+    const _insert: number = OurSqlite.constants.SQLITE_INSERT;
+    const _pragma: number = OurSqlite.constants.SQLITE_PRAGMA;
+    const _read: number = OurSqlite.constants.SQLITE_READ;
+    const _select: number = OurSqlite.constants.SQLITE_SELECT;
+    const _transaction: number = OurSqlite.constants.SQLITE_TRANSACTION;
+    const _update: number = OurSqlite.constants.SQLITE_UPDATE;
+    const _attach: number = OurSqlite.constants.SQLITE_ATTACH;
+    const _detach: number = OurSqlite.constants.SQLITE_DETACH;
+    const _alterTable: number = OurSqlite.constants.SQLITE_ALTER_TABLE;
+    const _reindex: number = OurSqlite.constants.SQLITE_REINDEX;
+    const _analyze: number = OurSqlite.constants.SQLITE_ANALYZE;
+    const _createVtable: number = OurSqlite.constants.SQLITE_CREATE_VTABLE;
+    const _dropVtable: number = OurSqlite.constants.SQLITE_DROP_VTABLE;
+    const _function: number = OurSqlite.constants.SQLITE_FUNCTION;
+    const _savepoint: number = OurSqlite.constants.SQLITE_SAVEPOINT;
+    const _copy: number = OurSqlite.constants.SQLITE_COPY;
+    const _recursive: number = OurSqlite.constants.SQLITE_RECURSIVE;
   }
 }
 
@@ -300,6 +358,46 @@ describe("API Compatibility", () => {
     // This test file is primarily for TypeScript compile-time checks
     // The actual testing happens during TypeScript compilation
     expect(true).toBe(true);
+  });
+
+  describe("constants compatibility with node:sqlite", () => {
+    it("includes all node:sqlite constants", () => {
+      const nodeKeys = Object.keys(NodeSqlite.constants);
+      const ourKeys = new Set(Object.keys(OurSqlite.constants));
+
+      const missingFromOurs = nodeKeys.filter((k) => !ourKeys.has(k));
+      expect(missingFromOurs).toEqual([]);
+    });
+
+    it("has matching values for all node:sqlite constants", () => {
+      const nodeConstants = NodeSqlite.constants as unknown as Record<
+        string,
+        number
+      >;
+      const ourConstants = OurSqlite.constants as unknown as Record<
+        string,
+        number
+      >;
+
+      for (const key of Object.keys(nodeConstants)) {
+        expect(ourConstants[key]).toBe(nodeConstants[key]);
+      }
+    });
+
+    it("documents extra constants beyond node:sqlite as SQLITE_OPEN_* flags", () => {
+      const nodeKeys = new Set(Object.keys(NodeSqlite.constants));
+      const ourKeys = Object.keys(OurSqlite.constants);
+      const extras = ourKeys.filter((k) => !nodeKeys.has(k));
+
+      // Our extensions should all be SQLITE_OPEN_* flags
+      expect(extras.every((k) => k.startsWith("SQLITE_OPEN_"))).toBe(true);
+      // We have 20 extra SQLITE_OPEN_* constants
+      expect(extras.length).toBe(20);
+    });
+
+    it("exports exactly 65 constants total", () => {
+      expect(Object.keys(OurSqlite.constants).length).toBe(65);
+    });
   });
 });
 
