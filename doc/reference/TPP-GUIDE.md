@@ -40,6 +40,28 @@ This is your North Star. Implementation details may change; the user need stays 
 **Fix approach**: Add null check matching node_sqlite.cc:892
 ```
 
+#### When TDD Isn't Possible
+
+Some bugs can't be reproduced in tests:
+
+- Memory allocation failures (e.g., `sqlite3_value_text()` returning NULL)
+- Race conditions requiring precise timing
+- Hardware-specific behavior
+- Kernel/OS edge cases
+
+For these, document explicitly:
+
+```markdown
+**Bug**: NULL pointer dereference when sqlite3_value_text() fails
+**Why untestable**: Requires SQLite internal memory allocation failure
+**Validation approach**:
+1. Code review showing NULL check matches known-good pattern
+2. Regression tests proving the code path still works
+3. `grep` showing fix applied to ALL similar locations
+```
+
+Don't pretend a test covers something it doesn't. Be explicit about what's validated and what isn't.
+
 ### Part 2: Share Your Expertise
 
 This section prevents surprises. Skip it for straightforward changes—document only what's non-obvious.
@@ -197,6 +219,14 @@ grep -r "newFunction" src/ test/  # Must appear in both
 
 Per [SIMPLE-DESIGN.md](./SIMPLE-DESIGN.md) Rule 5: Don't add defensive code for impossible cases. If assumptions are violated, fail visibly.
 
+### Testing the Wrong Thing
+
+Bad: "Added test for NULL handling" (but test exercises `SQLITE_NULL` type, not NULL pointer from extraction failure)
+
+Good: "Added regression test for TEXT/BLOB paths. The actual NULL-pointer edge case is untestable—validated via code review against `aggregate_function.cpp:515-530`"
+
+Be precise about what your test actually validates vs. what remains validated only by code review.
+
 ## Validation Requirements
 
 ### Required Evidence Types
@@ -207,6 +237,21 @@ Every checkbox needs proof another engineer can verify:
 - **Code locations**: `src/sqlite_impl.cpp:234` where implementation exists
 - **Integration proof**: `grep` commands showing production usage
 - **Behavior comparison**: Test output against node:sqlite
+
+### Completeness Validation
+
+For fixes that apply to multiple locations, the TPP must include a scope check:
+
+```bash
+# Example: Find ALL places that need the same fix
+grep -rn "sqlite3_value_text\|sqlite3_value_blob" src/*.cpp
+```
+
+A fix for one instance that misses others is incomplete. Document:
+
+- How many locations need the fix
+- Which files contain them
+- Validation that ALL were addressed
 
 ### Definition of Complete
 
@@ -236,9 +281,11 @@ Before marking your TPP ready:
 - [ ] Documented at least one "learned the hard way" lesson
 - [ ] Each task has verifiable success command
 - [ ] Explained how to adapt if code was refactored
-- [ ] Bug fixes start with failing test ([TDD.md](./TDD.md))
+- [ ] Bug fixes start with failing test ([TDD.md](./TDD.md))—or document why TDD isn't possible
 - [ ] Code follows Four Rules ([SIMPLE-DESIGN.md](./SIMPLE-DESIGN.md))
 - [ ] API compatibility with node:sqlite verified
+- [ ] If fix applies to multiple locations, included grep to find ALL instances
+- [ ] Test descriptions clarify what IS and ISN'T covered
 
 ## The Ultimate Test
 
@@ -295,11 +342,17 @@ As additional research and implementation details are completed, reconsider thes
 
 - [How to find new location]
 
+**What this test validates** (be precise):
+
+- ✅ [What the test DOES cover]
+- ❌ [What remains validated only by code review]
+
 **Completion checklist**:
 
 - [ ] Test passes: `npm t -- --grep "..."`
 - [ ] Integration shown: `grep -r "..." src/`
 - [ ] Old code removed
+- [ ] ALL similar locations fixed (if applicable): `grep -rn "pattern" src/`
 
 ### Task 2: ...
 
