@@ -1,3 +1,5 @@
+import { extractCallerPath, getCallerDirname } from "../src/stack-path";
+
 describe("stack_path", () => {
   describe("extractCallerPath", () => {
     describe("platform-specific stack parsing", () => {
@@ -35,7 +37,6 @@ describe("stack_path", () => {
         // Import extractCallerPath directly without platform switching
         // since it already handles platform detection internally
         it("extracts path from standard format (with Object.<anonymous>)", async () => {
-          const { extractCallerPath } = await import("../src/stack_path");
           // Only test if we're on Linux
           if (process.platform === "linux") {
             expect(extractCallerPath(linuxStack)).toBe(
@@ -45,7 +46,6 @@ describe("stack_path", () => {
         });
 
         it("extracts path from direct format (without Object.<anonymous>)", async () => {
-          const { extractCallerPath } = await import("../src/stack_path");
           // Only test if we're on Linux
           if (process.platform === "linux") {
             expect(extractCallerPath(linuxDirectStack)).toBe(
@@ -57,7 +57,6 @@ describe("stack_path", () => {
 
       describe("Windows stack traces", () => {
         it("extracts path from standard format", async () => {
-          const { extractCallerPath } = await import("../src/stack_path");
           // Only test if we're on Windows
           if (process.platform === "win32") {
             expect(extractCallerPath(windowsStack)).toBe(
@@ -67,7 +66,6 @@ describe("stack_path", () => {
         });
 
         it("extracts path from direct format", async () => {
-          const { extractCallerPath } = await import("../src/stack_path");
           // Only test if we're on Windows
           if (process.platform === "win32") {
             expect(extractCallerPath(windowsDirectStack)).toBe(
@@ -77,7 +75,6 @@ describe("stack_path", () => {
         });
 
         it("extracts and converts file:// URLs", async () => {
-          const { extractCallerPath } = await import("../src/stack_path");
           // Only test if we're on Windows
           if (process.platform === "win32") {
             expect(extractCallerPath(windowsFileUrlStack)).toBe(
@@ -87,7 +84,6 @@ describe("stack_path", () => {
         });
 
         it("handles UNC paths", async () => {
-          const { extractCallerPath } = await import("../src/stack_path");
           // Only test if we're on Windows
           if (process.platform === "win32") {
             expect(extractCallerPath(windowsUncStack)).toBe(
@@ -100,7 +96,6 @@ describe("stack_path", () => {
 
     describe("error handling", () => {
       it("throws when getCallerDirname is not in stack", async () => {
-        const { extractCallerPath } = await import("../src/stack_path");
         const stack = "Error\n    at someOtherFunction (/path/to/file.js:1:1)";
         expect(() => extractCallerPath(stack)).toThrow(
           "Invalid stack trace format: missing caller frame",
@@ -108,7 +103,6 @@ describe("stack_path", () => {
       });
 
       it("throws when no frames after getCallerDirname match patterns", async () => {
-        const { extractCallerPath } = await import("../src/stack_path");
         const stack = `Error\n    at getCallerDirname (/path/to/file.js:1:1)`;
         expect(() => extractCallerPath(stack)).toThrow(
           "Invalid stack trace format: no parsable frames",
@@ -116,7 +110,6 @@ describe("stack_path", () => {
       });
 
       it("throws when stack contains only internal frames after getCallerDirname", async () => {
-        const { extractCallerPath } = await import("../src/stack_path");
         const stack = `Error
     at getCallerDirname (/path/to/file.js:1:1)
     at node:internal/modules/cjs/loader:1126:14
@@ -131,7 +124,6 @@ describe("stack_path", () => {
   describe("getCallerDirname integration", () => {
     it("returns the correct directory when called from a module", async () => {
       // Import and test the actual function
-      const { getCallerDirname } = await import("../src/stack_path");
       const result = getCallerDirname();
 
       // Should return the directory of this test file

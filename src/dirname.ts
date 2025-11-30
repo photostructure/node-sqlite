@@ -1,4 +1,4 @@
-import { getCallerDirname } from "./stack_path";
+import { getCallerDirname } from "./stack-path";
 
 // Thanks to tsup shims, __dirname should always be defined except when run by
 // jest (which will use the stack_path shim)
