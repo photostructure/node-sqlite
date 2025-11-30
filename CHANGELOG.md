@@ -6,11 +6,26 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Node.js v25 compatibility**: Updated to Node.js v25.0.0 for latest features and API compatibility
+- **Node.js v25 compatibility**: Synced with Node.js v25+ for latest features and API compatibility
   - Native Symbol.dispose implementation moved from JavaScript to C++ for better performance
   - Session class now exposed in public API for advanced replication workflows
-  - SQLite 3.50.4 with latest performance improvements and features
-  - Future-proofing for continued Node.js compatibility
+  - SQLite 3.51.1 with latest performance improvements and features
+
+- **New database open options**:
+  - `readBigInts`: Return SQLite integers as JavaScript BigInt values
+  - `returnArrays`: Return query results as arrays instead of objects
+  - `allowBareNamedParameters`: Bind named parameters without prefix character
+  - `allowUnknownNamedParameters`: Ignore unknown named parameters instead of throwing
+  - `defensive`: Enable SQLite defensive mode at database open
+  - `open`: Control deferred database opening
+
+- **Defensive mode**: New `defensive` option and `enableDefensive()` method to prevent SQL from deliberately corrupting the database file
+
+- **Statement control**:
+  - `setAllowUnknownNamedParameters()` method for runtime control of parameter binding behavior
+  - `finalized` property to check if a statement has been finalized
+
+- **Type identification**: `sqlite-type` symbol property on DatabaseSync instances for reliable type checking (matches Node.js PR #59405)
 
 - **Enhanced error information**: SQLite errors now include additional diagnostic properties:
   - `sqliteCode`: The primary SQLite error code (e.g., `14` for `SQLITE_CANTOPEN`)
@@ -18,12 +33,19 @@ All notable changes to this project will be documented in this file.
   - `code`: SQLite error constant name (e.g., `"SQLITE_CANTOPEN"`)
   - `sqliteErrorString`: Human-readable error description
   - `systemErrno`: OS error number for I/O operations (when available)
-  - This provides better debugging capabilities and allows for programmatic error handling
 
 - **Expanded ARM64 support**: Added prebuilt binaries for ARM64 architectures:
   - macOS Apple Silicon (ARM64) with native compilation
   - Windows ARM64 with cross-compilation support
-  - Improved CI/CD pipeline with separate build jobs for Intel and ARM architectures
+
+- **Tagged template literals**: `db.createTagStore()` for cached prepared statements via tagged template syntax (matches Node.js PR #58748). Benchmarks show equivalent performance to the native C++ implementation.
+
+- **Authorization API**: `db.setAuthorizer()` for security callbacks invoked before SQL operations (matches Node.js PR #59928)
+
+### Fixed
+
+- DataView parameter binding now works correctly (previously returned garbage data)
+- RETURNING clause metadata handling improvements
 
 ## [0.0.1] - 2025-06-13
 
@@ -64,4 +86,5 @@ All notable changes to this project will be documented in this file.
 - macOS (x64, ARM64)
 - Linux (x64, ARM64), (glibc 2.28+, musl)
 
-[0.1.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.1.0
+[0.2.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.0
+[0.0.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.0.1
