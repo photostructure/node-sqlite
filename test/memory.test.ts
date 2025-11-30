@@ -1,7 +1,7 @@
 import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "../src/index";
+import { DatabaseSync } from "../src";
 import { testMemoryBenchmark } from "./benchmark-harness";
 import { getUniqueTableName, rm } from "./test-utils";
 

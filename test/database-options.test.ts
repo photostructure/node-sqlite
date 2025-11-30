@@ -1,4 +1,4 @@
-import { DatabaseSync } from "../src/index";
+import { DatabaseSync } from "../src";
 import { useTempDir } from "./test-utils";
 
 describe("DatabaseSync Options", () => {

@@ -7,7 +7,7 @@ import {
   jest,
 } from "@jest/globals";
 import * as fs from "node:fs";
-import { DatabaseSync } from "../src/index";
+import { DatabaseSync } from "../src";
 import { getTestTimeout, useTempDir } from "./test-utils";
 
 describe("Backup Restoration", () => {

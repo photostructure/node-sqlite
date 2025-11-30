@@ -1,5 +1,5 @@
 import { describe, expect, jest, test } from "@jest/globals";
-import { DatabaseSync } from "../src/index";
+import { DatabaseSync } from "../src";
 import { getTestTimeout } from "./test-utils";
 
 describe("Disposable Interface", () => {

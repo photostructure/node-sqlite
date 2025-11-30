@@ -3,7 +3,7 @@ import {
   constants,
   type DatabaseSyncInstance,
   type Session,
-} from "../src/index";
+} from "../src";
 import { useTempDir } from "./test-utils";
 
 describe("SQLite Sessions", () => {

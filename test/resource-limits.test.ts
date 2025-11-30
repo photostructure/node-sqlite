@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, jest } from "@jest/globals";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "../src/index";
+import { DatabaseSync } from "../src";
 import { getTestTimeout } from "./test-utils";
 
 describe("SQLite Resource Limits", () => {
