@@ -1,4 +1,4 @@
-import { DatabaseSync, DatabaseSyncInstance } from "../src";
+import { DatabaseSync, type DatabaseSyncInstance } from "../src";
 
 describe("NULL and Zero-Length TEXT/BLOB Handling", () => {
   let db: DatabaseSyncInstance;

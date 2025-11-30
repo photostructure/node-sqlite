@@ -1,5 +1,6 @@
-import type { DatabaseSyncInstance, StatementSyncInstance } from "./index";
 import { LRUCache } from "./lru-cache";
+import { DatabaseSyncInstance } from "./types/database-sync-instance";
+import type { StatementSyncInstance } from "./types/statement-sync-instance";
 
 /**
  * Default capacity for the statement cache.

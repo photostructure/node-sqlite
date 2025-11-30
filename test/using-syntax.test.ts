@@ -1,5 +1,5 @@
 import { describe, expect, jest, test } from "@jest/globals";
-import { DatabaseSync, type DatabaseSyncInstance } from "../src/index";
+import { DatabaseSync, type DatabaseSyncInstance } from "../src";
 import { getTestTimeout } from "./test-utils";
 
 describe("Using Syntax (Explicit Resource Management)", () => {

@@ -3,79 +3,52 @@ import nodeGypBuild from "node-gyp-build";
 import { join } from "node:path";
 import { _dirname } from "./dirname";
 import { SQLTagStore } from "./sql-tag-store";
+import { DatabaseSyncInstance } from "./types/database-sync-instance";
+import { DatabaseSyncOptions } from "./types/database-sync-options";
+import { SQLTagStoreInstance } from "./types/sql-tag-store-instance";
+import { SqliteAuthorizationActions } from "./types/sqlite-authorization-actions";
+import { SqliteAuthorizationResults } from "./types/sqlite-authorization-results";
+import { SqliteChangesetConflictTypes } from "./types/sqlite-changeset-conflict-types";
+import { SqliteChangesetResolution } from "./types/sqlite-changeset-resolution";
+import { SqliteOpenFlags } from "./types/sqlite-open-flags";
+import { StatementSyncInstance } from "./types/statement-sync-instance";
+
+export type { AggregateOptions } from "./types/aggregate-options";
+export type { ChangesetApplyOptions } from "./types/changeset-apply-options";
+export type { DatabaseSyncInstance } from "./types/database-sync-instance";
+export type { DatabaseSyncOptions } from "./types/database-sync-options";
+export type { SessionOptions } from "./types/session-options";
+export type { SQLTagStoreInstance } from "./types/sql-tag-store-instance";
+export type { SqliteAuthorizationActions } from "./types/sqlite-authorization-actions";
+export type { SqliteAuthorizationResults } from "./types/sqlite-authorization-results";
+export type { SqliteChangesetConflictTypes } from "./types/sqlite-changeset-conflict-types";
+export type { SqliteChangesetResolution } from "./types/sqlite-changeset-resolution";
+export type { SqliteOpenFlags } from "./types/sqlite-open-flags";
+export type { StatementSyncInstance } from "./types/statement-sync-instance";
+export type { UserFunctionOptions } from "./types/user-functions-options";
 
 // Use _dirname() helper that works in both CJS/ESM and Jest
 const binding = nodeGypBuild(join(_dirname(), ".."));
 
 /**
- * Configuration options for opening a database.
- * This interface matches Node.js sqlite module's DatabaseSyncOptions.
+ * All SQLite constants exported by this module.
+ *
+ * This is a union of all constant category interfaces:
+ * - {@link SqliteOpenFlags} - Database open flags (extension beyond `node:sqlite`)
+ * - {@link SqliteChangesetResolution} - Changeset conflict resolution values
+ * - {@link SqliteChangesetConflictTypes} - Changeset conflict type codes
+ * - {@link SqliteAuthorizationResults} - Authorization return values
+ * - {@link SqliteAuthorizationActions} - Authorization action codes
+ *
+ * **Note:** The categorized interfaces (`SqliteOpenFlags`, etc.) are extensions
+ * provided by `@photostructure/sqlite`. The `node:sqlite` module exports only
+ * a flat `constants` object without these type categories.
  */
-export interface DatabaseSyncOptions {
-  /** Path to the database file. Use ':memory:' for an in-memory database. */
-  readonly location?: string;
-  /** If true, the database is opened in read-only mode. @default false */
-  readonly readOnly?: boolean;
-  /** If true, foreign key constraints are enforced. @default true */
-  readonly enableForeignKeyConstraints?: boolean;
-  /** 
-   * If true, double-quoted string literals are allowed. 
-   *
-   * If enabled, double quotes can be misinterpreted as identifiers instead of
-   * string literals, leading to confusing errors. 
-   *
-   * **The SQLite documentation strongly recommends avoiding double-quoted
-   * strings entirely.**
-
-   * @see https://sqlite.org/quirks.html#dblquote
-   * @default false 
-   */
-  readonly enableDoubleQuotedStringLiterals?: boolean;
-  /**
-   * Sets the busy timeout in milliseconds.
-   * @default 5000
-   */
-  readonly timeout?: number;
-  /** If true, enables loading of SQLite extensions. @default false */
-  readonly allowExtension?: boolean;
-  /**
-   * If true, SQLite integers are returned as JavaScript BigInt values.
-   * If false, integers are returned as JavaScript numbers.
-   * @default false
-   */
-  readonly readBigInts?: boolean;
-  /**
-   * If true, query results are returned as arrays instead of objects.
-   * @default false
-   */
-  readonly returnArrays?: boolean;
-  /**
-   * If true, allows binding named parameters without the prefix character.
-   * For example, allows using 'foo' instead of ':foo' or '$foo'.
-   * @default true
-   */
-  readonly allowBareNamedParameters?: boolean;
-  /**
-   * If true, unknown named parameters are ignored during binding.
-   * If false, an exception is thrown for unknown named parameters.
-   * @default false
-   */
-  readonly allowUnknownNamedParameters?: boolean;
-  /**
-   * If true, enables the defensive flag. When the defensive flag is enabled,
-   * language features that allow ordinary SQL to deliberately corrupt the
-   * database file are disabled. The defensive flag can also be set using
-   * `enableDefensive()`.
-   * @see https://sqlite.org/c3ref/c_dbconfig_defensive.html
-   * @default false
-   */
-  readonly defensive?: boolean;
-  /**
-   * If true, the database is opened immediately. If false, the database is not opened until the first operation.
-   * @default true
-   */
-  readonly open?: boolean;
-}
+export type SqliteConstants = SqliteOpenFlags &
+  SqliteChangesetResolution &
+  SqliteChangesetConflictTypes &
+  SqliteAuthorizationResults &
+  SqliteAuthorizationActions;
 
 /**
  * Options for creating a prepared statement.
@@ -85,117 +58,6 @@ export interface StatementOptions {
   readonly expandedSQL?: boolean;
   /** If true, anonymous parameters are enabled for the statement. @default false */
   readonly anonymousParameters?: boolean;
-}
-
-/**
- * A prepared SQL statement that can be executed multiple times with different parameters.
- * This interface represents an instance of the StatementSync class.
- */
-export interface StatementSyncInstance {
-  /** The original SQL source string. */
-  readonly sourceSQL: string;
-  /** The expanded SQL string with bound parameters, if expandedSQL option was set. */
-  readonly expandedSQL: string | undefined;
-  /** Whether this statement has been finalized. */
-  readonly finalized: boolean;
-  /**
-   * This method executes a prepared statement and returns an object.
-   * @param parameters Optional named and anonymous parameters to bind to the statement.
-   * @returns An object with the number of changes and the last insert rowid.
-   */
-  run(...parameters: any[]): {
-    changes: number;
-    lastInsertRowid: number | bigint;
-  };
-  /**
-   * This method executes a prepared statement and returns the first result row.
-   * @param parameters Optional named and anonymous parameters to bind to the statement.
-   * @returns The first row from the query results, or undefined if no rows.
-   */
-  get(...parameters: any[]): any;
-  /**
-   * This method executes a prepared statement and returns all results as an array.
-   * @param parameters Optional named and anonymous parameters to bind to the statement.
-   * @returns An array of row objects from the query results.
-   */
-  all(...parameters: any[]): any[];
-  /**
-   * This method executes a prepared statement and returns an iterable iterator of objects.
-   * Each object represents a row from the query results.
-   * @param parameters Optional named and anonymous parameters to bind to the statement.
-   * @returns An iterable iterator of row objects.
-   */
-  iterate(...parameters: any[]): IterableIterator<any>;
-  /**
-   * Set whether to read integer values as JavaScript BigInt.
-   * @param readBigInts If true, read integers as BigInts. @default false
-   */
-  setReadBigInts(readBigInts: boolean): void;
-  /**
-   * Set whether to allow bare named parameters in SQL.
-   * @param allowBareNamedParameters If true, allows bare named parameters. @default false
-   */
-  setAllowBareNamedParameters(allowBareNamedParameters: boolean): void;
-  /**
-   * Set whether to allow unknown named parameters in SQL.
-   * @param enabled If true, unknown named parameters are ignored. If false, they throw an error. @default false
-   */
-  setAllowUnknownNamedParameters(enabled: boolean): void;
-  /**
-   * Set whether to return results as arrays rather than objects.
-   * @param returnArrays If true, return results as arrays. @default false
-   */
-  setReturnArrays(returnArrays: boolean): void;
-  /**
-   * Returns an array of objects, each representing a column in the statement's result set.
-   * Each object has a 'name' property for the column name and a 'type' property for the SQLite type.
-   * @returns Array of column metadata objects.
-   */
-  columns(): Array<{ name: string; type?: string }>;
-  /**
-   * Finalizes the prepared statement and releases its resources.
-   * Called automatically by Symbol.dispose.
-   */
-  finalize(): void;
-  /** Dispose of the statement resources using the explicit resource management protocol. */
-  [Symbol.dispose](): void;
-}
-
-export interface UserFunctionOptions {
-  /** If `true`, sets the `SQLITE_DETERMINISTIC` flag. @default false */
-  readonly deterministic?: boolean;
-  /** If `true`, sets the `SQLITE_DIRECTONLY` flag. @default false */
-  readonly directOnly?: boolean;
-  /** If `true`, converts integer arguments to `BigInt`s. @default false */
-  readonly useBigIntArguments?: boolean;
-  /** If `true`, allows function to be invoked with variable arguments. @default false */
-  readonly varargs?: boolean;
-}
-
-export interface AggregateOptions {
-  /** The initial value for the aggregation. */
-  readonly start?: any;
-  /** Function called for each row to update the aggregate state. */
-  readonly step: (accumulator: any, ...args: any[]) => any;
-  /** Optional function for window function support to reverse a step. */
-  readonly inverse?: (accumulator: any, ...args: any[]) => any;
-  /** Optional function to compute the final result from the accumulator. */
-  readonly result?: (accumulator: any) => any;
-  /** If `true`, sets the `SQLITE_DETERMINISTIC` flag. @default false */
-  readonly deterministic?: boolean;
-  /** If `true`, sets the `SQLITE_DIRECTONLY` flag. @default false */
-  readonly directOnly?: boolean;
-  /** If `true`, converts integer arguments to `BigInt`s. @default false */
-  readonly useBigIntArguments?: boolean;
-  /** If `true`, allows function to be invoked with variable arguments. @default false */
-  readonly varargs?: boolean;
-}
-
-export interface SessionOptions {
-  /** The table to track changes for. If omitted, all tables are tracked. */
-  readonly table?: string;
-  /** The database name. @default "main" */
-  readonly db?: string;
 }
 
 export interface Session {
@@ -213,222 +75,6 @@ export interface Session {
    * Close the session and release its resources.
    */
   close(): void;
-}
-
-/**
- * SQLTagStore provides cached prepared statements via tagged template syntax.
- * Statements are cached by their SQL string and reused across invocations.
- */
-export interface SQLTagStoreInstance {
-  /** Returns the associated database instance. */
-  readonly db: DatabaseSyncInstance;
-  /** Returns the maximum capacity of the statement cache. */
-  readonly capacity: number;
-  /**
-   * Returns the current number of cached statements.
-   */
-  size(): number;
-  /**
-   * Clears all cached statements.
-   */
-  clear(): void;
-  /**
-   * Execute an INSERT, UPDATE, DELETE or other statement that doesn't return rows.
-   * @param strings Template literal strings array.
-   * @param values Values to bind to the placeholders.
-   * @returns An object with `changes` and `lastInsertRowid`.
-   */
-  run(
-    strings: TemplateStringsArray,
-    ...values: unknown[]
-  ): { changes: number; lastInsertRowid: number | bigint };
-  /**
-   * Execute a query and return the first row, or undefined if no rows.
-   * @param strings Template literal strings array.
-   * @param values Values to bind to the placeholders.
-   */
-  get(strings: TemplateStringsArray, ...values: unknown[]): unknown;
-  /**
-   * Execute a query and return all rows as an array.
-   * @param strings Template literal strings array.
-   * @param values Values to bind to the placeholders.
-   */
-  all(strings: TemplateStringsArray, ...values: unknown[]): unknown[];
-  /**
-   * Execute a query and return an iterator over the rows.
-   * @param strings Template literal strings array.
-   * @param values Values to bind to the placeholders.
-   */
-  iterate(
-    strings: TemplateStringsArray,
-    ...values: unknown[]
-  ): IterableIterator<unknown>;
-}
-
-export interface ChangesetApplyOptions {
-  /**
-   * Function called when a conflict is detected during changeset application.
-   * @param conflictType The type of conflict (SQLITE_CHANGESET_CONFLICT, etc.)
-   * @returns One of SQLITE_CHANGESET_OMIT, SQLITE_CHANGESET_REPLACE, or SQLITE_CHANGESET_ABORT
-   */
-  readonly onConflict?: (conflictType: number) => number;
-  /**
-   * Function called to filter which tables to apply changes to.
-   * @param tableName The name of the table
-   * @returns true to include the table, false to skip it
-   */
-  readonly filter?: (tableName: string) => boolean;
-}
-
-/**
- * Represents a SQLite database connection.
- * This interface represents an instance of the DatabaseSync class.
- */
-export interface DatabaseSyncInstance {
-  /** Indicates whether the database connection is open. */
-  readonly isOpen: boolean;
-  /** Indicates whether a transaction is currently active. */
-  readonly isTransaction: boolean;
-
-  /**
-   * Opens a database connection. This method should only be used when the database
-   * was created with { open: false }. An exception is thrown if the database is already open.
-   */
-  open(): void;
-  /**
-   * Closes the database connection. This method should be called to ensure that
-   * the database connection is properly cleaned up. Once a database is closed,
-   * it cannot be used again.
-   */
-  close(): void;
-  /**
-   * Returns the location of the database file. For attached databases, you can specify
-   * the database name. Returns null for in-memory databases.
-   * @param dbName The name of the database. Defaults to 'main' (the primary database).
-   * @returns The file path of the database, or null for in-memory databases.
-   */
-  location(dbName?: string): string | null;
-  /**
-   * Compiles an SQL statement and returns a StatementSyncInstance object.
-   * @param sql The SQL statement to prepare.
-   * @param options Optional configuration for the statement.
-   * @returns A StatementSyncInstance object that can be executed multiple times.
-   */
-  prepare(sql: string, options?: StatementOptions): StatementSyncInstance;
-  /**
-   * This method allows one or more SQL statements to be executed without
-   * returning any results. This is useful for commands like CREATE TABLE,
-   * INSERT, UPDATE, or DELETE.
-   * @param sql The SQL statement(s) to execute.
-   */
-  exec(sql: string): void;
-
-  /**
-   * This method creates SQLite user-defined functions, wrapping sqlite3_create_function_v2().
-   * @param name The name of the SQLite function to create.
-   * @param func The JavaScript function to call when the SQLite function is invoked.
-   */
-  function(name: string, func: Function): void;
-  /**
-   * This method creates SQLite user-defined functions, wrapping sqlite3_create_function_v2().
-   * @param name The name of the SQLite function to create.
-   * @param options Optional configuration settings.
-   * @param func The JavaScript function to call when the SQLite function is invoked.
-   */
-  function(name: string, options: UserFunctionOptions, func: Function): void;
-
-  /**
-   * This method creates SQLite aggregate functions, wrapping sqlite3_create_window_function().
-   * @param name The name of the SQLite aggregate function to create.
-   * @param options Configuration object containing step function and other settings.
-   */
-  aggregate(name: string, options: AggregateOptions): void;
-  /**
-   * Create a new session to record database changes.
-   * @param options Optional configuration for the session.
-   * @returns A Session object for recording changes.
-   */
-  createSession(options?: SessionOptions): Session;
-  /**
-   * Create a new SQLTagStore for cached prepared statements via tagged template syntax.
-   * @param capacity Optional maximum number of statements to cache. @default 1000
-   * @returns A SQLTagStore instance.
-   * @example
-   * ```typescript
-   * const sql = db.createTagStore();
-   * sql.run`INSERT INTO users VALUES (${id}, ${name})`;
-   * const user = sql.get`SELECT * FROM users WHERE id = ${id}`;
-   * ```
-   */
-  createTagStore(capacity?: number): SQLTagStoreInstance;
-  /**
-   * Apply a changeset to the database.
-   * @param changeset The changeset data to apply.
-   * @param options Optional configuration for applying the changeset.
-   * @returns true if successful, false if aborted.
-   */
-  applyChangeset(changeset: Buffer, options?: ChangesetApplyOptions): boolean;
-  /**
-   * Enables or disables the loading of SQLite extensions.
-   * @param enable If true, enables extension loading. If false, disables it.
-   */
-  enableLoadExtension(enable: boolean): void;
-  /**
-   * Loads an SQLite extension from the specified file path.
-   * @param path The path to the extension library.
-   * @param entryPoint Optional entry point function name. If not provided, uses the default entry point.
-   */
-  loadExtension(path: string, entryPoint?: string): void;
-  /**
-   * Enables or disables the defensive flag. When the defensive flag is active,
-   * language features that allow ordinary SQL to deliberately corrupt the
-   * database file are disabled.
-   * @param active Whether to enable or disable the defensive flag.
-   * @see https://sqlite.org/c3ref/c_dbconfig_defensive.html
-   */
-  enableDefensive(active: boolean): void;
-
-  /**
-   * Makes a backup of the database. This method abstracts the sqlite3_backup_init(),
-   * sqlite3_backup_step() and sqlite3_backup_finish() functions.
-   *
-   * The backed-up database can be used normally during the backup process. Mutations
-   * coming from the same connection will be reflected in the backup right away.
-   * However, mutations from other connections will cause the backup process to restart.
-   *
-   * @param path The path where the backup will be created. If the file already exists, the contents will be overwritten.
-   * @param options Optional configuration for the backup operation.
-   * @param options.rate Number of pages to be transmitted in each batch of the backup. @default 100
-   * @param options.source Name of the source database. This can be 'main' (the default primary database) or any other database that have been added with ATTACH DATABASE. @default 'main'
-   * @param options.target Name of the target database. This can be 'main' (the default primary database) or any other database that have been added with ATTACH DATABASE. @default 'main'
-   * @param options.progress Callback function that will be called with the number of pages copied and the total number of pages.
-   * @returns A promise that resolves when the backup is completed and rejects if an error occurs.
-   *
-   * @example
-   * // Basic backup
-   * await db.backup('./backup.db');
-   *
-   * @example
-   * // Backup with progress
-   * await db.backup('./backup.db', {
-   *   rate: 10,
-   *   progress: ({ totalPages, remainingPages }) => {
-   *     console.log(`Progress: ${totalPages - remainingPages}/${totalPages}`);
-   *   }
-   * });
-   */
-  backup(
-    path: string | Buffer | URL,
-    options?: {
-      rate?: number;
-      source?: string;
-      target?: string;
-      progress?: (info: { totalPages: number; remainingPages: number }) => void;
-    },
-  ): Promise<number>;
-
-  /** Dispose of the database resources using the explicit resource management protocol. */
-  [Symbol.dispose](): void;
 }
 
 /**
@@ -459,39 +105,15 @@ export interface SqliteModule {
   Session: new () => Session;
   /**
    * SQLite constants for various operations and flags.
+   * @see {@link SqliteConstants} for the type definition
+   * @see {@link SqliteOpenFlags} for database open flags (extension beyond `node:sqlite`)
+   * @see {@link SqliteChangesetResolution} for changeset conflict resolution values
+   * @see {@link SqliteChangesetConflictTypes} for changeset conflict type codes
+   * @see {@link SqliteAuthorizationResults} for authorization return values
+   * @see {@link SqliteAuthorizationActions} for authorization action codes
    */
-  constants: {
-    /** Open database for reading only. */
-    SQLITE_OPEN_READONLY: number;
-    /** Open database for reading and writing. */
-    SQLITE_OPEN_READWRITE: number;
-    /** Create database if it doesn't exist. */
-    SQLITE_OPEN_CREATE: number;
-    // Changeset constants
-    /** Skip conflicting changes. */
-    SQLITE_CHANGESET_OMIT: number;
-    /** Replace conflicting changes. */
-    SQLITE_CHANGESET_REPLACE: number;
-    /** Abort on conflict. */
-    SQLITE_CHANGESET_ABORT: number;
-    /** Data conflict type. */
-    SQLITE_CHANGESET_DATA: number;
-    /** Row not found conflict. */
-    SQLITE_CHANGESET_NOTFOUND: number;
-    /** General conflict. */
-    SQLITE_CHANGESET_CONFLICT: number;
-    /** Constraint violation. */
-    SQLITE_CHANGESET_CONSTRAINT: number;
-    /** Foreign key constraint violation. */
-    SQLITE_CHANGESET_FOREIGN_KEY: number;
-    // ... more constants
-  };
+  constants: SqliteConstants;
 }
-
-// Symbol.dispose is now implemented natively in C++ (Node.js v25+)
-// No longer need JavaScript implementation
-
-// Export the native binding with TypeScript types
 
 /**
  * The DatabaseSync class represents a synchronous connection to a SQLite database.
@@ -514,7 +136,11 @@ export interface SqliteModule {
 export const DatabaseSync =
   binding.DatabaseSync as SqliteModule["DatabaseSync"];
 
-// Attach createTagStore method to DatabaseSync prototype
+// node:sqlite implements createTagStore and SQLTagStore entirely in native C++.
+// We use a TypeScript implementation instead, attached via prototype extension.
+// This maintains API compatibility with node:sqlite while avoiding the complexity
+// of a native LRU cache. Performance is equivalent since the real cost is SQLite
+// execution, not cache lookups - V8's Map is highly optimized for string keys.
 (DatabaseSync.prototype as DatabaseSyncInstance).createTagStore = function (
   this: DatabaseSyncInstance,
   capacity?: number,
@@ -576,7 +202,7 @@ export { SQLTagStore };
  * });
  * ```
  */
-export const constants = binding.constants as SqliteModule["constants"];
+export const constants: SqliteConstants = binding.constants;
 
 // Default export for CommonJS compatibility
 export default binding as SqliteModule;
