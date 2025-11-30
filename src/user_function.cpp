@@ -157,15 +157,20 @@ Napi::Value UserDefinedFunction::SqliteValueToJS(sqlite3_value *value) {
   }
 
   case SQLITE_TEXT: {
-    const unsigned char *text = sqlite3_value_text(value);
-    return Napi::String::New(env_, reinterpret_cast<const char *>(text));
+    const char *text =
+        reinterpret_cast<const char *>(sqlite3_value_text(value));
+    return Napi::String::New(env_, text ? text : "");
   }
 
   case SQLITE_BLOB: {
-    const void *blob_data = sqlite3_value_blob(value);
-    int blob_size = sqlite3_value_bytes(value);
-    return Napi::Buffer<uint8_t>::Copy(
-        env_, static_cast<const uint8_t *>(blob_data), blob_size);
+    const void *blob = sqlite3_value_blob(value);
+    int bytes = sqlite3_value_bytes(value);
+    if (blob && bytes > 0) {
+      return Napi::Buffer<uint8_t>::Copy(
+          env_, static_cast<const uint8_t *>(blob), static_cast<size_t>(bytes));
+    } else {
+      return Napi::Buffer<uint8_t>::New(env_, 0);
+    }
   }
 
   case SQLITE_NULL:
