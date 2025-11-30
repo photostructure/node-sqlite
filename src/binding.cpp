@@ -140,6 +140,64 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   constants.Set("SQLITE_CHANGESET_FOREIGN_KEY",
                 Napi::Number::New(env, SQLITE_CHANGESET_FOREIGN_KEY));
 
+  // Authorization result codes
+  constants.Set("SQLITE_OK", Napi::Number::New(env, SQLITE_OK));
+  constants.Set("SQLITE_DENY", Napi::Number::New(env, SQLITE_DENY));
+  constants.Set("SQLITE_IGNORE", Napi::Number::New(env, SQLITE_IGNORE));
+
+  // Authorization action codes
+  constants.Set("SQLITE_CREATE_INDEX",
+                Napi::Number::New(env, SQLITE_CREATE_INDEX));
+  constants.Set("SQLITE_CREATE_TABLE",
+                Napi::Number::New(env, SQLITE_CREATE_TABLE));
+  constants.Set("SQLITE_CREATE_TEMP_INDEX",
+                Napi::Number::New(env, SQLITE_CREATE_TEMP_INDEX));
+  constants.Set("SQLITE_CREATE_TEMP_TABLE",
+                Napi::Number::New(env, SQLITE_CREATE_TEMP_TABLE));
+  constants.Set("SQLITE_CREATE_TEMP_TRIGGER",
+                Napi::Number::New(env, SQLITE_CREATE_TEMP_TRIGGER));
+  constants.Set("SQLITE_CREATE_TEMP_VIEW",
+                Napi::Number::New(env, SQLITE_CREATE_TEMP_VIEW));
+  constants.Set("SQLITE_CREATE_TRIGGER",
+                Napi::Number::New(env, SQLITE_CREATE_TRIGGER));
+  constants.Set("SQLITE_CREATE_VIEW",
+                Napi::Number::New(env, SQLITE_CREATE_VIEW));
+  constants.Set("SQLITE_DELETE", Napi::Number::New(env, SQLITE_DELETE));
+  constants.Set("SQLITE_DROP_INDEX", Napi::Number::New(env, SQLITE_DROP_INDEX));
+  constants.Set("SQLITE_DROP_TABLE", Napi::Number::New(env, SQLITE_DROP_TABLE));
+  constants.Set("SQLITE_DROP_TEMP_INDEX",
+                Napi::Number::New(env, SQLITE_DROP_TEMP_INDEX));
+  constants.Set("SQLITE_DROP_TEMP_TABLE",
+                Napi::Number::New(env, SQLITE_DROP_TEMP_TABLE));
+  constants.Set("SQLITE_DROP_TEMP_TRIGGER",
+                Napi::Number::New(env, SQLITE_DROP_TEMP_TRIGGER));
+  constants.Set("SQLITE_DROP_TEMP_VIEW",
+                Napi::Number::New(env, SQLITE_DROP_TEMP_VIEW));
+  constants.Set("SQLITE_DROP_TRIGGER",
+                Napi::Number::New(env, SQLITE_DROP_TRIGGER));
+  constants.Set("SQLITE_DROP_VIEW", Napi::Number::New(env, SQLITE_DROP_VIEW));
+  constants.Set("SQLITE_INSERT", Napi::Number::New(env, SQLITE_INSERT));
+  constants.Set("SQLITE_PRAGMA", Napi::Number::New(env, SQLITE_PRAGMA));
+  constants.Set("SQLITE_READ", Napi::Number::New(env, SQLITE_READ));
+  constants.Set("SQLITE_SELECT", Napi::Number::New(env, SQLITE_SELECT));
+  constants.Set("SQLITE_TRANSACTION",
+                Napi::Number::New(env, SQLITE_TRANSACTION));
+  constants.Set("SQLITE_UPDATE", Napi::Number::New(env, SQLITE_UPDATE));
+  constants.Set("SQLITE_ATTACH", Napi::Number::New(env, SQLITE_ATTACH));
+  constants.Set("SQLITE_DETACH", Napi::Number::New(env, SQLITE_DETACH));
+  constants.Set("SQLITE_ALTER_TABLE",
+                Napi::Number::New(env, SQLITE_ALTER_TABLE));
+  constants.Set("SQLITE_REINDEX", Napi::Number::New(env, SQLITE_REINDEX));
+  constants.Set("SQLITE_ANALYZE", Napi::Number::New(env, SQLITE_ANALYZE));
+  constants.Set("SQLITE_CREATE_VTABLE",
+                Napi::Number::New(env, SQLITE_CREATE_VTABLE));
+  constants.Set("SQLITE_DROP_VTABLE",
+                Napi::Number::New(env, SQLITE_DROP_VTABLE));
+  constants.Set("SQLITE_FUNCTION", Napi::Number::New(env, SQLITE_FUNCTION));
+  constants.Set("SQLITE_SAVEPOINT", Napi::Number::New(env, SQLITE_SAVEPOINT));
+  constants.Set("SQLITE_COPY", Napi::Number::New(env, SQLITE_COPY));
+  constants.Set("SQLITE_RECURSIVE", Napi::Number::New(env, SQLITE_RECURSIVE));
+
   exports.Set("constants", constants);
 
   // TODO: Add backup function
