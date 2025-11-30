@@ -282,6 +282,7 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("createSession", &DatabaseSync::CreateSession),
        InstanceMethod("applyChangeset", &DatabaseSync::ApplyChangeset),
        InstanceMethod("backup", &DatabaseSync::Backup),
+       InstanceMethod("setAuthorizer", &DatabaseSync::SetAuthorizer),
        InstanceMethod("location", &DatabaseSync::LocationMethod),
        InstanceAccessor("isOpen", &DatabaseSync::IsOpenGetter, nullptr),
        InstanceAccessor("isTransaction", &DatabaseSync::IsTransactionGetter,
@@ -2778,6 +2779,121 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
   job->Queue();
 
   return deferred.Promise();
+}
+
+// Helper function to convert nullable C string to JavaScript value
+static Napi::Value NullableSQLiteStringToValue(Napi::Env env, const char *str) {
+  if (str == nullptr) {
+    return env.Null();
+  }
+  return Napi::String::New(env, str);
+}
+
+// DatabaseSync::SetAuthorizer implementation
+Napi::Value DatabaseSync::SetAuthorizer(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  // Handle null to clear the authorizer
+  if (info.Length() > 0 && info[0].IsNull()) {
+    sqlite3_set_authorizer(connection_, nullptr, nullptr);
+    authorizer_callback_.reset();
+    return env.Undefined();
+  }
+
+  // Validate callback argument
+  if (info.Length() < 1 || !info[0].IsFunction()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The \"callback\" argument must be a function or null.");
+    return env.Undefined();
+  }
+
+  // Store the JavaScript callback
+  Napi::Function fn = info[0].As<Napi::Function>();
+  authorizer_callback_ =
+      std::make_unique<Napi::FunctionReference>(Napi::Persistent(fn));
+
+  // Set the SQLite authorizer with our static callback
+  int r = sqlite3_set_authorizer(connection_, AuthorizerCallback, this);
+
+  if (r != SQLITE_OK) {
+    authorizer_callback_.reset();
+    ThrowEnhancedSqliteErrorWithDB(env, this, connection_, r,
+                                   "Failed to set authorizer");
+    return env.Undefined();
+  }
+
+  return env.Undefined();
+}
+
+// Static callback for SQLite authorization
+int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
+                                     const char *param1, const char *param2,
+                                     const char *param3, const char *param4) {
+  DatabaseSync *db = static_cast<DatabaseSync *>(user_data);
+
+  // If no callback is set, allow everything
+  if (!db->authorizer_callback_ || db->authorizer_callback_->IsEmpty()) {
+    return SQLITE_OK;
+  }
+
+  Napi::Env env(db->env_);
+  Napi::HandleScope scope(env);
+
+  try {
+    // Convert SQLite authorizer parameters to JavaScript values
+    std::vector<napi_value> args;
+    args.push_back(Napi::Number::New(env, action_code));
+    args.push_back(NullableSQLiteStringToValue(env, param1));
+    args.push_back(NullableSQLiteStringToValue(env, param2));
+    args.push_back(NullableSQLiteStringToValue(env, param3));
+    args.push_back(NullableSQLiteStringToValue(env, param4));
+
+    // Call the JavaScript callback
+    Napi::Value result = db->authorizer_callback_->Call(env.Undefined(), args);
+
+    // Handle JavaScript exceptions
+    if (env.IsExceptionPending()) {
+      db->SetIgnoreNextSQLiteError(true);
+      return SQLITE_DENY;
+    }
+
+    // Check if result is an integer
+    if (!result.IsNumber()) {
+      Napi::TypeError::New(
+          env, "Authorizer callback must return an integer authorization code")
+          .ThrowAsJavaScriptException();
+      db->SetIgnoreNextSQLiteError(true);
+      return SQLITE_DENY;
+    }
+
+    int32_t int_result = result.As<Napi::Number>().Int32Value();
+
+    // Validate the return code
+    if (int_result != SQLITE_OK && int_result != SQLITE_DENY &&
+        int_result != SQLITE_IGNORE) {
+      Napi::RangeError::New(
+          env, "Authorizer callback returned a invalid authorization code")
+          .ThrowAsJavaScriptException();
+      db->SetIgnoreNextSQLiteError(true);
+      return SQLITE_DENY;
+    }
+
+    return int_result;
+  } catch (const Napi::Error &e) {
+    // JavaScript exception occurred
+    e.ThrowAsJavaScriptException();
+    db->SetIgnoreNextSQLiteError(true);
+    return SQLITE_DENY;
+  } catch (...) {
+    // Unknown error - deny the operation
+    db->SetIgnoreNextSQLiteError(true);
+    return SQLITE_DENY;
+  }
 }
 
 // Thread validation implementations

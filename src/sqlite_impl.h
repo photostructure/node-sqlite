@@ -162,6 +162,14 @@ public:
   // Backup support
   Napi::Value Backup(const Napi::CallbackInfo &info);
 
+  // Authorization API
+  Napi::Value SetAuthorizer(const Napi::CallbackInfo &info);
+
+  // Static callback for SQLite authorization
+  static int AuthorizerCallback(void *user_data, int action_code,
+                                const char *param1, const char *param2,
+                                const char *param3, const char *param4);
+
   // Session management
   void AddSession(Session *session);
   void RemoveSession(Session *session);
@@ -188,6 +196,9 @@ private:
   std::thread::id creation_thread_;
   napi_env env_;                          // Store for cleanup purposes
   bool ignore_next_sqlite_error_ = false; // For user function error handling
+
+  // Authorization callback storage
+  std::unique_ptr<Napi::FunctionReference> authorizer_callback_;
 
   // Store database-level defaults for statement options
   DatabaseOpenConfiguration config_;
