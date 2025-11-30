@@ -181,6 +181,20 @@ public:
   }
   bool ShouldIgnoreSQLiteError() const { return ignore_next_sqlite_error_; }
 
+  // Deferred exception handling for authorizer callbacks
+  void SetDeferredAuthorizerException(const std::string &message) {
+    deferred_authorizer_exception_ = message;
+  }
+  void ClearDeferredAuthorizerException() {
+    deferred_authorizer_exception_.reset();
+  }
+  bool HasDeferredAuthorizerException() const {
+    return deferred_authorizer_exception_.has_value();
+  }
+  const std::string &GetDeferredAuthorizerException() const {
+    return deferred_authorizer_exception_.value();
+  }
+
 private:
   void InternalOpen(DatabaseOpenConfiguration config);
   void InternalClose();
@@ -196,6 +210,10 @@ private:
   std::thread::id creation_thread_;
   napi_env env_;                          // Store for cleanup purposes
   bool ignore_next_sqlite_error_ = false; // For user function error handling
+
+  // Deferred exception from authorizer callback - stored when exception occurs
+  // in callback context, thrown after SQLite operation completes
+  std::optional<std::string> deferred_authorizer_exception_;
 
   // Authorization callback storage
   std::unique_ptr<Napi::FunctionReference> authorizer_callback_;

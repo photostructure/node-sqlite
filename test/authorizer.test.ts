@@ -254,6 +254,59 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
       }).toThrow("Authorizer callback returned a invalid authorization code");
       db.close();
     });
+
+    it("handles exceptions without corrupting subsequent operations", () => {
+      const db = new DatabaseSync(":memory:");
+
+      // Authorizer that throws on SELECT
+      db.setAuthorizer((action: number) => {
+        if (action === constants.SQLITE_SELECT) {
+          throw new Error("Denied!");
+        }
+        return constants.SQLITE_OK;
+      });
+
+      // This should be denied (due to thrown exception)
+      expect(() => {
+        db.prepare("SELECT 1");
+      }).toThrow("Denied!");
+
+      // Remove authorizer
+      db.setAuthorizer(null);
+
+      // Subsequent operations should work normally
+      // (This would fail if exception was still pending)
+      const result = db.prepare("SELECT 2 as val").get() as { val: number };
+      expect(result.val).toBe(2);
+
+      db.close();
+    });
+
+    it("handles exceptions across multiple authorization checks", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE t1 (x); CREATE TABLE t2 (y)");
+
+      let callCount = 0;
+      db.setAuthorizer(() => {
+        callCount++;
+        if (callCount === 2) {
+          throw new Error("Second check denied");
+        }
+        return constants.SQLITE_OK;
+      });
+
+      // JOIN triggers multiple auth checks
+      expect(() => {
+        db.prepare("SELECT * FROM t1 JOIN t2");
+      }).toThrow("Second check denied");
+
+      db.setAuthorizer(null);
+
+      // Should still work
+      db.exec("INSERT INTO t1 VALUES (1)");
+
+      db.close();
+    });
   });
 
   describe("clearing authorizer", () => {

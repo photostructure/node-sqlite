@@ -15,9 +15,15 @@ inline void ThrowErrSqliteErrorWithDb(Napi::Env env,
                                       photostructure::sqlite::DatabaseSync *db,
                                       const char *message = nullptr) {
   // Check if we should ignore this SQLite error due to pending JavaScript
-  // exception
+  // exception (e.g., from authorizer callback)
   if (db != nullptr && db->ShouldIgnoreSQLiteError()) {
     db->SetIgnoreNextSQLiteError(false);
+    // Check for deferred authorizer exception and throw it instead
+    if (db->HasDeferredAuthorizerException()) {
+      std::string deferred_msg = db->GetDeferredAuthorizerException();
+      db->ClearDeferredAuthorizerException();
+      Napi::Error::New(env, deferred_msg).ThrowAsJavaScriptException();
+    }
     return; // Don't throw SQLite error, JavaScript exception takes precedence
   }
 
@@ -29,9 +35,15 @@ inline void ThrowEnhancedSqliteErrorWithDB(
     Napi::Env env, photostructure::sqlite::DatabaseSync *db_sync, sqlite3 *db,
     int sqlite_code, const std::string &message) {
   // Check if we should ignore this SQLite error due to pending JavaScript
-  // exception
+  // exception (e.g., from authorizer callback)
   if (db_sync != nullptr && db_sync->ShouldIgnoreSQLiteError()) {
     db_sync->SetIgnoreNextSQLiteError(false);
+    // Check for deferred authorizer exception and throw it instead
+    if (db_sync->HasDeferredAuthorizerException()) {
+      std::string deferred_msg = db_sync->GetDeferredAuthorizerException();
+      db_sync->ClearDeferredAuthorizerException();
+      Napi::Error::New(env, deferred_msg).ThrowAsJavaScriptException();
+    }
     return; // Don't throw SQLite error, JavaScript exception takes precedence
   }
 
@@ -590,6 +602,16 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
       sqlite3_exec(connection(), sql.c_str(), nullptr, nullptr, &error_msg);
 
   if (result != SQLITE_OK) {
+    // Check for deferred authorizer exception first
+    if (HasDeferredAuthorizerException()) {
+      if (error_msg)
+        sqlite3_free(error_msg);
+      std::string deferred_msg = GetDeferredAuthorizerException();
+      ClearDeferredAuthorizerException();
+      SetIgnoreNextSQLiteError(false);
+      Napi::Error::New(env, deferred_msg).ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
     std::string error = error_msg ? error_msg : "Unknown SQLite error";
     if (error_msg)
       sqlite3_free(error_msg);
@@ -1432,6 +1454,13 @@ void StatementSync::InitStatement(DatabaseSync *database,
                                   &statement_, &tail);
 
   if (result != SQLITE_OK) {
+    // Check for deferred authorizer exception first
+    if (database->HasDeferredAuthorizerException()) {
+      std::string deferred_msg = database->GetDeferredAuthorizerException();
+      database->ClearDeferredAuthorizerException();
+      database->SetIgnoreNextSQLiteError(false);
+      throw std::runtime_error(deferred_msg);
+    }
     std::string error = sqlite3_errmsg(database->connection());
     throw std::runtime_error("Failed to prepare statement: " + error);
   }
@@ -2856,41 +2885,58 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     // Call the JavaScript callback
     Napi::Value result = db->authorizer_callback_->Call(env.Undefined(), args);
 
-    // Handle JavaScript exceptions
+    // Handle JavaScript exceptions - must clear before returning to SQLite
     if (env.IsExceptionPending()) {
+      Napi::Error error = env.GetAndClearPendingException();
+      db->SetDeferredAuthorizerException(error.Message());
       db->SetIgnoreNextSQLiteError(true);
       return SQLITE_DENY;
     }
 
-    // Check if result is an integer
+    // Check if result is an integer - don't throw in callback context
     if (!result.IsNumber()) {
-      Napi::TypeError::New(
-          env, "Authorizer callback must return an integer authorization code")
-          .ThrowAsJavaScriptException();
+      db->SetDeferredAuthorizerException(
+          "Authorizer callback must return an integer authorization code");
       db->SetIgnoreNextSQLiteError(true);
       return SQLITE_DENY;
     }
 
     int32_t int_result = result.As<Napi::Number>().Int32Value();
 
-    // Validate the return code
+    // Validate the return code - don't throw in callback context
     if (int_result != SQLITE_OK && int_result != SQLITE_DENY &&
         int_result != SQLITE_IGNORE) {
-      Napi::RangeError::New(
-          env, "Authorizer callback returned a invalid authorization code")
-          .ThrowAsJavaScriptException();
+      db->SetDeferredAuthorizerException(
+          "Authorizer callback returned a invalid authorization code");
       db->SetIgnoreNextSQLiteError(true);
       return SQLITE_DENY;
     }
 
     return int_result;
   } catch (const Napi::Error &e) {
-    // JavaScript exception occurred
-    e.ThrowAsJavaScriptException();
+    // JavaScript exception occurred - clear any pending exception and store
+    if (env.IsExceptionPending()) {
+      Napi::Error error = env.GetAndClearPendingException();
+      db->SetDeferredAuthorizerException(error.Message());
+    } else {
+      db->SetDeferredAuthorizerException(e.Message());
+    }
+    db->SetIgnoreNextSQLiteError(true);
+    return SQLITE_DENY;
+  } catch (const std::exception &e) {
+    // C++ exception - clear any pending JS exception and store message
+    if (env.IsExceptionPending()) {
+      env.GetAndClearPendingException();
+    }
+    db->SetDeferredAuthorizerException(e.what());
     db->SetIgnoreNextSQLiteError(true);
     return SQLITE_DENY;
   } catch (...) {
-    // Unknown error - deny the operation
+    // Unknown error - clear any pending JS exception and deny
+    if (env.IsExceptionPending()) {
+      env.GetAndClearPendingException();
+    }
+    db->SetDeferredAuthorizerException("Unknown error in authorizer callback");
     db->SetIgnoreNextSQLiteError(true);
     return SQLITE_DENY;
   }
