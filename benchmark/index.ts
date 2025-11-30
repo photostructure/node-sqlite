@@ -76,261 +76,266 @@ if (scenarios.length === 0) {
   process.exit(1);
 }
 
-// Main benchmark function with top-level await
-console.log(chalk.bold.cyan("🚀 SQLite Driver Performance Benchmark\n"));
-console.log(chalk.gray(`Testing drivers: ${driversToTest.join(", ")}`));
-console.log(chalk.gray(`Scenarios: ${scenarios.length}\n`));
+// Main benchmark function wrapped in async IIFE for CJS compatibility
+(async () => {
+  console.log(chalk.bold.cyan("🚀 SQLite Driver Performance Benchmark\n"));
+  console.log(chalk.gray(`Testing drivers: ${driversToTest.join(", ")}`));
+  console.log(chalk.gray(`Scenarios: ${scenarios.length}\n`));
 
-// Results storage
-const results: Record<string, Record<string, any>> = {};
+  // Results storage
+  const results: Record<string, Record<string, any>> = {};
 
-// Memory tracking
-let memoryBaseline: NodeJS.MemoryUsage | null = null;
-if (options.memory && global.gc) {
-  global.gc();
-  memoryBaseline = process.memoryUsage();
-}
+  // Memory tracking
+  let memoryBaseline: NodeJS.MemoryUsage | null = null;
+  if (options.memory && global.gc) {
+    global.gc();
+    memoryBaseline = process.memoryUsage();
+  }
 
-// Run benchmarks for each scenario
-for (const [scenarioKey, scenario] of scenarios) {
-  console.log(chalk.bold.yellow(`\n📊 ${scenario.name}`));
-  console.log(chalk.gray(`   ${scenario.description}`));
+  // Run benchmarks for each scenario
+  for (const [scenarioKey, scenario] of scenarios) {
+    console.log(chalk.bold.yellow(`\n📊 ${scenario.name}`));
+    console.log(chalk.gray(`   ${scenario.description}`));
 
-  results[scenarioKey] = {};
+    results[scenarioKey] = {};
 
-  // Skip Benchmark.js and run manual benchmark directly
-  console.log(chalk.yellow("   Running manual benchmark..."));
+    // Skip Benchmark.js and run manual benchmark directly
+    console.log(chalk.yellow("   Running manual benchmark..."));
 
-  // First, determine optimal iterations by running the first available driver for 2 seconds
-  let optimalIterations = 100; // fallback
-  const calibrationDriver = driversToTest.find((d) =>
+    // First, determine optimal iterations by running the first available driver for 2 seconds
+    let optimalIterations = 100; // fallback
+    const calibrationDriver = driversToTest.find((d) =>
+      getAvailableDrivers().includes(d),
+    );
+
+    if (calibrationDriver) {
+      try {
+        console.log(
+          chalk.gray(`   Calibrating iterations with ${calibrationDriver}...`),
+        );
+        const tempDir = mkdtempSync(
+          join(tmpdir(), "sqlite-bench-calibration-"),
+        );
+        const dbPath = join(tempDir, "bench.db");
+        const driver = await createDriver(calibrationDriver, dbPath);
+        const currentScenario = scenarios.find(
+          ([key]) => key === scenarioKey,
+        )?.[1];
+        if (!currentScenario)
+          throw new Error(`Scenario ${scenarioKey} not found`);
+        const stmt = currentScenario.setup(driver);
+
+        // Run for 2 seconds to determine optimal iteration count
+        const targetDurationMs = 2000;
+        let iterations = 0;
+        const start = process.hrtime.bigint();
+        let end = start;
+
+        while (Number(end - start) / 1_000_000 < targetDurationMs) {
+          currentScenario.run(stmt, iterations);
+          iterations++;
+          end = process.hrtime.bigint();
+        }
+
+        optimalIterations = Math.max(10, Math.min(1000, iterations)); // Clamp between 10-1000
+        console.log(
+          chalk.gray(`   Using ${optimalIterations} iterations per driver`),
+        );
+
+        // Cleanup calibration
+        if (currentScenario.cleanup) {
+          currentScenario.cleanup(stmt);
+        } else if (
+          stmt &&
+          typeof stmt === "object" &&
+          "finalize" in stmt &&
+          typeof stmt.finalize === "function"
+        ) {
+          stmt.finalize();
+        }
+        await driver.close();
+        rmSync(tempDir, { recursive: true, force: true });
+      } catch (err) {
+        console.log(
+          chalk.yellow(
+            `   Calibration failed, using default ${optimalIterations} iterations`,
+          ),
+        );
+      }
+    }
+
+    // Manual benchmarking with optimal iterations
+    for (const driverName of driversToTest) {
+      if (!getAvailableDrivers().includes(driverName)) continue;
+
+      try {
+        const tempDir = mkdtempSync(join(tmpdir(), "sqlite-bench-"));
+        const dbPath = join(tempDir, "bench.db");
+        const driver = await createDriver(driverName, dbPath);
+        const currentScenario = scenarios.find(
+          ([key]) => key === scenarioKey,
+        )?.[1];
+        if (!currentScenario)
+          throw new Error(`Scenario ${scenarioKey} not found`);
+        const stmt = currentScenario.setup(driver);
+
+        // Manual timing with calibrated iterations
+        const start = process.hrtime.bigint();
+
+        for (let i = 0; i < optimalIterations; i++) {
+          currentScenario.run(stmt, i);
+        }
+
+        const end = process.hrtime.bigint();
+        const durationMs = Number(end - start) / 1_000_000;
+        const opsPerSec = (optimalIterations / durationMs) * 1000;
+
+        console.log(
+          chalk.green(
+            `   ${driverName}: ${Math.round(opsPerSec).toLocaleString()} ops/sec`,
+          ),
+        );
+
+        // Store results
+        results[scenarioKey][driverName] = {
+          hz: opsPerSec,
+          rme: 0,
+          runs: optimalIterations,
+          mean: durationMs / optimalIterations,
+          deviation: 0,
+        };
+
+        // Cleanup
+        if (currentScenario.cleanup) {
+          currentScenario.cleanup(stmt);
+        } else if (
+          stmt &&
+          typeof stmt === "object" &&
+          "finalize" in stmt &&
+          typeof stmt.finalize === "function"
+        ) {
+          stmt.finalize();
+        }
+        await driver.close();
+        rmSync(tempDir, { recursive: true, force: true });
+      } catch (err) {
+        console.error(
+          chalk.red(`   ✗ Error in ${driverName}: ${(err as Error).message}`),
+        );
+      }
+    }
+  }
+
+  // Summary
+  console.log(chalk.bold.cyan("\n\n### 📈 Summary\n"));
+
+  // Generate markdown table
+  const availableDrivers = driversToTest.filter((d) =>
     getAvailableDrivers().includes(d),
   );
+  console.log("| Scenario | " + availableDrivers.join(" | ") + " |");
+  console.log(
+    "|" + ["---"].concat(availableDrivers.map(() => "---:")).join("|") + "|",
+  );
 
-  if (calibrationDriver) {
-    try {
-      console.log(
-        chalk.gray(`   Calibrating iterations with ${calibrationDriver}...`),
-      );
-      const tempDir = mkdtempSync(join(tmpdir(), "sqlite-bench-calibration-"));
-      const dbPath = join(tempDir, "bench.db");
-      const driver = await createDriver(calibrationDriver, dbPath);
-      const currentScenario = scenarios.find(
-        ([key]) => key === scenarioKey,
-      )?.[1];
-      if (!currentScenario)
-        throw new Error(`Scenario ${scenarioKey} not found`);
-      const stmt = currentScenario.setup(driver);
+  for (const [scenarioKey, scenario] of scenarios) {
+    const row = [scenario.name];
 
-      // Run for 2 seconds to determine optimal iteration count
-      const targetDurationMs = 2000;
-      let iterations = 0;
-      const start = process.hrtime.bigint();
-      let end = start;
-
-      while (Number(end - start) / 1_000_000 < targetDurationMs) {
-        currentScenario.run(stmt, iterations);
-        iterations++;
-        end = process.hrtime.bigint();
+    for (const driver of availableDrivers) {
+      const result = results[scenarioKey]?.[driver];
+      if (result) {
+        // Format with commas
+        const hz = sigFigs(result.hz);
+        const formatted = `${hz.toLocaleString()} ops/s`;
+        row.push(formatted);
+      } else {
+        row.push("N/A");
       }
-
-      optimalIterations = Math.max(10, Math.min(1000, iterations)); // Clamp between 10-1000
-      console.log(
-        chalk.gray(`   Using ${optimalIterations} iterations per driver`),
-      );
-
-      // Cleanup calibration
-      if (currentScenario.cleanup) {
-        currentScenario.cleanup(stmt);
-      } else if (
-        stmt &&
-        typeof stmt === "object" &&
-        "finalize" in stmt &&
-        typeof stmt.finalize === "function"
-      ) {
-        stmt.finalize();
-      }
-      await driver.close();
-      rmSync(tempDir, { recursive: true, force: true });
-    } catch (err) {
-      console.log(
-        chalk.yellow(
-          `   Calibration failed, using default ${optimalIterations} iterations`,
-        ),
-      );
     }
+
+    console.log("| " + row.join(" | ") + " |");
   }
 
-  // Manual benchmarking with optimal iterations
-  for (const driverName of driversToTest) {
-    if (!getAvailableDrivers().includes(driverName)) continue;
+  // Memory usage report
+  if (options.memory && global.gc) {
+    global.gc();
+    const memoryFinal = process.memoryUsage();
 
-    try {
-      const tempDir = mkdtempSync(join(tmpdir(), "sqlite-bench-"));
-      const dbPath = join(tempDir, "bench.db");
-      const driver = await createDriver(driverName, dbPath);
-      const currentScenario = scenarios.find(
-        ([key]) => key === scenarioKey,
-      )?.[1];
-      if (!currentScenario)
-        throw new Error(`Scenario ${scenarioKey} not found`);
-      const stmt = currentScenario.setup(driver);
+    console.log(chalk.bold.cyan("\n\n### 💾 Memory Usage\n"));
 
-      // Manual timing with calibrated iterations
-      const start = process.hrtime.bigint();
+    const formatMB = (bytes: number) =>
+      `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
-      for (let i = 0; i < optimalIterations; i++) {
-        currentScenario.run(stmt, i);
-      }
+    console.log("| Metric | Baseline | Final | Delta |");
+    console.log("|---:|---:|---:|---:|");
 
-      const end = process.hrtime.bigint();
-      const durationMs = Number(end - start) / 1_000_000;
-      const opsPerSec = (optimalIterations / durationMs) * 1000;
+    for (const key of ["rss", "heapTotal", "heapUsed", "external"] as const) {
+      const delta = memoryFinal[key] - memoryBaseline![key];
+      const deltaStr = delta > 0 ? `+${formatMB(delta)}` : formatMB(delta);
 
       console.log(
-        chalk.green(
-          `   ${driverName}: ${Math.round(opsPerSec).toLocaleString()} ops/sec`,
-        ),
-      );
-
-      // Store results
-      results[scenarioKey][driverName] = {
-        hz: opsPerSec,
-        rme: 0,
-        runs: optimalIterations,
-        mean: durationMs / optimalIterations,
-        deviation: 0,
-      };
-
-      // Cleanup
-      if (currentScenario.cleanup) {
-        currentScenario.cleanup(stmt);
-      } else if (
-        stmt &&
-        typeof stmt === "object" &&
-        "finalize" in stmt &&
-        typeof stmt.finalize === "function"
-      ) {
-        stmt.finalize();
-      }
-      await driver.close();
-      rmSync(tempDir, { recursive: true, force: true });
-    } catch (err) {
-      console.error(
-        chalk.red(`   ✗ Error in ${driverName}: ${(err as Error).message}`),
+        `| ${key} | ${formatMB(memoryBaseline![key])} | ${formatMB(memoryFinal[key])} | ${deltaStr} |`,
       );
     }
-  }
-}
-
-// Summary
-console.log(chalk.bold.cyan("\n\n### 📈 Summary\n"));
-
-// Generate markdown table
-const availableDrivers = driversToTest.filter((d) =>
-  getAvailableDrivers().includes(d),
-);
-console.log("| Scenario | " + availableDrivers.join(" | ") + " |");
-console.log(
-  "|" + ["---"].concat(availableDrivers.map(() => "---:")).join("|") + "|",
-);
-
-for (const [scenarioKey, scenario] of scenarios) {
-  const row = [scenario.name];
-
-  for (const driver of availableDrivers) {
-    const result = results[scenarioKey]?.[driver];
-    if (result) {
-      // Format with commas
-      const hz = sigFigs(result.hz);
-      const formatted = `${hz.toLocaleString()} ops/s`;
-      row.push(formatted);
-    } else {
-      row.push("N/A");
-    }
-  }
-
-  console.log("| " + row.join(" | ") + " |");
-}
-
-// Memory usage report
-if (options.memory && global.gc) {
-  global.gc();
-  const memoryFinal = process.memoryUsage();
-
-  console.log(chalk.bold.cyan("\n\n### 💾 Memory Usage\n"));
-
-  const formatMB = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-
-  console.log("| Metric | Baseline | Final | Delta |");
-  console.log("|---:|---:|---:|---:|");
-
-  for (const key of ["rss", "heapTotal", "heapUsed", "external"] as const) {
-    const delta = memoryFinal[key] - memoryBaseline![key];
-    const deltaStr = delta > 0 ? `+${formatMB(delta)}` : formatMB(delta);
 
     console.log(
-      `| ${key} | ${formatMB(memoryBaseline![key])} | ${formatMB(memoryFinal[key])} | ${deltaStr} |`,
+      "\n" +
+        chalk.gray(
+          "📋 Memory table generated above - copy/paste ready for documentation!",
+        ),
     );
   }
 
-  console.log(
-    "\n" +
-      chalk.gray(
-        "📋 Memory table generated above - copy/paste ready for documentation!",
-      ),
-  );
-}
+  // Performance ranking
+  console.log(chalk.bold.cyan("\n\n### 🏆 Overall Performance Ranking\n"));
 
-// Performance ranking
-console.log(chalk.bold.cyan("\n\n### 🏆 Overall Performance Ranking\n"));
+  const overallScores: Record<string, number> = {};
+  for (const driver of driversToTest) {
+    if (!getAvailableDrivers().includes(driver)) continue;
 
-const overallScores: Record<string, number> = {};
-for (const driver of driversToTest) {
-  if (!getAvailableDrivers().includes(driver)) continue;
+    let totalScore = 0;
+    let scenarioCount = 0;
 
-  let totalScore = 0;
-  let scenarioCount = 0;
+    for (const [scenarioKey] of scenarios) {
+      const result = results[scenarioKey]?.[driver];
+      if (result) {
+        // Find the fastest for this scenario
+        let maxHz = 0;
+        for (const d of driversToTest) {
+          const r = results[scenarioKey]?.[d];
+          if (r && r.hz > maxHz) {
+            maxHz = r.hz;
+          }
+        }
 
-  for (const [scenarioKey] of scenarios) {
-    const result = results[scenarioKey]?.[driver];
-    if (result) {
-      // Find the fastest for this scenario
-      let maxHz = 0;
-      for (const d of driversToTest) {
-        const r = results[scenarioKey]?.[d];
-        if (r && r.hz > maxHz) {
-          maxHz = r.hz;
+        // Calculate relative performance (0-100)
+        if (maxHz > 0) {
+          totalScore += (result.hz / maxHz) * 100;
+          scenarioCount++;
         }
       }
+    }
 
-      // Calculate relative performance (0-100)
-      if (maxHz > 0) {
-        totalScore += (result.hz / maxHz) * 100;
-        scenarioCount++;
-      }
+    if (scenarioCount > 0) {
+      overallScores[driver] = sigFigs(totalScore / scenarioCount);
     }
   }
 
-  if (scenarioCount > 0) {
-    overallScores[driver] = sigFigs(totalScore / scenarioCount);
-  }
-}
+  // Sort by score
+  const rankedDrivers = Object.entries(overallScores).sort(
+    ([, a], [, b]) => b - a,
+  );
 
-// Sort by score
-const rankedDrivers = Object.entries(overallScores).sort(
-  ([, a], [, b]) => b - a,
-);
+  // Output as markdown table
+  console.log("| Rank | Driver | Score |");
+  console.log("|---:|---|---:|");
 
-// Output as markdown table
-console.log("| Rank | Driver | Score |");
-console.log("|---:|---|---:|");
+  const medals = ["🥇", "🥈", "🥉", "🐌", "🥔", "😅", "💩"];
+  rankedDrivers.forEach(([driver, score], index) => {
+    const medal = medals[index] ?? "🤷";
+    const rank = `${index + 1} ${medal}`;
+    console.log(`| ${rank} | ${driver} | ${score}% |`);
+  });
 
-const medals = ["🥇", "🥈", "🥉", "🐌", "🥔", "😅", "💩"];
-rankedDrivers.forEach(([driver, score], index) => {
-  const medal = medals[index] ?? "🤷";
-  const rank = `${index + 1} ${medal}`;
-  console.log(`| ${rank} | ${driver} | ${score}% |`);
-});
-
-console.log("\n✨ Benchmark complete!\n");
+  console.log("\n✨ Benchmark complete!\n");
+})();
