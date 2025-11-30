@@ -143,6 +143,20 @@ The async sqlite3 library is slower due to:
 - Mutex contention under load
 - Additional memory allocations
 
+### SQLTagStore Performance
+
+Both `node:sqlite` and `@photostructure/sqlite` provide `SQLTagStore` for cached prepared statements via tagged template literals. Node.js implements this in native C++, while we use a TypeScript implementation. Benchmarks show equivalent performance:
+
+| Scenario               | @photostructure/sqlite |   node:sqlite | Difference |
+| ---------------------- | ---------------------: | ------------: | ---------: |
+| Single query cache hit |          141,000 ops/s | 155,000 ops/s |        -9% |
+| Multi-pattern workload |           65,000 ops/s |  50,000 ops/s |       +31% |
+| Write operations       |              720 ops/s |     720 ops/s |         0% |
+
+The TypeScript implementation performs equivalently because SQLite execution time dominates over cache lookup overhead. V8's Map is highly optimized for string keys, matching or exceeding native LRU performance for typical workloads.
+
+Run `npm run bench:tagstore` in the `benchmark/` directory to reproduce these results.
+
 ## Migration Paths
 
 ### From `node:sqlite` to `@photostructure/sqlite`
