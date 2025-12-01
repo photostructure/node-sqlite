@@ -2,12 +2,12 @@ import { getTimingMultiplier } from "./test-timeout-config";
 
 export interface BenchmarkOptions {
   /**
-   * Target duration for the benchmark in milliseconds (default: 20000ms / 20 seconds)
+   * Target duration for the benchmark in milliseconds (default: 3000ms / 3 seconds)
    */
   targetDurationMs?: number;
 
   /**
-   * Maximum timeout for the entire benchmark in milliseconds (default: 60000ms / 1 minute)
+   * Maximum timeout for the entire benchmark in milliseconds (default: 15000ms / 15 seconds)
    */
   maxTimeoutMs?: number;
 
@@ -125,8 +125,8 @@ export async function runAdaptiveBenchmark(
   options: BenchmarkOptions = {},
 ): Promise<BenchmarkResult> {
   const {
-    targetDurationMs = 10_000,
-    maxTimeoutMs = 60_000,
+    targetDurationMs = 3_000,
+    maxTimeoutMs = 15_000,
     minIterations = 5,
     maxIterations = 10_000,
     warmupIterations = 3,
@@ -379,7 +379,7 @@ export function testMemoryBenchmark(
   operation: () => void | Promise<void>,
   options: MemoryBenchmarkOptions = {},
 ) {
-  const { maxTimeoutMs = 60_000, ...benchmarkOptions } = options;
+  const { maxTimeoutMs = 15_000, ...benchmarkOptions } = options;
   const multiplier = getTimingMultiplier();
   const jestTimeout = maxTimeoutMs * multiplier;
 

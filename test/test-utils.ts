@@ -3,8 +3,8 @@ import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "../src";
+import { getCallerDirname } from "../src/stack-path";
 import {
   getTestTimeout,
   getTimingMultiplier,
@@ -43,40 +43,8 @@ export function getDirname(): string {
     return __dirname;
   }
 
-  // In ESM with Jest, we need to extract from stack trace
-  const e = new Error();
-  const stack = e.stack ?? "";
-
-  // Look for the calling file in the stack trace
-  const frames = stack.split("\n");
-  for (const frame of frames) {
-    // Skip getDirname itself
-    if (frame.includes("getDirname")) continue;
-
-    // Try to extract file path from the frame
-    // Split the logic to avoid complex regex backtracking
-    let pathMatch: RegExpMatchArray | null = null;
-
-    // First try direct path: "at /path/file.js:1:1"
-    pathMatch = frame.match(/at\s+(?:file:\/\/)?([^:\s()]+):\d+:\d+$/);
-
-    // If not found, try with function name: "at functionName (/path/file.js:1:1)"
-    if (!pathMatch) {
-      pathMatch = frame.match(/\((?:file:\/\/)?([^:)]+):\d+:\d+\)$/);
-    }
-
-    const match = pathMatch;
-    if (match && match[1]) {
-      let filePath = match[1];
-      // Handle file:// URLs
-      if (filePath.startsWith("file://")) {
-        filePath = fileURLToPath(filePath);
-      }
-      return path.dirname(filePath);
-    }
-  }
-
-  throw new Error("Unable to determine directory");
+  // In ESM, use the well-tested stack-path implementation
+  return getCallerDirname();
 }
 
 /**

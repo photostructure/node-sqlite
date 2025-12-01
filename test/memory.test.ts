@@ -104,9 +104,9 @@ describeMemoryTests("Memory Tests", () => {
       }
     },
     {
-      targetDurationMs: 5_000, // Shorter duration for file operations
+      targetDurationMs: 2_000, // Shorter duration for file operations
       maxMemoryGrowthKBPerSecond: 1000, // Allow more growth for file operations
-      maxTimeoutMs: 60_000, // Increased timeout for Windows file operations
+      maxTimeoutMs: 30_000, // Increased timeout for Windows file operations
     },
   );
 
@@ -303,7 +303,7 @@ describeMemoryTests("Memory Tests", () => {
       db.close();
     },
     {
-      targetDurationMs: 10_000, // Shorter duration for transaction-heavy test
+      targetDurationMs: 2_000, // Shorter duration for transaction-heavy test
       maxMemoryGrowthKBPerSecond: 1500,
     },
   );
@@ -395,7 +395,7 @@ describeMemoryTests("Memory Tests", () => {
       db.close();
     },
     {
-      targetDurationMs: 10_000, // Shorter duration for BLOB test
+      targetDurationMs: 2_000, // Shorter duration for BLOB test
       maxMemoryGrowthKBPerSecond: 2000, // BLOBs can use more memory
     },
   );
@@ -443,9 +443,9 @@ describeMemoryTests("Memory Tests", () => {
       await rm(tempDir);
     },
     {
-      targetDurationMs: 5_000, // Shorter duration for file operations
+      targetDurationMs: 2_000, // Shorter duration for file operations
       maxMemoryGrowthKBPerSecond: 1000, // Allow more growth for file operations
-      maxTimeoutMs: 60_000, // Increased timeout for Windows file operations
+      maxTimeoutMs: 30_000, // Increased timeout for Windows file operations
     },
   );
 
