@@ -2,122 +2,56 @@
 
 ## Supported Versions
 
-Currently, we support security updates for the following versions:
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-| < 0.1   | :x:                |
+Security updates are provided for the latest released version only.
 
 ## Reporting a Vulnerability
 
-We take the security of @photostructure/sqlite seriously. If you believe you have found a security vulnerability, please report it to us as described below.
+**Do not report security vulnerabilities through public GitHub issues.**
 
-### How to Report
+Report via:
+- Email: security@photostructure.com
+- GitHub's private vulnerability reporting
 
-**Please do not report security vulnerabilities through public GitHub issues.**
+Include: issue type, affected source files, reproduction steps, and potential impact.
 
-Instead, please report them via one of the following methods:
-
-1. Email us at security@photostructure.com
-2. Use GitHub's private vulnerability reporting feature (if available)
-
-### What to Include
-
-Please include the following information in your report:
-
-- Type of issue (e.g., buffer overflow, SQL injection, cross-site scripting, etc.)
-- Full paths of source file(s) related to the manifestation of the issue
-- The location of the affected source code (tag/branch/commit or direct URL)
-- Any special configuration required to reproduce the issue
-- Step-by-step instructions to reproduce the issue
-- Proof-of-concept or exploit code (if possible)
-- Impact of the issue, including how an attacker might exploit it
-
-### Response Timeline
-
-- We will acknowledge receipt of your vulnerability report within 48 hours
-- We will provide a more detailed response within 7 days
-- We will work on fixes and coordinate disclosure timeline with you
+We acknowledge reports within 48 hours and provide detailed response within 7 days.
 
 ## Security Measures
 
-### Automated Security Scanning
+### Automated Scanning
 
-This project employs multiple layers of automated security scanning:
+- **npm audit** and **OSV Scanner** for dependency vulnerabilities
+- **CodeQL** for JS/TS and C++ semantic analysis
+- **TruffleHog** for secrets detection
+- **ESLint Security Plugin** for static analysis
 
-1. **npm audit** - Scans for known vulnerabilities in dependencies
-2. **OSV Scanner** - Google's Open Source Vulnerabilities scanner
-3. **CodeQL** - GitHub's semantic code analysis for both JavaScript/TypeScript and C++
-4. **TruffleHog** - Secrets detection in code
-5. **ESLint Security Plugin** - Static analysis for JavaScript/TypeScript security patterns
-
-### CodeQL Configuration
-
-Our CodeQL setup is configured to focus on security issues in our own code:
-
-- **JavaScript/TypeScript**: Uses `paths-ignore` to exclude upstream and vendor directories
-- **C++**: Uses SARIF filtering to exclude upstream SQLite code after scanning
-
-This ensures we identify security issues in our code while filtering out alerts from upstream dependencies that we cannot directly control.
-
-These scans run automatically on:
-
-- Every push to the main branch
-- Every pull request
-- Weekly scheduled scans
-- Manual workflow dispatch
-
-### Development Practices
-
-- All dependencies are regularly updated via Dependabot
-- Security patches are prioritized and released quickly
-- Native C++ code is analyzed with clang-tidy and ASAN
-- Memory safety is validated through comprehensive testing
+Scans run on every push, PR, and weekly.
 
 ### Native Code Security
 
-Since this package includes native C++ bindings to SQLite:
-
-- We use the official SQLite amalgamation source
-- SQLite is compiled with recommended security flags
-- Buffer overflows are prevented through careful memory management
-- All user inputs are properly validated before passing to SQLite
+- Uses official SQLite amalgamation source with recommended security flags
+- C++ code analyzed with clang-tidy and ASAN
+- Memory safety validated through comprehensive testing
 
 ## Security Configuration
 
-### SQLite Security Features
-
-The following SQLite security features are available:
-
 ```javascript
-// Restrict file access to read-only
-const db = new DatabaseSync("database.db", {
-  readonly: true,
-});
+// Read-only mode
+const db = new DatabaseSync("database.db", { readonly: true });
 
-// Disable extension loading by default
-// Extensions must be explicitly enabled
-db.allowExtension(); // Required first
-db.enableLoadExtension(true); // Then enable
+// Extension loading (disabled by default)
+db.allowExtension();
+db.enableLoadExtension(true);
 db.loadExtension("path/to/extension");
 ```
 
 ### Best Practices
 
-1. **Always validate and sanitize user input** before using in SQL queries
-2. **Use parameterized queries** to prevent SQL injection
-3. **Run with minimal permissions** when possible
-4. **Keep dependencies updated** regularly
-5. **Monitor security advisories** for SQLite and Node.js
+1. Use parameterized queries to prevent SQL injection
+2. Validate user input before use in queries
+3. Run with minimal permissions
+4. Keep dependencies updated
 
 ## Disclosure Policy
 
-When we receive a security report, we will:
-
-1. Confirm the problem and determine affected versions
-2. Audit code to find similar problems
-3. Prepare fixes for all supported versions
-4. Coordinate disclosure with the reporter
-
-We aim to disclose vulnerabilities responsibly, balancing the need for users to be informed with giving them time to update.
+Upon receiving a report, we confirm the issue, audit for similar problems, prepare fixes, and coordinate disclosure with the reporter.
