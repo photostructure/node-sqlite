@@ -84,11 +84,8 @@ static void test_extension_reverse(sqlite3_context *context, int argc,
 #ifdef _WIN32
 __declspec(dllexport)
 #endif
-int sqlite3_testextension_init(
-  sqlite3 *db,
-  char **pzErrMsg,
-  const sqlite3_api_routines *pApi
-){
+int sqlite3_testextension_init(sqlite3 *db, char **pzErrMsg,
+                               const sqlite3_api_routines *pApi) {
   int rc = SQLITE_OK;
   SQLITE_EXTENSION_INIT2(pApi);
 
@@ -116,10 +113,7 @@ int sqlite3_testextension_init(
 #ifdef _WIN32
 __declspec(dllexport)
 #endif
-int sqlite3_extension_init(
-  sqlite3 *db,
-  char **pzErrMsg,
-  const sqlite3_api_routines *pApi
-){
+int sqlite3_extension_init(sqlite3 *db, char **pzErrMsg,
+                           const sqlite3_api_routines *pApi) {
   return sqlite3_testextension_init(db, pzErrMsg, pApi);
 }
