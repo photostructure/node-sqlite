@@ -6,56 +6,33 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Node.js v25 compatibility**: Synced with Node.js v25+ for latest features and API compatibility
-  - Native Symbol.dispose implementation moved from JavaScript to C++ for better performance
-  - Session class now exposed in public API for advanced replication workflows
-  - SQLite 3.51.1 with latest performance improvements and features
+- **Node.js v25 API sync**: SQLite 3.51.1, native `Symbol.dispose` in C++, Session class exposed in public API
 
-- **New database open options**:
-  - `readBigInts`: Return SQLite integers as JavaScript BigInt values
-  - `returnArrays`: Return query results as arrays instead of objects
-  - `allowBareNamedParameters`: Bind named parameters without prefix character
-  - `allowUnknownNamedParameters`: Ignore unknown named parameters instead of throwing
-  - `defensive`: Enable SQLite defensive mode at database open
-  - `open`: Control deferred database opening
+- **New database open options**: `readBigInts`, `returnArrays`, `allowBareNamedParameters`, `allowUnknownNamedParameters`, `defensive`, `open`
 
-- **Defensive mode**: New `defensive` option and `enableDefensive()` method to prevent SQL from deliberately corrupting the database file
+- **Defensive mode**: `enableDefensive()` method to prevent SQL from deliberately corrupting the database
 
-- **Statement control**:
-  - `setAllowUnknownNamedParameters()` method for runtime control of parameter binding behavior
-  - `finalized` property to check if a statement has been finalized
+- **Statement enhancements**: `setAllowUnknownNamedParameters()` method, `finalized` property
 
-- **Type identification**: `sqlite-type` symbol property on DatabaseSync instances for reliable type checking (matches Node.js PR #59405)
+- **Type identification**: `sqlite-type` symbol property on DatabaseSync (Node.js PR #59405)
 
-- **Enhanced error information**: SQLite errors now include additional diagnostic properties:
-  - `sqliteCode`: The primary SQLite error code (e.g., `14` for `SQLITE_CANTOPEN`)
-  - `sqliteExtendedCode`: Extended error code for more specific information
-  - `code`: SQLite error constant name (e.g., `"SQLITE_CANTOPEN"`)
-  - `sqliteErrorString`: Human-readable error description
-  - `systemErrno`: OS error number for I/O operations (when available)
+- **Enhanced SQLite errors**: New properties `sqliteCode`, `sqliteExtendedCode`, `code`, `sqliteErrorString`, `systemErrno`
 
-- **Expanded ARM64 support**: Added prebuilt binaries for ARM64 architectures:
-  - macOS Apple Silicon (ARM64) with native compilation
-  - Windows ARM64 with cross-compilation support
+- **ARM64 prebuilds**: macOS Apple Silicon and Windows ARM64 binaries
 
-- **Tagged template literals**: `db.createTagStore()` for cached prepared statements via tagged template syntax (matches Node.js PR #58748). Benchmarks show equivalent performance to the native C++ implementation.
+- **Tagged template literals**: `db.createTagStore()` for cached prepared statements (Node.js PR #58748)
 
-- **Authorization API**: `db.setAuthorizer()` for security callbacks invoked before SQL operations (matches Node.js PR #59928)
+- **Authorization API**: `db.setAuthorizer()` for security callbacks (Node.js PR #59928)
 
-- **Standalone backup function**: `backup(srcDb, destFile, options?)` for one-liner database backups with progress callbacks
+- **Standalone backup**: `backup(srcDb, destFile, options?)` for one-liner database backups with progress callbacks
 
 ### Fixed
 
-- DataView and TypedArray return values now work correctly in user-defined functions
-- Statement holds strong reference to database object, preventing use-after-free
-- Thread-local storage for napi_env management improves stability in multi-threaded scenarios
-- Aggregate function N-API reference cleanup is now safe during destructor
-- User function destructor validates N-API environment before cleanup
-- Authorizer callbacks use deferred exception handling for proper error propagation
-- Null and empty values handled correctly in user function return value conversion
-
-- DataView parameter binding now works correctly (previously returned garbage data)
-- RETURNING clause metadata handling improvements
+- DataView parameter binding (previously returned garbage data)
+- DataView and TypedArray return values in user-defined functions
+- RETURNING clause metadata handling
+- Null and empty values in user function return value conversion
+- Native stability: N-API reference cleanup in aggregates/destructors, thread-local napi_env storage, statement-to-database reference tracking, deferred exception handling in authorizers
 
 ## [0.0.1] - 2025-06-13
 
