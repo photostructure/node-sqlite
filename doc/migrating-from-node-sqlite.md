@@ -7,7 +7,7 @@
 Simply change your import statement:
 
 ```javascript
-// Before: Using Node.js built-in SQLite (requires Node.js 25.0.0+ and --experimental-sqlite flag)
+// Before: Using Node.js built-in SQLite (available in Node.js 22.5.0+)
 const { DatabaseSync } = require("node:sqlite");
 
 // After: Using @photostructure/sqlite (works on Node.js 20+ without any flags)
@@ -40,7 +40,7 @@ node app.js
 
 ### Broader Node.js Version Support
 
-- **node:sqlite**: Requires Node.js 25.0.0 or higher
+- **node:sqlite**: Available in Node.js 22.5.0+ (experimental status)
 - **@photostructure/sqlite**: Works with Node.js 20.0.0 or higher
 
 ### Same API, Same Behavior

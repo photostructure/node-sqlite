@@ -311,20 +311,21 @@ const userPrefs = db
 
 ### Window Functions
 
-Aggregate functions can be used as window functions in SQLite:
+Aggregate functions can be used as window functions in SQLite. For full window function support with framed windows (using `OVER (ORDER BY ...)`), you should provide an `inverse` function that reverses the effect of `step`:
 
 ```javascript
-// Cumulative sum aggregate
+// Cumulative sum aggregate with inverse for window function support
 db.aggregate("cumsum", {
   start: 0,
   step: (sum, value) => sum + (value || 0),
+  inverse: (sum, value) => sum - (value || 0), // Required for window functions
 });
 
 // Use as window function
 const results = db
   .prepare(
     `
-  SELECT 
+  SELECT
     date,
     amount,
     cumsum(amount) OVER (ORDER BY date) as running_total
@@ -334,6 +335,8 @@ const results = db
   )
   .all(accountId);
 ```
+
+> **Note:** Without the `inverse` function, the aggregate will still work but may be less efficient for certain window frame types.
 
 ## Loading Extensions
 

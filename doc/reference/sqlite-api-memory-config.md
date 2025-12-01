@@ -1,5 +1,7 @@
 # SQLite Memory Management and Configuration API Reference
 
+> **⚠️ Important Note:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. Functions like `sqlite3_config()`, `sqlite3_limit()`, and `sqlite3_status()` are **NOT directly callable from JavaScript**. These are compile-time and native-level configurations. For the JavaScript API, see [API Reference](../api-reference.md).
+
 This document covers SQLite's memory management, configuration options, and runtime limits. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
 
 ## Table of Contents

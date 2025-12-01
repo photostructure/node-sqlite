@@ -318,8 +318,8 @@ session.close();
 
 // Apply changes to another database
 const replicaDb = new DatabaseSync("replica.db");
-const result = replicaDb.applyChangeset(changeset);
-console.log(`Applied ${result.changesApplied} changes`);
+const success = replicaDb.applyChangeset(changeset);
+console.log(`Changeset applied: ${success}`);
 
 db.close();
 replicaDb.close();
@@ -345,15 +345,17 @@ function syncDatabases(primaryPath, replicaPath) {
   session.close();
 
   // Apply to replica with conflict handling
-  const result = replica.applyChangeset(changeset, {
-    onConflict: (conflict) => {
-      console.log(`Conflict detected:`);
-      console.log(`  Table: ${conflict.table}`);
-      console.log(`  Type: ${conflict.type}`);
-      console.log(`  Old value: ${JSON.stringify(conflict.oldRow)}`);
-      console.log(`  New value: ${JSON.stringify(conflict.newRow)}`);
+  const success = replica.applyChangeset(changeset, {
+    onConflict: (conflictType) => {
+      // conflictType is a number indicating the type of conflict:
+      // - SQLITE_CHANGESET_DATA: Row exists but values differ
+      // - SQLITE_CHANGESET_NOTFOUND: Row not found in target
+      // - SQLITE_CHANGESET_CONFLICT: Primary key conflict
+      // - SQLITE_CHANGESET_CONSTRAINT: Constraint violation
+      // - SQLITE_CHANGESET_FOREIGN_KEY: Foreign key violation
+      console.log(`Conflict detected, type: ${conflictType}`);
 
-      // Conflict resolution strategies:
+      // Conflict resolution strategies (return one of these):
       // - SQLITE_CHANGESET_OMIT: Skip this change
       // - SQLITE_CHANGESET_REPLACE: Apply the change anyway
       // - SQLITE_CHANGESET_ABORT: Stop applying changes
@@ -362,107 +364,54 @@ function syncDatabases(primaryPath, replicaPath) {
     },
   });
 
-  console.log(`Sync complete: ${result.changesApplied} changes applied`);
+  console.log(`Sync complete: ${success ? "succeeded" : "aborted"}`);
 
   primary.close();
   replica.close();
 }
 ```
 
-### Undo/Redo Implementation
+### Change Tracking Example
+
+Sessions track changes that can be applied to other databases for synchronization:
 
 ```javascript
-class UndoRedoManager {
-  constructor(db) {
-    this.db = db;
-    this.undoStack = [];
-    this.redoStack = [];
-    this.session = null;
-  }
+const { DatabaseSync } = require("@photostructure/sqlite");
 
-  startTracking() {
-    if (this.session) {
-      this.endTracking();
-    }
-    this.session = this.db.createSession();
-  }
+const sourceDb = new DatabaseSync("source.db");
+const targetDb = new DatabaseSync("target.db");
 
-  endTracking(description) {
-    if (!this.session) return;
+// Create a session to track changes on the source database
+const session = sourceDb.createSession({ table: "documents" });
 
-    const changeset = this.session.changeset();
-    if (changeset.length > 0) {
-      this.undoStack.push({
-        description,
-        changeset,
-        inverse: this.session.changesetInvert(changeset),
-      });
-      this.redoStack = []; // Clear redo stack on new change
-    }
-
-    this.session.close();
-    this.session = null;
-  }
-
-  undo() {
-    const entry = this.undoStack.pop();
-    if (!entry) return false;
-
-    // Apply inverse changeset
-    this.db.applyChangeset(entry.inverse);
-
-    // Move to redo stack
-    this.redoStack.push(entry);
-
-    return true;
-  }
-
-  redo() {
-    const entry = this.redoStack.pop();
-    if (!entry) return false;
-
-    // Apply original changeset
-    this.db.applyChangeset(entry.changeset);
-
-    // Move back to undo stack
-    this.undoStack.push(entry);
-
-    return true;
-  }
-
-  getHistory() {
-    return {
-      undo: this.undoStack.map((e) => e.description),
-      redo: this.redoStack.map((e) => e.description),
-    };
-  }
-}
-
-// Usage
-const db = new DatabaseSync("document.db");
-const undoRedo = new UndoRedoManager(db);
-
-// Track a change
-undoRedo.startTracking();
-db.prepare("UPDATE document SET content = ? WHERE id = ?").run(
-  "New content",
+// Make changes to the source
+sourceDb.prepare("UPDATE documents SET content = ? WHERE id = ?").run(
+  "Updated content",
   1,
 );
-undoRedo.endTracking("Update document content");
+sourceDb.prepare("INSERT INTO documents (content) VALUES (?)").run(
+  "New document",
+);
 
-// Track another change
-undoRedo.startTracking();
-db.prepare("INSERT INTO document (content) VALUES (?)").run("Another document");
-undoRedo.endTracking("Add new document");
+// Get the changeset
+const changeset = session.changeset();
+session.close();
 
-// Undo last change
-undoRedo.undo();
-console.log("Undid: Add new document");
+// Apply changes to target database
+const success = targetDb.applyChangeset(changeset, {
+  onConflict: (conflictType) => {
+    // Handle conflicts as needed
+    return constants.SQLITE_CHANGESET_REPLACE;
+  },
+});
 
-// Redo
-undoRedo.redo();
-console.log("Redid: Add new document");
+console.log(`Sync ${success ? "succeeded" : "failed"}`);
+
+sourceDb.close();
+targetDb.close();
 ```
+
+> **Note:** The `changesetInvert()` function for creating inverse changesets is not currently exposed in the JavaScript API. For undo/redo functionality, consider storing the original data before modifications or using SQLite triggers to maintain a history table.
 
 ## Performance Optimization
 

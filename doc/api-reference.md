@@ -212,10 +212,10 @@ db.aggregate("custom_avg", {
 #### backup()
 
 ```typescript
-backup(destination: string, options?: BackupOptions): Promise<void>
+backup(destination: string, options?: BackupOptions): Promise<number>
 ```
 
-Creates a backup of the database.
+Creates a backup of the database. Returns the total number of pages backed up.
 
 **Options:**
 
@@ -271,15 +271,26 @@ session.close();
 #### applyChangeset()
 
 ```typescript
-applyChangeset(changeset: Uint8Array, options?: ChangesetOptions): ApplyResult
+applyChangeset(changeset: Buffer, options?: ChangesetApplyOptions): boolean
 ```
 
-Applies a changeset to the database.
+Applies a changeset to the database. Returns `true` if successful, `false` if aborted.
+
+**Options:**
+
+```typescript
+interface ChangesetApplyOptions {
+  onConflict?: (conflictType: number) => number; // Returns resolution constant
+  filter?: (tableName: string) => boolean; // Filter which tables to apply
+}
+```
 
 ```javascript
-const result = db.applyChangeset(changeset, {
-  onConflict: (conflict) => {
-    console.log(`Conflict on table ${conflict.table}`);
+const success = db.applyChangeset(changeset, {
+  onConflict: (conflictType) => {
+    // conflictType is one of: SQLITE_CHANGESET_DATA, SQLITE_CHANGESET_NOTFOUND,
+    // SQLITE_CHANGESET_CONFLICT, SQLITE_CHANGESET_CONSTRAINT, SQLITE_CHANGESET_FOREIGN_KEY
+    console.log(`Conflict type: ${conflictType}`);
     return constants.SQLITE_CHANGESET_REPLACE;
   },
 });
@@ -314,16 +325,17 @@ db.loadExtension("./custom.so", "sqlite3_custom_init");
 
 ### Properties
 
-#### location
+#### location()
 
 ```typescript
-readonly location: string
+location(dbName?: string): string | null
 ```
 
-The path or URI of the database file.
+Returns the file path of the database, or `null` for in-memory databases.
 
 ```javascript
-console.log(db.location); // "myapp.db"
+console.log(db.location()); // "myapp.db"
+console.log(db.location("main")); // "myapp.db"
 ```
 
 ## StatementSync

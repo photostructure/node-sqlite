@@ -1,5 +1,7 @@
 # SQLite Core API Reference
 
+> **⚠️ Important Note:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. These C functions are **NOT directly callable from JavaScript**. For the JavaScript API, see [API Reference](../api-reference.md).
+
 This document covers the fundamental SQLite C/C++ APIs for database connections, basic operations, and error handling. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
 
 ## Table of Contents

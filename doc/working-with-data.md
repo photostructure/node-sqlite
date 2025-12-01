@@ -84,16 +84,17 @@ const stmt2 = db.prepare(
 stmt2.run({ name: "David", age: 40, email: "david@example.com" });
 ```
 
-### Anonymous Parameters
+### Statement Options
+
+When preparing statements, you can pass optional configuration:
 
 ```javascript
-// Enable anonymous parameters for a specific statement
-const stmt = db.prepare("INSERT INTO logs (message) VALUES (?)", {
-  anonymousParameters: true,
+// Enable expanded SQL for debugging
+const stmt = db.prepare("SELECT * FROM users WHERE id = ?", {
+  expandedSQL: true,
 });
-
-// Now you can bind any number of parameters
-stmt.run("Error", "Details", "Stack trace"); // All concatenated
+stmt.get(42);
+console.log(stmt.expandedSQL); // "SELECT * FROM users WHERE id = 42"
 ```
 
 ## Data Types

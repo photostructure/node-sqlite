@@ -14,7 +14,7 @@ Comprehensive list of features and capabilities in @photostructure/sqlite.
 
 ## SQLite Version
 
-This package includes SQLite 3.50.4 with extensive compile-time options enabled. For complete build flag documentation, comparison with Node.js, and customization options, see [Build Flags & Configuration](./build-flags.md).
+This package includes SQLite 3.51.1 with extensive compile-time options enabled. For complete build flag documentation, comparison with Node.js, and customization options, see [Build Flags & Configuration](./build-flags.md).
 
 ## Enabled SQLite Features
 
@@ -36,8 +36,7 @@ This package includes SQLite 3.50.4 with extensive compile-time options enabled.
 - `SQLITE_ENABLE_RTREE` - R\*Tree spatial indexing
 - `SQLITE_ENABLE_GEOPOLY` - GeoJSON and polygon functions
 - `SQLITE_ENABLE_MATH_FUNCTIONS` - Math functions (sin, cos, sqrt, etc.)
-- `SQLITE_ENABLE_REGEXP` - REGEXP operator support
-- `SQLITE_ENABLE_SOUNDEX` - Soundex algorithm
+- `SQLITE_SOUNDEX` - Soundex algorithm
 
 ### Session Extension
 

@@ -1,5 +1,11 @@
 # SQLite C/C++ API Reference - Index
 
+> **⚠️ Important Note:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. Most functions documented here (like `sqlite3_config()`, `sqlite3_limit()`, `sqlite3_blob_open()`) are **NOT directly callable from JavaScript**.
+>
+> For the JavaScript API, see [API Reference](../api-reference.md).
+>
+> This reference is provided for understanding the underlying SQLite capabilities and for developers working on the native bindings.
+
 This is the main index for the SQLite C/C++ API documentation. The API has been organized into logical sections for easier navigation and understanding. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
 
 ## Overview

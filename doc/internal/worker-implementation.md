@@ -22,10 +22,10 @@ Worker thread support is **fully implemented and working** in @photostructure/sq
 SQLite supports three threading modes:
 
 - **Single-thread** (`SQLITE_THREADSAFE=0`): No thread safety, one thread only
-- **Multi-thread** (`SQLITE_THREADSAFE=2`): Multiple threads, separate connections per thread ✅ **CURRENT**
-- **Serialized** (`SQLITE_THREADSAFE=1`): Full thread safety with mutexes (default)
+- **Multi-thread** (`SQLITE_THREADSAFE=2`): Multiple threads, separate connections per thread
+- **Serialized** (`SQLITE_THREADSAFE=1`): Full thread safety with mutexes (default) ✅ **CURRENT**
 
-**Current Configuration:** Using `SQLITE_THREADSAFE=2` (multi-thread mode) - the correct choice for worker threads where each thread gets its own database connection.
+**Current Configuration:** Using the default `SQLITE_THREADSAFE=1` (serialized mode). This provides full thread safety with mutex protection, which is safe for worker threads where each thread creates its own database connection.
 
 ### Implemented Components
 

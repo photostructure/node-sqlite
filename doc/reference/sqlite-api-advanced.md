@@ -1,5 +1,7 @@
 # SQLite Advanced Features API Reference
 
+> **⚠️ Important Note:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. Most functions documented here (like `sqlite3_blob_open()`, `sqlite3_wal_checkpoint_v2()`) are **NOT directly callable from JavaScript**. Some features like backup and sessions are exposed through the JavaScript API - see [API Reference](../api-reference.md) and [Advanced Patterns](../advanced-patterns.md).
+
 This document covers SQLite's advanced APIs including backup operations, blob I/O, sessions, and threading features. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
 
 ## Table of Contents

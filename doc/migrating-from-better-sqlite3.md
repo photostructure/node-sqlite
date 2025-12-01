@@ -161,13 +161,10 @@ const result = db.prepare("PRAGMA cache_size").get();
 
 ### Features Only in better-sqlite3
 
-- ❌ `.transaction()` helper method
-- ❌ `.pragma()` convenience method
-- ❌ `.backup()` method (different API)
-- ❌ Virtual table support
-- ❌ `.loadExtension()` method
+- ❌ `.transaction()` helper method (use manual `BEGIN`/`COMMIT`/`ROLLBACK`)
+- ❌ `.pragma()` convenience method (use `db.exec("PRAGMA ...")` or `db.prepare("PRAGMA ...").get()`)
 - ❌ `.serialize()` method
-- ❌ `.defaultSafeIntegers()` method
+- ❌ `.defaultSafeIntegers()` method (use `stmt.setReadBigInts()` instead)
 - ❌ `.unsafeMode()` method
 
 ### Features Only in @photostructure/sqlite

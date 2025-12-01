@@ -1,5 +1,7 @@
 # SQLite Extension API Reference
 
+> **⚠️ Important Note:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. These C functions are **NOT directly callable from JavaScript**. For the JavaScript API (including `db.function()` and `db.aggregate()`), see [API Reference](../api-reference.md) and [Extending SQLite](../extending-sqlite.md).
+
 This document covers SQLite's extension APIs including user-defined functions, aggregate functions, collations, and virtual tables. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
 
 ## Table of Contents
