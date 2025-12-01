@@ -525,6 +525,25 @@ describe("Parameter Binding Tests", () => {
       );
     });
 
+    test("buffer size validation (normal buffers work)", () => {
+      // Note: Actually allocating 2GB+ buffers would OOM most systems
+      // This test documents that normal buffers work and that SafeCastToInt
+      // is used for size validation (see sqlite_impl.cpp)
+      const stmt = db.prepare(
+        "INSERT INTO test_params (value_blob) VALUES (?)",
+      );
+
+      // Normal sized buffers should work
+      const normalBuffer = Buffer.alloc(1024);
+      normalBuffer.fill(0x42);
+      const result = stmt.run(normalBuffer);
+      const row = db
+        .prepare("SELECT value_blob FROM test_params WHERE id = ?")
+        .get(result.lastInsertRowid) as { value_blob: Buffer };
+      expect(row.value_blob.length).toBe(1024);
+      expect(row.value_blob[0]).toBe(0x42);
+    });
+
     // Commented out as our implementation may allow mixing parameters
     // test("mixing anonymous and named parameters fails", () => {
     //   const stmt = db.prepare("INSERT INTO test_params (value_int, value_text) VALUES (?, :text)");

@@ -1,8 +1,27 @@
 #!/usr/bin/env node
 
-const { spawn } = require("child_process");
-const path = require("path");
-const fs = require("fs");
+const { spawn } = require("node:child_process");
+const path = require("node:path");
+const fs = require("node:fs");
+
+// Determine target extension file based on platform
+const targetDir = __dirname;
+let targetFile;
+if (process.platform === "win32") {
+  targetFile = path.join(targetDir, "test_extension.dll");
+} else if (process.platform === "darwin") {
+  targetFile = path.join(targetDir, "test_extension.dylib");
+} else {
+  targetFile = path.join(targetDir, "test_extension.so");
+}
+
+// Check if extension already exists (skip rebuild unless --force is passed)
+const forceRebuild = process.argv.includes("--force");
+if (!forceRebuild && fs.existsSync(targetFile)) {
+  console.log(`Test extension already exists: ${targetFile}`);
+  console.log("Use --force to rebuild");
+  process.exit(0);
+}
 
 // Build the test extension
 // Use npx to ensure node-gyp is available on all platforms, especially Windows
@@ -20,21 +39,15 @@ buildProcess.on("close", (code) => {
 
   // Copy the built extension to a predictable location
   const buildDir = path.join(__dirname, "build/Release");
-  const targetDir = __dirname;
 
   // Find the built extension file
   let sourceFile;
-  let targetFile;
-
   if (process.platform === "win32") {
     sourceFile = path.join(buildDir, "test_extension.dll");
-    targetFile = path.join(targetDir, "test_extension.dll");
   } else if (process.platform === "darwin") {
     sourceFile = path.join(buildDir, "test_extension.dylib");
-    targetFile = path.join(targetDir, "test_extension.dylib");
   } else {
     sourceFile = path.join(buildDir, "test_extension.so");
-    targetFile = path.join(targetDir, "test_extension.so");
   }
 
   try {
