@@ -10,16 +10,41 @@
 namespace node {
 
 // Environment class for Node.js context
+// Note: This class is a shim for upstream Node.js code compatibility.
+// It's not actively used in our implementation but provides the interface.
 class Environment {
+private:
+  using InstanceMap =
+      std::unordered_map<napi_env, std::unique_ptr<Environment>>;
+
+  // Thread-local storage accessor - the thread_local is on the variable, not
+  // the return type
+  static InstanceMap &GetInstances() {
+    static thread_local InstanceMap instances;
+    return instances;
+  }
+
+  // Cleanup hook called when napi_env is destroyed
+  static void CleanupHook(void *arg) {
+    napi_env env = static_cast<napi_env>(arg);
+    InstanceMap &instances = GetInstances();
+    auto it = instances.find(env);
+    if (it != instances.end()) {
+      instances.erase(it);
+    }
+  }
+
 public:
   static Environment *GetCurrent(Napi::Env env) {
-    // Store per-environment instances
-    static thread_local std::unordered_map<napi_env,
-                                           std::unique_ptr<Environment>>
-        instances;
+    InstanceMap &instances = GetInstances();
     auto it = instances.find(env);
     if (it == instances.end()) {
       auto result = instances.emplace(env, std::make_unique<Environment>(env));
+
+      // Register cleanup hook to remove this entry when env is destroyed
+      // This prevents memory leaks when worker threads terminate
+      napi_add_env_cleanup_hook(env, CleanupHook, static_cast<void *>(env));
+
       return result.first->second.get();
     }
     return it->second.get();
