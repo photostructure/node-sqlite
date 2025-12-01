@@ -129,6 +129,71 @@ describe("User-defined Functions Tests", () => {
     db.close();
   });
 
+  test("user-defined functions - DataView return values", () => {
+    const db = new DatabaseSync(":memory:");
+
+    // Register a function that returns a DataView
+    db.function("dataview_func", () => {
+      const buffer = new ArrayBuffer(4);
+      const view = new DataView(buffer);
+      view.setUint8(0, 0xde);
+      view.setUint8(1, 0xad);
+      view.setUint8(2, 0xbe);
+      view.setUint8(3, 0xef);
+      return view;
+    });
+
+    const stmt = db.prepare("SELECT dataview_func() as result");
+    const result = stmt.get();
+
+    expect(Buffer.isBuffer(result.result)).toBe(true);
+    expect(result.result).toEqual(Buffer.from([0xde, 0xad, 0xbe, 0xef]));
+
+    db.close();
+  });
+
+  test("user-defined functions - TypedArray return values", () => {
+    const db = new DatabaseSync(":memory:");
+
+    // Register a function that returns a Uint8Array
+    db.function("uint8array_func", () => {
+      return new Uint8Array([0x01, 0x02, 0x03, 0x04]);
+    });
+
+    const stmt = db.prepare("SELECT uint8array_func() as result");
+    const result = stmt.get();
+
+    expect(Buffer.isBuffer(result.result)).toBe(true);
+    expect(result.result).toEqual(Buffer.from([0x01, 0x02, 0x03, 0x04]));
+
+    db.close();
+  });
+
+  test("user-defined functions - DataView with offset and length", () => {
+    const db = new DatabaseSync(":memory:");
+
+    // Register a function that returns a DataView with non-zero offset
+    db.function("dataview_offset_func", () => {
+      const buffer = new ArrayBuffer(8);
+      const fullView = new DataView(buffer);
+      // Fill the whole buffer
+      for (let i = 0; i < 8; i++) {
+        fullView.setUint8(i, i + 1);
+      }
+      // Return a view that starts at offset 2 and has length 4
+      return new DataView(buffer, 2, 4);
+    });
+
+    const stmt = db.prepare("SELECT dataview_offset_func() as result");
+    const result = stmt.get();
+
+    expect(Buffer.isBuffer(result.result)).toBe(true);
+    // Should contain bytes at positions 2,3,4,5 which are 3,4,5,6
+    expect(result.result).toEqual(Buffer.from([0x03, 0x04, 0x05, 0x06]));
+
+    db.close();
+  });
+
   test("user-defined functions - empty string handling", () => {
     const db = new DatabaseSync(":memory:");
 

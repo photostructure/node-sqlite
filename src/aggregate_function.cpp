@@ -578,7 +578,26 @@ void CustomAggregate::JSValueToSqliteResult(sqlite3_context *ctx,
     std::string str = value.As<Napi::String>().Utf8Value();
     sqlite3_result_text(ctx, str.c_str(), SafeCastToInt(str.length()),
                         SQLITE_TRANSIENT);
+  } else if (value.IsDataView()) {
+    // IMPORTANT: Check DataView BEFORE IsBuffer() because N-API's IsBuffer()
+    // returns true for ALL ArrayBufferViews (including DataView), but
+    // Buffer::As() doesn't work correctly for DataView (returns length=0).
+    // See: https://github.com/nodejs/node/pull/56227
+    Napi::DataView dataView = value.As<Napi::DataView>();
+    Napi::ArrayBuffer arrayBuffer = dataView.ArrayBuffer();
+    size_t byteOffset = dataView.ByteOffset();
+    size_t byteLength = dataView.ByteLength();
+
+    if (arrayBuffer.Data() != nullptr && byteLength > 0) {
+      const uint8_t *data =
+          static_cast<const uint8_t *>(arrayBuffer.Data()) + byteOffset;
+      sqlite3_result_blob(ctx, data, SafeCastToInt(byteLength),
+                          SQLITE_TRANSIENT);
+    } else {
+      sqlite3_result_zeroblob(ctx, 0);
+    }
   } else if (value.IsBuffer()) {
+    // Handles both Node.js Buffer and TypedArrays (Uint8Array, etc.)
     Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
     sqlite3_result_blob(ctx, buffer.Data(), SafeCastToInt(buffer.Length()),
                         SQLITE_TRANSIENT);
