@@ -110,12 +110,19 @@ jobs:
           upload: false
           output: sarif-results
 
+      # Filter false positives and upstream code from results
+      # - cpp/slicing: All instances are N-API wrapper classes (Napi::Buffer,
+      #   Napi::BigInt, etc.) assigned to Napi::Value. This is intentional and
+      #   safe - these are thin wrappers around napi_value handles, and slicing
+      #   only loses cached C++ state, not the underlying JS value reference.
+      #   See: https://github.com/nodejs/node-addon-api/blob/main/doc/value.md
       - name: Filter upstream code from SARIF
         uses: advanced-security/filter-sarif@f3b8118a9349d88f7b1c0c488476411145b6270d # v1.0.1
         with:
           patterns: |
             -**/src/upstream/**
             -**/node_modules/**
+            -**:cpp/slicing
           input: sarif-results/cpp.sarif
           output: sarif-results/cpp.sarif
 
