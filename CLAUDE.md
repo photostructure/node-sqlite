@@ -168,7 +168,7 @@ Scripts follow an `action:target` pattern where:
 
 ### Error Testing Philosophy
 
-For error handling tests, we prioritize **functional behavior** over exact error message matching. See [doc/testing-philosophy.md](doc/testing-philosophy.md) for detailed guidelines on:
+For error handling tests, we prioritize **functional behavior** over exact error message matching. See [doc/internal/testing-philosophy.md](doc/internal/testing-philosophy.md) for detailed guidelines on:
 
 - When and how to test errors effectively
 - Avoiding brittle message matching patterns
