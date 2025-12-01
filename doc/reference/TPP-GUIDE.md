@@ -106,15 +106,18 @@ Each task needs:
 **Success**: `npm t -- --grep "empty result"` passes
 
 **Implementation**:
+
 1. Find StatementSync::All() in `src/sqlite_impl.cpp`
 2. Check node_sqlite.cc behavior for empty results
 3. Return empty array instead of undefined
 
 **If architecture changed**:
+
 - No StatementSync? Find statement class: `grep -r "class.*Statement" src/`
 - Method renamed? Find result handling: `grep -r "\.all\|All(" src/`
 
 **Proof of completion** (follows [SIMPLE-DESIGN.md](./SIMPLE-DESIGN.md) Rule 1):
+
 - [ ] Test passes: `npm t -- --grep "empty result"`
 - [ ] Behavior matches: Test against node:sqlite in Node.js 22+
 - [ ] Old code removed: No workarounds remain (Rule 4 - fewest elements)
@@ -153,12 +156,12 @@ ls src/upstream/
 
 When your task involves native code, document these traps:
 
-| Issue | Symptom | Solution |
-|-------|---------|----------|
+| Issue                    | Symptom                    | Solution                                 |
+| ------------------------ | -------------------------- | ---------------------------------------- |
 | ArrayBufferView checking | DataView handled as Buffer | Check `IsDataView()` before `IsBuffer()` |
-| SQLite callback context | Crash or corruption | Use POD types, not Napi::Reference |
-| Aggregate state | Memory corruption | JSON serialize complex objects |
-| Resource cleanup | Jest hangs | Close all databases in afterEach |
+| SQLite callback context  | Crash or corruption        | Use POD types, not Napi::Reference       |
+| Aggregate state          | Memory corruption          | JSON serialize complex objects           |
+| Resource cleanup         | Jest hangs                 | Close all databases in afterEach         |
 
 ### Platform-Specific Failures
 
@@ -258,12 +261,15 @@ Copy this structure for new TPPs--but omit sections that aren't relevant or help
 ## Context Research
 
 ### Existing Patterns
+
 [What similar code exists? Where?]
 
 ### Landmines
+
 [What breaks easily? N-API gotchas? Platform issues?]
 
 ### node:sqlite Behavior
+
 [What does the built-in do? Reference node_sqlite.cc lines]
 
 ## Tasks
@@ -281,13 +287,16 @@ As additional research and implementation details are completed, reconsider thes
 **Success**: `[test command]`
 
 **Implementation**:
+
 1. [Step with file:line]
 2. [Step]
 
 **If architecture changed**:
+
 - [How to find new location]
 
 **Completion checklist**:
+
 - [ ] Test passes: `npm t -- --grep "..."`
 - [ ] Integration shown: `grep -r "..." src/`
 - [ ] Old code removed
