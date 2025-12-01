@@ -450,6 +450,51 @@ describeMemoryTests("Memory Tests", () => {
   );
 
   testMemoryBenchmark(
+    "backup operations",
+    async () => {
+      const tempDir = await fsp.mkdtemp(
+        join(os.tmpdir(), "sqlite-backup-mem-test-"),
+      );
+
+      try {
+        const db = new DatabaseSync(":memory:");
+        db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT)");
+
+        const insert = db.prepare("INSERT INTO test (data) VALUES (?)");
+        for (let i = 0; i < 100; i++) {
+          insert.run(`data_${i}`);
+        }
+
+        // Backup to file - exercises full BackupJob lifecycle
+        const backupPath = join(tempDir, "backup.db");
+        await db.backup(backupPath);
+
+        // Verify backup completed
+        const backupDb = new DatabaseSync(backupPath);
+        const count = backupDb
+          .prepare("SELECT COUNT(*) as count FROM test")
+          .get() as { count: number };
+        if (count.count !== 100) {
+          throw new Error(`Backup verification failed: ${count.count} rows`);
+        }
+        backupDb.close();
+
+        // Also test backup to :memory: (different code path)
+        await db.backup(":memory:");
+
+        db.close();
+      } finally {
+        await rm(tempDir);
+      }
+    },
+    {
+      targetDurationMs: 2_000,
+      maxMemoryGrowthKBPerSecond: 1500,
+      maxTimeoutMs: 30_000,
+    },
+  );
+
+  testMemoryBenchmark(
     "prepared statement reuse",
     () => {
       const db = new DatabaseSync(":memory:");
