@@ -60,9 +60,8 @@ node-sqlite/
 │       ├── util.h            # Node.js utility functions
 │       └── ...               # Other Node.js internal headers
 ├── third-party/                 # Reference implementations for compatibility
-│   ├── node/                 # Complete Node.js repository (source of upstream/)
-│   ├── better-sqlite3/       # better-sqlite3 package for API reference
-│   └── node-sqlite3/         # node-sqlite3 package for compatibility testing
+│   └── better-sqlite3/       # better-sqlite3 package for API reference (submodule)
+├── ../node/                     # Node.js repository for reference (optional, clone separately)
 ├── scripts/
 │   └── sync-from-node.js     # Automated sync from Node.js repository
 ├── test/                     # Test suite with comprehensive coverage
