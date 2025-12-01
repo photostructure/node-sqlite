@@ -293,13 +293,49 @@ async function runStressTest(): Promise<void> {
     );
     console.log("");
 
+    // Calculate performance data (needed for both output modes)
+    const scenarios = [...new Set(results.map((r) => r.scenario))];
+    const drivers = [...new Set(results.map((r) => r.driver))];
+
+    const overallScores: Record<string, number> = {};
+    for (const driver of drivers) {
+      const driverResults = results.filter(
+        (r) => r.driver === driver && !r.error,
+      );
+      if (driverResults.length === 0) continue;
+
+      let totalScore = 0;
+      let scenarioCount = 0;
+
+      for (const scenarioKey of scenarios) {
+        const result = driverResults.find((r) => r.scenario === scenarioKey);
+        if (!result) continue;
+
+        // Find the fastest for this scenario
+        const scenarioResults = results.filter(
+          (r) => r.scenario === scenarioKey && !r.error,
+        );
+        const maxOps = Math.max(...scenarioResults.map((r) => r.avgOpsPerSec));
+
+        if (maxOps > 0) {
+          totalScore += (result.avgOpsPerSec / maxOps) * 100;
+          scenarioCount++;
+        }
+      }
+
+      if (scenarioCount > 0) {
+        overallScores[driver] = Math.round(totalScore / scenarioCount);
+      }
+    }
+
+    const rankedDrivers = Object.entries(overallScores).sort(
+      ([, a], [, b]) => b - a,
+    );
+
     if (options.output === "json") {
       console.log(JSON.stringify(results, null, 2));
     } else {
       // Create performance comparison table
-      const scenarios = [...new Set(results.map((r) => r.scenario))];
-      const drivers = [...new Set(results.map((r) => r.driver))];
-
       console.log("| Scenario | " + drivers.join(" | ") + " |");
       console.log(
         "|" + ["---"].concat(drivers.map(() => "---:")).join("|") + "|",
@@ -334,43 +370,6 @@ async function runStressTest(): Promise<void> {
       // Performance ranking
       console.log(chalk.bold.cyan("\n🏆 Overall Performance Ranking"));
       console.log("");
-
-      const overallScores: Record<string, number> = {};
-      for (const driver of drivers) {
-        const driverResults = results.filter(
-          (r) => r.driver === driver && !r.error,
-        );
-        if (driverResults.length === 0) continue;
-
-        let totalScore = 0;
-        let scenarioCount = 0;
-
-        for (const scenarioKey of scenarios) {
-          const result = driverResults.find((r) => r.scenario === scenarioKey);
-          if (!result) continue;
-
-          // Find the fastest for this scenario
-          const scenarioResults = results.filter(
-            (r) => r.scenario === scenarioKey && !r.error,
-          );
-          const maxOps = Math.max(
-            ...scenarioResults.map((r) => r.avgOpsPerSec),
-          );
-
-          if (maxOps > 0) {
-            totalScore += (result.avgOpsPerSec / maxOps) * 100;
-            scenarioCount++;
-          }
-        }
-
-        if (scenarioCount > 0) {
-          overallScores[driver] = Math.round(totalScore / scenarioCount);
-        }
-      }
-
-      const rankedDrivers = Object.entries(overallScores).sort(
-        ([, a], [, b]) => b - a,
-      );
 
       console.log("| Rank | Driver | Score |");
       console.log("|---:|---|---:|");
@@ -421,12 +420,7 @@ async function runStressTest(): Promise<void> {
           totalTests: results.length,
           successfulTests: results.filter((r) => !r.error).length,
           failedTests: results.filter((r) => r.error).length,
-          overallScores: Object.fromEntries(
-            Object.entries(overallScores ?? {}).map(([driver, score]) => [
-              driver,
-              score,
-            ]),
-          ),
+          overallScores,
         },
       };
 

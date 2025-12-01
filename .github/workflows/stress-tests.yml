@@ -61,7 +61,7 @@ jobs:
           cd ..
 
       - name: Run stress tests (CI mode)
-        run: tsx scripts/stress-test.ts --ci --output-file stress-test-results.json
+        run: npx tsx scripts/stress-test.ts --ci --output-file stress-test-results.json
         timeout-minutes: 20
 
       - name: Upload stress test results
