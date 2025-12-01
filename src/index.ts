@@ -204,5 +204,52 @@ export { SQLTagStore };
  */
 export const constants: SqliteConstants = binding.constants;
 
+/**
+ * Options for the backup() function.
+ */
+export interface BackupOptions {
+  /** Number of pages to be transmitted in each batch of the backup. @default 100 */
+  rate?: number;
+  /** Name of the source database. Can be 'main' or any attached database. @default 'main' */
+  source?: string;
+  /** Name of the target database. Can be 'main' or any attached database. @default 'main' */
+  target?: string;
+  /** Callback function that will be called with progress information. */
+  progress?: (info: { totalPages: number; remainingPages: number }) => void;
+}
+
+/**
+ * Standalone function to make a backup of a database.
+ *
+ * This function matches the Node.js `node:sqlite` module API which exports
+ * `backup()` as a standalone function in addition to the `db.backup()` method.
+ *
+ * @param sourceDb The database to backup from.
+ * @param destination The path where the backup will be created.
+ * @param options Optional configuration for the backup operation.
+ * @returns A promise that resolves when the backup is completed.
+ *
+ * @example
+ * ```typescript
+ * import { DatabaseSync, backup } from '@photostructure/sqlite';
+ *
+ * const db = new DatabaseSync('./source.db');
+ * await backup(db, './backup.db');
+ *
+ * // With options
+ * await backup(db, './backup.db', {
+ *   rate: 10,
+ *   progress: ({ totalPages, remainingPages }) => {
+ *     console.log(`Progress: ${totalPages - remainingPages}/${totalPages}`);
+ *   }
+ * });
+ * ```
+ */
+export const backup: (
+  sourceDb: DatabaseSyncInstance,
+  destination: string | Buffer | URL,
+  options?: BackupOptions,
+) => Promise<number> = binding.backup;
+
 // Default export for CommonJS compatibility
 export default binding as SqliteModule;

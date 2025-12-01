@@ -200,7 +200,54 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
   exports.Set("constants", constants);
 
-  // TODO: Add backup function
+  // Add standalone backup() function (Node.js API compatibility)
+  // Signature: backup(sourceDb, destination, options?) -> Promise
+  Napi::Function backupFunc = Napi::Function::New(
+      env,
+      [](const Napi::CallbackInfo &info) -> Napi::Value {
+        Napi::Env env = info.Env();
+
+        // Validate and unwrap DatabaseSync instance
+        DatabaseSync *db = nullptr;
+        if (info.Length() >= 1 && info[0].IsObject()) {
+          try {
+            db = DatabaseSync::Unwrap(info[0].As<Napi::Object>());
+          } catch (...) {
+            // Fall through to error below
+          }
+        }
+        if (db == nullptr) {
+          Napi::TypeError::New(
+              env, "The \"sourceDb\" argument must be a DatabaseSync object")
+              .ThrowAsJavaScriptException();
+          return env.Undefined();
+        }
+
+        // Validate destination path is provided
+        if (info.Length() < 2) {
+          Napi::TypeError::New(env, "The \"destination\" argument is required")
+              .ThrowAsJavaScriptException();
+          return env.Undefined();
+        }
+
+        // Delegate to instance method: db.backup(destination, options?)
+        std::vector<napi_value> args;
+        for (size_t i = 1; i < info.Length(); i++) {
+          args.push_back(info[i]);
+        }
+        Napi::Function backupMethod =
+            db->Value().Get("backup").As<Napi::Function>();
+        return backupMethod.Call(db->Value(), args);
+      },
+      "backup");
+
+  // Set function name and length properties (Node.js compatibility)
+  backupFunc.DefineProperty(Napi::PropertyDescriptor::Value(
+      "name", Napi::String::New(env, "backup"), napi_enumerable));
+  backupFunc.DefineProperty(Napi::PropertyDescriptor::Value(
+      "length", Napi::Number::New(env, 2), napi_enumerable));
+
+  exports.Set("backup", backupFunc);
 
   return exports;
 }

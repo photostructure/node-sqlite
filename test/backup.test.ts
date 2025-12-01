@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import * as fs from "node:fs";
-import { DatabaseSync } from "../src";
+import { pathToFileURL } from "node:url";
+import { backup, DatabaseSync } from "../src";
 import { createTestDb, getTestTimeout, rm, useTempDir } from "./test-utils";
 
 describe("Backup functionality", () => {
@@ -816,4 +817,251 @@ describe("Backup functionality", () => {
     },
     getTestTimeout(30000),
   );
+});
+
+/**
+ * Tests for the standalone backup() function.
+ * These tests match the node:sqlite test cases from test-sqlite-backup.mjs
+ */
+describe("Standalone backup() function", () => {
+  const { getDbPath, closeDatabases } = useTempDir("sqlite-standalone-backup-");
+
+  const testDatabases = new Set<InstanceType<typeof DatabaseSync>>();
+
+  afterEach(() => {
+    closeDatabases(...testDatabases);
+    testDatabases.clear();
+  });
+
+  function makeSourceDb(dbPath = ":memory:") {
+    const database = new DatabaseSync(dbPath);
+    testDatabases.add(database);
+
+    database.exec(`
+      CREATE TABLE data(
+        key INTEGER PRIMARY KEY,
+        value TEXT
+      )
+    `);
+
+    const insert = database.prepare(
+      "INSERT INTO data (key, value) VALUES (?, ?)",
+    );
+    for (let i = 1; i <= 2; i++) {
+      insert.run(i, `value-${i}`);
+    }
+
+    return database;
+  }
+
+  it("throws if the source database is not provided", () => {
+    expect(() => {
+      (backup as Function)();
+    }).toThrow(/sourceDb.*argument/i);
+  });
+
+  it("throws if path is not provided", () => {
+    const database = makeSourceDb();
+
+    expect(() => {
+      (backup as Function)(database);
+    }).toThrow();
+  });
+
+  it("throws if path is not a string, URL, or Buffer", () => {
+    const database = makeSourceDb();
+
+    expect(() => {
+      (backup as Function)(database, {});
+    }).toThrow();
+
+    expect(() => {
+      (backup as Function)(database, 123);
+    }).toThrow();
+  });
+
+  it("throws if options is not an object", async () => {
+    const database = makeSourceDb();
+    const destDb = getDbPath("backup.db");
+
+    await expect(
+      (backup as Function)(database, destDb, "invalid"),
+    ).rejects.toThrow(/options.*object/i);
+  });
+
+  it("throws if options.source is invalid", async () => {
+    const database = makeSourceDb();
+    const destDb = getDbPath("backup.db");
+
+    await expect(
+      backup(database, destDb, { source: 42 as any }),
+    ).rejects.toThrow(/source.*string/i);
+  });
+
+  it("throws if options.target is invalid", async () => {
+    const database = makeSourceDb();
+    const destDb = getDbPath("backup.db");
+
+    await expect(
+      backup(database, destDb, { target: 42 as any }),
+    ).rejects.toThrow(/target.*string/i);
+  });
+
+  it("throws if options.rate is invalid", async () => {
+    const database = makeSourceDb();
+    const destDb = getDbPath("backup.db");
+
+    await expect(
+      backup(database, destDb, { rate: "invalid" as any }),
+    ).rejects.toThrow(/rate/i);
+  });
+
+  it("throws if options.progress is invalid", async () => {
+    const database = makeSourceDb();
+    const destDb = getDbPath("backup.db");
+
+    await expect(
+      backup(database, destDb, { progress: "not a function" as any }),
+    ).rejects.toThrow(/progress.*function/i);
+  });
+
+  it("performs a successful backup", async () => {
+    const database = makeSourceDb();
+    const destPath = getDbPath("backup.db");
+
+    const progressCalls: Array<{
+      totalPages: number;
+      remainingPages: number;
+    }> = [];
+
+    await backup(database, destPath, {
+      rate: 1,
+      progress: (info) => {
+        progressCalls.push(info);
+      },
+    });
+
+    const backupDb = new DatabaseSync(destPath);
+    testDatabases.add(backupDb);
+
+    const rows = backupDb.prepare("SELECT * FROM data ORDER BY key").all() as {
+      key: number;
+      value: string;
+    }[];
+
+    expect(rows).toEqual([
+      { key: 1, value: "value-1" },
+      { key: 2, value: "value-2" },
+    ]);
+
+    // Progress callback should have been called
+    expect(progressCalls.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it("performs backup using URL destination", async () => {
+    const database = makeSourceDb();
+    const destPath = getDbPath("url-backup.db");
+    const destUrl = pathToFileURL(destPath);
+
+    await backup(database, destUrl);
+
+    const backupDb = new DatabaseSync(destPath);
+    testDatabases.add(backupDb);
+
+    const rows = backupDb.prepare("SELECT * FROM data ORDER BY key").all() as {
+      key: number;
+      value: string;
+    }[];
+
+    expect(rows).toEqual([
+      { key: 1, value: "value-1" },
+      { key: 2, value: "value-2" },
+    ]);
+  });
+
+  it("performs backup using Buffer destination", async () => {
+    const database = makeSourceDb();
+    const destPath = getDbPath("buffer-backup.db");
+    const destBuffer = Buffer.from(destPath);
+
+    await backup(database, destBuffer);
+
+    const backupDb = new DatabaseSync(destPath);
+    testDatabases.add(backupDb);
+
+    const rows = backupDb.prepare("SELECT * FROM data ORDER BY key").all() as {
+      key: number;
+      value: string;
+    }[];
+
+    expect(rows).toEqual([
+      { key: 1, value: "value-1" },
+      { key: 2, value: "value-2" },
+    ]);
+  });
+
+  it("throws when source database is closed", async () => {
+    const database = new DatabaseSync(":memory:");
+    database.close();
+
+    await expect(backup(database, getDbPath("closed.db"))).rejects.toThrow(
+      /not open/i,
+    );
+  });
+
+  it("throws if URL is not file: scheme", () => {
+    const database = makeSourceDb();
+
+    // The URL validation happens synchronously before the async backup
+    expect(() =>
+      backup(database, new URL("http://example.com/backup.db")),
+    ).toThrow(/URL.*scheme|file:/i);
+  });
+
+  it("rejects when destination path is invalid", async () => {
+    const database = makeSourceDb();
+
+    await expect(
+      backup(database, "/invalid/path/that/does/not/exist/backup.db"),
+    ).rejects.toThrow();
+  });
+
+  it("rejects when source db option is invalid", async () => {
+    const database = makeSourceDb();
+    const destDb = getDbPath("invalid-source.db");
+
+    await expect(
+      backup(database, destDb, { source: "nonexistent" }),
+    ).rejects.toThrow(/initialize backup|unknown database/i);
+  });
+
+  it("has correct name and length properties", () => {
+    expect(backup.name).toBe("backup");
+    expect(backup.length).toBe(2);
+  });
+
+  it("is equivalent to db.backup() method", async () => {
+    const database = makeSourceDb();
+    const destPath1 = getDbPath("method.db");
+    const destPath2 = getDbPath("function.db");
+
+    // Use instance method
+    const pages1 = await database.backup(destPath1);
+
+    // Use standalone function
+    const pages2 = await backup(database, destPath2);
+
+    expect(pages1).toBe(pages2);
+
+    // Verify both backups are identical
+    const db1 = new DatabaseSync(destPath1);
+    testDatabases.add(db1);
+    const db2 = new DatabaseSync(destPath2);
+    testDatabases.add(db2);
+
+    const rows1 = db1.prepare("SELECT * FROM data ORDER BY key").all();
+    const rows2 = db2.prepare("SELECT * FROM data ORDER BY key").all();
+
+    expect(rows1).toEqual(rows2);
+  });
 });

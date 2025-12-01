@@ -24,7 +24,7 @@ export interface DatabaseSyncOptions {
   readonly enableDoubleQuotedStringLiterals?: boolean;
   /**
    * Sets the busy timeout in milliseconds.
-   * @default 5000
+   * @default 0
    */
   readonly timeout?: number;
   /** If true, enables loading of SQLite extensions. @default false */

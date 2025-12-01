@@ -49,6 +49,9 @@ const _hasDatabaseSync: typeof OurSqlite.DatabaseSync = OurSqlite.DatabaseSync;
 const _hasStatementSync: typeof OurSqlite.StatementSync =
   OurSqlite.StatementSync;
 
+// Check that standalone backup function is exported
+const _hasBackup: typeof OurSqlite.backup = OurSqlite.backup;
+
 // Check that our interfaces correspond to node:sqlite interfaces
 // Note: We use different names but should have compatible structure
 
@@ -309,6 +312,27 @@ function _checkSessionClass() {
   }
 }
 
+// Check standalone backup function signature
+function _checkBackupFunction() {
+  // The standalone backup function should match node:sqlite's export
+  const _backup: (
+    sourceDb: InstanceType<typeof OurSqlite.DatabaseSync>,
+    destination: string | Buffer | URL,
+    options?: OurSqlite.BackupOptions,
+  ) => Promise<number> = OurSqlite.backup;
+
+  // Verify our BackupOptions type has the right shape
+  const _opts: OurSqlite.BackupOptions = {
+    rate: 100,
+    source: "main",
+    target: "main",
+    progress: ({ totalPages, remainingPages }) => {
+      const _t: number = totalPages;
+      const _r: number = remainingPages;
+    },
+  };
+}
+
 // Check constructor signatures
 function _checkConstructorSignatures() {
   // DatabaseSync constructors
@@ -397,6 +421,27 @@ describe("API Compatibility", () => {
 
     it("exports exactly 65 constants total", () => {
       expect(Object.keys(OurSqlite.constants).length).toBe(65);
+    });
+  });
+
+  describe("standalone backup() function compatibility", () => {
+    it("exports backup as a function", () => {
+      expect(typeof OurSqlite.backup).toBe("function");
+    });
+
+    it("backup has correct name property", () => {
+      expect(OurSqlite.backup.name).toBe("backup");
+    });
+
+    it("backup has correct length property (2 parameters)", () => {
+      expect(OurSqlite.backup.length).toBe(2);
+    });
+
+    it("backup matches node:sqlite export", () => {
+      // Verify our backup function matches node:sqlite's backup
+      expect(typeof NodeSqlite.backup).toBe("function");
+      expect(OurSqlite.backup.name).toBe(NodeSqlite.backup.name);
+      expect(OurSqlite.backup.length).toBe(NodeSqlite.backup.length);
     });
   });
 });

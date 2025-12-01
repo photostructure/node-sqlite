@@ -351,10 +351,9 @@ struct BackupProgress {
 // Backup job for asynchronous database backup
 class BackupJob : public Napi::AsyncProgressWorker<BackupProgress> {
 public:
-  BackupJob(Napi::Env env, DatabaseSync *source,
-            const std::string &destination_path, const std::string &source_db,
-            const std::string &dest_db, int pages, Napi::Function progress_func,
-            Napi::Promise::Deferred deferred);
+  BackupJob(Napi::Env env, DatabaseSync *source, std::string destination_path,
+            std::string source_db, std::string dest_db, int pages,
+            Napi::Function progress_func, Napi::Promise::Deferred deferred);
   ~BackupJob();
 
   void Execute(const ExecutionProgress &progress) override;

@@ -4,11 +4,66 @@ Complete API documentation for @photostructure/sqlite. This package provides 100
 
 ## Table of Contents
 
+- [Module Exports](#module-exports)
 - [DatabaseSync](#databasesync)
 - [StatementSync](#statementsync)
 - [Types and Interfaces](#types-and-interfaces)
 - [Constants](#constants)
 - [Error Handling](#error-handling)
+
+## Module Exports
+
+The module exports the following items that match `node:sqlite`:
+
+```typescript
+import {
+  DatabaseSync, // Main database class
+  StatementSync, // Prepared statement class
+  Session, // Session class for changesets
+  backup, // Standalone backup function
+  constants, // SQLite constants
+} from "@photostructure/sqlite";
+```
+
+### backup()
+
+```typescript
+backup(
+  sourceDb: DatabaseSync,
+  destination: string | Buffer | URL,
+  options?: BackupOptions
+): Promise<number>
+```
+
+Standalone function to create a backup of a database. This function is equivalent to calling `db.backup()` on a database instance, but allows passing the source database as a parameter.
+
+**Parameters:**
+
+- `sourceDb` - The database instance to back up
+- `destination` - Path to the backup file (string, Buffer, or file: URL)
+- `options` - Optional backup configuration
+
+**Returns:** A Promise that resolves to the total number of pages backed up.
+
+```javascript
+import { DatabaseSync, backup } from "@photostructure/sqlite";
+
+const db = new DatabaseSync("source.db");
+
+// Using standalone function
+await backup(db, "backup.db");
+
+// Equivalent to:
+await db.backup("backup.db");
+
+// With options
+await backup(db, "backup.db", {
+  rate: 10,
+  progress: ({ totalPages, remainingPages }) => {
+    console.log(`${totalPages - remainingPages}/${totalPages} pages copied`);
+  },
+});
+```
 
 ## DatabaseSync
 
@@ -37,7 +92,7 @@ interface DatabaseSyncOptions {
   readOnly?: boolean; // Open in read-only mode (default: false)
   enableForeignKeyConstraints?: boolean; // Enable foreign keys (default: true)
   enableDoubleQuotedStringLiterals?: boolean; // Allow double-quoted strings (default: false)
-  timeout?: number; // Busy timeout in ms (default: 5000)
+  timeout?: number; // Busy timeout in ms (default: 0)
   allowExtension?: boolean; // Allow loading extensions (default: false)
 }
 ```
@@ -222,6 +277,7 @@ Creates a backup of the database. Returns the total number of pages backed up.
 ```typescript
 interface BackupOptions {
   source?: string; // Source database name (default: 'main')
+  target?: string; // Target database name (default: 'main')
   rate?: number; // Pages per iteration (default: 100)
   progress?: (info: { totalPages: number; remainingPages: number }) => void;
 }

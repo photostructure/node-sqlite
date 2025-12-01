@@ -2563,17 +2563,17 @@ std::set<BackupJob *> BackupJob::active_job_instances_;
 
 // BackupJob Implementation
 BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
-                     const std::string &destination_path,
-                     const std::string &source_db, const std::string &dest_db,
-                     int pages, Napi::Function progress_func,
+                     std::string destination_path, std::string source_db,
+                     std::string dest_db, int pages,
+                     Napi::Function progress_func,
                      Napi::Promise::Deferred deferred)
     : Napi::AsyncProgressWorker<BackupProgress>(
           !progress_func.IsEmpty() && !progress_func.IsUndefined()
               ? progress_func
               : Napi::Function::New(env, [](const Napi::CallbackInfo &) {})),
-      source_(source), destination_path_(destination_path),
-      source_db_(source_db), dest_db_(dest_db), pages_(pages),
-      deferred_(deferred) {
+      source_(source), destination_path_(std::move(destination_path)),
+      source_db_(std::move(source_db)), dest_db_(std::move(dest_db)),
+      pages_(pages), deferred_(deferred) {
   if (!progress_func.IsEmpty() && !progress_func.IsUndefined()) {
     progress_func_ = Napi::Reference<Napi::Function>::New(progress_func);
   }
@@ -2822,8 +2822,9 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
   }
 
   // Create and schedule backup job
-  BackupJob *job = new BackupJob(env, this, destination_path.value(), source_db,
-                                 target_db, rate, progress_func, deferred);
+  BackupJob *job = new BackupJob(env, this, std::move(destination_path).value(),
+                                 std::move(source_db), std::move(target_db),
+                                 rate, progress_func, deferred);
 
   // Queue the async work - AsyncWorker will delete itself when complete
   job->Queue();
