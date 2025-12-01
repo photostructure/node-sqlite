@@ -96,29 +96,42 @@ CustomAggregate::CustomAggregate(Napi::Env env,
 }
 
 CustomAggregate::~CustomAggregate() {
-  // Only clean up our own function references
-  // Do NOT touch any aggregate contexts - SQLite owns those
-  if (!step_fn_.IsEmpty()) {
-    step_fn_.Reset();
-  }
-  if (!inverse_fn_.IsEmpty()) {
-    inverse_fn_.Reset();
-  }
-  if (!result_fn_.IsEmpty()) {
-    result_fn_.Reset();
-  }
-  if (!start_fn_.IsEmpty()) {
-    start_fn_.Reset();
-  }
-  if (start_type_ == OBJECT && !object_ref_.IsEmpty()) {
-    object_ref_.Reset();
-  }
+  // Check if environment is still valid before N-API operations.
+  // During shutdown, env_ may be torn down and N-API operations would crash.
+  // Try to create a handle scope - if this fails, env is invalid.
+  napi_handle_scope scope;
+  napi_status status = napi_open_handle_scope(env_, &scope);
 
-  // Clean up async context if it was created
-  if (async_context_ != nullptr) {
-    napi_async_destroy(env_, async_context_);
-    async_context_ = nullptr;
+  if (status == napi_ok) {
+    // Safe to do N-API operations
+    // Only clean up our own function references
+    // Do NOT touch any aggregate contexts - SQLite owns those
+    if (!step_fn_.IsEmpty()) {
+      step_fn_.Reset();
+    }
+    if (!inverse_fn_.IsEmpty()) {
+      inverse_fn_.Reset();
+    }
+    if (!result_fn_.IsEmpty()) {
+      result_fn_.Reset();
+    }
+    if (!start_fn_.IsEmpty()) {
+      start_fn_.Reset();
+    }
+    if (start_type_ == OBJECT && !object_ref_.IsEmpty()) {
+      object_ref_.Reset();
+    }
+
+    // Clean up async context if it was created
+    if (async_context_ != nullptr) {
+      napi_async_destroy(env_, async_context_);
+      async_context_ = nullptr;
+    }
+
+    napi_close_handle_scope(env_, scope);
   }
+  // If status != napi_ok, env is invalid - skip cleanup.
+  // References will be leaked, but that's better than crashing.
 }
 
 void CustomAggregate::xStep(sqlite3_context *ctx, int argc,
@@ -563,16 +576,16 @@ void CustomAggregate::JSValueToSqliteResult(sqlite3_context *ctx,
     }
   } else if (value.IsString()) {
     std::string str = value.As<Napi::String>().Utf8Value();
-    sqlite3_result_text(ctx, str.c_str(), static_cast<int>(str.length()),
+    sqlite3_result_text(ctx, str.c_str(), SafeCastToInt(str.length()),
                         SQLITE_TRANSIENT);
   } else if (value.IsBuffer()) {
     Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
-    sqlite3_result_blob(ctx, buffer.Data(), static_cast<int>(buffer.Length()),
+    sqlite3_result_blob(ctx, buffer.Data(), SafeCastToInt(buffer.Length()),
                         SQLITE_TRANSIENT);
   } else {
     // For other types (objects, functions, etc.), convert to string
     std::string str = value.ToString().Utf8Value();
-    sqlite3_result_text(ctx, str.c_str(), static_cast<int>(str.length()),
+    sqlite3_result_text(ctx, str.c_str(), SafeCastToInt(str.length()),
                         SQLITE_TRANSIENT);
   }
 }
