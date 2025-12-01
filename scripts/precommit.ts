@@ -35,7 +35,7 @@ run({ cmd: "npm install", desc: "Installing dependencies" });
 run({
   cmd: "npm run update:actions",
   desc: "Updating GitHub Actions",
-  optional: isWin,
+  optional: isWin || isMacOS,
 });
 run({
   cmd: "npm-check-updates --upgrade --errorLevel 2 || npx snyk test --dev",
