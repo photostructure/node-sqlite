@@ -5,6 +5,20 @@
 import * as https from "node:https";
 
 /**
+ * Check if a URL is for the GitHub API by parsing the hostname.
+ * This properly validates the URL rather than using substring matching,
+ * which could be bypassed with URLs like "http://evil.com/api.github.com".
+ */
+function isGitHubApiUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "api.github.com";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * GitHub API rate limit information
  */
 export interface RateLimitInfo {
@@ -54,7 +68,7 @@ export async function githubFetch(
   const response = await fetch(url, { headers: authHeaders });
 
   // Log rate limit information
-  if (logRateLimit && url.includes("api.github.com")) {
+  if (logRateLimit && isGitHubApiUrl(url)) {
     const rateLimitInfo = extractRateLimitInfo(response.headers);
     if (rateLimitInfo) {
       logRateLimitInfo(rateLimitInfo);
@@ -112,7 +126,7 @@ export async function githubFetchUrl(
     https
       .get(url, options, (res) => {
         // Log rate limit information for GitHub API calls
-        if (url.includes("api.github.com")) {
+        if (isGitHubApiUrl(url)) {
           const rateLimitInfo = extractRateLimitInfoFromHeaders(res.headers);
           if (rateLimitInfo) {
             logRateLimitInfo(rateLimitInfo);
@@ -121,7 +135,7 @@ export async function githubFetchUrl(
 
         if (res.statusCode !== 200) {
           const isRateLimit = res.statusCode === 403 || res.statusCode === 429;
-          if (isRateLimit && url.includes("api.github.com")) {
+          if (isRateLimit && isGitHubApiUrl(url)) {
             console.error("GitHub API rate limit exceeded!");
             if (!process.env.GITHUB_TOKEN) {
               console.error(
