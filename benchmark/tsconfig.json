@@ -11,7 +11,7 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "noImplicitAny": false,
-    "types": ["node"]
+    "types": ["node", "jest"]
   },
   "include": ["*.ts"],
   "exclude": ["node_modules"]

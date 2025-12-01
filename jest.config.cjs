@@ -10,7 +10,7 @@ const isESM =
 const config = {
   displayName: `@photostructure/sqlite (${isESM ? "ESM" : "CJS"})`,
   testEnvironment: "jest-environment-node",
-  roots: ["<rootDir>/src", "<rootDir>/test"],
+  roots: ["<rootDir>/src", "<rootDir>/test", "<rootDir>/benchmark"],
   coverageProvider: "v8",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
   verbose: true,

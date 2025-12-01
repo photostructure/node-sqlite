@@ -7,7 +7,6 @@ on:
       - "src/**/*.h"
       - "src/**/*.ts"
       - "benchmark/**"
-      - "test/stress-test.test.ts"
       - ".github/workflows/stress-tests.yml"
   push:
     branches: [main]

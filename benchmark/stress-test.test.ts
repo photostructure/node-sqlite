@@ -1,13 +1,13 @@
 // Test for stress test functionality
 
-import { createDriver } from "../benchmark/drivers";
+import { TempDir } from "../test/test-utils";
+import { createDriver } from "./drivers";
 import {
   createStressSchema,
   generateLargeDataset,
   getStressScenarios,
   NaturalDataGenerator,
-} from "../benchmark/stress-scenarios";
-import { TempDir } from "./test-utils";
+} from "./stress-scenarios";
 
 describe("Stress Test Components", () => {
   const tempDirMgr = TempDir.perTest();
@@ -86,7 +86,7 @@ describe("Stress Test Components", () => {
       const tables = driver
         .prepare(
           `
-        SELECT name FROM sqlite_master 
+        SELECT name FROM sqlite_master
         WHERE type='table' AND name NOT LIKE 'sqlite_%'
         ORDER BY name
       `,
@@ -157,7 +157,7 @@ describe("Stress Test Components", () => {
       const indexes = driver
         .prepare(
           `
-        SELECT name FROM sqlite_master 
+        SELECT name FROM sqlite_master
         WHERE type='index' AND name NOT LIKE 'sqlite_%'
       `,
         )
@@ -206,8 +206,8 @@ describe("Stress Test Components", () => {
       const orphanPosts = driver
         .prepare(
           `
-        SELECT COUNT(*) as count FROM posts p 
-        LEFT JOIN users u ON p.user_id = u.id 
+        SELECT COUNT(*) as count FROM posts p
+        LEFT JOIN users u ON p.user_id = u.id
         WHERE u.id IS NULL
       `,
         )

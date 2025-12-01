@@ -1,8 +1,30 @@
-import Database from "better-sqlite3";
-import deasync from "deasync";
 import { promisify } from "node:util";
-import sqlite3 from "sqlite3";
 import { DatabaseSync } from "../src/index";
+
+// Optional dependencies - loaded lazily to allow running tests without them
+// Use any types to avoid TypeScript issues with optional deps
+let Database: any = null;
+let deasync: any = null;
+let sqlite3Module: any = null;
+
+// Try to load optional dependencies
+try {
+  Database = require("better-sqlite3");
+} catch {
+  // better-sqlite3 not available
+}
+
+try {
+  deasync = require("deasync");
+} catch {
+  // deasync not available
+}
+
+try {
+  sqlite3Module = require("sqlite3");
+} catch {
+  // sqlite3 not available
+}
 
 // Track if node:sqlite is available
 let nodeSqliteAvailable = false;
@@ -110,13 +132,18 @@ class PhotostructureDriver extends BaseDriver {
 
 // better-sqlite3 driver
 class BetterSqlite3Driver extends BaseDriver {
-  declare protected db: Database.Database | null;
+  declare protected db: any;
 
   constructor() {
     super("better-sqlite3");
   }
 
   async initialize(filename: string): Promise<Driver> {
+    if (!Database) {
+      throw new Error(
+        "better-sqlite3 is not available - run 'npm install' in benchmark/",
+      );
+    }
     this.db = new Database(filename);
     return this;
   }
@@ -210,8 +237,8 @@ class NodeSqliteDriver extends BaseDriver {
 
 // sqlite3 driver (async, needs wrapper)
 class Sqlite3Driver extends BaseDriver {
-  declare protected db: sqlite3.Database;
-  private stmtCache = new Map<string, sqlite3.Statement>();
+  declare protected db: any;
+  private stmtCache = new Map<string, any>();
   private dbRun!: (sql: string, ...params: any[]) => Promise<void>;
   private dbGet!: (sql: string, ...params: any[]) => Promise<any>;
   private dbAll!: (sql: string, ...params: any[]) => Promise<any[]>;
@@ -222,7 +249,12 @@ class Sqlite3Driver extends BaseDriver {
   }
 
   async initialize(filename: string): Promise<Driver> {
-    const Database = sqlite3.verbose().Database;
+    if (!sqlite3Module || !deasync) {
+      throw new Error(
+        "sqlite3 and deasync are not available - run 'npm install' in benchmark/",
+      );
+    }
+    const Database = sqlite3Module.verbose().Database;
     this.db = new Database(filename);
 
     // Promisify common methods
@@ -243,7 +275,7 @@ class Sqlite3Driver extends BaseDriver {
       this.stmtCache.clear();
 
       await new Promise<void>((resolve, reject) => {
-        this.db.close((err) => {
+        this.db.close((err: any) => {
           if (err) reject(err);
           else resolve();
         });
@@ -277,7 +309,7 @@ class Sqlite3Driver extends BaseDriver {
         });
 
         // Busy wait using deasync
-        deasync.loopWhile(() => !done);
+        deasync!.loopWhile(() => !done);
 
         if (error) throw error;
         return result!;
@@ -294,7 +326,7 @@ class Sqlite3Driver extends BaseDriver {
           done = true;
         });
 
-        deasync.loopWhile(() => !done);
+        deasync!.loopWhile(() => !done);
 
         if (error) throw error;
         return result!;
@@ -311,7 +343,7 @@ class Sqlite3Driver extends BaseDriver {
           done = true;
         });
 
-        deasync.loopWhile(() => !done);
+        deasync!.loopWhile(() => !done);
 
         if (error) throw error;
         return result!;
@@ -329,7 +361,7 @@ class Sqlite3Driver extends BaseDriver {
           done = true;
         });
 
-        deasync.loopWhile(() => !done);
+        deasync!.loopWhile(() => !done);
 
         if (error) throw error;
 
@@ -364,12 +396,12 @@ class Sqlite3Driver extends BaseDriver {
     let error: Error | null = null;
     let done = false;
 
-    this.db.exec(sql, (err) => {
+    this.db.exec(sql, (err: any) => {
       error = err;
       done = true;
     });
 
-    deasync.loopWhile(() => !done);
+    deasync!.loopWhile(() => !done);
 
     if (error) throw error;
   }
@@ -381,9 +413,9 @@ type DriverConstructor = new () => BaseDriver;
 // Export available drivers
 export const drivers: Record<string, DriverConstructor> = {
   "@photostructure/sqlite": PhotostructureDriver,
-  "better-sqlite3": BetterSqlite3Driver,
+  ...(Database ? { "better-sqlite3": BetterSqlite3Driver } : {}),
   ...(nodeSqliteAvailable ? { "node:sqlite": NodeSqliteDriver } : {}),
-  sqlite3: Sqlite3Driver,
+  ...(sqlite3Module && deasync ? { sqlite3: Sqlite3Driver } : {}),
 };
 
 // Helper to create driver instance

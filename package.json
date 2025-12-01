@@ -63,7 +63,7 @@
     "benchmark:memory": "cd benchmark && npm install && npm run bench:memory",
     "benchmark:full": "cd benchmark && npm install && npm run bench && npm run bench:memory",
     "stress-test": "cd benchmark && npm install && cd .. && tsx scripts/stress-test.ts",
-    "stress-test:validate": "npm run tests:cjs -- --no-coverage test/stress-test.test.ts",
+    "stress-test:validate": "npm run tests:cjs -- --no-coverage benchmark/stress-test.test.ts",
     "stress-test:ci": "cd benchmark && npm install && cd .. && tsx scripts/stress-test.ts --ci --output-file stress-test-results.json",
     "lint": "run-p lint:*",
     "lint:ts": "tsc --noEmit",
