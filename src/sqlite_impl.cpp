@@ -1439,6 +1439,11 @@ void StatementSync::InitStatement(DatabaseSync *database,
   }
 
   database_ = database;
+  // Create a strong reference to the database object to prevent it from being
+  // garbage collected while this statement exists. This fixes use-after-free
+  // when the database is GC'd before its statements.
+  // See: https://github.com/nodejs/node/pull/56840
+  database_ref_ = Napi::Persistent(database->Value());
   source_sql_ = sql;
 
   // Apply database-level defaults
@@ -1469,6 +1474,10 @@ void StatementSync::InitStatement(DatabaseSync *database,
 StatementSync::~StatementSync() {
   if (statement_ && !finalized_) {
     sqlite3_finalize(statement_);
+  }
+  // Release the strong reference to the database object
+  if (!database_ref_.IsEmpty()) {
+    database_ref_.Reset();
   }
 }
 
