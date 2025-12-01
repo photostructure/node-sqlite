@@ -385,13 +385,12 @@ const targetDb = new DatabaseSync("target.db");
 const session = sourceDb.createSession({ table: "documents" });
 
 // Make changes to the source
-sourceDb.prepare("UPDATE documents SET content = ? WHERE id = ?").run(
-  "Updated content",
-  1,
-);
-sourceDb.prepare("INSERT INTO documents (content) VALUES (?)").run(
-  "New document",
-);
+sourceDb
+  .prepare("UPDATE documents SET content = ? WHERE id = ?")
+  .run("Updated content", 1);
+sourceDb
+  .prepare("INSERT INTO documents (content) VALUES (?)")
+  .run("New document");
 
 // Get the changeset
 const changeset = session.changeset();
