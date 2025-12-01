@@ -55,6 +55,7 @@ For these, document explicitly:
 **Bug**: NULL pointer dereference when sqlite3_value_text() fails
 **Why untestable**: Requires SQLite internal memory allocation failure
 **Validation approach**:
+
 1. Code review showing NULL check matches known-good pattern
 2. Regression tests proving the code path still works
 3. `grep` showing fix applied to ALL similar locations
