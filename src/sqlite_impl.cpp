@@ -2069,7 +2069,7 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
         const uint8_t *data =
             static_cast<const uint8_t *>(arrayBuffer.Data()) + byteOffset;
         sqlite3_bind_blob(statement_, param_index, data,
-                          static_cast<int>(byteLength), SQLITE_TRANSIENT);
+                          SafeCastToInt(byteLength), SQLITE_TRANSIENT);
       } else {
         sqlite3_bind_null(statement_, param_index);
       }
@@ -2079,7 +2079,7 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
       // internally)
       Napi::Buffer<uint8_t> buffer = param.As<Napi::Buffer<uint8_t>>();
       sqlite3_bind_blob(statement_, param_index, buffer.Data(),
-                        static_cast<int>(buffer.Length()), SQLITE_TRANSIENT);
+                        SafeCastToInt(buffer.Length()), SQLITE_TRANSIENT);
     } else if (param.IsFunction()) {
       // Functions cannot be stored in SQLite - bind as NULL
       sqlite3_bind_null(statement_, param_index);
@@ -2088,7 +2088,7 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
       Napi::ArrayBuffer arrayBuffer = param.As<Napi::ArrayBuffer>();
       if (!arrayBuffer.IsEmpty() && arrayBuffer.Data() != nullptr) {
         sqlite3_bind_blob(statement_, param_index, arrayBuffer.Data(),
-                          static_cast<int>(arrayBuffer.ByteLength()),
+                          SafeCastToInt(arrayBuffer.ByteLength()),
                           SQLITE_TRANSIENT);
       } else {
         sqlite3_bind_null(statement_, param_index);
