@@ -52,8 +52,16 @@ jobs:
         run: npm run stress-test:validate
         timeout-minutes: 5
 
+      - name: Install and build benchmark dependencies
+        run: |
+          cd benchmark
+          npm install
+          # Rebuild better-sqlite3 native bindings (npm install skips scripts due to .npmrc)
+          npm rebuild better-sqlite3
+          cd ..
+
       - name: Run stress tests (CI mode)
-        run: npm run stress-test:ci
+        run: tsx scripts/stress-test.ts --ci --output-file stress-test-results.json
         timeout-minutes: 20
 
       - name: Upload stress test results
