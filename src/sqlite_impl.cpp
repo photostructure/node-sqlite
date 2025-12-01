@@ -556,6 +556,10 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
 
   std::string sql = info[0].As<Napi::String>().Utf8Value();
 
+  // Clear any stale deferred exception from a previous operation
+  ClearDeferredAuthorizerException();
+  SetIgnoreNextSQLiteError(false);
+
   try {
     // Create new StatementSync instance using addon data constructor
     AddonData *addon_data = GetAddonData(env);
@@ -573,6 +577,25 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
 
     return stmt_obj;
   } catch (const std::exception &e) {
+    // Handle deferred authorizer exceptions:
+    //
+    // When an authorizer callback throws a JavaScript exception, we use a
+    // "marker" exception pattern to safely propagate the error:
+    //
+    // 1. On Windows (MSVC), std::exception::what() can sometimes return an
+    //    empty string, causing message loss.
+    //
+    // 2. By storing the message in the DatabaseSync instance, we can retrieve
+    //    it here and throw a proper JavaScript exception with the original text.
+    //
+    // See also: StatementSync::InitStatement for the other half of this pattern.
+    if (HasDeferredAuthorizerException()) {
+      std::string deferred_msg = GetDeferredAuthorizerException();
+      ClearDeferredAuthorizerException();
+      SetIgnoreNextSQLiteError(false);
+      Napi::Error::New(env, deferred_msg).ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
     node::THROW_ERR_SQLITE_ERROR(env, e.what());
     return env.Undefined();
   }
@@ -596,6 +619,10 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
   }
 
   std::string sql = info[0].As<Napi::String>().Utf8Value();
+
+  // Clear any stale deferred exception from a previous operation
+  ClearDeferredAuthorizerException();
+  SetIgnoreNextSQLiteError(false);
 
   char *error_msg = nullptr;
   int result =
@@ -1459,12 +1486,23 @@ void StatementSync::InitStatement(DatabaseSync *database,
                                   &statement_, &tail);
 
   if (result != SQLITE_OK) {
-    // Check for deferred authorizer exception first
+    // Handle deferred authorizer exceptions:
+    //
+    // When an authorizer callback throws a JavaScript exception, we use a
+    // "marker" exception pattern to safely propagate the error:
+    //
+    // 1. On Windows (MSVC), std::exception::what() can sometimes return an
+    //    empty string, causing message loss.
+    //
+    // 2. By storing the message in the DatabaseSync instance, the caller can
+    //    retrieve it and throw a proper JavaScript exception with the original text.
+    //
+    // 3. This matches Node.js's behavior where JavaScript exceptions from
+    //    authorizer callbacks propagate correctly to the caller.
     if (database->HasDeferredAuthorizerException()) {
-      std::string deferred_msg = database->GetDeferredAuthorizerException();
-      database->ClearDeferredAuthorizerException();
-      database->SetIgnoreNextSQLiteError(false);
-      throw std::runtime_error(deferred_msg);
+      // Throw a marker exception - the actual message is stored in the database
+      // object and will be retrieved by the caller.
+      throw std::runtime_error("");
     }
     std::string error = sqlite3_errmsg(database->connection());
     throw std::runtime_error("Failed to prepare statement: " + error);
@@ -2929,7 +2967,7 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     if (int_result != SQLITE_OK && int_result != SQLITE_DENY &&
         int_result != SQLITE_IGNORE) {
       db->SetDeferredAuthorizerException(
-          "Authorizer callback returned a invalid authorization code");
+          "Authorizer callback returned an invalid authorization code");
       db->SetIgnoreNextSQLiteError(true);
       return SQLITE_DENY;
     }
