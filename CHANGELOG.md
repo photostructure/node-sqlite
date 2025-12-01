@@ -42,7 +42,17 @@ All notable changes to this project will be documented in this file.
 
 - **Authorization API**: `db.setAuthorizer()` for security callbacks invoked before SQL operations (matches Node.js PR #59928)
 
+- **Standalone backup function**: `backup(srcDb, destFile, options?)` for one-liner database backups with progress callbacks
+
 ### Fixed
+
+- DataView and TypedArray return values now work correctly in user-defined functions
+- Statement holds strong reference to database object, preventing use-after-free
+- Thread-local storage for napi_env management improves stability in multi-threaded scenarios
+- Aggregate function N-API reference cleanup is now safe during destructor
+- User function destructor validates N-API environment before cleanup
+- Authorizer callbacks use deferred exception handling for proper error propagation
+- Null and empty values handled correctly in user function return value conversion
 
 - DataView parameter binding now works correctly (previously returned garbage data)
 - RETURNING clause metadata handling improvements
