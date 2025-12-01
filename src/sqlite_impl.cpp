@@ -2677,15 +2677,27 @@ void BackupJob::OnError(const Napi::Error &error) {
   // This runs on the main thread if Execute encounters an error
   Napi::HandleScope scope(Env());
 
-  // Cleanup SQLite resources
+  // Save error info BEFORE cleanup nulls the pointers
+  int saved_status = backup_status_;
+  std::string saved_errmsg;
+  if (dest_) {
+    saved_errmsg = sqlite3_errmsg(dest_);
+    // Capture any final error code from dest
+    int dest_err = sqlite3_errcode(dest_);
+    if (dest_err != SQLITE_OK && saved_status == SQLITE_OK) {
+      saved_status = dest_err;
+    }
+  }
+
+  // Now safe to cleanup
   Cleanup();
 
-  // Create a more detailed error if we have SQLite error info
-  if (dest_ && backup_status_ != SQLITE_OK) {
+  // Use saved values for error details (matching node:sqlite property names)
+  if (saved_status != SQLITE_OK && saved_status != SQLITE_DONE) {
     Napi::Error detailed_error = Napi::Error::New(Env(), error.Message());
-    detailed_error.Set(
-        "code", Napi::String::New(Env(), sqlite3_errstr(backup_status_)));
-    detailed_error.Set("errno", Napi::Number::New(Env(), backup_status_));
+    detailed_error.Set("errcode", Napi::Number::New(Env(), saved_status));
+    detailed_error.Set("errstr",
+                       Napi::String::New(Env(), sqlite3_errstr(saved_status)));
     deferred_.Reject(detailed_error.Value());
   } else {
     deferred_.Reject(error.Value());

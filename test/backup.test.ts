@@ -178,6 +178,28 @@ describe("Backup functionality", () => {
     ).rejects.toThrow();
   });
 
+  it("should include SQLite error details on backup failure", async () => {
+    try {
+      await sourceDb.backup("/invalid/path/that/does/not/exist/backup.db");
+      fail("Should have thrown");
+    } catch (err: any) {
+      // Check it's an error-like object
+      expect(err.message).toBeDefined();
+      expect(typeof err.message).toBe("string");
+
+      // Should have SQLite error info attached (matching node:sqlite property names)
+      expect(err.errcode).toBeDefined();
+      expect(typeof err.errcode).toBe("number");
+      expect(err.errstr).toBeDefined();
+      expect(typeof err.errstr).toBe("string");
+
+      // SQLITE_CANTOPEN is error code 14
+      // sqlite3_errstr(14) returns "unable to open database file"
+      expect(err.errcode).toBe(14);
+      expect(err.errstr).toBe("unable to open database file");
+    }
+  });
+
   it("should handle errors for closed database", async () => {
     // Create a separate database for this test to avoid affecting other tests
     const testDbPath = getDbPath("closed-test.db");
