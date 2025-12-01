@@ -4,7 +4,7 @@
  * This replaces the bash-only prebuildify-wrapper.sh for Windows compatibility
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -63,17 +63,13 @@ try {
     ...args,
   ];
 
-  if (process.platform === "win32") {
-    // On Windows, npx is actually npx.cmd. execSync uses a shell by default,
-    // which resolves .cmd files. We build the command string safely since
-    // these are controlled arguments (not user input).
-    const cmd = `npx ${prebuildifyArgs.join(" ")}`;
-    // eslint-disable-next-line no-restricted-syntax -- Arguments are controlled, not user input
-    execSync(cmd, { stdio: "inherit" });
-  } else {
-    // On Unix, we can use execFileSync directly
-    execFileSync("npx", prebuildifyArgs, { stdio: "inherit" });
-  }
+  // Use execFileSync for both platforms to avoid shell injection vulnerabilities.
+  // On Windows, we need to use the full path to npx.cmd or use { shell: true }
+  // with execFileSync, which safely passes arguments as an array.
+  execFileSync("npx", prebuildifyArgs, {
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
 
   // Verify the build succeeded
   if (!findValidNativeModule("prebuilds")) {
