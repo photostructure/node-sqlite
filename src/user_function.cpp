@@ -24,22 +24,27 @@ UserDefinedFunction::UserDefinedFunction(Napi::Env env, Napi::Function fn,
 }
 
 UserDefinedFunction::~UserDefinedFunction() noexcept {
-  // Clean up the persistent function reference
-  if (!fn_.IsEmpty()) {
-    fn_.Reset();
-  }
+  // Check if environment is still valid before N-API operations.
+  // During shutdown, env_ may be torn down and N-API operations would crash.
+  // Try to create a handle scope - if this fails, env is invalid.
+  napi_handle_scope scope;
+  napi_status status = napi_open_handle_scope(env_, &scope);
 
-  // Cleanup async context - check if environment is still valid
-  if (async_context_ != nullptr) {
-    // Use try-catch to handle cases where environment might be shutting down
-    try {
-      napi_async_destroy(env_, async_context_);
-    } catch (...) {
-      // Ignore errors during shutdown - environment may be cleaning up
-      // This is intentional - we cannot propagate exceptions from destructor
+  if (status == napi_ok) {
+    // Safe to do N-API operations
+    if (!fn_.IsEmpty()) {
+      fn_.Reset();
     }
-    async_context_ = nullptr;
+
+    if (async_context_ != nullptr) {
+      napi_async_destroy(env_, async_context_);
+      async_context_ = nullptr;
+    }
+
+    napi_close_handle_scope(env_, scope);
   }
+  // If status != napi_ok, env is invalid - skip cleanup.
+  // References will be leaked, but that's better than crashing.
 }
 
 void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
