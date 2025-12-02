@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
+        uses: github/codeql-action/init@fe4161a26a8629af62121b670040955b330f9af2 # v4.31.6
         with:
           languages: javascript-typescript
           queries: security-and-quality
@@ -68,10 +68,10 @@ jobs:
               - '**/test-directory/**'
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
+        uses: github/codeql-action/autobuild@fe4161a26a8629af62121b670040955b330f9af2 # v4.31.6
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
+        uses: github/codeql-action/analyze@fe4161a26a8629af62121b670040955b330f9af2 # v4.31.6
 
   codeql-cpp:
     name: CodeQL C++ Analysis
@@ -96,7 +96,7 @@ jobs:
         run: npm ci
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
+        uses: github/codeql-action/init@fe4161a26a8629af62121b670040955b330f9af2 # v4.31.6
         with:
           languages: cpp
           queries: security-and-quality
@@ -105,7 +105,7 @@ jobs:
         run: npm run node-gyp-rebuild
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
+        uses: github/codeql-action/analyze@fe4161a26a8629af62121b670040955b330f9af2 # v4.31.6
         with:
           upload: false
           output: sarif-results
@@ -127,7 +127,7 @@ jobs:
           output: sarif-results/cpp.sarif
 
       - name: Upload filtered SARIF
-        uses: github/codeql-action/upload-sarif@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
+        uses: github/codeql-action/upload-sarif@fe4161a26a8629af62121b670040955b330f9af2 # v4.31.6
         with:
           sarif_file: sarif-results/cpp.sarif
 
