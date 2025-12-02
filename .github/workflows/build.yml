@@ -38,7 +38,7 @@ jobs:
         timeout-minutes: 20 # Give the lint step more time
 
   prebuild-mac-x64:
-    runs-on: macos-13-large # Intel x64 runner
+    runs-on: macos-13 # Intel x64 runner
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -53,7 +53,7 @@ jobs:
           path: prebuilds/
 
   prebuild-mac-arm64:
-    runs-on: macos-14 # Apple Silicon ARM64 runner
+    runs-on: macos-14 # Apple Silicon ARM64 (macos-14+ are ARM64)
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -83,7 +83,7 @@ jobs:
           path: prebuilds/
 
   prebuild-win-arm64:
-    runs-on: windows-arm64 # Native ARM64 runner (public repos only)
+    runs-on: windows-11-arm # Native ARM64 runner (public repos only)
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -154,7 +154,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-13-large, macos-14, windows-latest, windows-arm64]
+        os: [macos-13, macos-14, windows-latest, windows-11-arm]
         node-version: [20, 22, 23, 24]
     runs-on: ${{ matrix.os }}
     steps:
