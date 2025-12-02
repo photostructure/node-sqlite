@@ -36,8 +36,7 @@ inline void THROW_ERR_SQLITE_ERROR(Napi::Env env,
                                    const char *message = nullptr) {
   // Check for both null and empty string - on Windows (MSVC),
   // std::exception::what() can sometimes return an empty string
-  const char *msg =
-      (message && message[0] != '\0') ? message : "SQLite error";
+  const char *msg = (message && message[0] != '\0') ? message : "SQLite error";
   Napi::Error::New(env, msg).ThrowAsJavaScriptException();
 }
 

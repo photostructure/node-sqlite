@@ -586,9 +586,11 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
     //    empty string, causing message loss.
     //
     // 2. By storing the message in the DatabaseSync instance, we can retrieve
-    //    it here and throw a proper JavaScript exception with the original text.
+    //    it here and throw a proper JavaScript exception with the original
+    //    text.
     //
-    // See also: StatementSync::InitStatement for the other half of this pattern.
+    // See also: StatementSync::InitStatement for the other half of this
+    // pattern.
     if (HasDeferredAuthorizerException()) {
       std::string deferred_msg = GetDeferredAuthorizerException();
       ClearDeferredAuthorizerException();
@@ -1495,7 +1497,8 @@ void StatementSync::InitStatement(DatabaseSync *database,
     //    empty string, causing message loss.
     //
     // 2. By storing the message in the DatabaseSync instance, the caller can
-    //    retrieve it and throw a proper JavaScript exception with the original text.
+    //    retrieve it and throw a proper JavaScript exception with the original
+    //    text.
     //
     // 3. This matches Node.js's behavior where JavaScript exceptions from
     //    authorizer callbacks propagate correctly to the caller.
