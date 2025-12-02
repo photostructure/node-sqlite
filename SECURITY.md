@@ -9,6 +9,7 @@ Security updates are provided for the latest released version only.
 **Do not report security vulnerabilities through public GitHub issues.**
 
 Report via:
+
 - Email: security@photostructure.com
 - GitHub's private vulnerability reporting
 
