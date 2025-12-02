@@ -101,13 +101,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, arm64]
-    runs-on: ubuntu-24.04 # Use newer runner for Docker support
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-      - uses: ./.github/actions/setup-qemu
-        with:
-          arch: ${{ matrix.arch }}
       - run: npm ci --ignore-scripts
       - run: TARGET_ARCH=${{ matrix.arch }} npm run build:linux-glibc
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
@@ -119,16 +120,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, arm64]
-    runs-on: ubuntu-24.04
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-      - uses: ./.github/actions/setup-qemu
-        with:
-          arch: ${{ matrix.arch }}
       - run: |
           CONTAINER_NAME="node-sqlite-musl-build-$$"
-          docker run -d --name "$CONTAINER_NAME" --platform linux/${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} node:20-alpine sleep 3600
+          docker run -d --name "$CONTAINER_NAME" --platform ${{ matrix.platform }} node:20-alpine sleep 3600
           docker cp . "$CONTAINER_NAME:/tmp/project"
           docker exec "$CONTAINER_NAME" sh -c "cd /tmp/project && apk add build-base git python3 py3-setuptools --update-cache && npm ci --ignore-scripts && npm run build:native && cd test/fixtures/test-extension && node build.js --force"
           docker cp "$CONTAINER_NAME:/tmp/project/prebuilds" . 2>/dev/null || true
@@ -180,12 +184,9 @@ jobs:
         os: [ubuntu-22.04, ubuntu-24.04]
         arch: [x64, arm64]
         node-version: [20, 22, 23, 24]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.arch == 'arm64' && format('{0}-arm', matrix.os) || matrix.os }}
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-      - uses: ./.github/actions/setup-qemu
-        with:
-          arch: ${{ matrix.arch }}
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: ${{ matrix.node-version }}
@@ -205,12 +206,16 @@ jobs:
       matrix:
         arch: [x64, arm64]
         node-version: [20, 22, 23, 24]
-    runs-on: ubuntu-24.04
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-      - uses: ./.github/actions/setup-qemu
-        with:
-          arch: ${{ matrix.arch }}
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           path: ./prebuilds
@@ -222,7 +227,7 @@ jobs:
           path: ./test/fixtures/test-extension
         continue-on-error: true
       - run: |
-          docker run --rm -v $(pwd):/tmp/project --entrypoint /bin/sh --platform linux/${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} node:${{ matrix.node-version }}-alpine -c "\
+          docker run --rm -v $(pwd):/tmp/project --entrypoint /bin/sh --platform ${{ matrix.platform }} node:${{ matrix.node-version }}-alpine -c "\
           apk add build-base git python3 py3-setuptools --update-cache && \
           cd /tmp/project && \
           npm ci && \
