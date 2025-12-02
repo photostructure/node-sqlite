@@ -2,28 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.2.0] (unreleased)
+## [0.2.0] (2025-12-01)
 
 ### Added
 
 - **Node.js v25 API sync**: SQLite 3.51.1, native `Symbol.dispose` in C++, Session class exposed in public API
-
 - **New database open options**: `readBigInts`, `returnArrays`, `allowBareNamedParameters`, `allowUnknownNamedParameters`, `defensive`, `open`
-
 - **Defensive mode**: `enableDefensive()` method to prevent SQL from deliberately corrupting the database
-
 - **Statement enhancements**: `setAllowUnknownNamedParameters()` method, `finalized` property
-
 - **Type identification**: `sqlite-type` symbol property on DatabaseSync (Node.js PR #59405)
-
 - **Enhanced SQLite errors**: New properties `sqliteCode`, `sqliteExtendedCode`, `code`, `sqliteErrorString`, `systemErrno`
-
 - **ARM64 prebuilds**: macOS Apple Silicon and Windows ARM64 binaries
-
 - **Tagged template literals**: `db.createTagStore()` for cached prepared statements (Node.js PR #58748)
-
 - **Authorization API**: `db.setAuthorizer()` for security callbacks (Node.js PR #59928)
-
 - **Standalone backup**: `backup(srcDb, destFile, options?)` for one-liner database backups with progress callbacks
 
 ### Fixed
