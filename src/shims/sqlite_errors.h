@@ -84,7 +84,10 @@ inline const char *GetSqliteErrorCodeName(int code) {
 inline void ThrowEnhancedSqliteError(Napi::Env env, sqlite3 *db,
                                      int sqlite_code,
                                      const std::string &message) {
-  Napi::Error error = Napi::Error::New(env, message);
+  // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
+  // where passing std::string directly to Napi::Error::New can result in
+  // truncated or corrupted error messages
+  Napi::Error error = Napi::Error::New(env, message.c_str());
 
   // Add SQLite error code information
   error.Set("sqliteCode", Napi::Number::New(env, sqlite_code));
@@ -127,7 +130,8 @@ inline void ThrowSqliteError(Napi::Env env, sqlite3 *db,
     ThrowEnhancedSqliteError(env, db, errcode, message);
   } else {
     // Fallback to simple error when no db handle available
-    Napi::Error::New(env, message).ThrowAsJavaScriptException();
+    // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
+    Napi::Error::New(env, message.c_str()).ThrowAsJavaScriptException();
   }
 }
 
@@ -150,8 +154,10 @@ ThrowFromSqliteException(Napi::Env env,
   error.Set("code", Napi::String::New(env, code_name));
 
   // Also set the human-readable error string
+  // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
   if (!ex.error_string().empty()) {
-    error.Set("sqliteErrorString", Napi::String::New(env, ex.error_string()));
+    error.Set("sqliteErrorString",
+              Napi::String::New(env, ex.error_string().c_str()));
   }
 
   error.ThrowAsJavaScriptException();

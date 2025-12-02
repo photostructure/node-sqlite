@@ -22,7 +22,8 @@ inline void ThrowErrSqliteErrorWithDb(Napi::Env env,
     if (db->HasDeferredAuthorizerException()) {
       std::string deferred_msg = db->GetDeferredAuthorizerException();
       db->ClearDeferredAuthorizerException();
-      Napi::Error::New(env, deferred_msg).ThrowAsJavaScriptException();
+      // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
+      Napi::Error::New(env, deferred_msg.c_str()).ThrowAsJavaScriptException();
     }
     return; // Don't throw SQLite error, JavaScript exception takes precedence
   }
@@ -42,7 +43,8 @@ inline void ThrowEnhancedSqliteErrorWithDB(
     if (db_sync->HasDeferredAuthorizerException()) {
       std::string deferred_msg = db_sync->GetDeferredAuthorizerException();
       db_sync->ClearDeferredAuthorizerException();
-      Napi::Error::New(env, deferred_msg).ThrowAsJavaScriptException();
+      // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
+      Napi::Error::New(env, deferred_msg.c_str()).ThrowAsJavaScriptException();
     }
     return; // Don't throw SQLite error, JavaScript exception takes precedence
   }
@@ -576,6 +578,19 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
     stmt->InitStatement(this, sql);
 
     return stmt_obj;
+  } catch (const SqliteException &e) {
+    // SqliteException stores message in std::string, avoiding Windows ARM ABI
+    // issues where std::exception::what() can return corrupted strings
+    if (HasDeferredAuthorizerException()) {
+      std::string deferred_msg = GetDeferredAuthorizerException();
+      ClearDeferredAuthorizerException();
+      SetIgnoreNextSQLiteError(false);
+      // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
+      Napi::Error::New(env, deferred_msg.c_str()).ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    node::ThrowFromSqliteException(env, e);
+    return env.Undefined();
   } catch (const std::exception &e) {
     // Handle deferred authorizer exceptions:
     //
@@ -595,7 +610,8 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
       std::string deferred_msg = GetDeferredAuthorizerException();
       ClearDeferredAuthorizerException();
       SetIgnoreNextSQLiteError(false);
-      Napi::Error::New(env, deferred_msg).ThrowAsJavaScriptException();
+      // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
+      Napi::Error::New(env, deferred_msg.c_str()).ThrowAsJavaScriptException();
       return env.Undefined();
     }
     node::THROW_ERR_SQLITE_ERROR(env, e.what());
@@ -638,7 +654,8 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
       std::string deferred_msg = GetDeferredAuthorizerException();
       ClearDeferredAuthorizerException();
       SetIgnoreNextSQLiteError(false);
-      Napi::Error::New(env, deferred_msg).ThrowAsJavaScriptException();
+      // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
+      Napi::Error::New(env, deferred_msg.c_str()).ThrowAsJavaScriptException();
       return env.Undefined();
     }
     std::string error = error_msg ? error_msg : "Unknown SQLite error";
@@ -1507,8 +1524,11 @@ void StatementSync::InitStatement(DatabaseSync *database,
       // object and will be retrieved by the caller.
       throw std::runtime_error("");
     }
-    std::string error = sqlite3_errmsg(database->connection());
-    throw std::runtime_error("Failed to prepare statement: " + error);
+    std::string error = "Failed to prepare statement: ";
+    error += sqlite3_errmsg(database->connection());
+    // Use SqliteException to capture error info - avoids Windows ARM ABI issues
+    // with std::runtime_error::what() returning corrupted strings
+    throw SqliteException(database->connection(), result, error);
   }
 }
 
