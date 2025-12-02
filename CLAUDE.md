@@ -59,8 +59,7 @@ node-sqlite/
 │       ├── node_mem.h        # Memory management utilities
 │       ├── util.h            # Node.js utility functions
 │       └── ...               # Other Node.js internal headers
-├── third-party/                 # Reference implementations for compatibility
-│   └── better-sqlite3/       # better-sqlite3 package for API reference (submodule)
+├── ../better-sqlite3/           # better-sqlite3 for API reference (optional, clone separately)
 ├── ../node/                     # Node.js repository for reference (optional, clone separately)
 ├── scripts/
 │   └── sync-from-node.js     # Automated sync from Node.js repository
@@ -100,12 +99,11 @@ node-sqlite/
 - Loads native binding and exports typed interfaces
 - Handles Symbol.dispose integration
 
-**Vendored Reference Implementations** (`third-party/`):
+**External Reference Implementations** (optional, clone separately):
 
-- **`third-party/better-sqlite3/`**: Reference implementation for better-sqlite3 API compatibility
-  - Contains full source code, documentation, and comprehensive test suite
-  - Used for API reference when implementing better-sqlite3 drop-in replacement features
-  - Test suite provides validation that our implementation matches expected behavior
+- **`../better-sqlite3/`**: Reference implementation for better-sqlite3 API compatibility
+  - Clone from https://github.com/WiseLibs/better-sqlite3 if needed for API reference
+  - Used when implementing better-sqlite3 drop-in replacement features
 
 ### Documentation Structure
 
@@ -219,8 +217,7 @@ This approach reduces test brittleness while ensuring error handling works corre
 - **Main implementation** is in `src/sqlite_impl.{h,cpp}` (ported from Node.js)
 - **Shims** in `src/shims/` provide Node.js internal API compatibility
 - **User functions** are implemented in `src/user_function.{h,cpp}`
-- **Use `third-party/better-sqlite3/` for API reference** when implementing better-sqlite3 compatibility
-- **Validate against `third-party/better-sqlite3/test/`** to ensure drop-in replacement behavior
+- **Use `../better-sqlite3/` for API reference** when implementing better-sqlite3 compatibility (clone separately if needed)
 
 ### Testing Requirements
 
