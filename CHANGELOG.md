@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] (2025-12-01)
+
+### Added
+
+- Windows ARM64 prebuilt binaries
+
+### Fixed
+
+- Error message handling on Windows ARM64 (ABI compatibility)
+- Error handling consistency across platforms
+
 ## [0.2.0] (2025-12-01)
 
 ### Added
