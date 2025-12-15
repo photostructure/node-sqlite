@@ -97,10 +97,12 @@ docker exec "$CONTAINER_NAME" sh -c "
   $BUILD_CMD
 "
 
-# Copy artifacts back with proper ownership
-docker cp "$CONTAINER_NAME:/tmp/project/prebuilds" . 2>/dev/null || true
-docker cp "$CONTAINER_NAME:/tmp/project/build" . 2>/dev/null || true
-docker cp "$CONTAINER_NAME:/tmp/project/config.gypi" . 2>/dev/null || true
+# Copy artifacts back with correct ownership (docker cp creates root-owned files)
+docker exec "$CONTAINER_NAME" tar -cf - -C /tmp/project \
+  prebuilds \
+  build \
+  config.gypi \
+  2>/dev/null | tar -xf - --owner="$(id -u)" --group="$(id -g)" || true
 
 # Clean up container
 docker rm -f "$CONTAINER_NAME" >/dev/null
