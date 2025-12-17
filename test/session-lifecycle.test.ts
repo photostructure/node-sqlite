@@ -284,42 +284,49 @@ describe("Session Lifecycle Management (RAII)", () => {
   });
 
   describe("RAII-Specific Guarantees", () => {
-    it("should ensure sessions are deleted before database in destructor", async () => {
-      // This test verifies the cleanup order by creating a scenario where
-      // incorrect order would cause issues
+    it(
+      "should ensure sessions are deleted before database in destructor",
+      async () => {
+        // This test verifies the cleanup order by using Symbol.dispose
+        // via the `using` declaration. When the block exits, the database
+        // is disposed which should properly clean up all associated sessions.
 
-      const dbPath = path.join(tempDir, "raii-test.db");
+        const dbPath = path.join(tempDir, "raii-test.db");
 
-      {
-        const db = new DatabaseSync(dbPath);
-        db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT)");
+        {
+          // Use `using` to trigger Symbol.dispose on block exit
+          using db = new DatabaseSync(dbPath);
+          db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, data TEXT)");
 
-        // Create multiple sessions
-        const sessions = [];
-        for (let i = 0; i < 10; i++) {
-          sessions.push(db.createSession());
+          // Create multiple sessions - these will be cleaned up when db is disposed
+          const sessions: Session[] = [];
+          for (let i = 0; i < 10; i++) {
+            sessions.push(db.createSession());
+          }
+
+          // Make changes
+          const stmt = db.prepare("INSERT INTO test (data) VALUES (?)");
+          for (let i = 0; i < 100; i++) {
+            stmt.run(`data_${i}`);
+          }
+
+          // When block exits, `using` triggers db[Symbol.dispose]() which
+          // should clean up sessions before closing the database.
+          // If cleanup order is wrong, SQLite would have undefined behavior.
         }
 
-        // Make changes
-        const stmt = db.prepare("INSERT INTO test (data) VALUES (?)");
-        for (let i = 0; i < 100; i++) {
-          stmt.run(`data_${i}`);
-        }
+        // Verify we can open the database again (no corruption)
+        const db2 = new DatabaseSync(dbPath);
+        const count = db2
+          .prepare("SELECT COUNT(*) as cnt FROM test")
+          .get() as any;
+        expect(count.cnt).toBe(100);
+        db2.close();
 
-        // Don't explicitly close anything - rely on RAII
-        // If cleanup order is wrong, SQLite would have undefined behavior
-      }
-
-      // Verify we can open the database again (no corruption)
-      const db2 = new DatabaseSync(dbPath);
-      const count = db2
-        .prepare("SELECT COUNT(*) as cnt FROM test")
-        .get() as any;
-      expect(count.cnt).toBe(100);
-      db2.close();
-
-      await rm(dbPath);
-    });
+        await rm(dbPath);
+      },
+      getTestTimeout(15000),
+    );
 
     it("should handle exceptions during session operations", () => {
       const db = new DatabaseSync(":memory:");
