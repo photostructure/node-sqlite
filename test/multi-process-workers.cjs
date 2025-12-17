@@ -44,9 +44,10 @@ if (workerData?.type === "lockHolder") {
       } catch (e) {
         parentPort?.postMessage({ type: "ERROR", error: e.message });
       }
-      
-      // Exit the worker
+
+      // Exit the worker - close parentPort to allow worker thread to exit
       parentPort?.postMessage({ type: "EXIT", code: 0 });
+      parentPort?.close();
     }, workerData.lockHoldTime);
     
   } catch (e) {
@@ -62,6 +63,7 @@ if (workerData?.type === "lockHolder") {
       }
     }
     parentPort?.postMessage({ type: "EXIT", code: 1 });
+    parentPort?.close();
   }
 }
 
@@ -73,24 +75,29 @@ else if (workerData?.type === "lockWriter") {
   try {
     // Open database with very short timeout
     db = new DatabaseSync(workerData.dbPath, { timeout: 1 });
-    
+
     // Try to write
-    const stmt = db.prepare(`UPDATE ${tableName} SET value = value + 1 WHERE id = 1`);
+    const stmt = db.prepare(
+      `UPDATE ${tableName} SET value = value + 1 WHERE id = 1`,
+    );
     stmt.run();
-    
+
     parentPort?.postMessage({ type: "WRITE_SUCCESS" });
     db.close();
     parentPort?.postMessage({ type: "EXIT", code: 0 });
-    
+    parentPort?.close();
   } catch (e) {
-    if (e.message.includes("SQLITE_BUSY") || e.message.includes("database is locked")) {
+    if (
+      e.message.includes("SQLITE_BUSY") ||
+      e.message.includes("database is locked")
+    ) {
       parentPort?.postMessage({ type: "DATABASE_LOCKED" });
       parentPort?.postMessage({ type: "EXIT", code: 0 });
     } else {
       parentPort?.postMessage({ type: "ERROR", error: e.message });
       parentPort?.postMessage({ type: "EXIT", code: 1 });
     }
-    
+
     if (db) {
       try {
         db.close();
@@ -98,5 +105,6 @@ else if (workerData?.type === "lockWriter") {
         // Ignore errors during cleanup
       }
     }
+    parentPort?.close();
   }
 }
