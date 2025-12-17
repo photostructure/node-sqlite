@@ -91,26 +91,26 @@ describe("SQLTagStore Tests", () => {
 
   test("TagStore capacity, size, and clear", () => {
     expect(sql.capacity).toBe(10);
-    expect(sql.size()).toBe(0);
+    expect(sql.size).toBe(0);
 
     expect(sql.run`INSERT INTO foo (text) VALUES (${"one"})`.changes).toBe(1);
-    expect(sql.size()).toBe(1);
+    expect(sql.size).toBe(1);
 
     expect(sql.get`SELECT * FROM foo WHERE text = ${"one"}`).toBeDefined();
-    expect(sql.size()).toBe(2);
+    expect(sql.size).toBe(2);
 
     // Using the same template string shouldn't increase the size
     expect(sql.get`SELECT * FROM foo WHERE text = ${"two"}`).toBeUndefined();
-    expect(sql.size()).toBe(2);
+    expect(sql.size).toBe(2);
 
     expect(
       (sql.all`SELECT * FROM foo` as Array<{ id: number; text: string }>)
         .length,
     ).toBe(1);
-    expect(sql.size()).toBe(3);
+    expect(sql.size).toBe(3);
 
     sql.clear();
-    expect(sql.size()).toBe(0);
+    expect(sql.size).toBe(0);
     expect(sql.capacity).toBe(10);
   });
 
@@ -141,7 +141,7 @@ describe("SQLTagStore Tests", () => {
 
   test("evicts finalized statements from cache", () => {
     expect(sql.run`INSERT INTO foo (text) VALUES (${"test"})`.changes).toBe(1);
-    expect(sql.size()).toBe(1);
+    expect(sql.size).toBe(1);
 
     // Get the cached statement through a different path - directly from db
     const stmt = db.prepare("INSERT INTO foo (text) VALUES (?)");
@@ -156,16 +156,16 @@ describe("SQLTagStore Tests", () => {
     expect(sql3.run`INSERT INTO foo (text) VALUES (${"cached"})`.changes).toBe(
       1,
     );
-    expect(sql3.size()).toBe(1);
+    expect(sql3.size).toBe(1);
 
     // Get a direct reference to a statement and finalize
     // Note: The cached statement is not directly accessible, so we test via size
     sql3.clear();
-    expect(sql3.size()).toBe(0);
+    expect(sql3.size).toBe(0);
 
     // Re-run should create a new statement
     expect(sql3.run`INSERT INTO foo (text) VALUES (${"new"})`.changes).toBe(1);
-    expect(sql3.size()).toBe(1);
+    expect(sql3.size).toBe(1);
   });
 
   test("LRU eviction when at capacity", () => {
@@ -183,18 +183,18 @@ describe("SQLTagStore Tests", () => {
       1,
     );
     expect(smallSql.get`SELECT * FROM foo WHERE id = ${1}`).toBeDefined();
-    expect(smallSql.size()).toBe(3);
+    expect(smallSql.size).toBe(3);
 
     // Add a 4th - should evict the oldest (first INSERT into foo)
     expect(smallSql.all`SELECT * FROM bar`.length).toBe(1);
-    expect(smallSql.size()).toBe(3);
+    expect(smallSql.size).toBe(3);
 
     // Verify LRU behavior - the INSERT into foo should be evicted
     // Accessing it again should add it back
     expect(smallSql.run`INSERT INTO foo (text) VALUES (${"c"})`.changes).toBe(
       1,
     );
-    expect(smallSql.size()).toBe(3);
+    expect(smallSql.size).toBe(3);
   });
 
   test("statement finalized property works", () => {

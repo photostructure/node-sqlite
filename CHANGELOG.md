@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] (2025-12-16)
+
+### Changed
+
+- **BREAKING**: `SQLTagStore.size` changed from method to getter for Node.js API parity (Node.js PR #60246)
+  - Before: `sql.size()`
+  - After: `sql.size`
+
 ## [0.2.1] (2025-12-01)
 
 ### Added
@@ -75,5 +83,7 @@ All notable changes to this project will be documented in this file.
 - macOS (x64, ARM64)
 - Linux (x64, ARM64), (glibc 2.28+, musl)
 
+[0.3.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.3.0
+[0.2.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.1
 [0.2.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.0
 [0.0.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.0.1

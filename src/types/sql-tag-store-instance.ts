@@ -12,7 +12,7 @@ export interface SQLTagStoreInstance {
   /**
    * Returns the current number of cached statements.
    */
-  size(): number;
+  readonly size: number;
   /**
    * Clears all cached statements.
    */

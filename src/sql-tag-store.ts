@@ -49,7 +49,7 @@ export class SQLTagStore {
   /**
    * Returns the current number of cached statements.
    */
-  size(): number {
+  get size(): number {
     return this.cache.size();
   }
 
