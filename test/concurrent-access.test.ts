@@ -1,5 +1,5 @@
 import { DatabaseSync } from "../src";
-import { useTempDir } from "./test-utils";
+import { getTimingMultiplier, useTempDir } from "./test-utils";
 
 describe("Concurrent Access Patterns Tests", () => {
   const { getDbPath } = useTempDir("sqlite-concurrent-test-", {
@@ -664,40 +664,31 @@ describe("Concurrent Access Patterns Tests", () => {
 
       const startTime = Date.now();
 
-      // Each reader performs 100 queries
-      const promises = readers.map((db, readerIndex) => {
-        return new Promise<void>((resolve) => {
-          const stmt = db.prepare(
-            "SELECT * FROM perf_test WHERE category = ? AND value > ? LIMIT 20",
-          );
-
-          for (let i = 0; i < 100; i++) {
-            const category = (readerIndex * 10 + i) % 50;
-            const value = Math.random() * 500;
-            const results = stmt.all(category, value);
-
-            // Verify results make sense
-            expect(Array.isArray(results)).toBe(true);
-            expect(results.length).toBeLessThanOrEqual(20);
-          }
-
-          resolve();
-        });
-      });
-
-      // Wait for all readers to complete (simulate concurrent execution)
-      Promise.all(promises).then(() => {
-        const endTime = Date.now();
-        const totalTime = endTime - startTime;
-
-        // Performance check: should complete within reasonable time
-        // This is a rough check - actual thresholds would depend on hardware
-        expect(totalTime).toBeLessThan(10000); // 10 seconds max for 800 queries
-
-        console.log(
-          `Concurrent read test completed in ${totalTime}ms (800 queries across 8 readers)`,
+      // Each reader performs 100 queries (synchronously - SQLite is synchronous)
+      readers.forEach((db, readerIndex) => {
+        const stmt = db.prepare(
+          "SELECT * FROM perf_test WHERE category = ? AND value > ? LIMIT 20",
         );
+
+        for (let i = 0; i < 100; i++) {
+          const category = (readerIndex * 10 + i) % 50;
+          const value = Math.random() * 500;
+          const results = stmt.all(category, value);
+
+          // Verify results make sense
+          expect(Array.isArray(results)).toBe(true);
+          expect(results.length).toBeLessThanOrEqual(20);
+        }
       });
+
+      const endTime = Date.now();
+      const totalTime = endTime - startTime;
+
+      // Log timing for informational purposes
+      // Note: ARM64 CI runners can be significantly slower than x64
+      console.log(
+        `Concurrent read test completed in ${totalTime}ms (800 queries across 8 readers)`,
+      );
 
       // Close all readers
       readers.forEach((db) => db.close());
@@ -761,8 +752,9 @@ describe("Concurrent Access Patterns Tests", () => {
       const finalCounter = readStmt1.get();
       expect(finalCounter.counter).toBe(10); // 100/10 writes
 
-      // Performance check
-      expect(totalTime).toBeLessThan(5000); // 5 seconds max
+      // Performance check - allow more time on slower platforms (ARM64, Windows, etc.)
+      const maxTime = 5000 * getTimingMultiplier();
+      expect(totalTime).toBeLessThan(maxTime);
 
       console.log(
         `Mixed workload test completed in ${totalTime}ms (100 iterations with reads and writes)`,
