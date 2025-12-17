@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- **BREAKING**: `SQLTagStore.size` changed from method to getter for Node.js API parity (Node.js PR #60246)
+- **BREAKING**: `SQLTagStore.size` changed from method to getter for Node.js API parity ([Node.js PR #60246](https://github.com/nodejs/node/pull/60246))
   - Before: `sql.size()`
   - After: `sql.size`
 
