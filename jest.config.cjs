@@ -1,15 +1,51 @@
 // @ts-check
 
-const { argv } = require("node:process");
+const os = require("node:os");
+const { arch, argv } = require("node:process");
 
 const isESM =
   process.env.TEST_ESM === "1" ||
   process.env.NODE_OPTIONS?.includes("--experimental-vm-modules");
 
+const isCI = process.env.CI === "true";
+
+/**
+ * Determine appropriate Jest worker count for the environment.
+ *
+ * In CI, we reduce parallelism to avoid resource contention between
+ * heavy test files (concurrent-access, multi-process, memory tests).
+ * ARM64 runners appear to have I/O bottlenecks that cause severe slowdowns
+ * when too many test files run in parallel.
+ *
+ * @returns {number | undefined} maxWorkers value, or undefined for Jest default
+ */
+function getMaxWorkers() {
+  if (!isCI) {
+    // Local development: use Jest default (all available)
+    return undefined;
+  }
+
+  // os.availableParallelism() was added in Node 18.14 / 19.4
+  const parallelism = os.availableParallelism?.() ?? os.cpus().length;
+
+  // ARM64 CI runners have I/O bottlenecks - be conservative
+  if (arch === "arm64") {
+    // Use at most half, but ensure at least 2 for concurrency testing
+    return Math.max(2, Math.floor(parallelism / 2));
+  }
+
+  // Other CI platforms: use 75% to leave headroom
+  return Math.max(2, Math.floor(parallelism * 0.75));
+}
+
+const maxWorkers = getMaxWorkers();
+
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 const config = {
   displayName: `@photostructure/sqlite (${isESM ? "ESM" : "CJS"})`,
   testEnvironment: "jest-environment-node",
+  // Limit parallelism in CI to avoid resource contention
+  ...(maxWorkers != null && { maxWorkers }),
   roots: ["<rootDir>/src", "<rootDir>/test", "<rootDir>/benchmark"],
   coverageProvider: "v8",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
