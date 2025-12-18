@@ -110,7 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - run: npm ci --ignore-scripts
-      - run: TARGET_ARCH=${{ matrix.arch }} npm run build:linux-glibc
+      - run: TARGET_ARCH=${{ matrix.arch }} npm run build:native:linux
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: prebuilds-linux-${{ matrix.arch }}-glibc
@@ -262,11 +262,11 @@ jobs:
       - run: npm ci
       - run: npm run build:dist
       - name: Check API compatibility types (TypeScript compile-time validation)
-        run: npm run lint:api-compat
+        run: npm run lint:api
       - name: Run API type compatibility tests (ensures our TypeScript types match node:sqlite)
-        run: npm run test:api-compat
+        run: npm run test:api
       - name: Run behavioral compatibility tests (validates runtime behavior matches node:sqlite)
-        run: npm run test:node-compat
+        run: npm run test:node
 
   publish:
     if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -310,7 +310,7 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run prepare-release
+      - run: npm run release:prepare
 
       - name: Version and tag release
         run: |

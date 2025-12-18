@@ -51,6 +51,10 @@ run({
   desc: "Fetching upstream from Node.js",
 });
 run({
+  cmd: "npm run sync:tests",
+  desc: "Fetching upstream tests from Node.js",
+});
+run({
   cmd: "npm run sync:sqlite",
   desc: "Fetching upstream from SQLite.org",
 });
@@ -63,13 +67,13 @@ run({
 run({ cmd: "npm run security", desc: "Running security checks" });
 run({ cmd: "npm run build:dist", desc: "Building project" });
 run({
-  cmd: "npm run build:" + (isLinux ? "linux-glibc" : "native"),
+  cmd: "npm run build:" + (isLinux ? "native:linux" : "native"),
   desc:
     "Building native project for " +
     (isLinux ? "Linux with portable GLIBC" : platform()),
 });
 run({
-  cmd: "npm run tests",
+  cmd: "npm run test:all",
   desc: "Running tests in CJS and ESM mode",
 });
 
@@ -78,15 +82,15 @@ const nodeVersion = process.version;
 const majorVersion = parseInt(nodeVersion.split(".")[0].substring(1), 10);
 if (majorVersion >= 22) {
   run({
-    cmd: "npm run lint:api-compat",
+    cmd: "npm run lint:api",
     desc: "Check API compatibility types (TypeScript compile-time validation)",
   });
   run({
-    cmd: "npm run test:api-compat",
+    cmd: "npm run test:api",
     desc: "Run API type compatibility tests (ensures our TypeScript types match node:sqlite)",
   });
   run({
-    cmd: "npm run test:node-compat",
+    cmd: "npm run test:node",
     desc: "Run behavioral compatibility tests (validates runtime behavior matches node:sqlite)",
   });
 } else {
@@ -100,7 +104,7 @@ if (isLinux || isMacOS) {
 
 // Run comprehensive memory tests (cross-platform)
 run({
-  cmd: "npm run check:memory",
+  cmd: "npm run memory:check",
   desc: "Comprehensive memory tests",
 });
 

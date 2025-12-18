@@ -49,7 +49,7 @@ jobs:
         run: npm run build
 
       - name: Run stress test validation
-        run: npm run stress-test:validate
+        run: npm run stress:validate
         timeout-minutes: 5
 
       - name: Install and build benchmark dependencies

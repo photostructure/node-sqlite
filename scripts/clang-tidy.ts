@@ -69,7 +69,7 @@ if (existsSync(compileCommandsPath)) {
 
   // Use bear to generate compile_commands.json
   // Bear intercepts the build commands and creates the compilation database
-  execSync("bear -- npm run node-gyp-rebuild", {
+  execSync("bear -- npm run build:native:rebuild", {
     stdio: "inherit",
   });
 

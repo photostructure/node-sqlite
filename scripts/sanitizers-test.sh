@@ -76,7 +76,7 @@ fi
 
 # Build the native module
 echo "Building with AddressSanitizer..."
-npm run node-gyp-rebuild
+npm run build:native:rebuild
 
 # Build the distribution bundle
 echo "Building distribution bundle..."

@@ -126,19 +126,32 @@ This separation ensures that all generated artifacts live under `build/` and eli
 
 This project follows consistent naming patterns for npm scripts to improve discoverability and maintainability:
 
-### Action:Target Format
+### Pattern: `<action>[:<target>[:<variant>]]`
 
-Scripts follow an `action:target` pattern where:
+- **action**: The operation being performed (`build`, `clean`, `test`, `lint`, `fmt`, `sync`, `bench`, `stress`, `memory`, `security`)
+- **target**: What the action operates on (`native`, `ts`, `dist`, `cjs`, `esm`, `api`, `node`)
+- **variant**: Optional modifier (`linux`, `rebuild`, `full`, `validate`, `ci`)
 
-- **action**: The operation being performed (`setup`, `build`, `clean`, `lint`, `test`, `fmt`)
-- **target**: What the action operates on (`native`, `ts`, `dist`)
+### Key Scripts
+
+| Script                 | Description                                                  |
+| ---------------------- | ------------------------------------------------------------ |
+| `test`                 | Quick dev feedback (builds dist, runs Jest without coverage) |
+| `test:all`             | Comprehensive tests (builds everything, runs CJS + ESM)      |
+| `test:api`             | API compatibility tests against node:sqlite                  |
+| `test:node`            | Node.js behavioral compatibility tests                       |
+| `lint`                 | Runs TypeScript and eslint (always works)                    |
+| `lint:full`            | Adds optional native linting and API checks                  |
+| `build:native:linux`   | Linux-specific portable GLIBC build                          |
+| `build:native:rebuild` | Direct node-gyp rebuild                                      |
 
 ### Naming Guidelines
 
-- Use explicit names to avoid ambiguity (e.g., `build:native` instead of just `prebuild`)
-- Group related scripts by action prefix for easy wildcard execution
-- Avoid names that could cause npm lifecycle conflicts
-- Use descriptive suffixes that clearly indicate the target or purpose
+- **Primary commands** are short and memorable (`test`, `lint`, `build`)
+- **Sub-commands** use consistent `:suffix` naming for variants
+- **No hidden lifecycle hooks** - `pretest`/`pretests` removed for clarity
+- **Explicit aggregation** - `lint` explicitly lists what it runs, doesn't glob
+- **Platform commands** use deep nesting (`build:native:linux`) to avoid breaking globs
 
 ## Development Notes
 
@@ -229,7 +242,7 @@ This approach reduces test brittleness while ensuring error handling works corre
 ### Build and Dependencies
 
 - **Run `npm run lint`** to check code quality
-- **Native rebuilds** use `npm run node-gyp-rebuild`
+- **Native rebuilds** use `npm run build:native:rebuild`
 - **Multi-platform prebuilds** are generated via GitHub Actions
 
 ## Example Usage (Target API)

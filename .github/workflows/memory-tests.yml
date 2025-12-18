@@ -36,7 +36,7 @@ jobs:
         run: npm run build
 
       - name: Run comprehensive memory tests
-        run: npm run check:memory
+        run: npm run memory:check
 
       - name: Upload memory test artifacts
         if: always()
