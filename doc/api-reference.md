@@ -89,11 +89,17 @@ Creates a new database connection.
 
 ```typescript
 interface DatabaseSyncOptions {
+  open?: boolean; // Open database immediately (default: true)
   readOnly?: boolean; // Open in read-only mode (default: false)
   enableForeignKeyConstraints?: boolean; // Enable foreign keys (default: true)
   enableDoubleQuotedStringLiterals?: boolean; // Allow double-quoted strings (default: false)
-  timeout?: number; // Busy timeout in ms (default: 0)
   allowExtension?: boolean; // Allow loading extensions (default: false)
+  timeout?: number; // Busy timeout in ms (default: 0)
+  readBigInts?: boolean; // Return BigInt for INTEGER columns (default: false)
+  returnArrays?: boolean; // Return rows as arrays instead of objects (default: false)
+  allowBareNamedParameters?: boolean; // Allow $name without : prefix (default: true)
+  allowUnknownNamedParameters?: boolean; // Allow unbound named parameters (default: false)
+  defensive?: boolean; // Enable defensive mode (default: false)
 }
 ```
 
@@ -198,9 +204,10 @@ Registers a custom scalar SQL function.
 
 ```typescript
 interface FunctionOptions {
-  deterministic?: boolean; // Same input always gives same output
-  directOnly?: boolean; // Cannot be used in triggers/views
-  varargs?: boolean; // Accept variable number of arguments
+  deterministic?: boolean; // Same input always gives same output (default: false)
+  directOnly?: boolean; // Cannot be used in triggers/views (default: false)
+  useBigIntArguments?: boolean; // Receive BigInt instead of number for INTEGER args (default: false)
+  varargs?: boolean; // Accept variable number of arguments (default: false)
 }
 ```
 
@@ -236,12 +243,14 @@ Registers a custom aggregate SQL function.
 
 ```typescript
 interface AggregateOptions {
-  start: any | (() => any); // Initial value or factory
-  step: (accumulator: any, ...values: any[]) => any; // Step function
-  result?: (accumulator: any) => any; // Final result transformer
-  deterministic?: boolean;
-  directOnly?: boolean;
-  varargs?: boolean;
+  start: any | (() => any); // Initial value or factory function
+  step: (accumulator: any, ...values: any[]) => any; // Called for each row
+  result?: (accumulator: any) => any; // Final result transformer (optional)
+  inverse?: (accumulator: any, ...values: any[]) => any; // For window functions
+  deterministic?: boolean; // Same input always gives same output (default: false)
+  directOnly?: boolean; // Cannot be used in triggers/views (default: false)
+  useBigIntArguments?: boolean; // Receive BigInt for INTEGER args (default: false)
+  varargs?: boolean; // Accept variable number of arguments (default: false)
 }
 ```
 
@@ -250,6 +259,7 @@ interface AggregateOptions {
 db.aggregate("custom_sum", {
   start: 0,
   step: (sum, value) => sum + value,
+  result: (sum) => sum,
 });
 
 // Average aggregate
@@ -261,6 +271,14 @@ db.aggregate("custom_avg", {
     return acc;
   },
   result: (acc) => acc.sum / acc.count,
+});
+
+// Window function with inverse
+db.aggregate("moving_sum", {
+  start: 0,
+  step: (sum, value) => sum + value,
+  inverse: (sum, value) => sum - value, // Remove value leaving window
+  result: (sum) => sum,
 });
 ```
 
@@ -379,7 +397,105 @@ db.loadExtension("./extensions/vector.so");
 db.loadExtension("./custom.so", "sqlite3_custom_init");
 ```
 
+#### open()
+
+```typescript
+open(): void
+```
+
+Opens the database connection. Only needed if `open: false` was passed to the constructor.
+
+```javascript
+const db = new DatabaseSync("myapp.db", { open: false });
+// ... configure something ...
+db.open();
+```
+
+#### setAuthorizer()
+
+```typescript
+setAuthorizer(callback: AuthorizerCallback | null): void
+```
+
+Sets an authorizer callback to control access to database operations. Pass `null` to remove the authorizer.
+
+**Callback signature:**
+
+```typescript
+type AuthorizerCallback = (
+  actionCode: number,
+  arg1: string | null,
+  arg2: string | null,
+  dbName: string | null,
+  triggerOrView: string | null,
+) => number; // Returns SQLITE_OK, SQLITE_DENY, or SQLITE_IGNORE
+```
+
+```javascript
+db.setAuthorizer((action, arg1, arg2, dbName, trigger) => {
+  if (action === constants.SQLITE_DROP_TABLE) {
+    return constants.SQLITE_DENY; // Prevent dropping tables
+  }
+  return constants.SQLITE_OK;
+});
+```
+
+#### enableDefensive()
+
+```typescript
+enableDefensive(active: boolean): void
+```
+
+Enables or disables defensive mode, which prevents application bugs from corrupting the database.
+
+```javascript
+db.enableDefensive(true);
+```
+
+#### createTagStore()
+
+```typescript
+createTagStore(maxSize?: number): SQLTagStore
+```
+
+Creates a SQLTagStore for cached prepared statements using tagged template literals.
+
+```javascript
+const sql = db.createTagStore();
+sql.run`INSERT INTO users VALUES (${id}, ${name})`;
+const user = sql.get`SELECT * FROM users WHERE id = ${id}`;
+```
+
 ### Properties
+
+#### isOpen
+
+```typescript
+readonly isOpen: boolean
+```
+
+Returns `true` if the database connection is open.
+
+```javascript
+console.log(db.isOpen); // true
+db.close();
+console.log(db.isOpen); // false
+```
+
+#### isTransaction
+
+```typescript
+readonly isTransaction: boolean
+```
+
+Returns `true` if a transaction is currently active.
+
+```javascript
+db.exec("BEGIN");
+console.log(db.isTransaction); // true
+db.exec("COMMIT");
+console.log(db.isTransaction); // false
+```
 
 #### location()
 
@@ -448,14 +564,101 @@ const users = stmt.all();
 console.log(users); // Array of all user objects
 ```
 
-#### [Symbol.iterator]()
+#### iterate()
 
-Allows direct iteration over statement results.
+```typescript
+iterate(...params: any[]): Iterator<any>
+```
+
+Executes the statement and returns an iterator for the results.
 
 ```javascript
-for (const row of stmt) {
+for (const row of stmt.iterate()) {
   console.log(row);
 }
+```
+
+#### columns()
+
+```typescript
+columns(): ColumnInfo[]
+```
+
+Returns metadata about the columns in the result set.
+
+**Returns:**
+
+```typescript
+interface ColumnInfo {
+  column: string | null; // Original column name
+  database: string | null; // Database name
+  name: string; // Column alias or name
+  table: string | null; // Table name
+  type: string | null; // Declared type
+}
+```
+
+```javascript
+const stmt = db.prepare("SELECT id, name FROM users");
+console.log(stmt.columns());
+// [
+//   { column: 'id', database: 'main', name: 'id', table: 'users', type: 'INTEGER' },
+//   { column: 'name', database: 'main', name: 'name', table: 'users', type: 'TEXT' }
+// ]
+```
+
+#### setReadBigInts()
+
+```typescript
+setReadBigInts(enabled: boolean): void
+```
+
+Configures whether INTEGER columns are returned as BigInt values.
+
+```javascript
+stmt.setReadBigInts(true);
+const row = stmt.get(1);
+console.log(typeof row.id); // "bigint"
+```
+
+#### setReturnArrays()
+
+```typescript
+setReturnArrays(enabled: boolean): void
+```
+
+Configures whether rows are returned as arrays instead of objects.
+
+```javascript
+stmt.setReturnArrays(true);
+const row = stmt.get(1);
+console.log(row); // [1, 'Alice', 30] instead of { id: 1, name: 'Alice', age: 30 }
+```
+
+#### setAllowBareNamedParameters()
+
+```typescript
+setAllowBareNamedParameters(enabled: boolean): void
+```
+
+Configures whether named parameters can be used without the `:` prefix.
+
+```javascript
+stmt.setAllowBareNamedParameters(true);
+stmt.run({ name: "Alice" }); // Works without :name
+```
+
+#### setAllowUnknownNamedParameters()
+
+```typescript
+setAllowUnknownNamedParameters(enabled: boolean): void
+```
+
+Configures whether unbound named parameters are allowed (they resolve to NULL).
+
+```javascript
+stmt.setAllowUnknownNamedParameters(true);
+stmt.run({ name: "Alice" }); // Extra params in object are ignored
 ```
 
 #### finalize()
@@ -523,11 +726,17 @@ console.log(stmt.expandedSQL); // "SELECT * FROM users WHERE id = 42"
 
 ```typescript
 interface DatabaseSyncOptions {
-  readOnly?: boolean;
-  enableForeignKeyConstraints?: boolean;
-  enableDoubleQuotedStringLiterals?: boolean;
-  timeout?: number;
-  allowExtension?: boolean;
+  open?: boolean; // Open database immediately (default: true)
+  readOnly?: boolean; // Open in read-only mode (default: false)
+  enableForeignKeyConstraints?: boolean; // Enable foreign keys (default: true)
+  enableDoubleQuotedStringLiterals?: boolean; // Allow double-quoted strings (default: false)
+  allowExtension?: boolean; // Allow loading extensions (default: false)
+  timeout?: number; // Busy timeout in ms (default: 0)
+  readBigInts?: boolean; // Return BigInt for INTEGER columns (default: false)
+  returnArrays?: boolean; // Return rows as arrays instead of objects (default: false)
+  allowBareNamedParameters?: boolean; // Allow $name without : prefix (default: true)
+  allowUnknownNamedParameters?: boolean; // Allow unbound named parameters (default: false)
+  defensive?: boolean; // Enable defensive mode (default: false)
 }
 ```
 
@@ -544,9 +753,10 @@ interface StatementOptions {
 
 ```typescript
 interface FunctionOptions {
-  deterministic?: boolean;
-  directOnly?: boolean;
-  varargs?: boolean;
+  deterministic?: boolean; // Same input always gives same output (default: false)
+  directOnly?: boolean; // Cannot be used in triggers/views (default: false)
+  useBigIntArguments?: boolean; // Receive BigInt for INTEGER args (default: false)
+  varargs?: boolean; // Accept variable number of arguments (default: false)
 }
 ```
 
@@ -554,12 +764,14 @@ interface FunctionOptions {
 
 ```typescript
 interface AggregateOptions {
-  start: any | (() => any);
-  step: (accumulator: any, ...values: any[]) => any;
-  result?: (accumulator: any) => any;
-  deterministic?: boolean;
-  directOnly?: boolean;
-  varargs?: boolean;
+  start: any | (() => any); // Initial value or factory function
+  step: (accumulator: any, ...values: any[]) => any; // Called for each row
+  result?: (accumulator: any) => any; // Final result transformer (optional)
+  inverse?: (accumulator: any, ...values: any[]) => any; // For window functions
+  deterministic?: boolean; // Same input always gives same output (default: false)
+  directOnly?: boolean; // Cannot be used in triggers/views (default: false)
+  useBigIntArguments?: boolean; // Receive BigInt for INTEGER args (default: false)
+  varargs?: boolean; // Accept variable number of arguments (default: false)
 }
 ```
 
@@ -567,9 +779,31 @@ interface AggregateOptions {
 
 ```typescript
 interface BackupOptions {
-  source?: string;
-  rate?: number;
+  source?: string; // Source database name (default: 'main')
+  target?: string; // Target database name (default: 'main')
+  rate?: number; // Pages per iteration (default: 100)
   progress?: (info: { totalPages: number; remainingPages: number }) => void;
+}
+```
+
+### ColumnInfo
+
+```typescript
+interface ColumnInfo {
+  column: string | null; // Original column name
+  database: string | null; // Database name
+  name: string; // Column alias or name
+  table: string | null; // Table name
+  type: string | null; // Declared type
+}
+```
+
+### RunResult
+
+```typescript
+interface RunResult {
+  changes: number | bigint; // Number of rows affected
+  lastInsertRowid: number | bigint; // Last inserted row ID
 }
 ```
 

@@ -99,6 +99,20 @@ db.close();
 3. ✅ Remove `--experimental-sqlite` flag from your npm scripts
 4. ✅ Run your tests - they should all pass!
 
+## Additional Constants
+
+@photostructure/sqlite exports 20 additional `SQLITE_OPEN_*` constants for advanced database opening scenarios. These are available via `constants.SQLITE_OPEN_*` and are useful for low-level control. These constants are additive and don't affect API compatibility.
+
+## Unsupported Features
+
+### Node.js Permission Model
+
+Node.js's [permission model](https://nodejs.org/api/permissions.html#permission-model) (`--permission` flag) provides security restrictions that are enforced at the Node.js runtime level. Since @photostructure/sqlite is a userland package, it cannot integrate with this internal security mechanism.
+
+If you use the permission model and need SQLite extension loading restrictions enforced by it, you must use the built-in `node:sqlite` module.
+
+**Workaround**: For extension loading control, you can simply avoid calling `loadExtension()` or set `allowExtension: false` (the default) when creating databases.
+
 ## When to Keep Using node:sqlite
 
 You might want to stick with the built-in module if:
@@ -106,6 +120,7 @@ You might want to stick with the built-in module if:
 - You're already on Node.js 22.5.0+ and don't need backward compatibility
 - You prefer zero dependencies and don't mind the experimental flag
 - You're building for an environment where the flag is already enabled
+- You require Node.js permission model integration for extension loading restrictions
 
 ## When to Use @photostructure/sqlite
 

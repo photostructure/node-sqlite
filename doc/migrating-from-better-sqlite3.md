@@ -55,10 +55,10 @@ for (const row of stmt.iterate()) {
 }
 
 // @photostructure/sqlite
-for (const row of stmt) {
-  // Direct iteration on statement
+for (const row of stmt.iterate()) {
   console.log(row);
 }
+// Same syntax! ✅
 ```
 
 ### Property Differences
@@ -72,8 +72,10 @@ console.log(db.memory); // true/false
 console.log(db.readonly); // true/false
 
 // @photostructure/sqlite
-console.log(db.location); // 'mydb.sqlite' (different property name)
-// Note: open, inTransaction, memory, readonly properties not available
+console.log(db.location()); // 'mydb.sqlite' (method, not property)
+console.log(db.isOpen); // true/false (different property name)
+console.log(db.isTransaction); // true/false (different property name)
+// Note: memory, readonly properties not available - use options at construction
 ```
 
 ### Custom Functions
@@ -258,9 +260,8 @@ const db = new DatabaseSync("mydb.sqlite");
 
 1. **No .transaction() helper** - Use manual BEGIN/COMMIT/ROLLBACK
 2. **No .pragma() method** - Use db.exec() or db.prepare().get()
-3. **Different iteration syntax** - Iterate directly on statement, not stmt.iterate()
-4. **Property name changes** - `.name` → `.location`
-5. **No virtual table API** - Use raw SQL if needed
+3. **Property name changes** - `.name` → `.location()`, `.open` → `.isOpen`, `.inTransaction` → `.isTransaction`
+4. **No virtual table API** - Use raw SQL if needed
 
 ## Need Help?
 
