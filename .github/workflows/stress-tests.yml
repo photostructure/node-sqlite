@@ -29,6 +29,7 @@ jobs:
     timeout-minutes: 30
 
     strategy:
+      fail-fast: false # Don't cancel other jobs if one fails
       matrix:
         node-version: [20, 22]
 

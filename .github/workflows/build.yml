@@ -245,6 +245,7 @@ jobs:
       - prebuild-linux-glibc
 
     strategy:
+      fail-fast: false # Don't cancel other jobs if one fails
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node-version: [24]
