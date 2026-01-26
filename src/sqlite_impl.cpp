@@ -2974,6 +2974,11 @@ void Session::SetSession(DatabaseSync *database, sqlite3_session *session) {
   session_ = session;
   if (database_) {
     database_->AddSession(this);
+    // Create a strong reference to the database object to prevent it from being
+    // garbage collected while this session exists. This fixes use-after-free
+    // when the database is GC'd before its sessions.
+    // See: https://github.com/nodejs/node/pull/56840 (similar fix for statements)
+    database_ref_ = Napi::Persistent(database->Value());
   }
 }
 
@@ -2996,6 +3001,11 @@ void Session::Delete() {
 
   // Now it's safe to delete the SQLite session
   sqlite3session_delete(session_to_delete);
+
+  // Release the strong reference to the database object
+  if (!database_ref_.IsEmpty()) {
+    database_ref_.Reset();
+  }
 }
 
 template <int (*sqliteChangesetFunc)(sqlite3_session *, int *, void **)>

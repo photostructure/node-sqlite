@@ -360,6 +360,10 @@ private:
 
   sqlite3_session *session_ = nullptr;
   DatabaseSync *database_ = nullptr; // Direct pointer to database
+  // Strong reference to database object to prevent GC while session exists.
+  // This fixes use-after-free when database is GC'd before its sessions.
+  // See: https://github.com/nodejs/node/pull/56840 (similar fix for statements)
+  Napi::ObjectReference database_ref_;
 
   friend class DatabaseSync;
 };
