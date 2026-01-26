@@ -25,7 +25,9 @@ export class SQLTagStore {
 
   constructor(db: DatabaseSyncInstance, capacity: number = DEFAULT_CAPACITY) {
     if (!db.isOpen) {
-      throw new Error("Database is not open");
+      const err = new Error("database is not open");
+      (err as NodeJS.ErrnoException).code = "ERR_INVALID_STATE";
+      throw err;
     }
     this.database = db;
     this.maxCapacity = capacity;
@@ -101,23 +103,18 @@ export class SQLTagStore {
 
   /**
    * Get a cached statement or prepare a new one.
-   * If a cached statement has been finalized, it's evicted and a new one is prepared.
    */
   private getOrPrepare(strings: TemplateStringsArray): StatementSyncInstance {
     if (!this.database.isOpen) {
-      throw new Error("Database is not open");
+      throw new Error("database is not open");
     }
 
     const sql = this.buildSQL(strings);
 
-    // Check cache - evict if finalized
+    // Check cache
     const cached = this.cache.get(sql);
     if (cached) {
-      if (!cached.finalized) {
-        return cached;
-      }
-      // Statement was finalized externally - remove from cache
-      this.cache.delete(sql);
+      return cached;
     }
 
     // Prepare new statement and cache it

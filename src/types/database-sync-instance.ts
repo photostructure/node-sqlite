@@ -88,13 +88,18 @@ export interface DatabaseSyncInstance {
    * ```
    */
   createTagStore(capacity?: number): SQLTagStoreInstance;
+
   /**
    * Apply a changeset to the database.
    * @param changeset The changeset data to apply.
    * @param options Optional configuration for applying the changeset.
    * @returns true if successful, false if aborted.
    */
-  applyChangeset(changeset: Buffer, options?: ChangesetApplyOptions): boolean;
+  applyChangeset(
+    changeset: Uint8Array,
+    options?: ChangesetApplyOptions,
+  ): boolean;
+
   /**
    * Enables or disables the loading of SQLite extensions.
    * @param enable If true, enables extension loading. If false, disables it.
@@ -158,45 +163,6 @@ export interface DatabaseSyncInstance {
         ) => number)
       | null,
   ): void;
-
-  /**
-   * Makes a backup of the database. This method abstracts the sqlite3_backup_init(),
-   * sqlite3_backup_step() and sqlite3_backup_finish() functions.
-   *
-   * The backed-up database can be used normally during the backup process. Mutations
-   * coming from the same connection will be reflected in the backup right away.
-   * However, mutations from other connections will cause the backup process to restart.
-   *
-   * @param path The path where the backup will be created. If the file already exists, the contents will be overwritten.
-   * @param options Optional configuration for the backup operation.
-   * @param options.rate Number of pages to be transmitted in each batch of the backup. @default 100
-   * @param options.source Name of the source database. This can be 'main' (the default primary database) or any other database that have been added with ATTACH DATABASE. @default 'main'
-   * @param options.target Name of the target database. This can be 'main' (the default primary database) or any other database that have been added with ATTACH DATABASE. @default 'main'
-   * @param options.progress Callback function that will be called with the number of pages copied and the total number of pages.
-   * @returns A promise that resolves when the backup is completed and rejects if an error occurs.
-   *
-   * @example
-   * // Basic backup
-   * await db.backup('./backup.db');
-   *
-   * @example
-   * // Backup with progress
-   * await db.backup('./backup.db', {
-   *   rate: 10,
-   *   progress: ({ totalPages, remainingPages }) => {
-   *     console.log(`Progress: ${totalPages - remainingPages}/${totalPages}`);
-   *   }
-   * });
-   */
-  backup(
-    path: string | Buffer | URL,
-    options?: {
-      rate?: number;
-      source?: string;
-      target?: string;
-      progress?: (info: { totalPages: number; remainingPages: number }) => void;
-    },
-  ): Promise<number>;
 
   /** Dispose of the database resources using the explicit resource management protocol. */
   [Symbol.dispose](): void;

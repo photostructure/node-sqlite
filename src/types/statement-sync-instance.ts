@@ -1,4 +1,40 @@
 /**
+ * Metadata about a column in a prepared statement's result set.
+ * Matches Node.js sqlite module's StatementColumnMetadata.
+ */
+export interface StatementColumnMetadata {
+  /**
+   * The unaliased name of the column in the origin table, or `null` if the
+   * column is the result of an expression or subquery.
+   * This property is the result of `sqlite3_column_origin_name()`.
+   */
+  column: string | null;
+  /**
+   * The unaliased name of the origin database, or `null` if the column is
+   * the result of an expression or subquery.
+   * This property is the result of `sqlite3_column_database_name()`.
+   */
+  database: string | null;
+  /**
+   * The name assigned to the column in the result set of a SELECT statement.
+   * This property is the result of `sqlite3_column_name()`.
+   */
+  name: string;
+  /**
+   * The unaliased name of the origin table, or `null` if the column is
+   * the result of an expression or subquery.
+   * This property is the result of `sqlite3_column_table_name()`.
+   */
+  table: string | null;
+  /**
+   * The declared data type of the column, or `null` if the column is
+   * the result of an expression or subquery.
+   * This property is the result of `sqlite3_column_decltype()`.
+   */
+  type: string | null;
+}
+
+/**
  * A prepared SQL statement that can be executed multiple times with different parameters.
  * This interface represents an instance of the StatementSync class.
  */
@@ -7,8 +43,6 @@ export interface StatementSyncInstance {
   readonly sourceSQL: string;
   /** The expanded SQL string with bound parameters, if expandedSQL option was set. */
   readonly expandedSQL: string | undefined;
-  /** Whether this statement has been finalized. */
-  readonly finalized: boolean;
   /**
    * This method executes a prepared statement and returns an object.
    * @param parameters Optional named and anonymous parameters to bind to the statement.
@@ -59,15 +93,7 @@ export interface StatementSyncInstance {
   setReturnArrays(returnArrays: boolean): void;
   /**
    * Returns an array of objects, each representing a column in the statement's result set.
-   * Each object has a 'name' property for the column name and a 'type' property for the SQLite type.
-   * @returns Array of column metadata objects.
+   * @returns Array of column metadata objects with name, column, database, table, and type.
    */
-  columns(): Array<{ name: string; type?: string }>;
-  /**
-   * Finalizes the prepared statement and releases its resources.
-   * Called automatically by Symbol.dispose.
-   */
-  finalize(): void;
-  /** Dispose of the statement resources using the explicit resource management protocol. */
-  [Symbol.dispose](): void;
+  columns(): StatementColumnMetadata[];
 }
