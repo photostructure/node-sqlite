@@ -171,8 +171,8 @@ import { DatabaseSync } from "@photostructure/sqlite";
 See our detailed [migration guide](./migrating-from-better-sqlite3.md). Key differences:
 
 - Constructor syntax slightly different
-- No `.transaction()` helper method
-- Different property names (e.g., `.name` → `.location`)
+- Use `enhance()` for `.transaction()` and `.pragma()` helper methods
+- Different property names (e.g., `.name` → `.location()`)
 - Iterator syntax changes
 
 ### From `sqlite3` to `@photostructure/sqlite`

@@ -86,6 +86,13 @@ This package includes SQLite 3.51.1 with extensive compile-time options enabled.
 - Configurable busy timeout
 - Foreign key constraint enforcement
 
+### better-sqlite3 Compatibility
+
+- **`enhance()` function** - Adds `.pragma()` and `.transaction()` methods to any compatible database
+- **Works with `node:sqlite`** - Enhance native `node:sqlite` DatabaseSync instances
+- **Transaction helpers** - Automatic BEGIN/COMMIT/ROLLBACK with savepoint support for nested transactions
+- **Pragma convenience** - Simple API for reading and setting SQLite pragmas
+
 ### Statement Features
 
 - Prepared statements with parameter binding

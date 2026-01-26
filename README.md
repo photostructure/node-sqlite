@@ -2,7 +2,6 @@
 
 [![npm version](https://img.shields.io/npm/v/@photostructure/sqlite.svg)](https://www.npmjs.com/package/@photostructure/sqlite)
 [![CI](https://github.com/photostructure/node-sqlite/actions/workflows/build.yml/badge.svg)](https://github.com/photostructure/node-sqlite/actions/workflows/build.yml)
-[![Stability: Stable](https://img.shields.io/badge/stability-stable-brightgreen.svg)](https://nodejs.org/api/documentation.html#stability-index)
 
 Native SQLite for Node.js 20+ without the experimental flag. Drop-in replacement for `node:sqlite`. Synced with Node.js v25 for the latest features including native `Symbol.dispose` resource management.
 
@@ -39,6 +38,7 @@ db.close();
 - Database backups and session/changeset support
 - Session class exposed for advanced replication workflows
 - Native Symbol.dispose for improved resource management
+- `enhance()` function for better-sqlite3 style `.pragma()` and `.transaction()` methods
 - URI filename support for advanced configuration
 - Worker thread safe
 - [Compare with other libraries →](./doc/library-comparison.md)

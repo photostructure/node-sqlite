@@ -17,6 +17,7 @@ export type { AggregateOptions } from "./types/aggregate-options";
 export type { ChangesetApplyOptions } from "./types/changeset-apply-options";
 export type { DatabaseSyncInstance } from "./types/database-sync-instance";
 export type { DatabaseSyncOptions } from "./types/database-sync-options";
+export type { PragmaOptions } from "./types/pragma-options";
 export type { SessionOptions } from "./types/session-options";
 export type { SQLTagStoreInstance } from "./types/sql-tag-store-instance";
 export type { SqliteAuthorizationActions } from "./types/sqlite-authorization-actions";
@@ -24,8 +25,21 @@ export type { SqliteAuthorizationResults } from "./types/sqlite-authorization-re
 export type { SqliteChangesetConflictTypes } from "./types/sqlite-changeset-conflict-types";
 export type { SqliteChangesetResolution } from "./types/sqlite-changeset-resolution";
 export type { SqliteOpenFlags } from "./types/sqlite-open-flags";
-export type { StatementSyncInstance } from "./types/statement-sync-instance";
+export type {
+  StatementColumnMetadata,
+  StatementSyncInstance,
+} from "./types/statement-sync-instance";
+export type { TransactionFunction, TransactionMode } from "./types/transaction";
 export type { UserFunctionOptions } from "./types/user-functions-options";
+
+// Enhancement utilities for adding better-sqlite3-style methods to any compatible database
+export {
+  enhance,
+  isEnhanced,
+  type EnhanceableDatabaseSync,
+  type EnhancedDatabaseSync,
+  type EnhancedMethods,
+} from "./enhance";
 
 // Use _dirname() helper that works in both CJS/ESM and Jest
 const binding = nodeGypBuild(join(_dirname(), ".."));
@@ -52,25 +66,54 @@ export type SqliteConstants = SqliteOpenFlags &
 
 /**
  * Options for creating a prepared statement.
+ *
+ * **Note:** The per-statement override options (`readBigInts`, `returnArrays`,
+ * `allowBareNamedParameters`, `allowUnknownNamedParameters`) are a **Node.js v25+**
+ * feature. On Node.js v24 and earlier, `node:sqlite` silently ignores these options.
+ * This library implements them for forward compatibility with Node.js v25+.
  */
 export interface StatementOptions {
   /** If true, the prepared statement's expandedSQL property will contain the expanded SQL. @default false */
   readonly expandedSQL?: boolean;
   /** If true, anonymous parameters are enabled for the statement. @default false */
   readonly anonymousParameters?: boolean;
+  /**
+   * If true, read integer values as JavaScript BigInt. Overrides database-level setting.
+   * **Node.js v25+ feature** - silently ignored by `node:sqlite` on v24 and earlier.
+   * @default database default
+   */
+  readonly readBigInts?: boolean;
+  /**
+   * If true, return results as arrays rather than objects. Overrides database-level setting.
+   * **Node.js v25+ feature** - silently ignored by `node:sqlite` on v24 and earlier.
+   * @default database default
+   */
+  readonly returnArrays?: boolean;
+  /**
+   * If true, allows bare named parameters (without prefix). Overrides database-level setting.
+   * **Node.js v25+ feature** - silently ignored by `node:sqlite` on v24 and earlier.
+   * @default database default
+   */
+  readonly allowBareNamedParameters?: boolean;
+  /**
+   * If true, unknown named parameters are ignored. Overrides database-level setting.
+   * **Node.js v25+ feature** - silently ignored by `node:sqlite` on v24 and earlier.
+   * @default database default
+   */
+  readonly allowUnknownNamedParameters?: boolean;
 }
 
 export interface Session {
   /**
    * Generate a changeset containing all changes recorded by the session.
-   * @returns A Buffer containing the changeset data.
+   * @returns A Uint8Array containing the changeset data.
    */
-  changeset(): Buffer;
+  changeset(): Uint8Array;
   /**
    * Generate a patchset containing all changes recorded by the session.
-   * @returns A Buffer containing the patchset data.
+   * @returns A Uint8Array containing the patchset data.
    */
-  patchset(): Buffer;
+  patchset(): Uint8Array;
   /**
    * Close the session and release its resources.
    */
@@ -133,8 +176,20 @@ export interface SqliteModule {
  * const readOnlyDb = new DatabaseSync('./data.db', { readOnly: true });
  * ```
  */
-export const DatabaseSync =
-  binding.DatabaseSync as SqliteModule["DatabaseSync"];
+// Store the native binding's DatabaseSync
+const _DatabaseSync = binding.DatabaseSync;
+// Wrapper around the native constructor to enforce usage of `new` with the correct error code.
+// We use a function wrapper instead of a Proxy for better performance and explicit prototype handling.
+export const DatabaseSync = function DatabaseSync(this: any, ...args: any[]) {
+  if (!new.target) {
+    const err = new TypeError("Cannot call constructor without `new`");
+    (err as NodeJS.ErrnoException).code = "ERR_CONSTRUCT_CALL_REQUIRED";
+    throw err;
+  }
+  return Reflect.construct(_DatabaseSync, args, new.target);
+} as unknown as SqliteModule["DatabaseSync"];
+Object.setPrototypeOf(DatabaseSync, _DatabaseSync);
+DatabaseSync.prototype = _DatabaseSync.prototype;
 
 // node:sqlite implements createTagStore and SQLTagStore entirely in native C++.
 // We use a TypeScript implementation instead, attached via prototype extension.
@@ -148,6 +203,15 @@ export const DatabaseSync =
   return new SQLTagStore(this, capacity);
 };
 
+// NOTE: .pragma() and .transaction() are NOT added to the prototype by default.
+// This keeps DatabaseSync 100% API-compatible with node:sqlite.
+// Users who want better-sqlite3-style methods should use enhance():
+//
+//   import { DatabaseSync, enhance } from '@photostructure/sqlite';
+//   const db = enhance(new DatabaseSync(':memory:'));
+//   db.pragma('journal_mode', { simple: true });
+//   db.transaction(() => { ... });
+
 /**
  * The StatementSync class represents a prepared SQL statement.
  * This class should not be instantiated directly; use DatabaseSync.prepare() instead.
@@ -159,8 +223,18 @@ export const DatabaseSync =
  * stmt.finalize();
  * ```
  */
-export const StatementSync =
-  binding.StatementSync as SqliteModule["StatementSync"];
+// Store the native binding's StatementSync for internal use
+const _StatementSync = binding.StatementSync;
+// Export a wrapper that throws ERR_ILLEGAL_CONSTRUCTOR when called directly
+// but preserves instanceof checks and prototype chain
+export const StatementSync = function StatementSync() {
+  const err = new TypeError("Illegal constructor");
+  (err as NodeJS.ErrnoException).code = "ERR_ILLEGAL_CONSTRUCTOR";
+  throw err;
+} as unknown as SqliteModule["StatementSync"];
+// Use the native prototype directly so instanceof checks work correctly
+// (stmt instanceof StatementSync will check if StatementSync.prototype is in stmt's chain)
+StatementSync.prototype = _StatementSync.prototype;
 
 /**
  * The Session class for recording database changes.

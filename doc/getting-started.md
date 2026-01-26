@@ -186,6 +186,38 @@ try {
 }
 ```
 
+### Using enhance() for better-sqlite3 Style
+
+If you're coming from better-sqlite3 or prefer its transaction helper pattern, use `enhance()`:
+
+```javascript
+import { DatabaseSync, enhance } from "@photostructure/sqlite";
+
+// Wrap with enhance() to add .pragma() and .transaction() methods
+const db = enhance(new DatabaseSync("myapp.db"));
+
+// Use the transaction helper - automatically handles BEGIN/COMMIT/ROLLBACK
+const insertMany = db.transaction((items) => {
+  const insert = db.prepare(
+    "INSERT INTO accounts (name, balance) VALUES (?, ?)",
+  );
+  for (const item of items) {
+    insert.run(item.name, item.balance);
+  }
+});
+
+insertMany([
+  { name: "Alice", balance: 1000 },
+  { name: "Bob", balance: 500 },
+]);
+
+// Use pragma() for configuration
+db.pragma("journal_mode = WAL");
+const cacheSize = db.pragma("cache_size", { simple: true });
+
+db.close();
+```
+
 ## Next Steps
 
 - [Working with Data](./working-with-data.md) - Learn about prepared statements, parameter binding, and transactions

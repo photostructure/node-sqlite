@@ -214,6 +214,65 @@ db.exec("BEGIN IMMEDIATE");
 db.exec("BEGIN EXCLUSIVE");
 ```
 
+### Transaction Helper with enhance()
+
+For a more convenient transaction API similar to better-sqlite3, use the `enhance()` function:
+
+```javascript
+import { DatabaseSync, enhance } from "@photostructure/sqlite";
+
+const db = enhance(new DatabaseSync("bank.db"));
+
+const withdraw = db.prepare(
+  "UPDATE accounts SET balance = balance - ? WHERE id = ?",
+);
+const deposit = db.prepare(
+  "UPDATE accounts SET balance = balance + ? WHERE id = ?",
+);
+
+// Create a transaction function
+const transfer = db.transaction((amount, fromId, toId) => {
+  withdraw.run(amount, fromId);
+  deposit.run(amount, toId);
+});
+
+// Automatically wraps in BEGIN/COMMIT, ROLLBACK on error
+transfer(100, 1, 2);
+
+// Use different transaction modes
+transfer.immediate(100, 1, 2); // BEGIN IMMEDIATE
+transfer.exclusive(100, 1, 2); // BEGIN EXCLUSIVE
+transfer.deferred(100, 1, 2); // BEGIN DEFERRED (default)
+```
+
+### Nested Transactions with Savepoints
+
+When using `enhance()`, nested transaction calls automatically use savepoints:
+
+```javascript
+const db = enhance(new DatabaseSync("app.db"));
+
+const outer = db.transaction(() => {
+  db.exec('INSERT INTO log VALUES ("outer start")');
+
+  try {
+    inner(); // Uses SAVEPOINT internally
+  } catch (e) {
+    // Inner was rolled back, outer continues
+    db.exec('INSERT INTO log VALUES ("inner failed")');
+  }
+
+  db.exec('INSERT INTO log VALUES ("outer end")');
+});
+
+const inner = db.transaction(() => {
+  db.exec('INSERT INTO log VALUES ("inner")');
+  throw new Error("rollback inner only");
+});
+
+outer(); // Only "outer start", "inner failed", "outer end" are committed
+```
+
 ### Savepoints
 
 ```javascript
