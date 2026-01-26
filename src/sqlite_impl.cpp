@@ -2977,7 +2977,8 @@ void Session::SetSession(DatabaseSync *database, sqlite3_session *session) {
     // Create a strong reference to the database object to prevent it from being
     // garbage collected while this session exists. This fixes use-after-free
     // when the database is GC'd before its sessions.
-    // See: https://github.com/nodejs/node/pull/56840 (similar fix for statements)
+    // See: https://github.com/nodejs/node/pull/56840 (similar fix for
+    // statements)
     database_ref_ = Napi::Persistent(database->Value());
   }
 }
