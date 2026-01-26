@@ -59,70 +59,8 @@ describe("Disposable Interface", () => {
     });
   });
 
-  describe("StatementSync Symbol.dispose", () => {
-    test("Symbol.dispose exists when Symbol.dispose is available", () => {
-      if (typeof Symbol !== "undefined" && Symbol.dispose) {
-        const db = new DatabaseSync(":memory:");
-        const stmt = db.prepare("SELECT 1");
-
-        expect(typeof stmt[Symbol.dispose]).toBe("function");
-
-        db.close(); // This also finalizes the statement
-      }
-    });
-
-    test("Symbol.dispose finalizes the statement", () => {
-      if (typeof Symbol !== "undefined" && Symbol.dispose) {
-        const db = new DatabaseSync(":memory:");
-        const stmt = db.prepare("SELECT 1");
-
-        // Statement should work initially
-        expect(stmt.get()).toEqual({ "1": 1 });
-
-        // Call Symbol.dispose
-        stmt[Symbol.dispose]();
-
-        // Statement should be finalized and throw on use
-        expect(() => stmt.get()).toThrow();
-
-        db.close();
-      }
-    });
-
-    test("Symbol.dispose ignores errors during disposal", () => {
-      if (typeof Symbol !== "undefined" && Symbol.dispose) {
-        const db = new DatabaseSync(":memory:");
-        const stmt = db.prepare("SELECT 1");
-
-        // Finalize the statement first
-        stmt.finalize();
-
-        // Calling Symbol.dispose on already finalized statement should not throw
-        expect(() => {
-          stmt[Symbol.dispose]();
-        }).not.toThrow();
-
-        db.close();
-      }
-    });
-
-    test("Symbol.dispose can be called multiple times safely", () => {
-      if (typeof Symbol !== "undefined" && Symbol.dispose) {
-        const db = new DatabaseSync(":memory:");
-        const stmt = db.prepare("SELECT 1");
-
-        // Call dispose multiple times
-        stmt[Symbol.dispose]();
-        stmt[Symbol.dispose]();
-        stmt[Symbol.dispose]();
-
-        // Statement should be finalized
-        expect(() => stmt.get()).toThrow();
-
-        db.close();
-      }
-    });
-  });
+  // Note: StatementSync does not implement Symbol.dispose in node:sqlite API.
+  // Statements are automatically finalized when the database is closed.
 
   describe("using statement integration", () => {
     test("using statement works with DatabaseSync if supported", async () => {
@@ -144,7 +82,6 @@ describe("Disposable Interface", () => {
             // Use the database
             const stmt = db.prepare("INSERT INTO test (id) VALUES (?)");
             stmt.run(1);
-            stmt.finalize();
           } finally {
             // using would call Symbol.dispose here
             db[Symbol.dispose]();
@@ -158,35 +95,23 @@ describe("Disposable Interface", () => {
       }
     });
 
-    test("nested using statements would work correctly", () => {
+    test("disposal of database finalizes all statements", () => {
       if (typeof Symbol !== "undefined" && Symbol.dispose) {
         const db = new DatabaseSync(":memory:");
         db.exec("CREATE TABLE test (id INTEGER)");
 
-        // Simulate nested using declarations
-        try {
-          // Outer using db = new DatabaseSync(...)
-          try {
-            // Inner using stmt = db.prepare(...)
-            const stmt = db.prepare("SELECT * FROM test");
+        const stmt1 = db.prepare("SELECT * FROM test");
+        const stmt2 = db.prepare("INSERT INTO test (id) VALUES (?)");
 
-            // Use the statement
-            stmt.all();
+        // Dispose database (should finalize all statements)
+        db[Symbol.dispose]();
 
-            // Inner using would dispose stmt here
-            stmt[Symbol.dispose]();
-
-            // Statement should be finalized
-            expect(() => stmt.get()).toThrow();
-          } finally {
-            // This represents the end of the inner using block
-          }
-        } finally {
-          // Outer using would dispose db here
-          db[Symbol.dispose]();
-        }
-
+        // Database should be closed
         expect(db.isOpen).toBe(false);
+
+        // Both statements should be finalized
+        expect(() => stmt1.get()).toThrow();
+        expect(() => stmt2.run(1)).toThrow();
       }
     });
   });
@@ -212,14 +137,9 @@ describe("Disposable Interface", () => {
       }
     });
 
-    test("disposal is idempotent across mixed manual and automatic cleanup", () => {
+    test("disposal is idempotent for database", () => {
       if (typeof Symbol !== "undefined" && Symbol.dispose) {
         const db = new DatabaseSync(":memory:");
-        const stmt = db.prepare("SELECT 1");
-
-        // Mix manual and automatic cleanup
-        stmt.finalize(); // Manual cleanup
-        stmt[Symbol.dispose](); // Automatic cleanup - should not throw
 
         db.close(); // Manual cleanup
         db[Symbol.dispose](); // Automatic cleanup - should not throw

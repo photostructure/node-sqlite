@@ -273,7 +273,7 @@ describe("Multi-Process Database Access", () => {
           }
         });
 
-        lockHolderWorker.on("error", (error) => {
+        lockHolderWorker.on("error", (error: Error) => {
           workerError = error;
         });
 
@@ -356,7 +356,7 @@ describe("Multi-Process Database Access", () => {
               }
             });
 
-            writerWorker.on("error", (error) => {
+            writerWorker.on("error", (error: Error) => {
               writerError = error;
               clearTimeout(timeout);
               reject(error);

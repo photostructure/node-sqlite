@@ -31,7 +31,7 @@ try {
       const db = new DatabaseSync(dbPath, { readOnly: true });
       const stmt = db.prepare("SELECT * FROM test");
       const rows = stmt.all();
-      stmt.finalize();
+      // Note: finalize() not needed - statements are auto-finalized on GC
       db.close();
       sendResult(true, { rows });
       break;
@@ -41,7 +41,7 @@ try {
       const db = new DatabaseSync(dbPath, { readOnly: true });
       const stmt = db.prepare("SELECT COUNT(*) as count FROM test");
       const result = stmt.get();
-      stmt.finalize();
+      // Note: finalize() not needed - statements are auto-finalized on GC
       db.close();
       sendResult(true, {
         count: result.count,
@@ -56,7 +56,7 @@ try {
       const db = new DatabaseSync(dbPath);
       const stmt = db.prepare("INSERT INTO test (value) VALUES (?)");
       const result = stmt.run(value || `worker-${workerId}`);
-      stmt.finalize();
+      // Note: finalize() not needed - statements are auto-finalized on GC
       db.close();
       sendResult(true, {
         lastInsertRowid: result.lastInsertRowid,

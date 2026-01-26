@@ -92,9 +92,6 @@ describe("Simple Concurrent Access Tests", () => {
     expect(result.value).toBe("test2");
 
     // Clean up
-    insertStmt.finalize();
-    selectStmt.finalize();
-    countStmt.finalize();
     db.close();
   });
 });

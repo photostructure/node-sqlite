@@ -7,14 +7,14 @@ import {
   jest,
 } from "@jest/globals";
 import * as fs from "node:fs";
-import { DatabaseSync } from "../src";
+import { backup, DatabaseSync, type DatabaseSyncInstance } from "../src";
 import { getTestTimeout, useTempDir } from "./test-utils";
 
 describe("Backup Restoration", () => {
   jest.setTimeout(getTestTimeout());
   const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-");
 
-  let sourceDb: InstanceType<typeof DatabaseSync>;
+  let sourceDb: DatabaseSyncInstance;
   let sourceFile: string;
   let backupFile: string;
 
@@ -42,7 +42,7 @@ describe("Backup Restoration", () => {
     `);
 
     // Create backup
-    await sourceDb.backup(backupFile);
+    await backup(sourceDb, backupFile);
 
     // Modify source database
     sourceDb.exec(`
@@ -126,7 +126,7 @@ describe("Backup Restoration", () => {
     `);
 
     // Create backup
-    await sourceDb.backup(backupFile);
+    await backup(sourceDb, backupFile);
 
     // Drop everything in source
     sourceDb.exec(`
@@ -204,7 +204,7 @@ describe("Backup Restoration", () => {
     expect(auditBefore.count).toBe(1);
 
     // Create backup
-    await sourceDb.backup(backupFile);
+    await backup(sourceDb, backupFile);
 
     // Restore from backup
     sourceDb.close();
@@ -239,7 +239,7 @@ describe("Backup Restoration", () => {
 
     // First backup
     const backup1 = getDbPath("backup1.db");
-    await sourceDb.backup(backup1);
+    await backup(sourceDb, backup1);
 
     // Add more data
     sourceDb.exec(
@@ -248,7 +248,7 @@ describe("Backup Restoration", () => {
 
     // Second backup
     const backup2 = getDbPath("backup2.db");
-    await sourceDb.backup(backup2);
+    await backup(sourceDb, backup2);
 
     // Add final data
     sourceDb.exec("INSERT INTO events (event_name) VALUES ('Event 5')");
@@ -307,7 +307,7 @@ describe("Backup Restoration", () => {
     expect(userVersionBefore.user_version).toBe(42);
 
     // Create backup
-    await sourceDb.backup(backupFile);
+    await backup(sourceDb, backupFile);
 
     // Change settings in source
     sourceDb.exec(`
@@ -315,6 +315,9 @@ describe("Backup Restoration", () => {
     `);
 
     // Restore from backup
+    // Force checkpoint and switch to rollback mode to ensure clean close
+    sourceDb.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    sourceDb.exec("PRAGMA journal_mode = DELETE");
     sourceDb.close();
     fs.copyFileSync(backupFile, sourceFile);
     sourceDb = new DatabaseSync(sourceFile);
@@ -349,7 +352,7 @@ describe("Backup Restoration", () => {
     `);
 
     // Create backup
-    await sourceDb.backup(backupFile);
+    await backup(sourceDb, backupFile);
 
     // Corrupt the backup file by writing invalid data
     fs.writeFileSync(
@@ -397,7 +400,7 @@ describe("Backup Restoration", () => {
 
     // Measure backup time
     const backupStart = Date.now();
-    await sourceDb.backup(backupFile);
+    await backup(sourceDb, backupFile);
     const backupTime = Date.now() - backupStart;
 
     // Clear source

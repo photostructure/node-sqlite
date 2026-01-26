@@ -27,7 +27,8 @@ describe("Enhanced SQLite Error Information", () => {
         // Enhanced error properties
         expect(error.sqliteCode).toBe(14); // SQLITE_CANTOPEN
         expect(error.sqliteExtendedCode).toBeGreaterThanOrEqual(14);
-        expect(error.code).toBe("SQLITE_CANTOPEN");
+        expect(error.code).toBe("ERR_SQLITE_ERROR"); // Node.js compatible error code
+        expect(error.sqliteCodeName).toBe("SQLITE_CANTOPEN"); // SQLite error name
         expect(error.sqliteErrorString).toBe("unable to open database file");
 
         // System errno should be set for file system errors
@@ -135,10 +136,9 @@ describe("Enhanced SQLite Error Information", () => {
 
         expect(error.message).toMatch(/UNIQUE constraint failed/);
 
-        // Basic SQLITE_CONSTRAINT is 19
-        expect(error.sqliteCode).toBe(19);
-
+        // Both sqliteCode and sqliteExtendedCode return the extended code
         // Extended code for UNIQUE constraint is SQLITE_CONSTRAINT_UNIQUE (2067)
+        expect(error.sqliteCode).toBe(2067);
         expect(error.sqliteExtendedCode).toBe(2067);
 
         // No system errno for constraint violations
@@ -210,7 +210,8 @@ describe("Enhanced SQLite Error Information", () => {
         // Should have error code for syntax error
         expect(error.sqliteCode).toBe(1); // SQLITE_ERROR
         expect(error.sqliteExtendedCode).toBeGreaterThanOrEqual(1);
-        expect(error.code).toBe("SQLITE_ERROR");
+        expect(error.code).toBe("ERR_SQLITE_ERROR"); // Node.js compatible
+        expect(error.sqliteCodeName).toBe("SQLITE_ERROR"); // SQLite name
 
         console.log("Syntax error properties:", {
           sqliteCode: error.sqliteCode,

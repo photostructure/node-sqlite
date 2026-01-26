@@ -1,386 +1,501 @@
 /**
+ * API Compatibility Type Tests
+ *
  * This file uses TypeScript's type system to ensure our API is compatible with node:sqlite.
- * It maps our interface names to node:sqlite names and checks compatibility.
+ * It uses two patterns for compile-time type checking:
  *
- * Note: This file only performs type checking on Node.js 24 or later where node:sqlite is available.
- * On earlier versions, the type imports will fail and this file should be excluded from compilation.
+ * 1. **Type-level assertions**: `type _Check = Assert<Extends<ActualType, ExpectedType>>`
+ *    These are pure type aliases that produce compile errors if types don't match.
+ *    No runtime code is generated.
  *
- * All "unused" variables and types in this file are intentional - they exist solely to perform
- * compile-time type checking to ensure API compatibility.
+ * 2. **`satisfies` operator**: `const x = { ... } satisfies SomeType`
+ *    Verifies object literals are assignable to expected types.
  *
- * @fileoverview
- * ⚠️ DO NOT "FIX" UNUSED VARIABLES IN THIS FILE! ⚠️
+ * The runtime Jest tests at the bottom verify actual behavior (constants values, etc).
  *
- * This is a compile-time type compatibility test. All variables prefixed with underscore (_)
- * are intentionally unused. They exist to force TypeScript to check type compatibility.
- *
- * DO NOT:
- * - Add @ts-nocheck (defeats the purpose)
- * - Add @ts-ignore or @ts-expect-error comments
- * - Try to "use" the variables
- * - Add eslint-disable comments (they're not needed)
- *
- * This file is:
- * - Excluded from main tsconfig.json to avoid unused variable errors
- * - Checked separately via scripts/tsconfig.api-check.json with noUnusedLocals: false
- * - Run by npm run lint:api-compat which is called during precommit checks
+ * @note This file requires Node.js 24+ where node:sqlite is available.
  */
 
+import * as NodeSqlite from "node:sqlite";
 import * as OurSqlite from "../src";
 
-// Only import node:sqlite types on Node.js 24+
-import * as NodeSqlite from "node:sqlite";
+// =============================================================================
+// TYPE ASSERTION HELPERS
+// =============================================================================
 
-// Type assertion helpers
-type _Equals<X, Y> =
+/** Produces `true` if T extends U, otherwise `never` (causing a compile error in Assert) */
+type Extends<T, U> = T extends U ? true : never;
+
+/** Produces `true` only if X and Y are exactly equal types */
+type Equals<X, Y> =
   (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2
     ? true
     : false;
-type _Assert<T extends true> = T;
 
-// Our API now matches node:sqlite naming:
-// OurSqlite.DatabaseSync = NodeSqlite.DatabaseSync
-// OurSqlite.StatementSync = NodeSqlite.StatementSync
-// OurSqlite.DatabaseSyncInstance = NodeSqlite.DatabaseSync instance
-// OurSqlite.StatementSyncInstance = NodeSqlite.StatementSync instance
+/** Compile-time assertion - produces T if T is true, otherwise compile error */
+type Assert<T extends true> = T;
 
-// Check that our main classes are exported
-const _hasDatabaseSync: typeof OurSqlite.DatabaseSync = OurSqlite.DatabaseSync;
-const _hasStatementSync: typeof OurSqlite.StatementSync =
-  OurSqlite.StatementSync;
+// Suppress unused type warnings - these are used for compile-time checks only
+type _UseEquals = Equals<number, number>;
 
-// Check that standalone backup function is exported
-const _hasBackup: typeof OurSqlite.backup = OurSqlite.backup;
+// =============================================================================
+// TYPE ALIASES FOR CONVENIENCE
+// =============================================================================
 
-// Check that our interfaces correspond to node:sqlite interfaces
-// Note: We use different names but should have compatible structure
+type DBSync = InstanceType<typeof OurSqlite.DatabaseSync>;
+type StmtSync = InstanceType<typeof OurSqlite.StatementSync>;
+type SQLStore = OurSqlite.SQLTagStoreInstance;
+type SessionInst = InstanceType<typeof OurSqlite.Session>;
 
-// Database options compatibility - check key overlap
-type _NodeDbOptions = NodeSqlite.DatabaseSyncOptions;
-type OurDbOptions = OurSqlite.DatabaseSyncOptions;
-
-// Check if our options can be assigned where node options are expected
-type _OptionsCompatible = {
-  open?: boolean;
-  enableForeignKeyConstraints?: boolean;
-  enableDoubleQuotedStringLiterals?: boolean;
-  readOnly?: boolean;
-  allowExtension?: boolean;
-};
-
-// Verify our options have compatible fields
-function _checkOptionsCompat() {
-  const _ourOpts: OurDbOptions = {
-    readOnly: true,
-    enableForeignKeyConstraints: true,
-    enableDoubleQuotedStringLiterals: true,
-    allowExtension: true,
-  };
-  // Field names now match node:sqlite exactly
-}
-
-// Check method compatibility by creating instances
-function _checkDatabaseMethodsExist() {
-  const db = {} as InstanceType<typeof OurSqlite.DatabaseSync>;
-
-  // Core methods that must exist
-  const _close: () => void = db.close;
-  const _exec: (sql: string) => void = db.exec;
-  const _prepare: (sql: string) => any = db.prepare;
-  const _open: (config?: OurSqlite.DatabaseSyncOptions) => void = db.open;
-
-  // User functions
-  const _function: {
-    (name: string, func: Function): void;
-    (
-      name: string,
-      options: OurSqlite.UserFunctionOptions,
-      func: Function,
-    ): void;
-  } = db.function;
-  const _aggregate: (
-    name: string,
-    options: OurSqlite.AggregateOptions,
-  ) => void = db.aggregate;
-
-  // Properties
-  const _isOpen: boolean = db.isOpen;
-  const _isTransaction: boolean = db.isTransaction;
-  const _location: string | null = db.location();
-
-  // Session support
-  const _createSession: (
-    options?: OurSqlite.SessionOptions,
-  ) => OurSqlite.Session = db.createSession;
-  const _applyChangeset: (
-    changeset: Buffer,
-    options?: OurSqlite.ChangesetApplyOptions,
-  ) => boolean = db.applyChangeset;
-
-  // Extension support
-  const _enableLoadExtension: (enable: boolean) => void =
-    db.enableLoadExtension;
-  const _loadExtension: (path: string, entryPoint?: string) => void =
-    db.loadExtension;
-
-  // Backup functionality
-  const _backup: (
-    path: string,
-    options?: {
-      rate?: number;
-      source?: string;
-      target?: string;
-      progress?: (info: { totalPages: number; remainingPages: number }) => void;
-    },
-  ) => Promise<number> = db.backup;
-
-  // Symbol.dispose
-  if (typeof Symbol !== "undefined" && Symbol.dispose) {
-    const _dispose = db[Symbol.dispose];
-  }
-}
-
-function _checkStatementMethodsExist() {
-  const stmt = {} as InstanceType<typeof OurSqlite.StatementSync>;
-
-  // Core methods
-  const _run: (...params: any[]) => OurChangesShape = stmt.run;
-  const _get: (...params: any[]) => any = stmt.get;
-  const _all: (...params: any[]) => any[] = stmt.all;
-  const _iterate: (...params: any[]) => IterableIterator<any> = stmt.iterate;
-
-  // Properties
-  const _sourceSQL: string = stmt.sourceSQL;
-  const _expandedSQL: string | undefined = stmt.expandedSQL;
-
-  // Configuration
-  const _setReadBigInts: (readBigInts: boolean) => void = stmt.setReadBigInts;
-  const _setAllowBareNamedParameters: (allow: boolean) => void =
-    stmt.setAllowBareNamedParameters;
-  const _setReturnArrays: (returnArrays: boolean) => void =
-    stmt.setReturnArrays;
-
-  // Column metadata
-  const _columns: () => Array<{ name: string; type?: string }> = stmt.columns;
-
-  // Finalization
-  const _finalize: () => void = stmt.finalize;
-
-  // Symbol.dispose
-  if (typeof Symbol !== "undefined" && Symbol.dispose) {
-    const _dispose = stmt[Symbol.dispose];
-  }
-}
-
-// Check constants exist - compile-time type checking for all 65 constants
-function _checkConstants() {
-  if (OurSqlite.constants) {
-    // Database open flags (extension beyond node:sqlite)
-    const _openReadonly: number = OurSqlite.constants.SQLITE_OPEN_READONLY;
-    const _openReadwrite: number = OurSqlite.constants.SQLITE_OPEN_READWRITE;
-    const _openCreate: number = OurSqlite.constants.SQLITE_OPEN_CREATE;
-    const _openDeleteOnClose: number =
-      OurSqlite.constants.SQLITE_OPEN_DELETEONCLOSE;
-    const _openExclusive: number = OurSqlite.constants.SQLITE_OPEN_EXCLUSIVE;
-    const _openAutoproxy: number = OurSqlite.constants.SQLITE_OPEN_AUTOPROXY;
-    const _openUri: number = OurSqlite.constants.SQLITE_OPEN_URI;
-    const _openMemory: number = OurSqlite.constants.SQLITE_OPEN_MEMORY;
-    const _openMainDb: number = OurSqlite.constants.SQLITE_OPEN_MAIN_DB;
-    const _openTempDb: number = OurSqlite.constants.SQLITE_OPEN_TEMP_DB;
-    const _openTransientDb: number =
-      OurSqlite.constants.SQLITE_OPEN_TRANSIENT_DB;
-    const _openMainJournal: number =
-      OurSqlite.constants.SQLITE_OPEN_MAIN_JOURNAL;
-    const _openTempJournal: number =
-      OurSqlite.constants.SQLITE_OPEN_TEMP_JOURNAL;
-    const _openSubjournal: number = OurSqlite.constants.SQLITE_OPEN_SUBJOURNAL;
-    const _openSuperJournal: number =
-      OurSqlite.constants.SQLITE_OPEN_SUPER_JOURNAL;
-    const _openNoMutex: number = OurSqlite.constants.SQLITE_OPEN_NOMUTEX;
-    const _openFullMutex: number = OurSqlite.constants.SQLITE_OPEN_FULLMUTEX;
-    const _openSharedCache: number =
-      OurSqlite.constants.SQLITE_OPEN_SHAREDCACHE;
-    const _openPrivateCache: number =
-      OurSqlite.constants.SQLITE_OPEN_PRIVATECACHE;
-    const _openWal: number = OurSqlite.constants.SQLITE_OPEN_WAL;
-
-    // Changeset conflict resolution constants
-    const _omit: number = OurSqlite.constants.SQLITE_CHANGESET_OMIT;
-    const _replace: number = OurSqlite.constants.SQLITE_CHANGESET_REPLACE;
-    const _abort: number = OurSqlite.constants.SQLITE_CHANGESET_ABORT;
-
-    // Changeset conflict type constants
-    const _data: number = OurSqlite.constants.SQLITE_CHANGESET_DATA;
-    const _notfound: number = OurSqlite.constants.SQLITE_CHANGESET_NOTFOUND;
-    const _conflict: number = OurSqlite.constants.SQLITE_CHANGESET_CONFLICT;
-    const _constraint: number = OurSqlite.constants.SQLITE_CHANGESET_CONSTRAINT;
-    const _foreignKey: number =
-      OurSqlite.constants.SQLITE_CHANGESET_FOREIGN_KEY;
-
-    // Authorization result codes
-    const _ok: number = OurSqlite.constants.SQLITE_OK;
-    const _deny: number = OurSqlite.constants.SQLITE_DENY;
-    const _ignore: number = OurSqlite.constants.SQLITE_IGNORE;
-
-    // Authorization action codes
-    const _createIndex: number = OurSqlite.constants.SQLITE_CREATE_INDEX;
-    const _createTable: number = OurSqlite.constants.SQLITE_CREATE_TABLE;
-    const _createTempIndex: number =
-      OurSqlite.constants.SQLITE_CREATE_TEMP_INDEX;
-    const _createTempTable: number =
-      OurSqlite.constants.SQLITE_CREATE_TEMP_TABLE;
-    const _createTempTrigger: number =
-      OurSqlite.constants.SQLITE_CREATE_TEMP_TRIGGER;
-    const _createTempView: number = OurSqlite.constants.SQLITE_CREATE_TEMP_VIEW;
-    const _createTrigger: number = OurSqlite.constants.SQLITE_CREATE_TRIGGER;
-    const _createView: number = OurSqlite.constants.SQLITE_CREATE_VIEW;
-    const _delete: number = OurSqlite.constants.SQLITE_DELETE;
-    const _dropIndex: number = OurSqlite.constants.SQLITE_DROP_INDEX;
-    const _dropTable: number = OurSqlite.constants.SQLITE_DROP_TABLE;
-    const _dropTempIndex: number = OurSqlite.constants.SQLITE_DROP_TEMP_INDEX;
-    const _dropTempTable: number = OurSqlite.constants.SQLITE_DROP_TEMP_TABLE;
-    const _dropTempTrigger: number =
-      OurSqlite.constants.SQLITE_DROP_TEMP_TRIGGER;
-    const _dropTempView: number = OurSqlite.constants.SQLITE_DROP_TEMP_VIEW;
-    const _dropTrigger: number = OurSqlite.constants.SQLITE_DROP_TRIGGER;
-    const _dropView: number = OurSqlite.constants.SQLITE_DROP_VIEW;
-    const _insert: number = OurSqlite.constants.SQLITE_INSERT;
-    const _pragma: number = OurSqlite.constants.SQLITE_PRAGMA;
-    const _read: number = OurSqlite.constants.SQLITE_READ;
-    const _select: number = OurSqlite.constants.SQLITE_SELECT;
-    const _transaction: number = OurSqlite.constants.SQLITE_TRANSACTION;
-    const _update: number = OurSqlite.constants.SQLITE_UPDATE;
-    const _attach: number = OurSqlite.constants.SQLITE_ATTACH;
-    const _detach: number = OurSqlite.constants.SQLITE_DETACH;
-    const _alterTable: number = OurSqlite.constants.SQLITE_ALTER_TABLE;
-    const _reindex: number = OurSqlite.constants.SQLITE_REINDEX;
-    const _analyze: number = OurSqlite.constants.SQLITE_ANALYZE;
-    const _createVtable: number = OurSqlite.constants.SQLITE_CREATE_VTABLE;
-    const _dropVtable: number = OurSqlite.constants.SQLITE_DROP_VTABLE;
-    const _function: number = OurSqlite.constants.SQLITE_FUNCTION;
-    const _savepoint: number = OurSqlite.constants.SQLITE_SAVEPOINT;
-    const _copy: number = OurSqlite.constants.SQLITE_COPY;
-    const _recursive: number = OurSqlite.constants.SQLITE_RECURSIVE;
-  }
-}
-
-// SQL value types - node:sqlite uses these
-type _NodeSQLInput = NodeSqlite.SQLInputValue;
-type _NodeSQLOutput = NodeSqlite.SQLOutputValue;
-
-// We should accept similar types
-type _OurAcceptedTypes = null | number | bigint | string | Buffer | Uint8Array;
-type _OurReturnedTypes = null | number | bigint | string | Uint8Array;
-
-// Statement result types
-type _NodeChangesResult = NodeSqlite.StatementResultingChanges;
-
-// Our result should have same shape
-type OurChangesShape = {
+type ChangesResult = {
   changes: number | bigint;
   lastInsertRowid: number | bigint;
 };
 
-// Ensure critical methods have correct signatures
-function _checkMethodSignatures() {
-  const db = {} as InstanceType<typeof OurSqlite.DatabaseSync>;
-  const stmt = {} as InstanceType<typeof OurSqlite.StatementSync>;
+// =============================================================================
+// EXPORT CHECKS - Verify main classes and functions are exported
+// =============================================================================
 
-  // Database.prepare should return a statement
-  const _preparedStmt: InstanceType<typeof OurSqlite.StatementSync> =
-    db.prepare("SELECT 1");
+type _Export_DatabaseSync = Assert<
+  Extends<typeof OurSqlite.DatabaseSync, new (...args: any[]) => any>
+>;
+type _Export_StatementSync = Assert<
+  Extends<typeof OurSqlite.StatementSync, new (...args: any[]) => any>
+>;
+type _Export_backup = Assert<
+  Extends<typeof OurSqlite.backup, (...args: any[]) => Promise<number>>
+>;
+type _Export_Session = Assert<
+  Extends<typeof OurSqlite.Session, new (...args: any[]) => any>
+>;
 
-  // Statement.run should return changes
-  const _runResult: OurChangesShape = stmt.run();
+// =============================================================================
+// DATABASE METHODS - Core API surface
+// =============================================================================
 
-  // Statement.get should return a record or undefined
-  const _getResult: Record<string, any> | undefined = stmt.get();
+type _DB_close = Assert<Extends<DBSync["close"], () => void>>;
+type _DB_exec = Assert<Extends<DBSync["exec"], (sql: string) => void>>;
+type _DB_prepare = Assert<Extends<DBSync["prepare"], (sql: string) => any>>;
+type _DB_open = Assert<
+  Extends<DBSync["open"], (config?: OurSqlite.DatabaseSyncOptions) => void>
+>;
 
-  // Statement.all should return array of records
-  const _allResult: Record<string, any>[] = stmt.all();
-}
+// User functions
+type _DB_function = Assert<
+  Extends<
+    DBSync["function"],
+    {
+      (name: string, func: Function): void;
+      (
+        name: string,
+        options: OurSqlite.UserFunctionOptions,
+        func: Function,
+      ): void;
+    }
+  >
+>;
+type _DB_aggregate = Assert<
+  Extends<
+    DBSync["aggregate"],
+    (name: string, options: OurSqlite.AggregateOptions) => void
+  >
+>;
 
-// Check Session class compatibility
-function _checkSessionClass() {
-  if (OurSqlite.Session) {
-    const session = {} as InstanceType<typeof OurSqlite.Session>;
+// Properties
+type _DB_isOpen = Assert<Extends<DBSync["isOpen"], boolean>>;
+type _DB_isTransaction = Assert<Extends<DBSync["isTransaction"], boolean>>;
+type _DB_location = Assert<Extends<DBSync["location"], () => string | null>>;
 
-    // Methods
-    const _changeset: () => Buffer = session.changeset;
-    const _patchset: () => Buffer = session.patchset;
-    const _close: () => void = session.close;
-  }
-}
+// Session support
+type _DB_createSession = Assert<
+  Extends<
+    DBSync["createSession"],
+    (options?: OurSqlite.SessionOptions) => OurSqlite.Session
+  >
+>;
+type _DB_applyChangeset = Assert<
+  Extends<
+    DBSync["applyChangeset"],
+    (changeset: Buffer, options?: OurSqlite.ChangesetApplyOptions) => boolean
+  >
+>;
 
-// Check standalone backup function signature
-function _checkBackupFunction() {
-  // The standalone backup function should match node:sqlite's export
-  const _backup: (
-    sourceDb: InstanceType<typeof OurSqlite.DatabaseSync>,
-    destination: string | Buffer | URL,
-    options?: OurSqlite.BackupOptions,
-  ) => Promise<number> = OurSqlite.backup;
+// Extension support
+type _DB_enableLoadExtension = Assert<
+  Extends<DBSync["enableLoadExtension"], (enable: boolean) => void>
+>;
+type _DB_loadExtension = Assert<
+  Extends<DBSync["loadExtension"], (path: string, entryPoint?: string) => void>
+>;
+type _DB_enableDefensive = Assert<
+  Extends<DBSync["enableDefensive"], (active: boolean) => void>
+>;
 
-  // Verify our BackupOptions type has the right shape
-  const _opts: OurSqlite.BackupOptions = {
-    rate: 100,
-    source: "main",
-    target: "main",
-    progress: ({ totalPages, remainingPages }) => {
-      const _t: number = totalPages;
-      const _r: number = remainingPages;
-    },
-  };
-}
+// Authorizer support (node:sqlite v24.10.0+)
+type _DB_setAuthorizer = Assert<
+  Extends<
+    DBSync["setAuthorizer"],
+    (
+      callback:
+        | ((
+            actionCode: number,
+            param1: string | null,
+            param2: string | null,
+            param3: string | null,
+            param4: string | null,
+          ) => number)
+        | null,
+    ) => void
+  >
+>;
 
-// Check constructor signatures
-function _checkConstructorSignatures() {
-  // DatabaseSync constructors
-  const _db1 = new OurSqlite.DatabaseSync(); // No args - in-memory
-  const _db2 = new OurSqlite.DatabaseSync(":memory:"); // Path only
-  const _db3 = new OurSqlite.DatabaseSync(":memory:", { readOnly: false }); // Full signature
+// SQLTagStore support (node:sqlite v24.9.0+)
+type _DB_createTagStore = Assert<
+  Extends<
+    DBSync["createTagStore"],
+    (capacity?: number) => OurSqlite.SQLTagStoreInstance
+  >
+>;
 
-  // StatementSync should not be directly constructible by users
-  // Session should not be directly constructible by users
-}
+// =============================================================================
+// STATEMENT METHODS
+// =============================================================================
 
-// Check type aliases exist
-type _CheckSQLTypes = {
-  input: null | number | bigint | string | Buffer | Uint8Array;
-  output: null | number | bigint | string | Uint8Array;
-};
+type _Stmt_run = Assert<
+  Extends<StmtSync["run"], (...params: any[]) => ChangesResult>
+>;
+type _Stmt_get = Assert<Extends<StmtSync["get"], (...params: any[]) => any>>;
+type _Stmt_all = Assert<Extends<StmtSync["all"], (...params: any[]) => any[]>>;
+type _Stmt_iterate = Assert<
+  Extends<StmtSync["iterate"], (...params: any[]) => IterableIterator<any>>
+>;
 
-// Verify all database options are present
-function _checkAllDatabaseOptions() {
-  const _opts: OurSqlite.DatabaseSyncOptions = {
-    location: ":memory:",
-    readOnly: false,
-    enableForeignKeyConstraints: true,
-    enableDoubleQuotedStringLiterals: true,
-    timeout: 5000,
-    allowExtension: false,
-  };
-}
+// Properties
+type _Stmt_sourceSQL = Assert<Extends<StmtSync["sourceSQL"], string>>;
+type _Stmt_expandedSQL = Assert<
+  Extends<StmtSync["expandedSQL"], string | undefined>
+>;
 
-// Check aggregate options completeness
-function _checkAggregateOptions() {
-  const _opts: OurSqlite.AggregateOptions = {
-    start: 0,
-    step: (acc: any, value: any) => acc + value,
-    inverse: (acc: any, value: any) => acc - value, // For window functions
-    result: (acc: any) => acc,
-    deterministic: true,
-    directOnly: false,
-    useBigIntArguments: false,
-    varargs: false,
-  };
-}
+// Configuration methods
+type _Stmt_setReadBigInts = Assert<
+  Extends<StmtSync["setReadBigInts"], (readBigInts: boolean) => void>
+>;
+type _Stmt_setAllowBareNamedParameters = Assert<
+  Extends<StmtSync["setAllowBareNamedParameters"], (allow: boolean) => void>
+>;
+type _Stmt_setAllowUnknownNamedParameters = Assert<
+  Extends<
+    StmtSync["setAllowUnknownNamedParameters"],
+    (enabled: boolean) => void
+  >
+>;
+type _Stmt_setReturnArrays = Assert<
+  Extends<StmtSync["setReturnArrays"], (returnArrays: boolean) => void>
+>;
 
-// Add a simple test to satisfy Jest
+// Column metadata
+type _Stmt_columns = Assert<
+  Extends<StmtSync["columns"], () => OurSqlite.StatementColumnMetadata[]>
+>;
+
+// =============================================================================
+// SQL TAG STORE METHODS
+// =============================================================================
+
+type _SQL_db = Assert<Extends<SQLStore["db"], OurSqlite.DatabaseSyncInstance>>;
+type _SQL_capacity = Assert<Extends<SQLStore["capacity"], number>>;
+type _SQL_size = Assert<Extends<SQLStore["size"], number>>;
+type _SQL_clear = Assert<Extends<SQLStore["clear"], () => void>>;
+type _SQL_run = Assert<
+  Extends<
+    SQLStore["run"],
+    (
+      strings: TemplateStringsArray,
+      ...values: unknown[]
+    ) => { changes: number; lastInsertRowid: number | bigint }
+  >
+>;
+type _SQL_get = Assert<
+  Extends<
+    SQLStore["get"],
+    (strings: TemplateStringsArray, ...values: unknown[]) => unknown
+  >
+>;
+type _SQL_all = Assert<
+  Extends<
+    SQLStore["all"],
+    (strings: TemplateStringsArray, ...values: unknown[]) => unknown[]
+  >
+>;
+type _SQL_iterate = Assert<
+  Extends<
+    SQLStore["iterate"],
+    (
+      strings: TemplateStringsArray,
+      ...values: unknown[]
+    ) => IterableIterator<unknown>
+  >
+>;
+
+// =============================================================================
+// SESSION CLASS
+// =============================================================================
+
+type _Session_changeset = Assert<
+  Extends<SessionInst["changeset"], () => Uint8Array>
+>;
+type _Session_patchset = Assert<
+  Extends<SessionInst["patchset"], () => Uint8Array>
+>;
+type _Session_close = Assert<Extends<SessionInst["close"], () => void>>;
+
+// =============================================================================
+// BACKUP FUNCTION SIGNATURE
+// =============================================================================
+
+type _Backup_signature = Assert<
+  Extends<
+    typeof OurSqlite.backup,
+    (
+      sourceDb: DBSync,
+      destination: string | Buffer | URL,
+      options?: OurSqlite.BackupOptions,
+    ) => Promise<number>
+  >
+>;
+
+// =============================================================================
+// OBJECT LITERAL CHECKS - Using satisfies
+// =============================================================================
+
+// Database options
+const _databaseOptions = {
+  location: ":memory:",
+  readOnly: false,
+  enableForeignKeyConstraints: true,
+  enableDoubleQuotedStringLiterals: true,
+  timeout: 5000,
+  allowExtension: false,
+} satisfies OurSqlite.DatabaseSyncOptions;
+
+// Aggregate options (with all fields)
+const _aggregateOptions = {
+  start: 0,
+  step: (acc: number, value: number) => acc + value,
+  inverse: (acc: number, value: number) => acc - value,
+  result: (acc: number) => acc,
+  deterministic: true,
+  directOnly: false,
+  useBigIntArguments: false,
+  varargs: false,
+} satisfies OurSqlite.AggregateOptions;
+
+// Backup options
+const _backupOptions = {
+  rate: 100,
+  source: "main",
+  target: "main",
+  progress: ({ totalPages, remainingPages }) => {
+    void totalPages;
+    void remainingPages;
+  },
+} satisfies OurSqlite.BackupOptions;
+
+// Statement column metadata (with values)
+const _columnMetadata = {
+  column: "id",
+  database: "main",
+  name: "id",
+  table: "users",
+  type: "INTEGER",
+} satisfies OurSqlite.StatementColumnMetadata;
+
+// Statement column metadata (with nulls for expressions)
+const _columnMetadataNull = {
+  column: null,
+  database: null,
+  name: "expr",
+  table: null,
+  type: null,
+} satisfies OurSqlite.StatementColumnMetadata;
+
+// =============================================================================
+// TYPE COMPATIBILITY CHECKS
+// =============================================================================
+
+// SQL value types compatibility
+type _NodeSQLInput = NodeSqlite.SQLInputValue;
+type _NodeSQLOutput = NodeSqlite.SQLOutputValue;
+type _OurInputTypes = null | number | bigint | string | Buffer | Uint8Array;
+type _OurOutputTypes = null | number | bigint | string | Uint8Array;
+
+// StatementResultingChanges shape compatibility
+type _NodeChangesResult = NodeSqlite.StatementResultingChanges;
+type _ChangesShapeOK = Assert<Extends<ChangesResult, _NodeChangesResult>>;
+
+// =============================================================================
+// CONSTANTS TYPE CHECKS - Verify all 65 constants exist with correct types
+// =============================================================================
+
+type Constants = typeof OurSqlite.constants;
+
+// Database open flags (our extension beyond node:sqlite - 20 flags)
+type _C_OPEN_READONLY = Assert<
+  Extends<Constants["SQLITE_OPEN_READONLY"], number>
+>;
+type _C_OPEN_READWRITE = Assert<
+  Extends<Constants["SQLITE_OPEN_READWRITE"], number>
+>;
+type _C_OPEN_CREATE = Assert<Extends<Constants["SQLITE_OPEN_CREATE"], number>>;
+type _C_OPEN_DELETEONCLOSE = Assert<
+  Extends<Constants["SQLITE_OPEN_DELETEONCLOSE"], number>
+>;
+type _C_OPEN_EXCLUSIVE = Assert<
+  Extends<Constants["SQLITE_OPEN_EXCLUSIVE"], number>
+>;
+type _C_OPEN_AUTOPROXY = Assert<
+  Extends<Constants["SQLITE_OPEN_AUTOPROXY"], number>
+>;
+type _C_OPEN_URI = Assert<Extends<Constants["SQLITE_OPEN_URI"], number>>;
+type _C_OPEN_MEMORY = Assert<Extends<Constants["SQLITE_OPEN_MEMORY"], number>>;
+type _C_OPEN_MAIN_DB = Assert<
+  Extends<Constants["SQLITE_OPEN_MAIN_DB"], number>
+>;
+type _C_OPEN_TEMP_DB = Assert<
+  Extends<Constants["SQLITE_OPEN_TEMP_DB"], number>
+>;
+type _C_OPEN_TRANSIENT_DB = Assert<
+  Extends<Constants["SQLITE_OPEN_TRANSIENT_DB"], number>
+>;
+type _C_OPEN_MAIN_JOURNAL = Assert<
+  Extends<Constants["SQLITE_OPEN_MAIN_JOURNAL"], number>
+>;
+type _C_OPEN_TEMP_JOURNAL = Assert<
+  Extends<Constants["SQLITE_OPEN_TEMP_JOURNAL"], number>
+>;
+type _C_OPEN_SUBJOURNAL = Assert<
+  Extends<Constants["SQLITE_OPEN_SUBJOURNAL"], number>
+>;
+type _C_OPEN_SUPER_JOURNAL = Assert<
+  Extends<Constants["SQLITE_OPEN_SUPER_JOURNAL"], number>
+>;
+type _C_OPEN_NOMUTEX = Assert<
+  Extends<Constants["SQLITE_OPEN_NOMUTEX"], number>
+>;
+type _C_OPEN_FULLMUTEX = Assert<
+  Extends<Constants["SQLITE_OPEN_FULLMUTEX"], number>
+>;
+type _C_OPEN_SHAREDCACHE = Assert<
+  Extends<Constants["SQLITE_OPEN_SHAREDCACHE"], number>
+>;
+type _C_OPEN_PRIVATECACHE = Assert<
+  Extends<Constants["SQLITE_OPEN_PRIVATECACHE"], number>
+>;
+type _C_OPEN_WAL = Assert<Extends<Constants["SQLITE_OPEN_WAL"], number>>;
+
+// Changeset conflict resolution constants
+type _C_CHANGESET_OMIT = Assert<
+  Extends<Constants["SQLITE_CHANGESET_OMIT"], number>
+>;
+type _C_CHANGESET_REPLACE = Assert<
+  Extends<Constants["SQLITE_CHANGESET_REPLACE"], number>
+>;
+type _C_CHANGESET_ABORT = Assert<
+  Extends<Constants["SQLITE_CHANGESET_ABORT"], number>
+>;
+
+// Changeset conflict type constants
+type _C_CHANGESET_DATA = Assert<
+  Extends<Constants["SQLITE_CHANGESET_DATA"], number>
+>;
+type _C_CHANGESET_NOTFOUND = Assert<
+  Extends<Constants["SQLITE_CHANGESET_NOTFOUND"], number>
+>;
+type _C_CHANGESET_CONFLICT = Assert<
+  Extends<Constants["SQLITE_CHANGESET_CONFLICT"], number>
+>;
+type _C_CHANGESET_CONSTRAINT = Assert<
+  Extends<Constants["SQLITE_CHANGESET_CONSTRAINT"], number>
+>;
+type _C_CHANGESET_FOREIGN_KEY = Assert<
+  Extends<Constants["SQLITE_CHANGESET_FOREIGN_KEY"], number>
+>;
+
+// Authorization result codes
+type _C_OK = Assert<Extends<Constants["SQLITE_OK"], number>>;
+type _C_DENY = Assert<Extends<Constants["SQLITE_DENY"], number>>;
+type _C_IGNORE = Assert<Extends<Constants["SQLITE_IGNORE"], number>>;
+
+// Authorization action codes (31 codes)
+type _C_CREATE_INDEX = Assert<
+  Extends<Constants["SQLITE_CREATE_INDEX"], number>
+>;
+type _C_CREATE_TABLE = Assert<
+  Extends<Constants["SQLITE_CREATE_TABLE"], number>
+>;
+type _C_CREATE_TEMP_INDEX = Assert<
+  Extends<Constants["SQLITE_CREATE_TEMP_INDEX"], number>
+>;
+type _C_CREATE_TEMP_TABLE = Assert<
+  Extends<Constants["SQLITE_CREATE_TEMP_TABLE"], number>
+>;
+type _C_CREATE_TEMP_TRIGGER = Assert<
+  Extends<Constants["SQLITE_CREATE_TEMP_TRIGGER"], number>
+>;
+type _C_CREATE_TEMP_VIEW = Assert<
+  Extends<Constants["SQLITE_CREATE_TEMP_VIEW"], number>
+>;
+type _C_CREATE_TRIGGER = Assert<
+  Extends<Constants["SQLITE_CREATE_TRIGGER"], number>
+>;
+type _C_CREATE_VIEW = Assert<Extends<Constants["SQLITE_CREATE_VIEW"], number>>;
+type _C_DELETE = Assert<Extends<Constants["SQLITE_DELETE"], number>>;
+type _C_DROP_INDEX = Assert<Extends<Constants["SQLITE_DROP_INDEX"], number>>;
+type _C_DROP_TABLE = Assert<Extends<Constants["SQLITE_DROP_TABLE"], number>>;
+type _C_DROP_TEMP_INDEX = Assert<
+  Extends<Constants["SQLITE_DROP_TEMP_INDEX"], number>
+>;
+type _C_DROP_TEMP_TABLE = Assert<
+  Extends<Constants["SQLITE_DROP_TEMP_TABLE"], number>
+>;
+type _C_DROP_TEMP_TRIGGER = Assert<
+  Extends<Constants["SQLITE_DROP_TEMP_TRIGGER"], number>
+>;
+type _C_DROP_TEMP_VIEW = Assert<
+  Extends<Constants["SQLITE_DROP_TEMP_VIEW"], number>
+>;
+type _C_DROP_TRIGGER = Assert<
+  Extends<Constants["SQLITE_DROP_TRIGGER"], number>
+>;
+type _C_DROP_VIEW = Assert<Extends<Constants["SQLITE_DROP_VIEW"], number>>;
+type _C_INSERT = Assert<Extends<Constants["SQLITE_INSERT"], number>>;
+type _C_PRAGMA = Assert<Extends<Constants["SQLITE_PRAGMA"], number>>;
+type _C_READ = Assert<Extends<Constants["SQLITE_READ"], number>>;
+type _C_SELECT = Assert<Extends<Constants["SQLITE_SELECT"], number>>;
+type _C_TRANSACTION = Assert<Extends<Constants["SQLITE_TRANSACTION"], number>>;
+type _C_UPDATE = Assert<Extends<Constants["SQLITE_UPDATE"], number>>;
+type _C_ATTACH = Assert<Extends<Constants["SQLITE_ATTACH"], number>>;
+type _C_DETACH = Assert<Extends<Constants["SQLITE_DETACH"], number>>;
+type _C_ALTER_TABLE = Assert<Extends<Constants["SQLITE_ALTER_TABLE"], number>>;
+type _C_REINDEX = Assert<Extends<Constants["SQLITE_REINDEX"], number>>;
+type _C_ANALYZE = Assert<Extends<Constants["SQLITE_ANALYZE"], number>>;
+type _C_CREATE_VTABLE = Assert<
+  Extends<Constants["SQLITE_CREATE_VTABLE"], number>
+>;
+type _C_DROP_VTABLE = Assert<Extends<Constants["SQLITE_DROP_VTABLE"], number>>;
+type _C_FUNCTION = Assert<Extends<Constants["SQLITE_FUNCTION"], number>>;
+type _C_SAVEPOINT = Assert<Extends<Constants["SQLITE_SAVEPOINT"], number>>;
+type _C_COPY = Assert<Extends<Constants["SQLITE_COPY"], number>>;
+type _C_RECURSIVE = Assert<Extends<Constants["SQLITE_RECURSIVE"], number>>;
+
+// =============================================================================
+// RUNTIME TESTS - Verify actual behavior
+// =============================================================================
+
 describe("API Compatibility", () => {
   it("type checks pass at compile time", () => {
     // This test file is primarily for TypeScript compile-time checks
-    // The actual testing happens during TypeScript compilation
+    // If this file compiles, all type assertions above have passed
     expect(true).toBe(true);
   });
 
@@ -438,12 +553,18 @@ describe("API Compatibility", () => {
     });
 
     it("backup matches node:sqlite export", () => {
-      // Verify our backup function matches node:sqlite's backup
       expect(typeof NodeSqlite.backup).toBe("function");
       expect(OurSqlite.backup.name).toBe(NodeSqlite.backup.name);
       expect(OurSqlite.backup.length).toBe(NodeSqlite.backup.length);
     });
   });
 });
+
+// Suppress unused variable warnings for satisfies checks
+void _databaseOptions;
+void _aggregateOptions;
+void _backupOptions;
+void _columnMetadata;
+void _columnMetadataNull;
 
 export {}; // Make this a module

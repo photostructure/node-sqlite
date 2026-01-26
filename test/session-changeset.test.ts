@@ -34,7 +34,7 @@ describe("Session Changeset Tests", () => {
   test("should record INSERT operations in a changeset", () => {
     db.exec("INSERT INTO test (id, name) VALUES (1, 'one')");
     const changeset = session.changeset();
-    expect(changeset).toBeInstanceOf(Buffer);
+    expect(changeset).toBeInstanceOf(Uint8Array);
     expect(changeset.length).toBeGreaterThan(0);
   });
 
@@ -43,7 +43,7 @@ describe("Session Changeset Tests", () => {
     session.changeset(); // Clear initial changes
     db.exec("UPDATE test SET name = 'updated' WHERE id = 1");
     const changeset = session.changeset();
-    expect(changeset).toBeInstanceOf(Buffer);
+    expect(changeset).toBeInstanceOf(Uint8Array);
     expect(changeset.length).toBeGreaterThan(0);
   });
 
@@ -58,13 +58,13 @@ describe("Session Changeset Tests", () => {
     // Delete the existing row
     db.exec("DELETE FROM test WHERE id = 1");
     const changeset = session.changeset();
-    expect(changeset).toBeInstanceOf(Buffer);
+    expect(changeset).toBeInstanceOf(Uint8Array);
     expect(changeset.length).toBeGreaterThan(0);
   });
 
   test("should return an empty buffer when no changes have occurred", () => {
     const changeset = session.changeset();
-    expect(changeset).toBeInstanceOf(Buffer);
+    expect(changeset).toBeInstanceOf(Uint8Array);
     expect(changeset.length).toBe(0);
   });
 

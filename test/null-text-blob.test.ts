@@ -111,8 +111,9 @@ describe("NULL and Zero-Length TEXT/BLOB Handling", () => {
 
       expect(row).toBeDefined();
       expect(row.id).toBe(1);
-      // SQLite treats zero-length BLOB as NULL
-      expect(row.data).toBeNull();
+      // Empty buffers are stored as empty blobs and returned as empty Uint8Array
+      expect(row.data).toBeInstanceOf(Uint8Array);
+      expect(row.data.length).toBe(0);
     });
 
     test("handles zero-length BLOB in array mode", () => {
@@ -125,15 +126,16 @@ describe("NULL and Zero-Length TEXT/BLOB Handling", () => {
 
       expect(rows).toHaveLength(1);
       expect(rows[0].id).toBe(1);
-      // SQLite treats zero-length BLOB as NULL
-      expect(rows[0].data).toBeNull();
+      // Empty buffers are stored as empty blobs and returned as empty Uint8Array
+      expect(rows[0].data).toBeInstanceOf(Uint8Array);
+      expect(rows[0].data.length).toBe(0);
     });
 
     test("handles mixed NULL, empty, and non-empty BLOB values", () => {
       db.exec("CREATE TABLE test (id INTEGER, data BLOB)");
       const stmt = db.prepare("INSERT INTO test VALUES (?, ?)");
       stmt.run(1, null);
-      stmt.run(2, Buffer.alloc(0)); // SQLite treats this as NULL
+      stmt.run(2, Buffer.alloc(0)); // Empty buffer stored as empty blob
       stmt.run(3, Buffer.from("hello"));
 
       const selectStmt = db.prepare("SELECT * FROM test ORDER BY id");
@@ -141,9 +143,11 @@ describe("NULL and Zero-Length TEXT/BLOB Handling", () => {
 
       expect(rows).toHaveLength(3);
       expect(rows[0].data).toBeNull();
-      expect(rows[1].data).toBeNull(); // Zero-length BLOB becomes NULL
-      expect(Buffer.isBuffer(rows[2].data)).toBe(true);
-      expect(rows[2].data.toString()).toBe("hello");
+      // Empty buffer is stored as empty blob and returned as empty Uint8Array
+      expect(rows[1].data).toBeInstanceOf(Uint8Array);
+      expect(rows[1].data.length).toBe(0);
+      expect(rows[2].data).toBeInstanceOf(Uint8Array);
+      expect(Buffer.from(rows[2].data).toString()).toBe("hello");
     });
   });
 
@@ -169,7 +173,7 @@ describe("NULL and Zero-Length TEXT/BLOB Handling", () => {
       db.exec("CREATE TABLE test (id INTEGER, data BLOB)");
       const insertStmt = db.prepare("INSERT INTO test VALUES (?, ?)");
       insertStmt.run(1, null);
-      insertStmt.run(2, Buffer.alloc(0)); // SQLite treats this as NULL
+      insertStmt.run(2, Buffer.alloc(0)); // Empty buffer stored as empty blob
       insertStmt.run(3, Buffer.from("test"));
 
       const stmt = db.prepare("SELECT * FROM test ORDER BY id");
@@ -181,9 +185,11 @@ describe("NULL and Zero-Length TEXT/BLOB Handling", () => {
 
       expect(results).toHaveLength(3);
       expect(results[0].data).toBeNull();
-      expect(results[1].data).toBeNull(); // Zero-length BLOB becomes NULL
-      expect(Buffer.isBuffer(results[2].data)).toBe(true);
-      expect(results[2].data.toString()).toBe("test");
+      // Empty buffer is stored as empty blob and returned as empty Uint8Array
+      expect(results[1].data).toBeInstanceOf(Uint8Array);
+      expect(results[1].data.length).toBe(0);
+      expect(results[2].data).toBeInstanceOf(Uint8Array);
+      expect(Buffer.from(results[2].data).toString()).toBe("test");
     });
   });
 });

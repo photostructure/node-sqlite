@@ -79,6 +79,8 @@ describe("User-defined Functions Tests", () => {
 
     // Test the function with large integers
     const stmt = db.prepare("SELECT big_add(?, ?) as result");
+    // Must use setReadBigInts(true) to read large integer results, otherwise RangeError
+    stmt.setReadBigInts(true);
     const result = stmt.get(9007199254740991n, 1n); // Number.MAX_SAFE_INTEGER + 1
 
     expect(result.result).toBe(9007199254740992n);
@@ -118,10 +120,11 @@ describe("User-defined Functions Tests", () => {
     const stmt = db.prepare("SELECT identity(?) as result");
     const result = stmt.get(blobData);
 
-    expect(Buffer.isBuffer(result.result)).toBe(true);
-    expect(result.result).toEqual(blobData);
+    expect(result.result).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(result.result).equals(blobData)).toBe(true);
 
-    // Note: SQLite treats empty blobs (0-length Buffer) as NULL during binding
+    // Empty blobs passed through user functions result in NULL
+    // (same behavior as Node.js sqlite)
     const emptyBlob = Buffer.alloc(0);
     const emptyResult = stmt.get(emptyBlob);
     expect(emptyResult.result).toBeNull();
@@ -146,8 +149,10 @@ describe("User-defined Functions Tests", () => {
     const stmt = db.prepare("SELECT dataview_func() as result");
     const result = stmt.get();
 
-    expect(Buffer.isBuffer(result.result)).toBe(true);
-    expect(result.result).toEqual(Buffer.from([0xde, 0xad, 0xbe, 0xef]));
+    expect(result.result).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(result.result)).toEqual(
+      Buffer.from([0xde, 0xad, 0xbe, 0xef]),
+    );
 
     db.close();
   });
@@ -163,8 +168,10 @@ describe("User-defined Functions Tests", () => {
     const stmt = db.prepare("SELECT uint8array_func() as result");
     const result = stmt.get();
 
-    expect(Buffer.isBuffer(result.result)).toBe(true);
-    expect(result.result).toEqual(Buffer.from([0x01, 0x02, 0x03, 0x04]));
+    expect(result.result).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(result.result)).toEqual(
+      Buffer.from([0x01, 0x02, 0x03, 0x04]),
+    );
 
     db.close();
   });
@@ -187,9 +194,11 @@ describe("User-defined Functions Tests", () => {
     const stmt = db.prepare("SELECT dataview_offset_func() as result");
     const result = stmt.get();
 
-    expect(Buffer.isBuffer(result.result)).toBe(true);
+    expect(result.result).toBeInstanceOf(Uint8Array);
     // Should contain bytes at positions 2,3,4,5 which are 3,4,5,6
-    expect(result.result).toEqual(Buffer.from([0x03, 0x04, 0x05, 0x06]));
+    expect(Buffer.from(result.result)).toEqual(
+      Buffer.from([0x03, 0x04, 0x05, 0x06]),
+    );
 
     db.close();
   });
@@ -274,7 +283,6 @@ describe("User-defined Functions Tests", () => {
     expect(result.result).toBe(null);
 
     // Explicitly finalize the statement before closing the database
-    stmt.finalize();
     db.close();
   });
 });

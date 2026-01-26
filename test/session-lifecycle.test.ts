@@ -112,13 +112,13 @@ describe("Session Lifecycle Management (RAII)", () => {
       db.close();
 
       // Sessions should be invalidated for operations
-      // When database closes, it deletes all sessions, so they throw "session is not open"
-      expect(() => session1.changeset()).toThrow(/session is not open/);
-      expect(() => session2.changeset()).toThrow(/session is not open/);
+      // When database closes, sessions report "database is not open"
+      expect(() => session1.changeset()).toThrow(/database is not open/);
+      expect(() => session2.changeset()).toThrow(/database is not open/);
 
-      // But close() should throw since sessions are already closed
-      expect(() => session1.close()).toThrow(/session is not open/);
-      expect(() => session2.close()).toThrow(/session is not open/);
+      // close() should also throw since database is closed
+      expect(() => session1.close()).toThrow(/database is not open/);
+      expect(() => session2.close()).toThrow(/database is not open/);
     });
 
     it("should handle session outliving database (garbage collection scenario)", () => {
@@ -138,10 +138,10 @@ describe("Session Lifecycle Management (RAII)", () => {
         // Database goes out of scope here
       }
 
-      // Session still exists but database closed it during cleanup
-      expect(() => session.changeset()).toThrow(/session is not open/);
-      // close() should throw since session was already closed by database
-      expect(() => session.close()).toThrow(/session is not open/);
+      // Session still exists but database is closed
+      expect(() => session.changeset()).toThrow(/database is not open/);
+      // close() should also throw since database is closed
+      expect(() => session.close()).toThrow(/database is not open/);
     });
 
     it("should handle multiple databases being destroyed in different order", () => {
@@ -168,9 +168,9 @@ describe("Session Lifecycle Management (RAII)", () => {
         // Databases go out of scope
       }
 
-      // All sessions should be invalidated
+      // All sessions should be invalidated (database is closed)
       for (const session of sessions) {
-        expect(() => session.changeset()).toThrow(/session is not open/);
+        expect(() => session.changeset()).toThrow(/database is not open/);
       }
     });
 
@@ -278,8 +278,8 @@ describe("Session Lifecycle Management (RAII)", () => {
 
       db.close();
 
-      // Now it should fail - but with "session is not open" since db.close() deleted the session
-      expect(() => session.changeset()).toThrow(/session is not open/);
+      // Now it should fail with "database is not open"
+      expect(() => session.changeset()).toThrow(/database is not open/);
     });
   });
 
@@ -427,7 +427,6 @@ describe("Session Lifecycle Management (RAII)", () => {
       expect(changeset.length).toBeGreaterThan(0);
 
       // Close statement before session
-      stmt.finalize();
 
       // Session should still work
       expect(() => session.changeset()).not.toThrow();
@@ -487,8 +486,9 @@ describe("Session Lifecycle Management (RAII)", () => {
           const session = db.createSession();
           stmt.run(i);
           const changeset = session.changeset();
-          if (!(changeset instanceof Buffer)) {
-            throw new Error("Expected changeset to be a Buffer");
+          // Node.js sqlite returns Uint8Array, not Buffer
+          if (!(changeset instanceof Uint8Array)) {
+            throw new Error("Expected changeset to be a Uint8Array");
           }
           if (changeset.length === 0) {
             throw new Error("Expected changeset to have non-zero length");
@@ -502,7 +502,6 @@ describe("Session Lifecycle Management (RAII)", () => {
         }
 
         // Finalize the statement to ensure cleanup
-        stmt.finalize();
         db.close();
       },
       {

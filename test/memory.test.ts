@@ -1,7 +1,7 @@
 import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "../src";
+import { backup, DatabaseSync } from "../src";
 import { testMemoryBenchmark } from "./benchmark-harness";
 import { getUniqueTableName, rm } from "./test-utils";
 
@@ -379,15 +379,18 @@ describeMemoryTests("Memory Tests", () => {
         Buffer.alloc(32768, 0xcc), // 32KB
       ];
 
-      for (let i = 0; i < buffers.length; i++) {
-        const result = insert.run(buffers[i]);
+      for (const buf of buffers) {
+        const result = insert.run(buf);
         const row = select.get(Number(result.lastInsertRowid));
 
-        if (!row || !Buffer.isBuffer(row.blob_data)) {
+        // BLOBs are returned as Uint8Array (like node:sqlite)
+        if (!row || !(row.blob_data instanceof Uint8Array)) {
           throw new Error("BLOB data not retrieved correctly");
         }
 
-        if (!row.blob_data.equals(buffers[i])) {
+        // Compare the data - convert both to Buffer for equals() method
+        const retrievedBuf = Buffer.from(row.blob_data);
+        if (!retrievedBuf.equals(buf)) {
           throw new Error("BLOB data corruption detected");
         }
       }
@@ -467,7 +470,7 @@ describeMemoryTests("Memory Tests", () => {
 
         // Backup to file - exercises full BackupJob lifecycle
         const backupPath = join(tempDir, "backup.db");
-        await db.backup(backupPath);
+        await backup(db, backupPath);
 
         // Verify backup completed
         const backupDb = new DatabaseSync(backupPath);
@@ -480,7 +483,7 @@ describeMemoryTests("Memory Tests", () => {
         backupDb.close();
 
         // Also test backup to :memory: (different code path)
-        await db.backup(":memory:");
+        await backup(db, ":memory:");
 
         db.close();
       } finally {

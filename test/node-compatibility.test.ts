@@ -1,6 +1,7 @@
 import {
-  DatabaseSync as OurDatabaseSync,
+  backup,
   constants as ourConstants,
+  DatabaseSync as OurDatabaseSync,
 } from "../src";
 import { getTimingMultiplier } from "./test-timeout-config";
 
@@ -97,7 +98,7 @@ describe("Node.js API Compatibility Tests", () => {
       expect(typeof db.close).toBe("function");
       expect(typeof db.exec).toBe("function");
       expect(typeof db.prepare).toBe("function");
-      expect(typeof db.backup).toBe("function");
+      expect(typeof (db as any).backup).toBe("function"); // Instance method exists but standalone backup() is official API
       expect(typeof db.function).toBe("function");
       expect(typeof db.aggregate).toBe("function");
       expect(typeof db.createSession).toBe("function");
@@ -522,11 +523,11 @@ describe("Node.js API Compatibility Tests", () => {
       db.exec("CREATE TABLE test (id INTEGER, data TEXT)");
       db.exec("INSERT INTO test VALUES (1, 'test data')");
 
-      // Test backup method exists
-      expect(typeof db.backup).toBe("function");
+      // Test standalone backup() function (official node:sqlite API)
+      expect(typeof backup).toBe("function");
 
       // For in-memory databases, backup may have limitations
-      await db.backup(":memory:");
+      await backup(db, ":memory:");
 
       db.close();
     });
@@ -543,9 +544,9 @@ describe("Node.js API Compatibility Tests", () => {
       db.exec("INSERT INTO test VALUES (1, 'original')");
       db.exec("UPDATE test SET value = 'modified' WHERE id = 1");
 
-      // Generate changeset
+      // Generate changeset - returns Uint8Array in Node.js sqlite API
       const changeset = session.changeset();
-      expect(Buffer.isBuffer(changeset)).toBe(true);
+      expect(changeset).toBeInstanceOf(Uint8Array);
 
       session.close();
       db.close();

@@ -40,19 +40,24 @@ describe("Statement Configuration Tests", () => {
       expect(result.big_num).toBe(9007199254740992n);
     });
 
-    test("returns numbers for small integers when disabled", () => {
+    test("throws RangeError for large integers when BigInts disabled", () => {
       const stmt = db.prepare(
         "SELECT id, small_num, big_num FROM test WHERE id = ?",
       );
       stmt.setReadBigInts(false);
 
-      const result = stmt.get(1);
-      expect(typeof result.id).toBe("number");
-      expect(typeof result.small_num).toBe("number");
-      expect(typeof result.big_num).toBe("bigint"); // Still BigInt for large numbers
-      expect(result.id).toBe(1);
-      expect(result.small_num).toBe(100);
-      expect(result.big_num).toBe(9007199254740992n);
+      // Large integers outside safe integer range throw RangeError
+      // Note: we can't use expect().toThrow(RangeError) because Jest wraps the error
+      // and sees identical constructor names but different references
+      let error: Error | undefined;
+      try {
+        stmt.get(1);
+      } catch (e) {
+        error = e as Error;
+      }
+      expect(error).toBeDefined();
+      expect(error!.name).toBe("RangeError");
+      expect(error!.message).toContain("too large");
     });
 
     test("default behavior returns numbers for small integers", () => {
@@ -108,9 +113,9 @@ describe("Statement Configuration Tests", () => {
 
   describe("setAllowBareNamedParameters", () => {
     test("allows bare named parameters when enabled", () => {
-      // Create a statement with named parameters
+      // Create a statement with named parameters - only select columns without large integers
       const stmt = db.prepare(
-        "SELECT * FROM test WHERE id = :id AND name = :name",
+        "SELECT id, name FROM test WHERE id = :id AND name = :name",
       );
       stmt.setAllowBareNamedParameters(true);
 
@@ -121,7 +126,7 @@ describe("Statement Configuration Tests", () => {
     });
 
     test("requires exact parameter names when disabled", () => {
-      const stmt = db.prepare("SELECT * FROM test WHERE id = :id");
+      const stmt = db.prepare("SELECT id, name FROM test WHERE id = :id");
       stmt.setAllowBareNamedParameters(false);
 
       // Should only work with exact names (with : prefix)
@@ -130,7 +135,7 @@ describe("Statement Configuration Tests", () => {
     });
 
     test("works with $ prefix", () => {
-      const stmt = db.prepare("SELECT * FROM test WHERE id = $id");
+      const stmt = db.prepare("SELECT id, name FROM test WHERE id = $id");
       stmt.setAllowBareNamedParameters(true);
 
       const result = stmt.get({ id: 1 });
@@ -160,16 +165,7 @@ describe("Statement Configuration Tests", () => {
     });
   });
 
-  describe("finalized statement handling", () => {
-    test("throws error when setting configuration on finalized statement", () => {
-      const stmt = db.prepare("SELECT * FROM test");
-      stmt.finalize();
-
-      expect(() => stmt.setReadBigInts(true)).toThrow("finalized");
-      expect(() => stmt.setReturnArrays(true)).toThrow("finalized");
-      expect(() => stmt.setAllowBareNamedParameters(true)).toThrow("finalized");
-    });
-  });
+  // Note: finalize() is not part of node:sqlite API - statements are auto-finalized on GC
 
   describe("columns() method", () => {
     test("returns column metadata", () => {
@@ -227,8 +223,8 @@ describe("Statement Configuration Tests", () => {
       `);
 
       const stmt = db.prepare(`
-        SELECT t.id, t.name, d.name AS dept_name 
-        FROM test t 
+        SELECT t.id, t.name, d.name AS dept_name
+        FROM test t
         JOIN department d ON t.id = d.id
       `);
       const columns = stmt.columns();
@@ -242,12 +238,168 @@ describe("Statement Configuration Tests", () => {
         type: "TEXT",
       });
     });
+  });
 
-    test("throws error on finalized statement", () => {
-      const stmt = db.prepare("SELECT * FROM test");
-      stmt.finalize();
+  describe("prepare() options (Node.js v25+)", () => {
+    test("readBigInts option overrides database default", () => {
+      const stmt = db.prepare("SELECT id, small_num FROM test WHERE id = ?", {
+        readBigInts: true,
+      });
 
-      expect(() => stmt.columns()).toThrow("finalized");
+      const result = stmt.get(1);
+      expect(typeof result.id).toBe("bigint");
+      expect(typeof result.small_num).toBe("bigint");
+      expect(result.id).toBe(1n);
+    });
+
+    test("readBigInts option can be disabled per-statement", () => {
+      // Database with BigInts enabled by default
+      const dbWithBigInts = new DatabaseSync(":memory:", { readBigInts: true });
+      dbWithBigInts.exec(`
+        CREATE TABLE nums (id INTEGER, val INTEGER);
+        INSERT INTO nums VALUES (1, 100);
+      `);
+
+      // Override with readBigInts: false for this statement
+      const stmt = dbWithBigInts.prepare(
+        "SELECT id, val FROM nums WHERE id = ?",
+        { readBigInts: false },
+      );
+
+      const result = stmt.get(1);
+      expect(typeof result.id).toBe("number");
+      expect(typeof result.val).toBe("number");
+      dbWithBigInts.close();
+    });
+
+    test("returnArrays option overrides database default", () => {
+      const stmt = db.prepare("SELECT id, name FROM test WHERE id = ?", {
+        returnArrays: true,
+      });
+
+      const result = stmt.get(1);
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toEqual([1, "Alice"]);
+    });
+
+    test("returnArrays option can be disabled per-statement", () => {
+      // Database with arrays enabled by default
+      const dbWithArrays = new DatabaseSync(":memory:", { returnArrays: true });
+      dbWithArrays.exec(`
+        CREATE TABLE items (id INTEGER, name TEXT);
+        INSERT INTO items VALUES (1, 'Test');
+      `);
+
+      // Override with returnArrays: false for this statement
+      const stmt = dbWithArrays.prepare(
+        "SELECT id, name FROM items WHERE id = ?",
+        { returnArrays: false },
+      );
+
+      const result = stmt.get(1);
+      expect(Array.isArray(result)).toBe(false);
+      expect(result).toEqual({ id: 1, name: "Test" });
+      dbWithArrays.close();
+    });
+
+    test("allowBareNamedParameters option overrides database default", () => {
+      // Database with bare params disabled by default
+      const dbNoBare = new DatabaseSync(":memory:", {
+        allowBareNamedParameters: false,
+      });
+      dbNoBare.exec(`
+        CREATE TABLE items (id INTEGER, name TEXT);
+        INSERT INTO items VALUES (1, 'Test');
+      `);
+
+      // Override with allowBareNamedParameters: true for this statement
+      const stmt = dbNoBare.prepare(
+        "SELECT id, name FROM items WHERE id = :id",
+        { allowBareNamedParameters: true },
+      );
+
+      const result = stmt.get({ id: 1 });
+      expect(result).toEqual({ id: 1, name: "Test" });
+      dbNoBare.close();
+    });
+
+    test("multiple prepare options can be combined", () => {
+      const stmt = db.prepare("SELECT id, name FROM test WHERE id = :id", {
+        readBigInts: true,
+        returnArrays: true,
+        allowBareNamedParameters: true,
+      });
+
+      const result = stmt.get({ id: 1 });
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toEqual([1n, "Alice"]);
+      expect(typeof result[0]).toBe("bigint");
+    });
+
+    test("prepare options do not affect other statements", () => {
+      const stmtWithBigInts = db.prepare("SELECT id FROM test WHERE id = ?", {
+        readBigInts: true,
+      });
+      const stmtWithoutBigInts = db.prepare("SELECT id FROM test WHERE id = ?");
+
+      const result1 = stmtWithBigInts.get(1);
+      const result2 = stmtWithoutBigInts.get(1);
+
+      expect(typeof result1.id).toBe("bigint");
+      expect(typeof result2.id).toBe("number");
+    });
+
+    test("throws on invalid options type", () => {
+      expect(() => {
+        db.prepare("SELECT 1", "not an object" as any);
+      }).toThrow(/object/);
+    });
+
+    test("throws on invalid readBigInts option type", () => {
+      expect(() => {
+        db.prepare("SELECT 1", { readBigInts: "yes" as any });
+      }).toThrow(/boolean/);
+    });
+
+    test("throws on invalid returnArrays option type", () => {
+      expect(() => {
+        db.prepare("SELECT 1", { returnArrays: 42 as any });
+      }).toThrow(/boolean/);
+    });
+
+    test("throws on invalid allowBareNamedParameters option type", () => {
+      expect(() => {
+        db.prepare("SELECT 1", { allowBareNamedParameters: null as any });
+      }).toThrow(/boolean/);
+    });
+
+    test("throws on invalid allowUnknownNamedParameters option type", () => {
+      expect(() => {
+        db.prepare("SELECT 1", { allowUnknownNamedParameters: {} as any });
+      }).toThrow(/boolean/);
+    });
+
+    test("undefined options are ignored and use database defaults", () => {
+      const stmt = db.prepare("SELECT id FROM test WHERE id = ?", {
+        readBigInts: undefined,
+      });
+
+      const result = stmt.get(1);
+      // Should use database default (false)
+      expect(typeof result.id).toBe("number");
+    });
+
+    test("setReadBigInts still works after prepare options", () => {
+      // Prepare with readBigInts: false
+      const stmt = db.prepare("SELECT id FROM test WHERE id = ?", {
+        readBigInts: false,
+      });
+
+      // Override with setter
+      stmt.setReadBigInts(true);
+
+      const result = stmt.get(1);
+      expect(typeof result.id).toBe("bigint");
     });
   });
 });

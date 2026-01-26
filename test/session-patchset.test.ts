@@ -34,7 +34,7 @@ describe("Session Patchset Tests", () => {
   test("should record INSERT operations in a patchset", () => {
     db.exec("INSERT INTO test (id, name) VALUES (1, 'one')");
     const patchset = session.patchset();
-    expect(patchset).toBeInstanceOf(Buffer);
+    expect(patchset).toBeInstanceOf(Uint8Array);
     expect(patchset.length).toBeGreaterThan(0);
   });
 
@@ -43,7 +43,7 @@ describe("Session Patchset Tests", () => {
     session.patchset(); // Clear initial changes
     db.exec("UPDATE test SET name = 'updated' WHERE id = 1");
     const patchset = session.patchset();
-    expect(patchset).toBeInstanceOf(Buffer);
+    expect(patchset).toBeInstanceOf(Uint8Array);
     expect(patchset.length).toBeGreaterThan(0);
   });
 
@@ -58,13 +58,13 @@ describe("Session Patchset Tests", () => {
     // Delete the existing row
     db.exec("DELETE FROM test WHERE id = 1");
     const patchset = session.patchset();
-    expect(patchset).toBeInstanceOf(Buffer);
+    expect(patchset).toBeInstanceOf(Uint8Array);
     expect(patchset.length).toBeGreaterThan(0);
   });
 
   test("should return an empty buffer when no changes have occurred", () => {
     const patchset = session.patchset();
-    expect(patchset).toBeInstanceOf(Buffer);
+    expect(patchset).toBeInstanceOf(Uint8Array);
     expect(patchset.length).toBe(0);
   });
 

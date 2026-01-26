@@ -1,4 +1,3 @@
-/* eslint-env node */
 // Helper script for multi-process tests
 const path = require("node:path");
 const { DatabaseSync } = require(path.resolve(__dirname, "../dist/index.cjs"));

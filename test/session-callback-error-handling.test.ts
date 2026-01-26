@@ -27,7 +27,7 @@ describe("Session callback error handling", () => {
   });
 
   describe("onConflict callback error handling", () => {
-    test("should handle string errors thrown in onConflict callback", () => {
+    test("should propagate string errors thrown in onConflict callback", () => {
       // Setup conflicting data
       sourceDb.exec(
         "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@source.com')",
@@ -42,22 +42,21 @@ describe("Session callback error handling", () => {
       const changeset = session.changeset();
       session.close();
 
-      // Apply with throwing onConflict
-      const result = targetDb.applyChangeset(changeset, {
-        onConflict: (_conflictType: number) => {
-          throw "Conflict error!";
-        },
-      });
-
-      // Should abort the changeset
-      expect(result).toBe(false);
+      // Apply with throwing onConflict - should propagate the exception
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          onConflict: (_conflictType: number) => {
+            throw "Conflict error!";
+          },
+        });
+      }).toThrow("Conflict error!");
 
       // Original data should remain unchanged
       const user = targetDb.prepare("SELECT * FROM users WHERE id = 1").get();
       expect(user.name).toBe("Bob");
     });
 
-    test("should handle Error objects thrown in onConflict callback", () => {
+    test("should propagate Error objects thrown in onConflict callback", () => {
       // Setup conflicting data
       sourceDb.exec(
         "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@source.com')",
@@ -72,22 +71,21 @@ describe("Session callback error handling", () => {
       const changeset = session.changeset();
       session.close();
 
-      // Apply with throwing onConflict
-      const result = targetDb.applyChangeset(changeset, {
-        onConflict: (_conflictType: number) => {
-          throw new Error("Custom conflict error");
-        },
-      });
-
-      // Should abort the changeset
-      expect(result).toBe(false);
+      // Apply with throwing onConflict - should propagate the exception
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          onConflict: (_conflictType: number) => {
+            throw new Error("Custom conflict error");
+          },
+        });
+      }).toThrow("Custom conflict error");
 
       // Original data should remain unchanged
       const user = targetDb.prepare("SELECT * FROM users WHERE id = 1").get();
       expect(user.name).toBe("Bob");
     });
 
-    test("should handle null thrown in onConflict callback", () => {
+    test("should propagate null thrown in onConflict callback", () => {
       // Setup conflicting data
       sourceDb.exec(
         "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@source.com')",
@@ -102,18 +100,17 @@ describe("Session callback error handling", () => {
       const changeset = session.changeset();
       session.close();
 
-      // Apply with throwing onConflict
-      const result = targetDb.applyChangeset(changeset, {
-        onConflict: (_conflictType: number) => {
-          throw null;
-        },
-      });
-
-      // Should abort the changeset
-      expect(result).toBe(false);
+      // Apply with throwing onConflict - should propagate
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          onConflict: (_conflictType: number) => {
+            throw null;
+          },
+        });
+      }).toThrow();
     });
 
-    test("should handle undefined thrown in onConflict callback", () => {
+    test("should propagate undefined thrown in onConflict callback", () => {
       // Setup conflicting data
       sourceDb.exec(
         "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@source.com')",
@@ -128,18 +125,17 @@ describe("Session callback error handling", () => {
       const changeset = session.changeset();
       session.close();
 
-      // Apply with throwing onConflict
-      const result = targetDb.applyChangeset(changeset, {
-        onConflict: (_conflictType: number) => {
-          throw undefined;
-        },
-      });
-
-      // Should abort the changeset
-      expect(result).toBe(false);
+      // Apply with throwing onConflict - should propagate
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          onConflict: (_conflictType: number) => {
+            throw undefined;
+          },
+        });
+      }).toThrow();
     });
 
-    test("should handle object thrown in onConflict callback", () => {
+    test("should propagate object thrown in onConflict callback", () => {
       // Setup conflicting data
       sourceDb.exec(
         "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@source.com')",
@@ -154,18 +150,17 @@ describe("Session callback error handling", () => {
       const changeset = session.changeset();
       session.close();
 
-      // Apply with throwing onConflict
-      const result = targetDb.applyChangeset(changeset, {
-        onConflict: (_conflictType: number) => {
-          throw { error: "conflict", code: 42 };
-        },
-      });
-
-      // Should abort the changeset
-      expect(result).toBe(false);
+      // Apply with throwing onConflict - should propagate
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          onConflict: (_conflictType: number) => {
+            throw { error: "conflict", code: 42 };
+          },
+        });
+      }).toThrow();
     });
 
-    test("should handle non-numeric return values from onConflict", () => {
+    test("should throw on non-numeric return values from onConflict", () => {
       // Setup conflicting data
       sourceDb.exec(
         "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@source.com')",
@@ -180,18 +175,17 @@ describe("Session callback error handling", () => {
       const changeset = session.changeset();
       session.close();
 
-      // Apply with invalid return value
-      const result = targetDb.applyChangeset(changeset, {
-        onConflict: (_conflictType: number) => {
-          return "invalid" as any;
-        },
-      });
-
-      // Should handle gracefully
-      expect(result).toBe(false);
+      // Apply with invalid return value - Node.js throws SQLITE_MISUSE
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          onConflict: (_conflictType: number) => {
+            return "invalid" as any;
+          },
+        });
+      }).toThrow(/bad parameter|MISUSE/);
     });
 
-    test("should handle async functions in onConflict", () => {
+    test("should throw on async functions in onConflict", () => {
       // Setup conflicting data
       sourceDb.exec(
         "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@source.com')",
@@ -206,15 +200,14 @@ describe("Session callback error handling", () => {
       const changeset = session.changeset();
       session.close();
 
-      // Apply with async function (returns Promise)
-      const result = targetDb.applyChangeset(changeset, {
-        onConflict: (async (_conflictType: number) => {
-          return constants.SQLITE_CHANGESET_REPLACE;
-        }) as any,
-      });
-
-      // Should handle the Promise object as invalid return
-      expect(result).toBe(false);
+      // Apply with async function (returns Promise) - Node.js throws SQLITE_MISUSE
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          onConflict: (async (_conflictType: number) => {
+            return constants.SQLITE_CHANGESET_REPLACE;
+          }) as any,
+        });
+      }).toThrow(/bad parameter|MISUSE/);
     });
 
     test("should handle multiple conflicts with mixed behaviors", () => {
@@ -248,24 +241,21 @@ describe("Session callback error handling", () => {
       session.close();
 
       let callCount = 0;
-      // Apply with callback that throws on second conflict
-      const result = targetDb.applyChangeset(changeset, {
-        onConflict: (_conflictType: number) => {
-          callCount++;
-          if (callCount === 2) {
-            throw new Error("Error on second conflict");
-          }
-          return constants.SQLITE_CHANGESET_REPLACE;
-        },
-      });
+      // Apply with callback that throws on second conflict - should propagate exception
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          onConflict: (_conflictType: number) => {
+            callCount++;
+            if (callCount === 2) {
+              throw new Error("Error on second conflict");
+            }
+            return constants.SQLITE_CHANGESET_REPLACE;
+          },
+        });
+      }).toThrow("Error on second conflict");
 
-      // Should abort when error is thrown
-      expect(result).toBe(false);
+      // Should have processed at least 2 conflicts before error
       expect(callCount).toBeGreaterThanOrEqual(2);
-
-      // First update might have been applied, but not the rest
-      const user2 = targetDb.prepare("SELECT * FROM users WHERE id = 2").get();
-      expect(user2.name).toBe("Bob2"); // Should remain unchanged
     });
   });
 
@@ -282,21 +272,21 @@ describe("Session callback error handling", () => {
       const changeset = session.changeset();
       session.close();
 
-      // Apply with throwing filter
+      // Apply with throwing filter - should propagate exception
       expect(() => {
         targetDb.applyChangeset(changeset, {
           filter: (_tableName: string) => {
             throw "Filter error!";
           },
         });
-      }).not.toThrow(); // Should not crash
+      }).toThrow("Filter error!");
 
       // No changes should be applied
       const user = targetDb.prepare("SELECT * FROM users WHERE id = 1").get();
       expect(user).toBeUndefined();
     });
 
-    test("should handle Error objects thrown in filter callback", () => {
+    test("should propagate Error objects thrown in filter callback", () => {
       // Setup test data
       sourceDb.exec(
         "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
@@ -308,22 +298,21 @@ describe("Session callback error handling", () => {
       const changeset = session.changeset();
       session.close();
 
-      // Apply with throwing filter
-      const result = targetDb.applyChangeset(changeset, {
-        filter: (_tableName: string) => {
-          throw new Error("Custom filter error");
-        },
-      });
-
-      // Should complete but exclude the table
-      expect(result).toBe(true);
+      // Apply with throwing filter - should propagate exception
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          filter: (_tableName: string) => {
+            throw new Error("Custom filter error");
+          },
+        });
+      }).toThrow("Custom filter error");
 
       // No changes should be applied
       const user = targetDb.prepare("SELECT * FROM users WHERE id = 1").get();
       expect(user).toBeUndefined();
     });
 
-    test("should handle null/undefined thrown in filter callback", () => {
+    test("should propagate null/undefined thrown in filter callback", () => {
       // Setup test data
       sourceDb.exec(
         "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
@@ -335,21 +324,23 @@ describe("Session callback error handling", () => {
       const changeset = session.changeset();
       session.close();
 
-      // Test with null
-      let result = targetDb.applyChangeset(changeset, {
-        filter: (_tableName: string) => {
-          throw null;
-        },
-      });
-      expect(result).toBe(true);
+      // Test with null - should propagate
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          filter: (_tableName: string) => {
+            throw null;
+          },
+        });
+      }).toThrow();
 
-      // Test with undefined
-      result = targetDb.applyChangeset(changeset, {
-        filter: (_tableName: string) => {
-          throw undefined;
-        },
-      });
-      expect(result).toBe(true);
+      // Test with undefined - should propagate
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          filter: (_tableName: string) => {
+            throw undefined;
+          },
+        });
+      }).toThrow();
     });
 
     test("should handle non-boolean return values from filter", () => {
@@ -425,22 +416,23 @@ describe("Session callback error handling", () => {
       let filterCalled = false;
       let conflictCalled = false;
 
-      // Apply with both callbacks that can throw
-      const result = targetDb.applyChangeset(changeset, {
-        filter: (_tableName: string) => {
-          filterCalled = true;
-          // Don't throw in filter, let it pass to conflict
-          return true;
-        },
-        onConflict: (_conflictType: number) => {
-          conflictCalled = true;
-          throw new Error("Conflict handler error");
-        },
-      });
+      // Apply with both callbacks - conflict handler throws, should propagate
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          filter: (_tableName: string) => {
+            filterCalled = true;
+            // Don't throw in filter, let it pass to conflict
+            return true;
+          },
+          onConflict: (_conflictType: number) => {
+            conflictCalled = true;
+            throw new Error("Conflict handler error");
+          },
+        });
+      }).toThrow("Conflict handler error");
 
       expect(filterCalled).toBe(true);
       expect(conflictCalled).toBe(true);
-      expect(result).toBe(false);
     });
 
     test("should handle filter throwing before onConflict is called", () => {
@@ -460,20 +452,21 @@ describe("Session callback error handling", () => {
 
       let conflictCalled = false;
 
-      // Apply with filter that throws
-      const result = targetDb.applyChangeset(changeset, {
-        filter: (_tableName: string) => {
-          throw new Error("Filter error");
-        },
-        onConflict: (_conflictType: number) => {
-          conflictCalled = true;
-          return constants.SQLITE_CHANGESET_REPLACE;
-        },
-      });
+      // Apply with filter that throws - should propagate exception
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          filter: (_tableName: string) => {
+            throw new Error("Filter error");
+          },
+          onConflict: (_conflictType: number) => {
+            conflictCalled = true;
+            return constants.SQLITE_CHANGESET_REPLACE;
+          },
+        });
+      }).toThrow("Filter error");
 
       // Filter error should prevent conflict callback from being called
       expect(conflictCalled).toBe(false);
-      expect(result).toBe(true); // Operation succeeds but table is filtered out
     });
   });
 
@@ -497,29 +490,38 @@ describe("Session callback error handling", () => {
       const changeset = session.changeset();
       session.close();
 
-      // Apply with throwing callbacks many times
-      for (let attempt = 0; attempt < 10; attempt++) {
-        const result = targetDb.applyChangeset(changeset, {
-          filter: (_tableName: string) => {
-            if (Math.random() > 0.5) {
-              throw new Error("Random filter error");
-            }
-            return true;
-          },
-          onConflict: (_conflictType: number) => {
-            if (Math.random() > 0.5) {
-              throw new Error("Random conflict error");
-            }
-            return constants.SQLITE_CHANGESET_OMIT;
-          },
-        });
+      // Apply with throwing callbacks many times - some will throw, some won't
+      let successCount = 0;
+      let errorCount = 0;
 
-        // Some attempts might succeed, some might fail
-        expect(typeof result).toBe("boolean");
+      for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+          const result = targetDb.applyChangeset(changeset, {
+            filter: (_tableName: string) => {
+              if (Math.random() > 0.5) {
+                throw new Error("Random filter error");
+              }
+              return true;
+            },
+            onConflict: (_conflictType: number) => {
+              if (Math.random() > 0.5) {
+                throw new Error("Random conflict error");
+              }
+              return constants.SQLITE_CHANGESET_OMIT;
+            },
+          });
+          // Some attempts might succeed
+          expect(typeof result).toBe("boolean");
+          successCount++;
+        } catch {
+          // Some attempts will throw (expected with new behavior)
+          errorCount++;
+        }
       }
 
+      // We should have some mix of successes and errors due to random throws
+      expect(successCount + errorCount).toBe(10);
       // If we get here without segfault, the test passes
-      expect(true).toBe(true);
     });
 
     test("should handle callback errors after database operations", () => {
@@ -538,20 +540,20 @@ describe("Session callback error handling", () => {
       targetDb.exec("CREATE TABLE temp (id INTEGER)");
       targetDb.exec("INSERT INTO temp VALUES (1), (2), (3)");
 
-      // Apply changeset with throwing callback
-      const result = targetDb.applyChangeset(changeset, {
-        filter: (_tableName: string) => {
-          // Access database during callback (should not crash)
-          try {
-            targetDb.prepare("SELECT COUNT(*) FROM temp").get();
-          } catch {
-            // Ignore any errors from nested DB access
-          }
-          throw new Error("Filter error after DB access");
-        },
-      });
-
-      expect(result).toBe(true);
+      // Apply changeset with throwing callback - should propagate exception
+      expect(() => {
+        targetDb.applyChangeset(changeset, {
+          filter: (_tableName: string) => {
+            // Access database during callback (should not crash)
+            try {
+              targetDb.prepare("SELECT COUNT(*) FROM temp").get();
+            } catch {
+              // Ignore any errors from nested DB access
+            }
+            throw new Error("Filter error after DB access");
+          },
+        });
+      }).toThrow("Filter error after DB access");
     });
   });
 });

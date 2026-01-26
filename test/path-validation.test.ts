@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import * as fs from "node:fs";
 import { URL } from "node:url";
-import { DatabaseSync, type DatabaseSyncInstance } from "../src";
+import { backup, DatabaseSync, type DatabaseSyncInstance } from "../src";
 import { getTestTimeout, useTempDir } from "./test-utils";
 
 describe("Path Validation", () => {
@@ -27,7 +27,9 @@ describe("Path Validation", () => {
     it("should reject string paths with null bytes", () => {
       expect(() => {
         new DatabaseSync("test\0.db");
-      }).toThrow(/must be a string, Buffer, or URL without null bytes/);
+      }).toThrow(
+        /must be a string, (Buffer|Uint8Array), or URL without null bytes/,
+      );
     });
   });
 
@@ -54,7 +56,9 @@ describe("Path Validation", () => {
       const buffer = Buffer.from("test\0.db", "utf8");
       expect(() => {
         new DatabaseSync(buffer);
-      }).toThrow(/must be a string, Buffer, or URL without null bytes/);
+      }).toThrow(
+        /must be a string, (Buffer|Uint8Array), or URL without null bytes/,
+      );
     });
   });
 
@@ -84,21 +88,25 @@ describe("Path Validation", () => {
       const httpUrl = { href: "http://example.com/test.db" };
       expect(() => {
         new DatabaseSync(httpUrl as any);
-      }).toThrow(/Invalid URL scheme/);
+      }).toThrow(/must be of scheme file/i);
     });
 
     it("should reject URLs with null bytes in href", () => {
       const urlWithNull = { href: "file:///test\0.db" };
       expect(() => {
         new DatabaseSync(urlWithNull as any);
-      }).toThrow(/must be a string, Buffer, or URL without null bytes/);
+      }).toThrow(
+        /must be a string, (Buffer|Uint8Array), or URL without null bytes/,
+      );
     });
 
     it("should reject URL objects without href property", () => {
       const invalidUrl = { protocol: "file:" };
       expect(() => {
         new DatabaseSync(invalidUrl as any);
-      }).toThrow(/must be a string, Buffer, or URL without null bytes/);
+      }).toThrow(
+        /must be a string, (Buffer|Uint8Array), or URL without null bytes/,
+      );
     });
   });
 
@@ -106,25 +114,33 @@ describe("Path Validation", () => {
     it("should reject numeric paths", () => {
       expect(() => {
         new DatabaseSync(123 as any);
-      }).toThrow(/must be a string, Buffer, or URL without null bytes/);
+      }).toThrow(
+        /must be a string, (Buffer|Uint8Array), or URL without null bytes/,
+      );
     });
 
     it("should reject boolean paths", () => {
       expect(() => {
         new DatabaseSync(true as any);
-      }).toThrow(/must be a string, Buffer, or URL without null bytes/);
+      }).toThrow(
+        /must be a string, (Buffer|Uint8Array), or URL without null bytes/,
+      );
     });
 
     it("should reject null paths", () => {
       expect(() => {
         new DatabaseSync(null as any);
-      }).toThrow(/must be a string, Buffer, or URL without null bytes/);
+      }).toThrow(
+        /must be a string, (Buffer|Uint8Array), or URL without null bytes/,
+      );
     });
 
     it("should reject undefined paths", () => {
       expect(() => {
         new DatabaseSync(undefined as any);
-      }).toThrow(/must be a string, Buffer, or URL without null bytes/);
+      }).toThrow(
+        /must be a string, (Buffer|Uint8Array), or URL without null bytes/,
+      );
     });
   });
 
@@ -163,7 +179,7 @@ describe("Path Validation", () => {
 
     it("should accept string destination paths", async () => {
       const destPath = getDbPath("backup-string.db");
-      await sourceDb.backup(destPath);
+      await backup(sourceDb, destPath);
 
       // Verify backup was created
       const verifyDb = new DatabaseSync(destPath);
@@ -176,7 +192,7 @@ describe("Path Validation", () => {
     it("should accept Buffer destination paths", async () => {
       const destPath = getDbPath("backup-buffer.db");
       const buffer = Buffer.from(destPath, "utf8");
-      await sourceDb.backup(buffer);
+      await backup(sourceDb, buffer);
 
       // Verify backup was created
       const verifyDb = new DatabaseSync(destPath);
@@ -189,7 +205,7 @@ describe("Path Validation", () => {
     it("should accept file:// URL destination paths", async () => {
       const destPath = getDbPath("backup-url.db");
       const fileUrl = new URL(`file://${destPath}`);
-      await sourceDb.backup(fileUrl);
+      await backup(sourceDb, fileUrl);
 
       // Verify backup was created
       const verifyDb = new DatabaseSync(destPath);
@@ -202,8 +218,10 @@ describe("Path Validation", () => {
     it("should reject invalid destination paths", () => {
       // Path validation throws immediately for invalid types
       expect(() => {
-        sourceDb.backup(123 as any);
-      }).toThrow(/must be a string, Buffer, or URL without null bytes/);
+        backup(sourceDb, 123 as any);
+      }).toThrow(
+        /must be a string, (Buffer|Uint8Array), or URL without null bytes/,
+      );
     });
   });
 });

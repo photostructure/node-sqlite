@@ -128,12 +128,10 @@ describe("DatabaseSync open option", () => {
       expect(db1.isOpen).toBe(true);
       db1.close();
 
-      // null should be treated as invalid (not a boolean)
-      // This depends on the implementation - it might default to true
-      // or might be treated as a non-boolean value
-      const db2 = new DatabaseSync(dbPath, { open: null as any });
-      expect(db2.isOpen).toBe(true); // Defaults to true for non-boolean
-      db2.close();
+      // null should throw TypeError because it's not a boolean (Node.js behavior)
+      expect(() => new DatabaseSync(dbPath, { open: null as any })).toThrow(
+        /open.*boolean/i,
+      );
     });
 
     test("should handle creating database with empty path when open is false", () => {

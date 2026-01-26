@@ -135,31 +135,22 @@ describe("SQLTagStore Tests", () => {
 
     // Throws when closed
     expect(() => sql2.run`INSERT INTO bar (id) VALUES (${2})`).toThrow(
-      "Database is not open",
+      "database is not open",
     );
   });
 
-  test("evicts finalized statements from cache", () => {
+  test("cache clear and re-population works", () => {
     expect(sql.run`INSERT INTO foo (text) VALUES (${"test"})`.changes).toBe(1);
     expect(sql.size).toBe(1);
 
-    // Get the cached statement through a different path - directly from db
-    const stmt = db.prepare("INSERT INTO foo (text) VALUES (?)");
-    expect(stmt.finalized).toBe(false);
-
-    // Now finalize it - the cache doesn't track this external statement
-    stmt.finalize();
-    expect(stmt.finalized).toBe(true);
-
-    // Create a scenario where we have a cached statement, then finalize it
+    // Create a new tag store and verify cache behavior
     const sql3 = db.createTagStore(10);
     expect(sql3.run`INSERT INTO foo (text) VALUES (${"cached"})`.changes).toBe(
       1,
     );
     expect(sql3.size).toBe(1);
 
-    // Get a direct reference to a statement and finalize
-    // Note: The cached statement is not directly accessible, so we test via size
+    // Clear the cache
     sql3.clear();
     expect(sql3.size).toBe(0);
 
@@ -195,13 +186,6 @@ describe("SQLTagStore Tests", () => {
       1,
     );
     expect(smallSql.size).toBe(3);
-  });
-
-  test("statement finalized property works", () => {
-    const stmt = db.prepare("SELECT 1");
-    expect(stmt.finalized).toBe(false);
-    stmt.finalize();
-    expect(stmt.finalized).toBe(true);
   });
 
   test("multiple values are bound correctly", () => {
@@ -252,6 +236,6 @@ describe("SQLTagStore Tests", () => {
   test("createTagStore on closed database throws", () => {
     const db2 = new DatabaseSync(":memory:");
     db2.close();
-    expect(() => db2.createTagStore()).toThrow("Database is not open");
+    expect(() => db2.createTagStore()).toThrow("database is not open");
   });
 });

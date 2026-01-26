@@ -53,7 +53,7 @@ describe("Backup functionality", () => {
 
   it("should create a backup of the database", async () => {
     // Perform backup
-    const totalPages = await sourceDb.backup(destPath);
+    const totalPages = await backup(sourceDb, destPath);
     expect(totalPages).toBeGreaterThan(0);
 
     // Open and verify destination database
@@ -92,7 +92,7 @@ describe("Backup functionality", () => {
   });
 
   it("should handle backup with custom rate", async () => {
-    const totalPages = await sourceDb.backup(destPath, { rate: 5 });
+    const totalPages = await backup(sourceDb, destPath, { rate: 5 });
     expect(totalPages).toBeGreaterThan(0);
 
     // Verify the backup
@@ -108,7 +108,7 @@ describe("Backup functionality", () => {
     const progressCalls: Array<{ totalPages: number; remainingPages: number }> =
       [];
 
-    const totalPages = await sourceDb.backup(destPath, {
+    const totalPages = await backup(sourceDb, destPath, {
       rate: 1, // Use small rate to ensure multiple progress callbacks
       progress: (info: { totalPages: number; remainingPages: number }) => {
         progressCalls.push(info);
@@ -136,7 +136,7 @@ describe("Backup functionality", () => {
   });
 
   it("should handle backup to memory database", async () => {
-    const totalPages = await sourceDb.backup(":memory:");
+    const totalPages = await backup(sourceDb, ":memory:");
     expect(totalPages).toBeGreaterThan(0);
     // Note: We can't verify the contents of the memory database
     // as it's not accessible after the backup completes
@@ -155,7 +155,7 @@ describe("Backup functionality", () => {
     `);
 
     // Backup main database only (default)
-    const totalPages = await sourceDb.backup(destPath);
+    const totalPages = await backup(sourceDb, destPath);
     expect(totalPages).toBeGreaterThan(0);
 
     const destDb = new DatabaseSync(destPath);
@@ -175,13 +175,13 @@ describe("Backup functionality", () => {
 
   it("should handle errors for invalid destination", async () => {
     await expect(
-      sourceDb.backup("/invalid/path/that/does/not/exist/backup.db"),
+      backup(sourceDb, "/invalid/path/that/does/not/exist/backup.db"),
     ).rejects.toThrow();
   });
 
   it("should include SQLite error details on backup failure", async () => {
     try {
-      await sourceDb.backup("/invalid/path/that/does/not/exist/backup.db");
+      await backup(sourceDb, "/invalid/path/that/does/not/exist/backup.db");
       fail("Should have thrown");
     } catch (err: any) {
       // Check it's an error-like object
@@ -208,17 +208,16 @@ describe("Backup functionality", () => {
     testDatabases.add(testDb);
 
     // Close it and try to backup
+    // Validation errors (like database not open) are thrown synchronously
     testDb.close();
-    await expect(testDb.backup(destPath)).rejects.toThrow(
-      "database is not open",
-    );
+    expect(() => backup(testDb, destPath)).toThrow("database is not open");
   });
 
-  it("should reject invalid options", async () => {
-    // Invalid progress callback
-    await expect(
-      sourceDb.backup(destPath, { progress: "not a function" as any }),
-    ).rejects.toThrow("must be a function");
+  it("should reject invalid options", () => {
+    // Invalid progress callback - validation errors are thrown synchronously
+    expect(() =>
+      backup(sourceDb, destPath, { progress: "not a function" as any }),
+    ).toThrow("must be a function");
   });
 
   it("should handle concurrent backups", async () => {
@@ -226,8 +225,8 @@ describe("Backup functionality", () => {
 
     // Start two backups concurrently
     const [pages1, pages2] = await Promise.all([
-      sourceDb.backup(destPath),
-      sourceDb.backup(destPath2),
+      backup(sourceDb, destPath),
+      backup(sourceDb, destPath2),
     ]);
 
     expect(pages1).toBeGreaterThan(0);
@@ -292,7 +291,7 @@ describe("Backup functionality", () => {
 
     // Perform backup
     const backupPath = getDbPath("full_backup.db");
-    const totalPages = await sourceDb.backup(backupPath);
+    const totalPages = await backup(sourceDb, backupPath);
     expect(totalPages).toBeGreaterThan(0);
 
     // Close source and remove it
@@ -468,7 +467,7 @@ describe("Backup functionality", () => {
 
     // Perform backup
     const backupPath = getDbPath("pragma_backup.db");
-    await sourceDb.backup(backupPath);
+    await backup(sourceDb, backupPath);
     sourceDb.close();
 
     // Open backup and verify pragmas
@@ -548,7 +547,7 @@ describe("Backup functionality", () => {
 
       // Use a small rate to ensure multiple iterations
       const pagesPerStep = 2;
-      const totalPages = await sourceDb.backup(backupPath, {
+      const totalPages = await backup(sourceDb, backupPath, {
         rate: pagesPerStep,
         progress: (info) => {
           progressCalls.push({
@@ -627,7 +626,7 @@ describe("Backup functionality", () => {
   it("should handle incremental backup simulation", async () => {
     // Create initial backup
     const backup1Path = getDbPath("backup1.db");
-    await sourceDb.backup(backup1Path);
+    await backup(sourceDb, backup1Path);
 
     // Add more data
     sourceDb.exec(`
@@ -637,7 +636,7 @@ describe("Backup functionality", () => {
 
     // Create second backup
     const backup2Path = getDbPath("backup2.db");
-    await sourceDb.backup(backup2Path);
+    await backup(sourceDb, backup2Path);
 
     // Don't close sourceDb here - let afterEach handle it
     // sourceDb.close();
@@ -699,7 +698,7 @@ describe("Backup functionality", () => {
       const backup1Path = getDbPath("all_at_once.db");
       let callbackCount1 = 0;
 
-      await sourceDb.backup(backup1Path, {
+      await backup(sourceDb, backup1Path, {
         rate: -1, // Negative value to copy all pages at once
         progress: () => {
           callbackCount1++;
@@ -711,7 +710,7 @@ describe("Backup functionality", () => {
       let callbackCount2 = 0;
       const progressInfo2: Array<{ remaining: number }> = [];
 
-      await sourceDb.backup(backup2Path, {
+      await backup(sourceDb, backup2Path, {
         rate: 1,
         progress: (info) => {
           callbackCount2++;
@@ -724,7 +723,7 @@ describe("Backup functionality", () => {
       let callbackCount3 = 0;
       const progressInfo3: Array<{ remaining: number }> = [];
 
-      await sourceDb.backup(backup3Path, {
+      await backup(sourceDb, backup3Path, {
         rate: 5,
         progress: (info) => {
           callbackCount3++;
@@ -886,45 +885,50 @@ describe("Standalone backup() function", () => {
     const database = makeSourceDb();
     const destDb = getDbPath("backup.db");
 
-    await expect(
-      (backup as Function)(database, destDb, "invalid"),
-    ).rejects.toThrow(/options.*object/i);
+    // Validation errors are thrown synchronously before async operation starts
+    expect(() => (backup as Function)(database, destDb, "invalid")).toThrow(
+      /options.*object/i,
+    );
   });
 
   it("throws if options.source is invalid", async () => {
     const database = makeSourceDb();
     const destDb = getDbPath("backup.db");
 
-    await expect(
-      backup(database, destDb, { source: 42 as any }),
-    ).rejects.toThrow(/source.*string/i);
+    // Validation errors are thrown synchronously before async operation starts
+    expect(() => backup(database, destDb, { source: 42 as any })).toThrow(
+      /source.*string/i,
+    );
   });
 
   it("throws if options.target is invalid", async () => {
     const database = makeSourceDb();
     const destDb = getDbPath("backup.db");
 
-    await expect(
-      backup(database, destDb, { target: 42 as any }),
-    ).rejects.toThrow(/target.*string/i);
+    // Validation errors are thrown synchronously before async operation starts
+    expect(() => backup(database, destDb, { target: 42 as any })).toThrow(
+      /target.*string/i,
+    );
   });
 
   it("throws if options.rate is invalid", async () => {
     const database = makeSourceDb();
     const destDb = getDbPath("backup.db");
 
-    await expect(
-      backup(database, destDb, { rate: "invalid" as any }),
-    ).rejects.toThrow(/rate/i);
+    // Validation errors are thrown synchronously before async operation starts
+    expect(() => backup(database, destDb, { rate: "invalid" as any })).toThrow(
+      /rate/i,
+    );
   });
 
   it("throws if options.progress is invalid", async () => {
     const database = makeSourceDb();
     const destDb = getDbPath("backup.db");
 
-    await expect(
+    // Validation errors are thrown synchronously before async operation starts
+    expect(() =>
       backup(database, destDb, { progress: "not a function" as any }),
-    ).rejects.toThrow(/progress.*function/i);
+    ).toThrow(/progress.*function/i);
   });
 
   it("performs a successful backup", async () => {
@@ -1006,9 +1010,8 @@ describe("Standalone backup() function", () => {
     const database = new DatabaseSync(":memory:");
     database.close();
 
-    await expect(backup(database, getDbPath("closed.db"))).rejects.toThrow(
-      /not open/i,
-    );
+    // Closed database check is thrown synchronously before async operation starts
+    expect(() => backup(database, getDbPath("closed.db"))).toThrow(/not open/i);
   });
 
   it("throws if URL is not file: scheme", () => {
@@ -1042,15 +1045,15 @@ describe("Standalone backup() function", () => {
     expect(backup.length).toBe(2);
   });
 
-  it("is equivalent to db.backup() method", async () => {
+  it("produces consistent results across multiple calls", async () => {
     const database = makeSourceDb();
-    const destPath1 = getDbPath("method.db");
-    const destPath2 = getDbPath("function.db");
+    const destPath1 = getDbPath("backup1.db");
+    const destPath2 = getDbPath("backup2.db");
 
-    // Use instance method
-    const pages1 = await database.backup(destPath1);
+    // First backup
+    const pages1 = await backup(database, destPath1);
 
-    // Use standalone function
+    // Second backup
     const pages2 = await backup(database, destPath2);
 
     expect(pages1).toBe(pages2);

@@ -128,7 +128,7 @@ describe("Extension Loading Tests", () => {
 
       expect(() => {
         db.enableLoadExtension(true);
-      }).toThrow(/Database is not open/);
+      }).toThrow(/database is not open/);
     });
 
     test("can toggle extension loading on and off", () => {
@@ -191,7 +191,7 @@ describe("Extension Loading Tests", () => {
 
       expect(() => {
         db.loadExtension("some-extension.so");
-      }).toThrow(/Database is not open/);
+      }).toThrow(/database is not open/);
     });
 
     test("attempts to load non-existent extension", () => {

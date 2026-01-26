@@ -12,7 +12,6 @@ let sqliteVecPath: string | undefined;
 let sqliteVecLoadError: string | undefined;
 
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const sqliteVec = require("@mceachen/sqlite-vec");
   sqliteVecPath = sqliteVec.getLoadablePath();
 } catch (error: any) {
@@ -304,9 +303,9 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
 
     test("vec_length() returns vector dimension", () => {
       const vec = new Float32Array([1.0, 2.0, 3.0, 4.0]);
-      const result = db
-        .prepare("SELECT vec_length(?) as len")
-        .get(vec) as { len: number };
+      const result = db.prepare("SELECT vec_length(?) as len").get(vec) as {
+        len: number;
+      };
       expect(result.len).toBe(4);
     });
 

@@ -93,7 +93,6 @@ try {
   const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
   const stmt = db.prepare('SELECT COUNT(*) as count FROM test');
   const result = stmt.get();
-  stmt.finalize();
   db.close();
   
   parentPort.postMessage({ 
@@ -156,7 +155,6 @@ try {
   const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
   const stmt = db.prepare('SELECT COUNT(*) as count FROM test');
   const result = stmt.get();
-  stmt.finalize();
   db.close();
   
   parentPort.postMessage({ 
@@ -184,7 +182,7 @@ try {
 
           const result = await new Promise<any>((resolve, _reject) => {
             worker.on("message", resolve);
-            worker.on("error", (error) => {
+            worker.on("error", (error: Error) => {
               resolve({ success: false, error: error.message, workerId: i });
             });
             worker.on("exit", (code) => {

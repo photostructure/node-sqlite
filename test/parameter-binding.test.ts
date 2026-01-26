@@ -36,17 +36,14 @@ describe("Parameter Binding Tests", () => {
       expect(row.value_null).toBeNull();
     });
 
-    test("undefined binding (should bind as NULL)", () => {
+    test("undefined binding throws error (Node.js behavior)", () => {
       const stmt = db.prepare(
         "INSERT INTO test_params (value_null) VALUES (?)",
       );
-      const result = stmt.run(undefined);
-      expect(result.changes).toBe(1);
-
-      const row = db
-        .prepare("SELECT value_null FROM test_params WHERE id = ?")
-        .get(result.lastInsertRowid);
-      expect(row.value_null).toBeNull();
+      // Node.js throws ERR_INVALID_ARG_TYPE for undefined (unlike null which binds as SQL NULL)
+      expect(() => stmt.run(undefined)).toThrow(
+        /Provided value cannot be bound to SQLite parameter/,
+      );
     });
 
     test("number binding - integer", () => {
@@ -87,6 +84,12 @@ describe("Parameter Binding Tests", () => {
       const stmt = db.prepare(
         "INSERT INTO test_params (value_bigint) VALUES (?)",
       );
+      const selectStmt = db.prepare(
+        "SELECT value_bigint FROM test_params WHERE id = ?",
+      );
+      // Enable bigint reading to handle values outside safe integer range
+      selectStmt.setReadBigInts(true);
+
       const testValues = [
         0n,
         42n,
@@ -99,20 +102,12 @@ describe("Parameter Binding Tests", () => {
 
       testValues.forEach((value) => {
         const result = stmt.run(value);
-        const row = db
-          .prepare("SELECT value_bigint FROM test_params WHERE id = ?")
-          .get(result.lastInsertRowid);
+        const row = selectStmt.get(result.lastInsertRowid) as {
+          value_bigint: bigint;
+        };
 
-        // For values within safe integer range, SQLite might return number
-        if (
-          value <= BigInt(Number.MAX_SAFE_INTEGER) &&
-          value >= BigInt(Number.MIN_SAFE_INTEGER)
-        ) {
-          expect(BigInt(row.value_bigint)).toBe(value);
-        } else {
-          // For larger values, should return as bigint or string
-          expect(BigInt(row.value_bigint)).toBe(value);
-        }
+        // With setReadBigInts(true), all values come back as bigints
+        expect(row.value_bigint).toBe(value);
       });
     });
 
@@ -171,15 +166,11 @@ describe("Parameter Binding Tests", () => {
         const result = stmt.run(buffer);
         const row = db
           .prepare("SELECT value_blob FROM test_params WHERE id = ?")
-          .get(result.lastInsertRowid);
+          .get(result.lastInsertRowid) as { value_blob: Uint8Array };
 
-        // Empty buffers are stored as NULL in SQLite
-        if (buffer.length === 0) {
-          expect(row.value_blob).toBeNull();
-        } else {
-          expect(row.value_blob).toBeInstanceOf(Uint8Array);
-          expect(Buffer.from(row.value_blob).equals(buffer)).toBe(true);
-        }
+        // Node.js sqlite returns empty blobs as empty Uint8Array (not NULL)
+        expect(row.value_blob).toBeInstanceOf(Uint8Array);
+        expect(Buffer.from(row.value_blob).equals(buffer)).toBe(true);
       });
     });
 
@@ -291,15 +282,16 @@ describe("Parameter Binding Tests", () => {
       const result = stmt.run(emptyView);
       const row = db
         .prepare("SELECT value_blob FROM test_params WHERE id = ?")
-        .get(result.lastInsertRowid);
+        .get(result.lastInsertRowid) as { value_blob: Uint8Array };
 
-      // Empty DataView should bind as NULL
-      expect(row.value_blob).toBeNull();
+      // Node.js sqlite returns empty blobs as empty Uint8Array (not NULL)
+      expect(row.value_blob).toBeInstanceOf(Uint8Array);
+      expect(row.value_blob.length).toBe(0);
     });
 
     test("multiple parameters of different types", () => {
       const stmt = db.prepare(`
-        INSERT INTO test_params (value_null, value_int, value_real, value_text, value_blob, value_bigint) 
+        INSERT INTO test_params (value_null, value_int, value_real, value_text, value_blob, value_bigint)
         VALUES (?, ?, ?, ?, ?, ?)
       `);
 
@@ -313,12 +305,21 @@ describe("Parameter Binding Tests", () => {
         9007199254740993n,
       );
 
-      const row = db
-        .prepare("SELECT * FROM test_params WHERE id = ?")
-        .get(result.lastInsertRowid);
+      // Use setReadBigInts(true) to read values beyond safe integer range
+      const selectStmt = db.prepare("SELECT * FROM test_params WHERE id = ?");
+      selectStmt.setReadBigInts(true);
+      const row = selectStmt.get(result.lastInsertRowid) as {
+        value_null: null;
+        value_int: bigint;
+        value_real: number;
+        value_text: string;
+        value_blob: Uint8Array;
+        value_bigint: bigint;
+      };
 
       expect(row.value_null).toBeNull();
-      expect(row.value_int).toBe(42);
+      // With setReadBigInts(true), integers come back as bigints
+      expect(row.value_int).toBe(42n);
       expect(row.value_real).toBeCloseTo(3.14159);
       expect(row.value_text).toBe("Hello");
       expect(Buffer.from(row.value_blob).equals(buffer)).toBe(true);
@@ -471,11 +472,15 @@ describe("Parameter Binding Tests", () => {
           .prepare(
             "SELECT value_blob, typeof(value_blob) as type FROM test_params WHERE id = ?",
           )
-          .get(result.lastInsertRowid);
+          .get(result.lastInsertRowid) as {
+          value_blob: Uint8Array;
+          type: string;
+        };
 
-        // SQLite stores empty blobs as NULL
-        expect(row.value_blob).toBeNull();
-        expect(row.type).toBe("null");
+        // Node.js sqlite stores empty blobs as blobs (not NULL) and returns empty Uint8Array
+        expect(row.value_blob).toBeInstanceOf(Uint8Array);
+        expect(row.value_blob.length).toBe(0);
+        expect(row.type).toBe("blob");
       });
     });
 

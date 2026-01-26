@@ -1,4 +1,4 @@
-import { DatabaseSync } from "../src";
+import { backup, DatabaseSync } from "../src";
 
 describe("Callback Function Error Handling", () => {
   let db: InstanceType<typeof DatabaseSync>;
@@ -114,17 +114,20 @@ describe("Callback Function Error Handling", () => {
         return () => "nested function";
       });
 
-      // These should not crash, but convert to string or similar
-      const result1 = db.prepare("SELECT return_promise() as result").get();
-      expect(result1.result).toBeTruthy(); // Will be string representation
+      // Promise return throws "Asynchronous user-defined functions are not supported"
+      expect(() => {
+        db.prepare("SELECT return_promise() as result").get();
+      }).toThrow(/asynchronous/i);
 
       // Symbol conversion throws an error, which is expected
       expect(() => {
         db.prepare("SELECT return_symbol() as result").get();
-      }).toThrow(); // Just verify that an error is thrown
+      }).toThrow();
 
-      const result3 = db.prepare("SELECT return_function() as result").get();
-      expect(result3.result).toBeTruthy();
+      // Functions as return values also throw
+      expect(() => {
+        db.prepare("SELECT return_function() as result").get();
+      }).toThrow();
     });
 
     test("varargs function with error", () => {
@@ -224,7 +227,7 @@ describe("Callback Function Error Handling", () => {
 
       // Backup should complete successfully despite error in progress callback
       await expect(
-        tempDb.backup(":memory:", {
+        backup(tempDb, ":memory:", {
           progress: progressCallback,
           rate: 1, // Small rate to ensure multiple progress calls
         }),

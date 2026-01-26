@@ -251,7 +251,7 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
 
       expect(() => {
         db.exec("SELECT 1");
-      }).toThrow("Authorizer callback returned an invalid authorization code");
+      }).toThrow(/Authorizer callback returned a.* invalid authorization code/);
       db.close();
     });
 

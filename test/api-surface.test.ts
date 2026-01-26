@@ -54,8 +54,11 @@ describe("API Surface Tests", () => {
       expect(typeof db.enableLoadExtension).toBe("function");
       expect(typeof db.loadExtension).toBe("function");
 
-      // Backup
-      expect(typeof db.backup).toBe("function");
+      // Authorizer (new in node:sqlite v24.10.0)
+      expect(typeof db.setAuthorizer).toBe("function");
+
+      // Our extension: enableDefensive
+      expect(typeof db.enableDefensive).toBe("function");
 
       db.close();
     });
@@ -99,13 +102,11 @@ describe("API Surface Tests", () => {
       // Configuration methods
       expect(typeof stmt.setReadBigInts).toBe("function");
       expect(typeof stmt.setAllowBareNamedParameters).toBe("function");
+      expect(typeof stmt.setAllowUnknownNamedParameters).toBe("function");
       expect(typeof stmt.setReturnArrays).toBe("function");
 
       // Metadata
       expect(typeof stmt.columns).toBe("function");
-
-      // Finalization
-      expect(typeof stmt.finalize).toBe("function");
 
       db.close();
     });
@@ -125,15 +126,6 @@ describe("API Surface Tests", () => {
       db.close();
     });
 
-    test("has Symbol.dispose if available", () => {
-      if (typeof Symbol !== "undefined" && Symbol.dispose) {
-        const db = new DatabaseSync(":memory:");
-        const stmt = db.prepare("SELECT 1");
-        expect(typeof stmt[Symbol.dispose]).toBe("function");
-        db.close();
-      }
-    });
-
     test("columns() returns correct metadata", () => {
       const db = new DatabaseSync(":memory:");
       db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
@@ -142,8 +134,51 @@ describe("API Surface Tests", () => {
       const columns = stmt.columns();
       expect(Array.isArray(columns)).toBe(true);
       expect(columns).toHaveLength(2);
-      expect(columns[0]).toHaveProperty("name", "id");
-      expect(columns[1]).toHaveProperty("name", "name");
+
+      // Verify full column metadata (matches node:sqlite StatementColumnMetadata)
+      expect(columns[0]).toEqual({
+        column: "id",
+        database: "main",
+        name: "id",
+        table: "test",
+        type: "INTEGER",
+      });
+      expect(columns[1]).toEqual({
+        column: "name",
+        database: "main",
+        name: "name",
+        table: "test",
+        type: "TEXT",
+      });
+
+      db.close();
+    });
+
+    test("columns() handles expressions and aliases", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE test (value INTEGER)");
+      const stmt = db.prepare("SELECT value + 1 AS computed, value FROM test");
+
+      const columns = stmt.columns();
+      expect(columns).toHaveLength(2);
+
+      // Expression column has null for origin fields
+      expect(columns[0]).toEqual({
+        column: null,
+        database: null,
+        name: "computed",
+        table: null,
+        type: null,
+      });
+
+      // Regular column has full metadata
+      expect(columns[1]).toEqual({
+        column: "value",
+        database: "main",
+        name: "value",
+        table: "test",
+        type: "INTEGER",
+      });
 
       db.close();
     });
@@ -334,11 +369,14 @@ describe("API Surface Tests", () => {
       db.close();
     });
 
-    test("backup() returns Promise<number>", async () => {
+    test("standalone backup() returns Promise<number>", async () => {
       const db = new DatabaseSync(":memory:");
       db.exec("CREATE TABLE test (id INTEGER)");
 
-      const backupPromise = db.backup(":memory:");
+      // Use the standalone backup function (official node:sqlite API)
+      const { backup } = await import("../src");
+      const backupPromise = backup(db, ":memory:");
+
       // Check it's a promise by checking for then method
       expect(typeof backupPromise.then).toBe("function");
       expect(typeof backupPromise.catch).toBe("function");

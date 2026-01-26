@@ -139,16 +139,7 @@ describe("Statement Iterator Tests", () => {
     expect(result.value).toBeNull();
   });
 
-  test("iterator with finalized statement should throw", () => {
-    const stmt = db.prepare("SELECT * FROM test_data");
-    const iterator = stmt.iterate();
-
-    // Finalize the statement
-    stmt.finalize();
-
-    // Iterator should throw on next call
-    expect(() => iterator.next()).toThrow(/finalized/i);
-  });
+  // Note: finalize() is not part of node:sqlite API - statements are auto-finalized on GC
 
   test("iterator spread operator", () => {
     const stmt = db.prepare("SELECT name FROM test_data ORDER BY id");

@@ -34,7 +34,6 @@ try {
   // This should fail with thread validation error
   const stmt = workerData.db.prepare('SELECT * FROM test');
   const rows = stmt.all();
-  stmt.finalize();
   
   parentPort.postMessage({ success: true, rows });
 } catch (error) {
@@ -80,7 +79,6 @@ try {
   const db = new DatabaseSync(workerData.dbPath, { readOnly: true });
   const stmt = db.prepare('SELECT * FROM test');
   const rows = stmt.all();
-  stmt.finalize();
   db.close();
   
   parentPort.postMessage({ success: true, rows });
@@ -127,7 +125,6 @@ try {
   // This should work fine - same thread
   const stmt = db.prepare('SELECT * FROM test');
   const count = stmt.get();
-  stmt.finalize();
   db.close();
   
   parentPort.postMessage({ success: true, threadValidation: "working" });

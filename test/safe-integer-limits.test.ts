@@ -46,36 +46,56 @@ describe("JavaScript Safe Integer Limits", () => {
       });
     });
 
-    test("returns BigInt for values outside JavaScript safe integer range", () => {
+    test("throws RangeError for values outside JavaScript safe integer range", () => {
+      // Node.js sqlite throws RangeError when reading values outside safe integer range
+      // without setReadBigInts(true) enabled. This is intentional to prevent silent data loss.
       const stmt = db.prepare("INSERT INTO test (value) VALUES (?)");
       const selectStmt = db.prepare("SELECT value FROM test WHERE id = ?");
 
       // Test values outside the JavaScript safe integer range
       const testCases = [
-        { value: BigInt(Number.MAX_SAFE_INTEGER) + 1n, expectedType: "bigint" },
-        { value: BigInt(Number.MIN_SAFE_INTEGER) - 1n, expectedType: "bigint" },
-        { value: 9007199254740992n, expectedType: "bigint" }, // MAX_SAFE_INTEGER + 1
-        { value: -9007199254740992n, expectedType: "bigint" }, // MIN_SAFE_INTEGER - 1
-        { value: 9223372036854775807n, expectedType: "bigint" }, // INT64_MAX
-        { value: -9223372036854775808n, expectedType: "bigint" }, // INT64_MIN
+        { value: BigInt(Number.MAX_SAFE_INTEGER) + 1n },
+        { value: BigInt(Number.MIN_SAFE_INTEGER) - 1n },
+        { value: 9007199254740992n }, // MAX_SAFE_INTEGER + 1
+        { value: -9007199254740992n }, // MIN_SAFE_INTEGER - 1
+        { value: 9223372036854775807n }, // INT64_MAX
+        { value: -9223372036854775808n }, // INT64_MIN
       ];
 
       testCases.forEach((testCase) => {
         const result = stmt.run(testCase.value);
-        const row = selectStmt.get(result.lastInsertRowid);
+        // Reading without setReadBigInts(true) should throw RangeError
+        // Note: we can't use expect().toThrow(RangeError) because Jest wraps the error
+        let error: Error | undefined;
+        try {
+          selectStmt.get(result.lastInsertRowid);
+        } catch (e) {
+          error = e as Error;
+        }
+        expect(error).toBeDefined();
+        expect(error!.name).toBe("RangeError");
+        expect(error!.message).toContain("too large");
+      });
 
-        expect(typeof row.value).toBe(testCase.expectedType);
+      // With setReadBigInts(true), values can be read correctly
+      selectStmt.setReadBigInts(true);
+      testCases.forEach((testCase) => {
+        const result = stmt.run(testCase.value);
+        const row = selectStmt.get(result.lastInsertRowid) as { value: bigint };
+        expect(typeof row.value).toBe("bigint");
         expect(row.value).toBe(testCase.value);
       });
     });
 
-    test("lastInsertRowid returns number for safe values and BigInt for large values", () => {
+    test("lastInsertRowid throws RangeError for large values without setReadBigInts", () => {
       // Create a table with explicit rowid
       db.exec("CREATE TABLE rowid_test (data TEXT);");
 
       // Test safe rowid values
       db.exec("INSERT INTO rowid_test (rowid, data) VALUES (42, 'test1')");
-      let result = db.prepare("SELECT last_insert_rowid() as rowid").get();
+      let result = db.prepare("SELECT last_insert_rowid() as rowid").get() as {
+        rowid: number;
+      };
       expect(typeof result.rowid).toBe("number");
       expect(result.rowid).toBe(42);
 
@@ -83,17 +103,33 @@ describe("JavaScript Safe Integer Limits", () => {
       db.exec(
         `INSERT INTO rowid_test (rowid, data) VALUES (${Number.MAX_SAFE_INTEGER}, 'test2')`,
       );
-      result = db.prepare("SELECT last_insert_rowid() as rowid").get();
+      result = db.prepare("SELECT last_insert_rowid() as rowid").get() as {
+        rowid: number;
+      };
       expect(typeof result.rowid).toBe("number");
       expect(result.rowid).toBe(Number.MAX_SAFE_INTEGER);
 
-      // Test rowid beyond MAX_SAFE_INTEGER
+      // Test rowid beyond MAX_SAFE_INTEGER - throws RangeError without setReadBigInts(true)
       db.exec(
         `INSERT INTO rowid_test (rowid, data) VALUES (${Number.MAX_SAFE_INTEGER + 1}, 'test3')`,
       );
-      result = db.prepare("SELECT last_insert_rowid() as rowid").get();
-      expect(typeof result.rowid).toBe("bigint");
-      expect(result.rowid).toBe(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
+      const stmt = db.prepare("SELECT last_insert_rowid() as rowid");
+      // Note: we can't use expect().toThrow(RangeError) because Jest wraps the error
+      let error: Error | undefined;
+      try {
+        stmt.get();
+      } catch (e) {
+        error = e as Error;
+      }
+      expect(error).toBeDefined();
+      expect(error!.name).toBe("RangeError");
+      expect(error!.message).toContain("too large");
+
+      // With setReadBigInts(true), large rowid can be read
+      stmt.setReadBigInts(true);
+      const bigResult = stmt.get() as { rowid: bigint };
+      expect(typeof bigResult.rowid).toBe("bigint");
+      expect(bigResult.rowid).toBe(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
     });
   });
 

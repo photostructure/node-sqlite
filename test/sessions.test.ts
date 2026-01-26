@@ -51,7 +51,7 @@ describe("SQLite Sessions", () => {
       );
 
       const changeset = session.changeset();
-      expect(changeset).toBeInstanceOf(Buffer);
+      expect(changeset).toBeInstanceOf(Uint8Array);
       expect(changeset.length).toBeGreaterThan(0);
 
       session.close();
@@ -70,7 +70,7 @@ describe("SQLite Sessions", () => {
       db.exec("INSERT INTO products (name) VALUES ('Widget')");
 
       const changeset = session.changeset();
-      expect(changeset).toBeInstanceOf(Buffer);
+      expect(changeset).toBeInstanceOf(Uint8Array);
       expect(changeset.length).toBeGreaterThan(0);
 
       session.close();
@@ -125,7 +125,7 @@ describe("SQLite Sessions", () => {
 
     it("should generate empty changeset for no changes", () => {
       const changeset = session.changeset();
-      expect(changeset).toBeInstanceOf(Buffer);
+      expect(changeset).toBeInstanceOf(Uint8Array);
       expect(changeset.length).toBe(0);
 
       // Verify empty changeset can be applied without effect
@@ -146,12 +146,12 @@ describe("SQLite Sessions", () => {
       db.exec("INSERT INTO test (id, value) VALUES (1, 'one'), (2, 'two')");
 
       const changeset = session.changeset();
-      expect(changeset).toBeInstanceOf(Buffer);
+      expect(changeset).toBeInstanceOf(Uint8Array);
       expect(changeset.length).toBeGreaterThan(0);
 
       // Verify changeset contains expected data
       // SQLite changesets have a specific binary format with table names and values
-      const changesetStr = changeset.toString("binary");
+      const changesetStr = Buffer.from(changeset).toString("binary");
       expect(changesetStr).toContain("test"); // Should contain table name
       expect(changesetStr).toContain("one"); // Should contain first value
       expect(changesetStr).toContain("two"); // Should contain second value
@@ -185,7 +185,7 @@ describe("SQLite Sessions", () => {
       expect(changeset.length).toBeGreaterThan(0);
 
       // Verify changeset contains update data
-      const changesetStr = changeset.toString("binary");
+      const changesetStr = Buffer.from(changeset).toString("binary");
       expect(changesetStr).toContain("test"); // Table name
       expect(changesetStr).toContain("updated"); // New value
 
@@ -217,7 +217,7 @@ describe("SQLite Sessions", () => {
       expect(changeset.length).toBeGreaterThan(0);
 
       // Verify changeset contains delete operation data
-      const changesetStr = changeset.toString("binary");
+      const changesetStr = Buffer.from(changeset).toString("binary");
       expect(changesetStr).toContain("test"); // Table name
       expect(changesetStr).toContain("to_delete"); // Deleted value
 
@@ -241,7 +241,7 @@ describe("SQLite Sessions", () => {
       db.exec("INSERT INTO test (id, value) VALUES (1, 'one')");
 
       const patchset = session.patchset();
-      expect(patchset).toBeInstanceOf(Buffer);
+      expect(patchset).toBeInstanceOf(Uint8Array);
       expect(patchset.length).toBeGreaterThan(0);
 
       // Patchset should be smaller than or equal to changeset
@@ -386,8 +386,10 @@ describe("SQLite Sessions", () => {
       expect(rows[0].int_val).toBe(42);
       expect(rows[0].real_val).toBeCloseTo(3.14159);
       expect(rows[0].text_val).toBe("hello");
-      expect(rows[0].blob_val).toBeInstanceOf(Buffer);
-      expect(rows[0].blob_val.toString("hex").toUpperCase()).toBe("DEADBEEF");
+      expect(rows[0].blob_val).toBeInstanceOf(Uint8Array);
+      expect(Buffer.from(rows[0].blob_val).toString("hex").toUpperCase()).toBe(
+        "DEADBEEF",
+      );
       expect(rows[0].null_val).toBeNull();
 
       // Check second row
@@ -395,7 +397,7 @@ describe("SQLite Sessions", () => {
       expect(rows[1].int_val).toBe(-123);
       expect(rows[1].real_val).toBe(-2.5);
       expect(rows[1].text_val).toBe("");
-      expect(rows[1].blob_val).toBeInstanceOf(Buffer);
+      expect(rows[1].blob_val).toBeInstanceOf(Uint8Array);
       expect(rows[1].blob_val.length).toBe(0);
       expect(rows[1].null_val).toBe("not null");
 
@@ -779,7 +781,7 @@ describe("SQLite Sessions", () => {
     it("should throw error for invalid changeset data", () => {
       const invalidChangeset = Buffer.from("invalid data");
       expect(() => targetDb.applyChangeset(invalidChangeset)).toThrow(
-        /Failed to apply changeset/,
+        /malformed|invalid/i,
       );
     });
 

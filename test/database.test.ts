@@ -99,8 +99,9 @@ describe("DatabaseSync Tests", () => {
     expect(row.int_col).toBe(42);
     expect(row.real_col).toBeCloseTo(3.14);
     expect(row.text_col).toBe("test string");
-    expect(Buffer.isBuffer(row.blob_col)).toBe(true);
-    expect(row.blob_col.toString("utf8")).toBe("hello world");
+    // Node.js sqlite returns Uint8Array, not Buffer
+    expect(row.blob_col).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(row.blob_col).toString("utf8")).toBe("hello world");
 
     db.close();
   });
@@ -112,13 +113,17 @@ describe("DatabaseSync Tests", () => {
 
     const stmt = db.prepare("INSERT INTO null_test VALUES (?, ?)");
     stmt.run(1, null);
-    stmt.run(2, undefined);
+
+    // Node.js sqlite throws TypeError for undefined parameter values
+    expect(() => stmt.run(2, undefined)).toThrow(
+      /cannot be bound to SQLite parameter/i,
+    );
 
     const selectStmt = db.prepare("SELECT * FROM null_test ORDER BY id");
     const rows = selectStmt.all();
 
+    expect(rows).toHaveLength(1);
     expect(rows[0]).toEqual({ id: 1, value: null });
-    expect(rows[1]).toEqual({ id: 2, value: null });
 
     db.close();
   });
@@ -535,8 +540,7 @@ describe("Database Configuration Tests", () => {
 
     db.close();
 
-    // Test with foreign keys disabled - currently the implementation doesn't properly
-    // disable foreign keys, so they remain enabled regardless of the setting
+    // Test with foreign keys disabled
     db = new DatabaseSync(":memory:", { enableForeignKeyConstraints: false });
 
     db.exec(`
@@ -554,11 +558,10 @@ describe("Database Configuration Tests", () => {
       db.exec("INSERT INTO child VALUES (1, 1, 'Child1')");
     }).not.toThrow();
 
-    // Invalid foreign key should still fail because foreign keys are actually enabled
-    // TODO: Fix implementation to properly disable foreign key constraints
+    // Invalid foreign key should also work when foreign keys are disabled
     expect(() => {
       db.exec("INSERT INTO child VALUES (2, 999, 'Child2')");
-    }).toThrow(/foreign key constraint/i);
+    }).not.toThrow();
 
     db.close();
   });
@@ -747,33 +750,35 @@ describe("Defensive Mode", () => {
     return journalMode() === "memory";
   }
 
-  test("by default, defensive mode is off", () => {
+  test("by default, defensive mode is on", () => {
+    // Node.js v25+ changed the default to true
     const db = new DatabaseSync(":memory:");
+    expect(checkDefensiveMode(db)).toBe(true);
+    db.close();
+  });
+
+  test("when passing { defensive: false } as config, defensive mode is off", () => {
+    const db = new DatabaseSync(":memory:", {
+      defensive: false,
+    });
     expect(checkDefensiveMode(db)).toBe(false);
     db.close();
   });
 
-  test("when passing { defensive: true } as config, defensive mode is on", () => {
-    const db = new DatabaseSync(":memory:", {
-      defensive: true,
-    });
-    expect(checkDefensiveMode(db)).toBe(true);
-    db.close();
-  });
-
-  test("defensive mode on after calling db.enableDefensive(true)", () => {
+  test("defensive mode can be toggled off with db.enableDefensive(false)", () => {
     const db = new DatabaseSync(":memory:");
-    db.enableDefensive(true);
-    expect(checkDefensiveMode(db)).toBe(true);
-    db.close();
-  });
-
-  test("defensive mode should be off after calling db.enableDefensive(false)", () => {
-    const db = new DatabaseSync(":memory:", {
-      defensive: true,
-    });
+    // Default is now on, toggle it off
     db.enableDefensive(false);
     expect(checkDefensiveMode(db)).toBe(false);
+    db.close();
+  });
+
+  test("defensive mode can be toggled on with db.enableDefensive(true)", () => {
+    const db = new DatabaseSync(":memory:", {
+      defensive: false,
+    });
+    db.enableDefensive(true);
+    expect(checkDefensiveMode(db)).toBe(true);
     db.close();
   });
 

@@ -2,6 +2,13 @@ import { describe, expect, jest, test } from "@jest/globals";
 import { DatabaseSync, type DatabaseSyncInstance } from "../src";
 import { getTestTimeout } from "./test-utils";
 
+/**
+ * Tests for the Explicit Resource Management (using syntax) with DatabaseSync.
+ *
+ * Note: StatementSync does not implement Symbol.dispose in the node:sqlite API.
+ * Statements are automatically finalized when the database is closed, so there's
+ * no need for explicit statement disposal via the `using` keyword.
+ */
 describe("Using Syntax (Explicit Resource Management)", () => {
   jest.setTimeout(getTestTimeout());
 
@@ -23,7 +30,6 @@ describe("Using Syntax (Explicit Resource Management)", () => {
       const stmt = db.prepare("SELECT * FROM test");
       const result = stmt.get();
       expect(result).toEqual({ id: 1, name: "test" });
-      stmt.finalize();
 
       // Database is still open at this point
       expect(db.isOpen).toBe(true);
@@ -34,37 +40,7 @@ describe("Using Syntax (Explicit Resource Management)", () => {
     expect(dbRef!.isOpen).toBe(false);
   });
 
-  test("using statement with StatementSync automatically finalizes statement", () => {
-    const db = new DatabaseSync(":memory:");
-    db.exec("CREATE TABLE test (id INTEGER, name TEXT)");
-
-    let stmtRef: any = null;
-
-    try {
-      // Use a block to ensure the using scope is clearly defined
-      {
-        using stmt = db.prepare("SELECT * FROM test WHERE id = ?");
-        stmtRef = stmt;
-
-        // Statement should work initially
-        const result = stmt.get(1);
-        expect(result).toBeUndefined(); // No rows yet
-
-        // Insert some data and test again
-        db.exec("INSERT INTO test (id, name) VALUES (1, 'Alice')");
-        const result2 = stmt.get(1);
-        expect(result2).toEqual({ id: 1, name: "Alice" });
-      }
-      // using block ends here - stmt should be automatically finalized
-
-      // Statement should now be finalized and throw on use
-      expect(() => stmtRef.get(1)).toThrow();
-    } finally {
-      db.close();
-    }
-  });
-
-  test("nested using statements work correctly", () => {
+  test("nested using with database and manual statement cleanup", () => {
     let dbRef: DatabaseSyncInstance | null = null;
     let stmtRef: any = null;
 
@@ -77,28 +53,26 @@ describe("Using Syntax (Explicit Resource Management)", () => {
 
       expect(db.isOpen).toBe(true);
 
-      {
-        using selectStmt = db.prepare("SELECT * FROM users WHERE name = ?");
-        stmtRef = selectStmt;
+      // Statements don't support using syntax, but we can still use them normally
+      const selectStmt = db.prepare("SELECT * FROM users WHERE name = ?");
+      stmtRef = selectStmt;
 
-        const alice = selectStmt.get("Alice");
-        expect(alice).toEqual({ id: 1, name: "Alice" });
+      const alice = selectStmt.get("Alice");
+      expect(alice).toEqual({ id: 1, name: "Alice" });
 
-        const bob = selectStmt.get("Bob");
-        expect(bob).toEqual({ id: 2, name: "Bob" });
-      }
-      // Inner using block ends - selectStmt should be finalized
-
-      // Statement should be finalized
-      expect(() => stmtRef.get("Alice")).toThrow();
+      const bob = selectStmt.get("Bob");
+      expect(bob).toEqual({ id: 2, name: "Bob" });
 
       // Database should still be open
       expect(db.isOpen).toBe(true);
     }
-    // Outer using block ends - db should be closed
+    // using block ends - db should be closed, which also finalizes statements
 
     // Database should now be closed
     expect(dbRef!.isOpen).toBe(false);
+
+    // Statement should be finalized (because database was closed)
+    expect(() => stmtRef.get("Alice")).toThrow();
   });
 
   test("using statement handles exceptions properly", () => {
@@ -119,7 +93,7 @@ describe("Using Syntax (Explicit Resource Management)", () => {
     expect(dbRef!.isOpen).toBe(false);
   });
 
-  test("using statement with multiple resources", () => {
+  test("using statement with database and multiple statements", () => {
     let dbRef: DatabaseSyncInstance | null = null;
     let insertRef: any = null;
     let selectRef: any = null;
@@ -129,8 +103,9 @@ describe("Using Syntax (Explicit Resource Management)", () => {
 
       db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
 
-      using insertStmt = db.prepare("INSERT INTO users (name) VALUES (?)");
-      using selectStmt = db.prepare("SELECT * FROM users WHERE name = ?");
+      // Create statements normally (they don't need 'using')
+      const insertStmt = db.prepare("INSERT INTO users (name) VALUES (?)");
+      const selectStmt = db.prepare("SELECT * FROM users WHERE name = ?");
 
       dbRef = db;
       insertRef = insertStmt;
@@ -144,10 +119,12 @@ describe("Using Syntax (Explicit Resource Management)", () => {
       // All resources should be active
       expect(db.isOpen).toBe(true);
     }
-    // All using declarations end here
+    // using declaration ends here - db is closed, statements are finalized
 
-    // All resources should be cleaned up
+    // Database should be closed
     expect(dbRef!.isOpen).toBe(false);
+
+    // Statements should be finalized (because database was closed)
     expect(() => insertRef.run("David")).toThrow();
     expect(() => selectRef.get("Charlie")).toThrow();
   });
@@ -170,7 +147,6 @@ describe("Using Syntax (Explicit Resource Management)", () => {
         "INSERT INTO async_test (timestamp) VALUES (?)",
       );
       insertStmt.run(Date.now());
-      insertStmt.finalize();
 
       expect(db.isOpen).toBe(true);
     }

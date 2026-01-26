@@ -855,12 +855,14 @@ describe("Error Handling Tests - Safe Edition", () => {
       ];
 
       for (let i = 0; i < buffers.length; i++) {
-        const result = insert.run(buffers[i]);
+        const buffer = buffers[i]!;
+        const result = insert.run(buffer);
         const row = select.get(Number(result.lastInsertRowid));
 
         expect(row).toBeDefined();
-        expect(Buffer.isBuffer(row.blob_data)).toBe(true);
-        expect(row.blob_data.equals(buffers[i])).toBe(true);
+        // Blobs are returned as Uint8Array in Node.js sqlite
+        expect(row.blob_data).toBeInstanceOf(Uint8Array);
+        expect(Buffer.from(row.blob_data).equals(buffer)).toBe(true);
       }
 
       db.close();

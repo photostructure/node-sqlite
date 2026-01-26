@@ -122,7 +122,8 @@ export async function waitForOutput(
     };
 
     if (process.stdout) {
-      process.stdout.on("data", onData);
+      // Cast to ReadableStream since child processes have readable stdout
+      (process.stdout as NodeJS.ReadableStream).on("data", onData);
     }
   });
 }

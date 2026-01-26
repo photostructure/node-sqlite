@@ -16,39 +16,7 @@ import { rm } from "./test-utils";
  */
 describe("Invalid Operations Tests", () => {
   describe("Statement Invalid Operations", () => {
-    test("handles finalized statement operations", () => {
-      const db = new DatabaseSync(":memory:");
-      db.exec("CREATE TABLE test (id INTEGER, value TEXT)");
-
-      const stmt = db.prepare("SELECT * FROM test");
-
-      // Finalize the statement
-      stmt.finalize();
-
-      // All operations on finalized statement should throw
-      expect(() => {
-        stmt.run();
-      }).toThrow(/finalized|destroyed|invalid/i);
-
-      expect(() => {
-        stmt.get();
-      }).toThrow(/finalized|destroyed|invalid/i);
-
-      expect(() => {
-        stmt.all();
-      }).toThrow(/finalized|destroyed|invalid/i);
-
-      expect(() => {
-        stmt.iterate();
-      }).toThrow(/finalized|destroyed|invalid/i);
-
-      // Double finalize should not throw or have no effect
-      expect(() => {
-        stmt.finalize();
-      }).not.toThrow();
-
-      db.close();
-    });
+    // Note: finalize() is not part of node:sqlite API - statements are auto-finalized on GC
 
     test("handles statement from closed database", () => {
       const db = new DatabaseSync(":memory:");
@@ -95,14 +63,12 @@ describe("Invalid Operations Tests", () => {
       // Empty SQL is actually allowed by SQLite
       const emptyStmt = db.prepare("");
       expect(emptyStmt).toBeInstanceOf(StatementSync);
-      emptyStmt.finalize();
 
       // Multiple statements in prepare is actually allowed by SQLite
       // Only the first statement is prepared
       const multiStmt = db.prepare("SELECT 1; SELECT 2");
       const result = multiStmt.get();
       expect(result).toEqual({ "1": 1 });
-      multiStmt.finalize();
 
       db.close();
     });
@@ -125,14 +91,19 @@ describe("Invalid Operations Tests", () => {
         stmt.run(1, 2); // Missing third param
       }).not.toThrow();
 
-      // Too many parameters - SQLite ignores extras
+      // Too many parameters - Node.js sqlite throws "column index out of range"
       expect(() => {
-        stmt.run(1, 2, 3, 4); // Extra param
-      }).not.toThrow();
+        stmt.run(1, 2, Buffer.from("test"), 4); // Extra param
+      }).toThrow(/column index out of range/i);
 
-      // Various types - SQLite converts most things
+      // undefined throws TypeError in Node.js sqlite
       expect(() => {
         stmt.run(undefined, null, Buffer.from("test"));
+      }).toThrow(/cannot be bound to SQLite parameter/i);
+
+      // null is valid
+      expect(() => {
+        stmt.run(null, null, Buffer.from("test"));
       }).not.toThrow();
 
       expect(() => {
@@ -388,15 +359,12 @@ describe("Invalid Operations Tests", () => {
         });
       }).toThrow(/step|required/i);
 
-      // Missing start is actually allowed - defaults to undefined
-      db.aggregate("myagg2", {
-        step: (acc: any, val: number) => (acc ?? 0) + val,
-      });
-      // It works with the default undefined start
-      const testResult = db
-        .prepare("SELECT myagg2(value) as result FROM test")
-        .get();
-      expect(testResult.result).toBe(6); // (undefined ?? 0) + 1 + 2 + 3 = 6
+      // Missing start is NOT allowed - Node.js sqlite requires it
+      expect(() => {
+        db.aggregate("myagg2", {
+          step: (acc: any, val: number) => (acc ?? 0) + val,
+        });
+      }).toThrow(/start/i);
 
       // Invalid step function
       expect(() => {
@@ -551,29 +519,7 @@ describe("Invalid Operations Tests", () => {
   });
 
   describe("Iterator Invalid Operations", () => {
-    test("handles iterator after statement finalize", () => {
-      const db = new DatabaseSync(":memory:");
-      db.exec("CREATE TABLE test (id INTEGER)");
-      db.exec("INSERT INTO test VALUES (1), (2), (3)");
-
-      const stmt = db.prepare("SELECT * FROM test");
-      const iterator = stmt.iterate();
-
-      // Get first value
-      const first = iterator.next();
-      expect(first.done).toBe(false);
-      expect(first.value.id).toBe(1);
-
-      // Finalize statement
-      stmt.finalize();
-
-      // Iterator should fail
-      expect(() => {
-        iterator.next();
-      }).toThrow(/finalized|invalid/i);
-
-      db.close();
-    });
+    // Note: finalize() is not part of node:sqlite API - statements are auto-finalized on GC
 
     test("handles multiple iterators on same statement", () => {
       const db = new DatabaseSync(":memory:");
@@ -840,13 +786,14 @@ describe("Invalid Operations Tests", () => {
       }).not.toThrow();
 
       // Try with even more parameters than placeholders
+      // Node.js sqlite throws "column index out of range" for extra params
       const tooManyValues = Array.from(
         { length: columnCount * 2 },
         (_, i) => i,
       );
       expect(() => {
         stmt.run(...tooManyValues);
-      }).not.toThrow(); // SQLite ignores extra parameters
+      }).toThrow(/column index out of range/i);
 
       db.close();
     });
@@ -887,40 +834,11 @@ describe("Invalid Operations Tests", () => {
         const stmt = db.prepare("SELECT ?");
         const result = stmt.get(i);
         expect(Object.values(result)[0]).toBe(i);
-        stmt.finalize();
         db.close();
       }
     });
 
-    test("handles statement finalization during iteration", () => {
-      const db = new DatabaseSync(":memory:");
-      db.exec("CREATE TABLE test (id INTEGER)");
-      db.exec("INSERT INTO test VALUES (1), (2), (3), (4), (5)");
-
-      const stmt = db.prepare("SELECT * FROM test");
-      const iterator = stmt.iterate();
-
-      // Get first result
-      const first = iterator.next();
-      expect(first.done).toBe(false);
-
-      // Create another iterator
-      const iterator2 = stmt.iterate();
-
-      // Finalize while iterators exist
-      stmt.finalize();
-
-      // Both iterators should fail
-      expect(() => {
-        iterator.next();
-      }).toThrow(/finalized/i);
-
-      expect(() => {
-        iterator2.next();
-      }).toThrow(/finalized/i);
-
-      db.close();
-    });
+    // Note: "handles statement finalization during iteration" removed - finalize() not part of node:sqlite API
 
     test("handles database close with active user functions", () => {
       const db = new DatabaseSync(":memory:");
@@ -1112,14 +1030,7 @@ describe("Invalid Operations Tests", () => {
         statements[500]?.get("test");
         statements[999]?.get("test");
       } finally {
-        // Clean up
-        for (const stmt of statements) {
-          try {
-            stmt.finalize();
-          } catch {
-            // Ignore finalization errors
-          }
-        }
+        // Clean up - statements are finalized when db closes
         db.close();
       }
     });
@@ -1137,7 +1048,6 @@ describe("Invalid Operations Tests", () => {
         // Try to prepare a statement inside the function
         const stmt = db.prepare("SELECT * FROM test WHERE id = ?");
         const result = stmt.get(id);
-        stmt.finalize();
         return result ? result.value : null;
       });
 
@@ -1254,24 +1164,7 @@ describe("Invalid Operations Tests", () => {
       }
     });
 
-    test("handles statement finalization race conditions", () => {
-      const db = new DatabaseSync(":memory:");
-      db.exec("CREATE TABLE test (id INTEGER)");
-
-      const stmt = db.prepare("SELECT * FROM test");
-
-      // Finalize multiple times rapidly
-      for (let i = 0; i < 10; i++) {
-        stmt.finalize(); // Should be safe to call multiple times
-      }
-
-      // All operations should fail gracefully
-      expect(() => stmt.run()).toThrow(/finalized/i);
-      expect(() => stmt.get()).toThrow(/finalized/i);
-      expect(() => stmt.all()).toThrow(/finalized/i);
-
-      db.close();
-    });
+    // Note: finalize() is not part of node:sqlite API - statements are auto-finalized on GC
 
     test("handles aggregate with database operations in result function", () => {
       const db = new DatabaseSync(":memory:");
@@ -1286,7 +1179,6 @@ describe("Invalid Operations Tests", () => {
           try {
             const stmt = db.prepare("SELECT ? * 2");
             const result = stmt.get(acc);
-            stmt.finalize();
             return Object.values(result)[0];
           } catch {
             return acc;
@@ -1310,11 +1202,10 @@ describe("Invalid Operations Tests", () => {
         };
       });
 
-      // Should handle gracefully - SQLite converts functions to strings
-      const result = db.prepare("SELECT return_func()").get();
-      const value = Object.values(result)[0];
-      // SQLite converts the function to its string representation
-      expect(value).toMatch(/function|innerFunc/);
+      // Returning a function throws an error since it can't be converted to SQLite value
+      expect(() => {
+        db.prepare("SELECT return_func()").get();
+      }).toThrow(/cannot be converted to a SQLite value/i);
 
       db.close();
     });
@@ -1405,7 +1296,6 @@ describe("Invalid Operations Tests", () => {
       const count = db.prepare("SELECT COUNT(*) as count FROM test").get();
       expect(count.count).toBe(1);
 
-      stmt.finalize();
       db.close();
     });
 
@@ -1425,28 +1315,14 @@ describe("Invalid Operations Tests", () => {
 
       // Verify the original data was stored
       const result = db.prepare("SELECT data FROM test").get();
-      const retrievedBuffer = result.data as Buffer;
+      // Blobs are returned as Uint8Array in Node.js sqlite
+      const retrievedBuffer = result.data as Uint8Array;
       expect(retrievedBuffer[0]).toBe(0x42); // Original value, not 0xFF
 
       db.close();
     });
 
-    test("handles statement operations with corrupted internal state", () => {
-      const db = new DatabaseSync(":memory:");
-      const stmt = db.prepare("SELECT 1");
-
-      // This test was attempting to directly manipulate internal C++ state
-      // which isn't possible from JavaScript. Instead, test a similar scenario
-      // where the statement becomes invalid
-
-      // Finalize the statement to make it invalid
-      stmt.finalize();
-
-      // Now operations should throw
-      expect(() => stmt.run()).toThrow(/finalized|destroyed|invalid/i);
-
-      db.close();
-    });
+    // Note: "handles statement operations with corrupted internal state" removed - finalize() not part of node:sqlite API
 
     test("handles exceptions during parameter binding", () => {
       const db = new DatabaseSync(":memory:");
@@ -1472,9 +1348,9 @@ describe("Invalid Operations Tests", () => {
         // The object might have been converted to null or an error string
         expect(result).toBeDefined();
       } catch (error: any) {
-        // If it throws, verify it's our error
+        // If it throws, verify it's our error (Node.js sqlite says "cannot be bound")
         expect(error.message).toMatch(
-          /toString error|Error binding parameter/i,
+          /toString error|Error binding parameter|cannot be bound/i,
         );
       }
 
@@ -1489,28 +1365,6 @@ describe("Invalid Operations Tests", () => {
       db.close();
     });
 
-    test("handles race between iterator and statement finalization", () => {
-      const db = new DatabaseSync(":memory:");
-      db.exec("CREATE TABLE test (id INTEGER)");
-      db.exec("INSERT INTO test VALUES (1), (2), (3), (4), (5)");
-
-      const stmt = db.prepare("SELECT * FROM test");
-
-      // Create multiple iterators
-      const iterators = [stmt.iterate(), stmt.iterate(), stmt.iterate()];
-
-      // Advance first iterator
-      iterators[0]?.next();
-
-      // Finalize statement while iterators exist
-      stmt.finalize();
-
-      // All iterators should fail gracefully
-      for (const iter of iterators) {
-        expect(() => iter.next()).toThrow(/finalized/i);
-      }
-
-      db.close();
-    });
+    // Note: "handles race between iterator and statement finalization" removed - finalize() not part of node:sqlite API
   });
 });
