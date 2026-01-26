@@ -1529,6 +1529,11 @@ void DatabaseSync::DeleteAllSessions() {
       session->session_ = nullptr;
       // Note: Don't null database_ - we need it to check IsOpen()
     }
+    // Release the database reference now rather than waiting for Session
+    // destructor. This ensures cleanup happens while environment is valid.
+    if (!session->database_ref_.IsEmpty()) {
+      session->database_ref_.Reset();
+    }
   }
 }
 
