@@ -46,6 +46,7 @@ try {
   execFileSync("npm", ["run", "build:native"], {
     stdio: "inherit",
     env: cleanEnv,
+    shell: true, // Required on Windows where npm is npm.cmd
   });
   console.log(color(colors.GREEN, "✓ Native module ready"));
 } catch (error) {
@@ -186,6 +187,7 @@ if (os.platform() === "linux") {
     execFileSync("npm", ["run", "build:native"], {
       stdio: "inherit",
       env: cleanEnv,
+      shell: true, // Required on Windows where npm is npm.cmd
     });
     console.log(color(colors.GREEN, "✓ Native module restored"));
   } catch (rebuildError) {
