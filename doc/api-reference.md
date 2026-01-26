@@ -5,6 +5,7 @@ Complete API documentation for @photostructure/sqlite. This package provides 100
 ## Table of Contents
 
 - [Module Exports](#module-exports)
+- [Enhancement Utilities](#enhancement-utilities)
 - [DatabaseSync](#databasesync)
 - [StatementSync](#statementsync)
 - [Types and Interfaces](#types-and-interfaces)
@@ -25,6 +26,15 @@ import {
 } from "@photostructure/sqlite";
 ```
 
+Additionally, this package provides enhancement utilities for (some) better-sqlite3 compatibility:
+
+```typescript
+import {
+  enhance, // Add .pragma() and .transaction() to any compatible database
+  isEnhanced, // Type guard to check if database has enhanced methods
+} from "@photostructure/sqlite";
+```
+
 ### backup()
 
 ```typescript
@@ -35,7 +45,7 @@ backup(
 ): Promise<number>
 ```
 
-Standalone function to create a backup of a database. This function is equivalent to calling `db.backup()` on a database instance, but allows passing the source database as a parameter.
+Standalone function to create a backup of a database.
 
 **Parameters:**
 
@@ -50,19 +60,159 @@ import { DatabaseSync, backup } from "@photostructure/sqlite";
 
 const db = new DatabaseSync("source.db");
 
-// Using standalone function
+// Create a backup
 await backup(db, "backup.db");
 
-// Equivalent to:
-await db.backup("backup.db");
-
-// With options
+// With progress monitoring
 await backup(db, "backup.db", {
   rate: 10,
   progress: ({ totalPages, remainingPages }) => {
     console.log(`${totalPages - remainingPages}/${totalPages} pages copied`);
   },
 });
+```
+
+## Enhancement Utilities
+
+These utilities add better-sqlite3-style convenience methods to database instances. They are an extension beyond the `node:sqlite` API.
+
+### enhance()
+
+```typescript
+enhance<T extends EnhanceableDatabaseSync>(db: T): EnhancedDatabaseSync<T>
+```
+
+Adds `.pragma()` and `.transaction()` methods to any compatible database instance. This enables better-sqlite3-style convenience methods on `node:sqlite` DatabaseSync instances or any object with compatible `exec()`, `prepare()`, and `isTransaction` properties.
+
+The enhancement is done by adding methods directly to the instance, not the prototype, so it won't affect other instances or the original class.
+
+**Parameters:**
+
+- `db` - The database instance to enhance
+
+**Returns:** The same instance with `.pragma()` and `.transaction()` methods guaranteed.
+
+```javascript
+import { DatabaseSync, enhance } from "@photostructure/sqlite";
+
+// Enhance a database to add better-sqlite3-style methods
+const db = enhance(new DatabaseSync(":memory:"));
+
+// Now you can use .pragma()
+db.pragma("journal_mode = WAL");
+const cacheSize = db.pragma("cache_size", { simple: true });
+
+// And .transaction()
+const insertMany = db.transaction((items) => {
+  const stmt = db.prepare("INSERT INTO data (value) VALUES (?)");
+  for (const item of items) stmt.run(item);
+});
+insertMany(["a", "b", "c"]); // All in one transaction
+```
+
+**Note:** If the database already has `.pragma()` and `.transaction()` methods (e.g., if you call `enhance()` twice), it returns the database unchanged.
+
+### isEnhanced()
+
+```typescript
+isEnhanced(db: EnhanceableDatabaseSync): db is EnhancedDatabaseSync
+```
+
+Type guard to check if a database has enhanced methods.
+
+```javascript
+import { isEnhanced } from "@photostructure/sqlite";
+
+if (isEnhanced(db)) {
+  // TypeScript knows db has .pragma() and .transaction()
+  db.pragma("cache_size", { simple: true });
+}
+```
+
+### Enhanced Methods
+
+When a database is enhanced, it gains these methods:
+
+#### pragma()
+
+```typescript
+pragma(source: string, options?: PragmaOptions): unknown
+```
+
+Executes a PRAGMA statement and returns its result.
+
+**Parameters:**
+
+- `source` - The PRAGMA command (without "PRAGMA" prefix)
+- `options` - Optional configuration
+  - `simple` - If `true`, returns the first column of the first row instead of an array of row objects
+
+**Returns:** Array of rows, or single value if `simple: true`.
+
+```javascript
+// Get all rows
+const result = db.pragma("table_info(users)");
+// [{ cid: 0, name: 'id', type: 'INTEGER', ... }, ...]
+
+// Get simple value
+const journalMode = db.pragma("journal_mode", { simple: true });
+// 'wal'
+
+// Set a pragma
+db.pragma("cache_size = -16000"); // 16MB cache
+```
+
+#### transaction()
+
+```typescript
+transaction<F extends (...args: any[]) => any>(fn: F): TransactionFunction<F>
+```
+
+Creates a function that always runs inside a transaction. If an exception is thrown, the transaction is rolled back; otherwise, it's committed.
+
+**Parameters:**
+
+- `fn` - The function to wrap in a transaction
+
+**Returns:** A transaction function with `.deferred`, `.immediate`, `.exclusive` variants.
+
+```javascript
+const insert = db.prepare("INSERT INTO users (name) VALUES (?)");
+
+// Create a transaction function
+const insertMany = db.transaction((names) => {
+  for (const name of names) {
+    insert.run(name);
+  }
+});
+
+// Use it - automatically wrapped in BEGIN/COMMIT
+insertMany(["Alice", "Bob", "Charlie"]);
+
+// Use different transaction modes
+insertMany.immediate(["Dave"]); // BEGIN IMMEDIATE
+insertMany.exclusive(["Eve"]); // BEGIN EXCLUSIVE
+insertMany.deferred(["Frank"]); // BEGIN DEFERRED (default)
+```
+
+**Nested Transactions:** When called inside an existing transaction, uses savepoints automatically:
+
+```javascript
+const outer = db.transaction(() => {
+  insert.run("outer");
+  try {
+    inner(); // Uses SAVEPOINT
+  } catch (e) {
+    // Inner rolled back, outer continues
+  }
+});
+
+const inner = db.transaction(() => {
+  insert.run("inner");
+  throw new Error("rollback inner only");
+});
+
+outer(); // "outer" is committed, "inner" is not
 ```
 
 ## DatabaseSync
@@ -182,14 +332,25 @@ Prepares a SQL statement for execution.
 interface StatementOptions {
   expandedSQL?: boolean; // Include expanded SQL (default: false)
   anonymousParameters?: boolean; // Enable anonymous parameters (default: false)
+  // Per-statement overrides (Node.js v25+ feature):
+  readBigInts?: boolean; // Override database-level BigInt setting
+  returnArrays?: boolean; // Override database-level array return setting
+  allowBareNamedParameters?: boolean; // Override bare parameter setting
+  allowUnknownNamedParameters?: boolean; // Override unknown parameter setting
 }
 ```
+
+> **Note:** The per-statement override options (`readBigInts`, `returnArrays`, `allowBareNamedParameters`, `allowUnknownNamedParameters`) are a **Node.js v25+** feature. On Node.js v24 and earlier, `node:sqlite` silently ignores these options. This library implements them for forward compatibility.
 
 ```javascript
 const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
 const stmtWithExpanded = db.prepare("SELECT * FROM users WHERE id = ?", {
   expandedSQL: true,
 });
+
+// Per-statement option overrides (Node.js v25+)
+const stmtBigInt = db.prepare("SELECT big_id FROM data", { readBigInts: true });
+const stmtArrays = db.prepare("SELECT * FROM users", { returnArrays: true });
 ```
 
 #### function()
@@ -279,42 +440,6 @@ db.aggregate("moving_sum", {
   step: (sum, value) => sum + value,
   inverse: (sum, value) => sum - value, // Remove value leaving window
   result: (sum) => sum,
-});
-```
-
-#### backup()
-
-```typescript
-backup(destination: string, options?: BackupOptions): Promise<number>
-```
-
-Creates a backup of the database. Returns the total number of pages backed up.
-
-**Options:**
-
-```typescript
-interface BackupOptions {
-  source?: string; // Source database name (default: 'main')
-  target?: string; // Target database name (default: 'main')
-  rate?: number; // Pages per iteration (default: 100)
-  progress?: (info: { totalPages: number; remainingPages: number }) => void;
-}
-```
-
-```javascript
-// Simple backup
-await db.backup("backup.db");
-
-// With progress monitoring
-await db.backup("backup.db", {
-  rate: 10,
-  progress: ({ totalPages, remainingPages }) => {
-    const percent = (
-      ((totalPages - remainingPages) / totalPages) *
-      100
-    ).toFixed(1);
-    console.log(`Backup progress: ${percent}%`);
-  },
 });
 ```
 
@@ -661,35 +786,6 @@ stmt.setAllowUnknownNamedParameters(true);
 stmt.run({ name: "Alice" }); // Extra params in object are ignored
 ```
 
-#### finalize()
-
-```typescript
-finalize(): void
-```
-
-Finalizes the statement and frees resources.
-
-```javascript
-stmt.finalize();
-```
-
-#### [Symbol.dispose]()
-
-```typescript
-[Symbol.dispose](): void
-```
-
-Implements the disposable interface for automatic resource management. Calls `finalize()` internally, ignoring any errors during disposal. Implemented natively in C++ for better performance.
-
-```javascript
-// Automatic cleanup with using statement
-using stmt = db.prepare("SELECT * FROM users WHERE id = ?");
-// stmt.finalize() called automatically when leaving scope
-
-// Or explicit disposal
-stmt[Symbol.dispose]();
-```
-
 ### Properties
 
 #### sourceSQL
@@ -805,6 +901,57 @@ interface RunResult {
   changes: number | bigint; // Number of rows affected
   lastInsertRowid: number | bigint; // Last inserted row ID
 }
+```
+
+### PragmaOptions
+
+```typescript
+interface PragmaOptions {
+  simple?: boolean; // Return first column of first row instead of array
+}
+```
+
+### TransactionFunction
+
+```typescript
+interface TransactionFunction<F extends (...args: any[]) => any> {
+  (...args: Parameters<F>): ReturnType<F>;
+  deferred: (...args: Parameters<F>) => ReturnType<F>;
+  immediate: (...args: Parameters<F>) => ReturnType<F>;
+  exclusive: (...args: Parameters<F>) => ReturnType<F>;
+}
+```
+
+### EnhanceableDatabaseSync
+
+Minimal interface for a database that can be enhanced:
+
+```typescript
+interface EnhanceableDatabaseSync {
+  exec(sql: string): void;
+  prepare(sql: string): { all(): unknown[] };
+  readonly isTransaction: boolean;
+}
+```
+
+### EnhancedMethods
+
+Interface for enhanced database methods:
+
+```typescript
+interface EnhancedMethods {
+  pragma(source: string, options?: PragmaOptions): unknown;
+  transaction<F extends (...args: any[]) => any>(fn: F): TransactionFunction<F>;
+}
+```
+
+### EnhancedDatabaseSync
+
+A database instance that has been enhanced:
+
+```typescript
+type EnhancedDatabaseSync<T extends EnhanceableDatabaseSync> = T &
+  EnhancedMethods;
 ```
 
 ## Constants

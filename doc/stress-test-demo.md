@@ -16,7 +16,7 @@ This document demonstrates how to use the comprehensive stress test system that 
 ### Run Default Stress Test (100MB database)
 
 ```bash
-npm run stress-test
+npm run stress
 ```
 
 This will:
@@ -30,22 +30,22 @@ This will:
 
 ```bash
 # Test specific drivers
-npm run stress-test -- --drivers @photostructure/sqlite,better-sqlite3
+npm run stress -- --drivers @photostructure/sqlite,better-sqlite3
 
 # Target different database size
-npm run stress-test -- --size 50
+npm run stress -- --size 50
 
 # Test specific scenarios only
-npm run stress-test -- --scenarios stress-fts-search,stress-complex-joins
+npm run stress -- --scenarios stress-fts-search,stress-complex-joins
 
 # JSON output for analysis
-npm run stress-test -- --output json
+npm run stress -- --output json
 
 # Verbose progress reporting
-npm run stress-test -- --verbose
+npm run stress -- --verbose
 
 # Use existing database (skip generation)
-npm run stress-test -- --skip-generation --db-path ./my-large-db.db
+npm run stress -- --skip-generation --db-path ./my-large-db.db
 ```
 
 ## Schema Overview
@@ -187,7 +187,7 @@ Fastest Operation: 2,198 ops/sec (better-sqlite3)
 Run unit tests for the stress test components:
 
 ```bash
-npm run stress-test:validate
+npm run stress:validate
 ```
 
 This validates:
@@ -206,10 +206,10 @@ Run before/after releases to detect performance regressions:
 
 ```bash
 # Before changes
-npm run stress-test -- --output json > before.json
+npm run stress -- --output json > before.json
 
 # After changes
-npm run stress-test -- --output json > after.json
+npm run stress -- --output json > after.json
 
 # Compare results programmatically
 ```
@@ -219,7 +219,7 @@ npm run stress-test -- --output json > after.json
 Compare performance across SQLite libraries:
 
 ```bash
-npm run stress-test -- --drivers @photostructure/sqlite,better-sqlite3,node:sqlite
+npm run stress -- --drivers @photostructure/sqlite,better-sqlite3,node:sqlite
 ```
 
 ### Scalability Testing
@@ -227,10 +227,10 @@ npm run stress-test -- --drivers @photostructure/sqlite,better-sqlite3,node:sqli
 Test how performance scales with database size:
 
 ```bash
-npm run stress-test -- --size 10   # 10MB
-npm run stress-test -- --size 50   # 50MB
-npm run stress-test -- --size 100  # 100MB
-npm run stress-test -- --size 500  # 500MB
+npm run stress -- --size 10   # 10MB
+npm run stress -- --size 50   # 50MB
+npm run stress -- --size 100  # 100MB
+npm run stress -- --size 500  # 500MB
 ```
 
 ### Scenario-Specific Testing
@@ -239,10 +239,10 @@ Focus on specific performance aspects:
 
 ```bash
 # Test only FTS performance
-npm run stress-test -- --scenarios stress-fts-search
+npm run stress -- --scenarios stress-fts-search
 
 # Test only JOIN performance
-npm run stress-test -- --scenarios stress-complex-joins
+npm run stress -- --scenarios stress-complex-joins
 ```
 
 ## Architecture Notes
