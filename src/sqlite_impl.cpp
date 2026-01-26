@@ -996,6 +996,10 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
 
 void DatabaseSync::InternalClose() {
   if (connection_) {
+    // Finalize any active backup jobs first
+    // This prevents use-after-free if backup is running on worker thread
+    FinalizeBackups();
+
     // Finalize all prepared statements
     prepared_statements_.clear();
 
@@ -1525,6 +1529,35 @@ void DatabaseSync::DeleteAllSessions() {
       session->session_ = nullptr;
       // Note: Don't null database_ - we need it to check IsOpen()
     }
+  }
+}
+
+void DatabaseSync::AddBackup(BackupJob *backup) {
+  std::lock_guard<std::mutex> lock(backups_mutex_);
+  backups_.insert(backup);
+}
+
+void DatabaseSync::RemoveBackup(BackupJob *backup) {
+  std::lock_guard<std::mutex> lock(backups_mutex_);
+  backups_.erase(backup);
+}
+
+void DatabaseSync::FinalizeBackups() {
+  // Copy the set while holding the lock, then release before cleanup
+  // This prevents deadlock if destructor calls RemoveBackup
+  std::set<BackupJob *> backups_copy;
+  {
+    std::lock_guard<std::mutex> lock(backups_mutex_);
+    backups_copy = backups_;
+    backups_.clear(); // Clear now to prevent destructor issues
+  }
+
+  // Clean up each active backup without holding the lock
+  // We clear source_ to prevent the destructor from trying to
+  // RemoveBackup (the set is already empty anyway)
+  for (auto *backup : backups_copy) {
+    backup->ClearSource(); // Prevent RemoveBackup call in destructor
+    backup->Cleanup();
   }
 }
 
@@ -2992,9 +3025,12 @@ Napi::Value Session::GenericChangeset(const Napi::CallbackInfo &info) {
   int r = sqliteChangesetFunc(session_, &nChangeset, &pChangeset);
 
   if (r != SQLITE_OK) {
-    const char *errMsg = sqlite3_errmsg(database_->connection());
+    // Use sqlite3_errstr(r) to get a description of the error code,
+    // rather than sqlite3_errmsg() which returns the last error on the
+    // connection (which may not be related to this session operation)
+    const char *errStr = sqlite3_errstr(r);
     Napi::Error::New(env,
-                     std::string("Failed to generate changeset: ") + errMsg)
+                     std::string("Failed to generate changeset: ") + errStr)
         .ThrowAsJavaScriptException();
     return env.Undefined();
   }
@@ -3070,16 +3106,29 @@ BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
           !progress_func.IsEmpty() && !progress_func.IsUndefined()
               ? progress_func
               : Napi::Function::New(env, [](const Napi::CallbackInfo &) {})),
-      source_(source), destination_path_(std::move(destination_path)),
+      source_(source),
+      // Capture connection pointer now while we know it's valid
+      // This prevents use-after-free if database is closed during backup
+      source_connection_(source->connection()),
+      destination_path_(std::move(destination_path)),
       source_db_(std::move(source_db)), dest_db_(std::move(dest_db)),
       pages_(pages), deferred_(deferred) {
   if (!progress_func.IsEmpty() && !progress_func.IsUndefined()) {
     progress_func_ = Napi::Reference<Napi::Function>::New(progress_func);
   }
   active_jobs_++;
+  // Register with database for proper cleanup coordination
+  source_->AddBackup(this);
 }
 
-BackupJob::~BackupJob() { active_jobs_--; }
+BackupJob::~BackupJob() {
+  active_jobs_--;
+  // Unregister from database
+  // Note: source_ may be null if FinalizeBackups was called
+  if (source_) {
+    source_->RemoveBackup(this);
+  }
+}
 
 void BackupJob::Execute(const ExecutionProgress &progress) {
   // This method is executed on a worker thread, not the main thread
@@ -3097,8 +3146,9 @@ void BackupJob::Execute(const ExecutionProgress &progress) {
     return;
   }
 
-  // Initialize backup
-  backup_ = sqlite3_backup_init(dest_, dest_db_.c_str(), source_->connection(),
+  // Initialize backup using the connection pointer captured at construction
+  // This prevents use-after-free if database is closed during backup
+  backup_ = sqlite3_backup_init(dest_, dest_db_.c_str(), source_connection_,
                                 source_db_.c_str());
 
   if (!backup_) {

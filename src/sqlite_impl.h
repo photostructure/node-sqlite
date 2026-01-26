@@ -31,6 +31,7 @@ class DatabaseSync;
 class StatementSync;
 class StatementSyncIterator;
 class Session;
+class BackupJob;
 
 // Per-worker instance data
 struct AddonData {
@@ -185,6 +186,12 @@ public:
   void RemoveSession(Session *session);
   void DeleteAllSessions();
 
+  // Backup management - prevents use-after-free when database is closed
+  // during an active backup operation
+  void AddBackup(BackupJob *backup);
+  void RemoveBackup(BackupJob *backup);
+  void FinalizeBackups();
+
   // Error handling for user functions
   void SetIgnoreNextSQLiteError(bool ignore) {
     ignore_next_sqlite_error_ = ignore;
@@ -217,6 +224,8 @@ private:
   std::map<std::string, std::unique_ptr<StatementSync>> prepared_statements_;
   std::set<Session *> sessions_;      // Track all active sessions
   mutable std::mutex sessions_mutex_; // Protect sessions_ for thread safety
+  std::set<BackupJob *> backups_;     // Track all active backup jobs
+  mutable std::mutex backups_mutex_;  // Protect backups_ for thread safety
   std::thread::id creation_thread_;
   napi_env env_;                          // Store for cleanup purposes
   bool ignore_next_sqlite_error_ = false; // For user function error handling
@@ -234,6 +243,7 @@ private:
   bool ValidateThread(Napi::Env env) const;
   friend class Session;
   friend class StatementSync;
+  friend class BackupJob;
 };
 
 // Statement class
@@ -375,10 +385,15 @@ public:
 
   Napi::Promise GetPromise() { return deferred_.Promise(); }
 
-private:
+public:
+  // Cleanup is called by FinalizeBackups when database is closing
   void Cleanup();
+  // Called by FinalizeBackups to prevent double-unregistration in destructor
+  void ClearSource() { source_ = nullptr; }
 
+private:
   DatabaseSync *source_;
+  sqlite3 *source_connection_; // Captured at construction to avoid race
   std::string destination_path_;
   std::string source_db_;
   std::string dest_db_;
