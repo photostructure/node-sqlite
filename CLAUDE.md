@@ -155,6 +155,8 @@ This project follows consistent naming patterns for npm scripts to improve disco
 
 ## Development Notes
 
+- If you need to run a command with `sudo`, ask the user to run the command. You can't run `sudo`.
+
 ### Working with Node.js C++ Code
 
 - The SQLite implementation has been ported from `src/upstream/node_sqlite.cc` to `src/sqlite_impl.cpp`
