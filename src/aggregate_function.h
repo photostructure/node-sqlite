@@ -59,6 +59,7 @@ private:
     };
     Type type;
     bool is_initialized;
+    bool xvalue_called; // Track if xValue was called (for window functions)
     union {
       double number_value;
       bool bool_value;
@@ -94,6 +95,7 @@ private:
   Napi::Value GetStartValue();
 
   Napi::Env env_;
+  DatabaseSync *db_;
   bool use_bigint_args_;
 
   // Storage for start value - handle primitives and objects

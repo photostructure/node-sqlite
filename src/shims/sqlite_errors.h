@@ -81,6 +81,14 @@ inline const char *GetSqliteErrorCodeName(int code) {
 }
 
 // Enhanced SQLite error that includes system errno information
+// Error format matches Node.js node:sqlite for API compatibility:
+// - code: 'ERR_SQLITE_ERROR' (constant, matches Node.js)
+// - errcode: number (SQLite error code, matches Node.js)
+// - errstr: string (SQLite error string, matches Node.js)
+// We also add extra properties for enhanced debugging:
+// - sqliteCode: number (same as errcode, for backward compat)
+// - sqliteExtendedCode: number (extended SQLite error code)
+// - sqliteErrorString: string (same as errstr, for backward compat)
 inline void ThrowEnhancedSqliteError(Napi::Env env, sqlite3 *db,
                                      int sqlite_code,
                                      const std::string &message) {
@@ -89,7 +97,16 @@ inline void ThrowEnhancedSqliteError(Napi::Env env, sqlite3 *db,
   // truncated or corrupted error messages
   Napi::Error error = Napi::Error::New(env, message.c_str());
 
-  // Add SQLite error code information
+  // Node.js compatible properties
+  error.Set("code", Napi::String::New(env, "ERR_SQLITE_ERROR"));
+  error.Set("errcode", Napi::Number::New(env, sqlite_code));
+
+  const char *err_str = sqlite3_errstr(sqlite_code);
+  if (err_str) {
+    error.Set("errstr", Napi::String::New(env, err_str));
+  }
+
+  // Our enhanced properties (for backward compatibility and debugging)
   error.Set("sqliteCode", Napi::Number::New(env, sqlite_code));
 
   if (db) {
@@ -104,12 +121,11 @@ inline void ThrowEnhancedSqliteError(Napi::Env env, sqlite3 *db,
     }
   }
 
-  // Set a standard error code property for compatibility
+  // Keep original code name as sqliteCodeName for debugging
   const char *code_name = GetSqliteErrorCodeName(sqlite_code);
-  error.Set("code", Napi::String::New(env, code_name));
+  error.Set("sqliteCodeName", Napi::String::New(env, code_name));
 
   // Also set the human-readable error string
-  const char *err_str = sqlite3_errstr(sqlite_code);
   if (err_str) {
     error.Set("sqliteErrorString", Napi::String::New(env, err_str));
   }
@@ -126,7 +142,9 @@ inline void ThrowEnhancedSqliteError(Napi::Env env, sqlite3 *db,
 inline void ThrowSqliteError(Napi::Env env, sqlite3 *db,
                              const std::string &message) {
   if (db) {
-    int errcode = sqlite3_errcode(db);
+    // Use extended error code (e.g., 1555 for SQLITE_CONSTRAINT_PRIMARYKEY)
+    // instead of basic code (e.g., 19 for SQLITE_CONSTRAINT) to match Node.js
+    int errcode = sqlite3_extended_errcode(db);
     ThrowEnhancedSqliteError(env, db, errcode, message);
   } else {
     // Fallback to simple error when no db handle available
@@ -136,12 +154,20 @@ inline void ThrowSqliteError(Napi::Env env, sqlite3 *db,
 }
 
 // Helper to throw from a SqliteException with captured error info
+// Uses same format as ThrowEnhancedSqliteError for consistency
 inline void
 ThrowFromSqliteException(Napi::Env env,
                          const photostructure::sqlite::SqliteException &ex) {
   Napi::Error error = Napi::Error::New(env, ex.what());
 
-  // Add all captured error information
+  // Node.js compatible properties
+  error.Set("code", Napi::String::New(env, "ERR_SQLITE_ERROR"));
+  error.Set("errcode", Napi::Number::New(env, ex.sqlite_code()));
+  if (!ex.error_string().empty()) {
+    error.Set("errstr", Napi::String::New(env, ex.error_string().c_str()));
+  }
+
+  // Our enhanced properties (for backward compatibility and debugging)
   error.Set("sqliteCode", Napi::Number::New(env, ex.sqlite_code()));
   error.Set("sqliteExtendedCode", Napi::Number::New(env, ex.extended_code()));
 
@@ -149,9 +175,9 @@ ThrowFromSqliteException(Napi::Env env,
     error.Set("systemErrno", Napi::Number::New(env, ex.system_errno()));
   }
 
-  // Set the error code name
+  // Keep original code name as sqliteCodeName for debugging
   const char *code_name = GetSqliteErrorCodeName(ex.sqlite_code());
-  error.Set("code", Napi::String::New(env, code_name));
+  error.Set("sqliteCodeName", Napi::String::New(env, code_name));
 
   // Also set the human-readable error string
   // Use c_str() explicitly to avoid potential ABI issues on Windows ARM

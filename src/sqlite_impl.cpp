@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cinttypes>
 #include <climits>
 #include <cmath>
 #include <limits>
@@ -34,7 +35,7 @@ inline void ThrowErrSqliteErrorWithDb(Napi::Env env,
 
 inline void ThrowEnhancedSqliteErrorWithDB(
     Napi::Env env, photostructure::sqlite::DatabaseSync *db_sync, sqlite3 *db,
-    int sqlite_code, const std::string &message) {
+    int /*sqlite_code*/, const std::string &message) {
   // Check if we should ignore this SQLite error due to pending JavaScript
   // exception (e.g., from authorizer callback)
   if (db_sync != nullptr && db_sync->ShouldIgnoreSQLiteError()) {
@@ -49,8 +50,11 @@ inline void ThrowEnhancedSqliteErrorWithDB(
     return; // Don't throw SQLite error, JavaScript exception takes precedence
   }
 
-  // Call the original function
-  node::ThrowEnhancedSqliteError(env, db, sqlite_code, message);
+  // Use extended error code from db handle (e.g., 1555 for
+  // SQLITE_CONSTRAINT_PRIMARYKEY) instead of basic code (e.g., 19 for
+  // SQLITE_CONSTRAINT) to match Node.js behavior
+  int extended_code = db ? sqlite3_extended_errcode(db) : SQLITE_ERROR;
+  node::ThrowEnhancedSqliteError(env, db, extended_code, message);
 }
 } // namespace
 #include "sqlite_exception.h"
@@ -94,6 +98,14 @@ std::optional<std::string> ValidateDatabasePath(Napi::Env env, Napi::Value path,
         if (!has_null_bytes(location)) {
           // Check if it's a file:// URL
           if (location.compare(0, 7, "file://") == 0) {
+            // Check if URL has query parameters - if so, return full URI
+            // for SQLite URI mode (e.g., file:///path/to/db?mode=ro)
+            size_t query_pos = location.find('?');
+            if (query_pos != std::string::npos) {
+              // Return full URI for SQLite to parse with SQLITE_OPEN_URI
+              return location;
+            }
+
             // Convert file:// URL to file path with proper validation
             std::string file_path = location.substr(7);
 
@@ -265,10 +277,11 @@ std::optional<std::string> ValidateDatabasePath(Napi::Env env, Napi::Value path,
     }
   }
 
-  node::THROW_ERR_INVALID_ARG_TYPE(env, ("The \"" + field_name +
-                                         "\" argument must be a string, "
-                                         "Buffer, or URL without null bytes.")
-                                            .c_str());
+  node::THROW_ERR_INVALID_ARG_TYPE(env,
+                                   ("The \"" + field_name +
+                                    "\" argument must be a string, "
+                                    "Uint8Array, or URL without null bytes.")
+                                       .c_str());
   return std::nullopt;
 }
 
@@ -277,6 +290,21 @@ std::optional<std::string> ValidateDatabasePath(Napi::Env env, Napi::Value path,
 
 // Forward declarations for addon data access
 extern AddonData *GetAddonData(napi_env env);
+
+// Helper to create an object with null prototype (matches Node.js behavior)
+// Node.js uses Object::New(isolate, Null(isolate), ...) but N-API doesn't have
+// this capability, so we use cached Object.create(null) instead.
+Napi::Object CreateObjectWithNullPrototype(Napi::Env env) {
+  AddonData *addon_data = GetAddonData(env);
+  if (addon_data && !addon_data->objectCreateFn.IsEmpty()) {
+    // Call Object.create(null) to create object with null prototype
+    return addon_data->objectCreateFn.Value()
+        .Call({env.Null()})
+        .As<Napi::Object>();
+  }
+  // Fallback to regular object if Object.create not available
+  return Napi::Object::New(env);
+}
 
 // DatabaseSync Implementation
 Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
@@ -295,8 +323,8 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("enableDefensive", &DatabaseSync::EnableDefensive),
        InstanceMethod("createSession", &DatabaseSync::CreateSession),
        InstanceMethod("applyChangeset", &DatabaseSync::ApplyChangeset),
-       InstanceMethod("backup", &DatabaseSync::Backup),
        InstanceMethod("setAuthorizer", &DatabaseSync::SetAuthorizer),
+       InstanceMethod("backup", &DatabaseSync::Backup),
        InstanceMethod("location", &DatabaseSync::LocationMethod),
        InstanceAccessor("isOpen", &DatabaseSync::IsOpenGetter, nullptr),
        InstanceAccessor("isTransaction", &DatabaseSync::IsTransactionGetter,
@@ -346,8 +374,12 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
   // Register this instance for cleanup tracking
   RegisterDatabaseInstance(info.Env(), this);
 
-  // If no arguments, create but don't open (for manual open() call)
-  if (info.Length() == 0) {
+  // Node.js requires a path argument - throw if missing
+  if (info.Length() == 0 || info[0].IsUndefined()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        info.Env(),
+        "The \"path\" argument must be a string, Uint8Array, or URL without "
+        "null bytes.");
     return;
   }
 
@@ -359,100 +391,172 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
   }
 
   try {
-    DatabaseOpenConfiguration config(std::move(location.value()));
+    std::string loc = std::move(location.value());
+    // Check if this is a file:// URI (for SQLite URI mode)
+    bool is_uri = (loc.compare(0, 7, "file://") == 0);
+    DatabaseOpenConfiguration config(std::move(loc));
+    if (is_uri) {
+      config.set_open_uri(true);
+    }
 
     // Track whether to open immediately (default: true)
     bool should_open = true;
 
     // Handle options object if provided as second argument
-    if (info.Length() > 1 && info[1].IsObject()) {
+    if (info.Length() > 1) {
+      if (!info[1].IsObject()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            info.Env(), "The \"options\" argument must be an object.");
+        return;
+      }
+
       Napi::Object options = info[1].As<Napi::Object>();
 
-      if (options.Has("readOnly") && options.Get("readOnly").IsBoolean()) {
-        config.set_read_only(
-            options.Get("readOnly").As<Napi::Boolean>().Value());
+      // Validate and parse 'open' option
+      Napi::Value open_val = options.Get("open");
+      if (!open_val.IsUndefined()) {
+        if (!open_val.IsBoolean()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(), "The \"options.open\" argument must be a boolean.");
+          return;
+        }
+        should_open = open_val.As<Napi::Boolean>().Value();
       }
 
-      // Support both old and new naming for backwards compatibility
-      if (options.Has("enableForeignKeyConstraints") &&
-          options.Get("enableForeignKeyConstraints").IsBoolean()) {
+      // Validate and parse 'readOnly' option
+      Napi::Value read_only_val = options.Get("readOnly");
+      if (!read_only_val.IsUndefined()) {
+        if (!read_only_val.IsBoolean()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(),
+              "The \"options.readOnly\" argument must be a boolean.");
+          return;
+        }
+        config.set_read_only(read_only_val.As<Napi::Boolean>().Value());
+      }
+
+      // Validate and parse 'enableForeignKeyConstraints' option
+      Napi::Value enable_fk_val = options.Get("enableForeignKeyConstraints");
+      if (!enable_fk_val.IsUndefined()) {
+        if (!enable_fk_val.IsBoolean()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(),
+              "The \"options.enableForeignKeyConstraints\" argument must be a "
+              "boolean.");
+          return;
+        }
         config.set_enable_foreign_keys(
-            options.Get("enableForeignKeyConstraints")
-                .As<Napi::Boolean>()
-                .Value());
-      } else if (options.Has("enableForeignKeys") &&
-                 options.Get("enableForeignKeys").IsBoolean()) {
-        config.set_enable_foreign_keys(
-            options.Get("enableForeignKeys").As<Napi::Boolean>().Value());
+            enable_fk_val.As<Napi::Boolean>().Value());
       }
 
-      if (options.Has("timeout") && options.Get("timeout").IsNumber()) {
-        config.set_timeout(
-            options.Get("timeout").As<Napi::Number>().Int32Value());
+      // Validate and parse 'enableDoubleQuotedStringLiterals' option
+      Napi::Value enable_dqs_val =
+          options.Get("enableDoubleQuotedStringLiterals");
+      if (!enable_dqs_val.IsUndefined()) {
+        if (!enable_dqs_val.IsBoolean()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(),
+              "The \"options.enableDoubleQuotedStringLiterals\" argument must "
+              "be a boolean.");
+          return;
+        }
+        config.set_enable_dqs(enable_dqs_val.As<Napi::Boolean>().Value());
       }
 
-      if (options.Has("enableDoubleQuotedStringLiterals") &&
-          options.Get("enableDoubleQuotedStringLiterals").IsBoolean()) {
-        config.set_enable_dqs(options.Get("enableDoubleQuotedStringLiterals")
-                                  .As<Napi::Boolean>()
-                                  .Value());
+      // Validate and parse 'allowExtension' option
+      Napi::Value allow_ext_val = options.Get("allowExtension");
+      if (!allow_ext_val.IsUndefined()) {
+        if (!allow_ext_val.IsBoolean()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(),
+              "The \"options.allowExtension\" argument must be a boolean.");
+          return;
+        }
+        allow_load_extension_ = allow_ext_val.As<Napi::Boolean>().Value();
       }
 
-      if (options.Has("allowExtension") &&
-          options.Get("allowExtension").IsBoolean()) {
-        allow_load_extension_ =
-            options.Get("allowExtension").As<Napi::Boolean>().Value();
+      // Validate and parse 'timeout' option
+      Napi::Value timeout_val = options.Get("timeout");
+      if (!timeout_val.IsUndefined()) {
+        if (!timeout_val.IsNumber()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(),
+              "The \"options.timeout\" argument must be an integer.");
+          return;
+        }
+        double timeout_double = timeout_val.As<Napi::Number>().DoubleValue();
+        if (timeout_double != std::trunc(timeout_double)) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(),
+              "The \"options.timeout\" argument must be an integer.");
+          return;
+        }
+        config.set_timeout(timeout_val.As<Napi::Number>().Int32Value());
       }
 
-      if (options.Has("readBigInts") &&
-          options.Get("readBigInts").IsBoolean()) {
-        config.set_read_big_ints(
-            options.Get("readBigInts").As<Napi::Boolean>().Value());
+      // Validate and parse 'readBigInts' option
+      Napi::Value read_bigints_val = options.Get("readBigInts");
+      if (!read_bigints_val.IsUndefined()) {
+        if (!read_bigints_val.IsBoolean()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(),
+              "The \"options.readBigInts\" argument must be a boolean.");
+          return;
+        }
+        config.set_read_big_ints(read_bigints_val.As<Napi::Boolean>().Value());
       }
 
-      if (options.Has("returnArrays") &&
-          options.Get("returnArrays").IsBoolean()) {
-        config.set_return_arrays(
-            options.Get("returnArrays").As<Napi::Boolean>().Value());
+      // Validate and parse 'returnArrays' option
+      Napi::Value return_arrays_val = options.Get("returnArrays");
+      if (!return_arrays_val.IsUndefined()) {
+        if (!return_arrays_val.IsBoolean()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(),
+              "The \"options.returnArrays\" argument must be a boolean.");
+          return;
+        }
+        config.set_return_arrays(return_arrays_val.As<Napi::Boolean>().Value());
       }
 
-      if (options.Has("allowBareNamedParameters") &&
-          options.Get("allowBareNamedParameters").IsBoolean()) {
+      // Validate and parse 'allowBareNamedParameters' option
+      Napi::Value allow_bare_val = options.Get("allowBareNamedParameters");
+      if (!allow_bare_val.IsUndefined()) {
+        if (!allow_bare_val.IsBoolean()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(),
+              "The \"options.allowBareNamedParameters\" argument must be a "
+              "boolean.");
+          return;
+        }
         config.set_allow_bare_named_params(
-            options.Get("allowBareNamedParameters")
-                .As<Napi::Boolean>()
-                .Value());
+            allow_bare_val.As<Napi::Boolean>().Value());
       }
 
-      if (options.Has("allowUnknownNamedParameters") &&
-          options.Get("allowUnknownNamedParameters").IsBoolean()) {
+      // Validate and parse 'allowUnknownNamedParameters' option
+      Napi::Value allow_unknown_val =
+          options.Get("allowUnknownNamedParameters");
+      if (!allow_unknown_val.IsUndefined()) {
+        if (!allow_unknown_val.IsBoolean()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(),
+              "The \"options.allowUnknownNamedParameters\" argument must be a "
+              "boolean.");
+          return;
+        }
         config.set_allow_unknown_named_params(
-            options.Get("allowUnknownNamedParameters")
-                .As<Napi::Boolean>()
-                .Value());
+            allow_unknown_val.As<Napi::Boolean>().Value());
       }
 
-      if (options.Has("defensive")) {
-        Napi::Value defensive_val = options.Get("defensive");
-        if (!defensive_val.IsUndefined()) {
-          if (!defensive_val.IsBoolean()) {
-            node::THROW_ERR_INVALID_ARG_TYPE(
-                info.Env(),
-                "The \"options.defensive\" argument must be a boolean.");
-            return;
-          }
-          config.set_enable_defensive(
-              defensive_val.As<Napi::Boolean>().Value());
+      // Validate and parse 'defensive' option
+      Napi::Value defensive_val = options.Get("defensive");
+      if (!defensive_val.IsUndefined()) {
+        if (!defensive_val.IsBoolean()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(),
+              "The \"options.defensive\" argument must be a boolean.");
+          return;
         }
-      }
-
-      // Handle the open option
-      if (options.Has("open")) {
-        Napi::Value open_val = options.Get("open");
-        if (open_val.IsBoolean()) {
-          should_open = open_val.As<Napi::Boolean>().Value();
-        }
-        // For non-boolean values, default to true (existing behavior)
+        config.set_enable_defensive(defensive_val.As<Napi::Boolean>().Value());
       }
     }
 
@@ -506,7 +610,7 @@ Napi::Value DatabaseSync::Close(const Napi::CallbackInfo &info) {
   }
 
   if (!IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 
@@ -547,16 +651,81 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
   }
 
   if (!IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 
   if (info.Length() < 1 || !info[0].IsString()) {
-    node::THROW_ERR_INVALID_ARG_TYPE(env, "Expected SQL string");
+    node::THROW_ERR_INVALID_ARG_TYPE(env,
+                                     "The \"sql\" argument must be a string.");
     return env.Undefined();
   }
 
   std::string sql = info[0].As<Napi::String>().Utf8Value();
+
+  // Parse optional second argument (options object)
+  // Node.js v25+ supports per-statement options that override database defaults
+  std::optional<bool> opt_read_big_ints;
+  std::optional<bool> opt_return_arrays;
+  std::optional<bool> opt_allow_bare_named_params;
+  std::optional<bool> opt_allow_unknown_named_params;
+
+  if (info.Length() > 1 && !info[1].IsUndefined()) {
+    if (!info[1].IsObject()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"options\" argument must be an object.");
+      return env.Undefined();
+    }
+
+    Napi::Object options = info[1].As<Napi::Object>();
+
+    // Parse readBigInts option
+    Napi::Value read_big_ints_val = options.Get("readBigInts");
+    if (!read_big_ints_val.IsUndefined()) {
+      if (!read_big_ints_val.IsBoolean()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.readBigInts\" argument must be a boolean.");
+        return env.Undefined();
+      }
+      opt_read_big_ints = read_big_ints_val.As<Napi::Boolean>().Value();
+    }
+
+    // Parse returnArrays option
+    Napi::Value return_arrays_val = options.Get("returnArrays");
+    if (!return_arrays_val.IsUndefined()) {
+      if (!return_arrays_val.IsBoolean()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.returnArrays\" argument must be a boolean.");
+        return env.Undefined();
+      }
+      opt_return_arrays = return_arrays_val.As<Napi::Boolean>().Value();
+    }
+
+    // Parse allowBareNamedParameters option
+    Napi::Value allow_bare_val = options.Get("allowBareNamedParameters");
+    if (!allow_bare_val.IsUndefined()) {
+      if (!allow_bare_val.IsBoolean()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.allowBareNamedParameters\" argument must be a "
+                 "boolean.");
+        return env.Undefined();
+      }
+      opt_allow_bare_named_params = allow_bare_val.As<Napi::Boolean>().Value();
+    }
+
+    // Parse allowUnknownNamedParameters option
+    Napi::Value allow_unknown_val = options.Get("allowUnknownNamedParameters");
+    if (!allow_unknown_val.IsUndefined()) {
+      if (!allow_unknown_val.IsBoolean()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.allowUnknownNamedParameters\" argument must be "
+                 "a boolean.");
+        return env.Undefined();
+      }
+      opt_allow_unknown_named_params =
+          allow_unknown_val.As<Napi::Boolean>().Value();
+    }
+  }
 
   // Clear any stale deferred exception from a previous operation
   ClearDeferredAuthorizerException();
@@ -573,9 +742,24 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
     Napi::Object stmt_obj =
         addon_data->statementSyncConstructor.New({}).As<Napi::Object>();
 
-    // Initialize the statement
+    // Initialize the statement (applies database-level defaults)
     StatementSync *stmt = StatementSync::Unwrap(stmt_obj);
     stmt->InitStatement(this, sql);
+
+    // Apply per-statement option overrides (if explicitly provided)
+    if (opt_read_big_ints.has_value()) {
+      stmt->use_big_ints_ = opt_read_big_ints.value();
+    }
+    if (opt_return_arrays.has_value()) {
+      stmt->return_arrays_ = opt_return_arrays.value();
+    }
+    if (opt_allow_bare_named_params.has_value()) {
+      stmt->allow_bare_named_params_ = opt_allow_bare_named_params.value();
+    }
+    if (opt_allow_unknown_named_params.has_value()) {
+      stmt->allow_unknown_named_params_ =
+          opt_allow_unknown_named_params.value();
+    }
 
     return stmt_obj;
   } catch (const SqliteException &e) {
@@ -627,12 +811,13 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
   }
 
   if (!IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 
   if (info.Length() < 1 || !info[0].IsString()) {
-    node::THROW_ERR_INVALID_ARG_TYPE(env, "Expected SQL string");
+    node::THROW_ERR_INVALID_ARG_TYPE(env,
+                                     "The \"sql\" argument must be a string.");
     return env.Undefined();
   }
 
@@ -672,13 +857,18 @@ Napi::Value DatabaseSync::LocationMethod(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (!IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 
   // Default to "main" if no dbName provided
   std::string db_name = "main";
-  if (info.Length() > 0 && info[0].IsString()) {
+  if (info.Length() > 0 && !info[0].IsUndefined()) {
+    if (!info[0].IsString()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"dbName\" argument must be a string.");
+      return env.Undefined();
+    }
     db_name = info[0].As<Napi::String>().Utf8Value();
   }
 
@@ -699,9 +889,16 @@ Napi::Value DatabaseSync::IsOpenGetter(const Napi::CallbackInfo &info) {
 }
 
 Napi::Value DatabaseSync::IsTransactionGetter(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
   // Check if we're in a transaction
-  bool in_transaction = IsOpen() && !sqlite3_get_autocommit(connection());
-  return Napi::Boolean::New(info.Env(), in_transaction);
+  bool in_transaction = !sqlite3_get_autocommit(connection());
+  return Napi::Boolean::New(env, in_transaction);
 }
 
 void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
@@ -715,6 +912,11 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
     flags = SQLITE_OPEN_READONLY;
   } else {
     flags |= SQLITE_OPEN_READWRITE;
+  }
+
+  // Add URI flag when location contains URI parameters
+  if (config_.get_open_uri()) {
+    flags |= SQLITE_OPEN_URI;
   }
 
   int result = sqlite3_open_v2(location_.c_str(), &connection_, flags, nullptr);
@@ -731,10 +933,19 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
     throw ex;
   }
 
-  // Configure database
-  if (config_.get_enable_foreign_keys()) {
-    sqlite3_exec(connection(), "PRAGMA foreign_keys = ON", nullptr, nullptr,
-                 nullptr);
+  // Configure foreign keys using sqlite3_db_config (matches Node.js behavior)
+  // This properly handles both enabling and disabling FK constraints
+  int fk_enabled;
+  result =
+      sqlite3_db_config(connection(), SQLITE_DBCONFIG_ENABLE_FKEY,
+                        config_.get_enable_foreign_keys() ? 1 : 0, &fk_enabled);
+  if (result != SQLITE_OK) {
+    std::string error = sqlite3_errmsg(connection());
+    SqliteException ex(connection_, result,
+                       "Failed to configure foreign keys: " + error);
+    sqlite3_close(connection_);
+    connection_ = nullptr;
+    throw ex;
   }
 
   if (config_.get_timeout() > 0) {
@@ -808,18 +1019,13 @@ Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (!IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
-    return env.Undefined();
-  }
-
-  if (info.Length() < 2) {
-    node::THROW_ERR_INVALID_ARG_TYPE(
-        env, "Expected at least 2 arguments: name and function");
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 
   if (!info[0].IsString()) {
-    node::THROW_ERR_INVALID_ARG_TYPE(env, "Function name must be a string");
+    node::THROW_ERR_INVALID_ARG_TYPE(env,
+                                     "The \"name\" argument must be a string.");
     return env.Undefined();
   }
 
@@ -831,31 +1037,60 @@ Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo &info) {
   bool direct_only = false;
 
   // Parse options object if provided
-  if (fn_index > 1 && info[1].IsObject()) {
+  if (fn_index > 1) {
+    if (!info[1].IsObject()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"options\" argument must be an object.");
+      return env.Undefined();
+    }
+
     Napi::Object options = info[1].As<Napi::Object>();
 
-    if (options.Has("useBigIntArguments") &&
-        options.Get("useBigIntArguments").IsBoolean()) {
-      use_bigint_args =
-          options.Get("useBigIntArguments").As<Napi::Boolean>().Value();
+    Napi::Value use_bigint_args_v = options.Get("useBigIntArguments");
+    if (!use_bigint_args_v.IsUndefined()) {
+      if (!use_bigint_args_v.IsBoolean()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env,
+            "The \"options.useBigIntArguments\" argument must be a boolean.");
+        return env.Undefined();
+      }
+      use_bigint_args = use_bigint_args_v.As<Napi::Boolean>().Value();
     }
 
-    if (options.Has("varargs") && options.Get("varargs").IsBoolean()) {
-      varargs = options.Get("varargs").As<Napi::Boolean>().Value();
+    Napi::Value varargs_v = options.Get("varargs");
+    if (!varargs_v.IsUndefined()) {
+      if (!varargs_v.IsBoolean()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.varargs\" argument must be a boolean.");
+        return env.Undefined();
+      }
+      varargs = varargs_v.As<Napi::Boolean>().Value();
     }
 
-    if (options.Has("deterministic") &&
-        options.Get("deterministic").IsBoolean()) {
-      deterministic = options.Get("deterministic").As<Napi::Boolean>().Value();
+    Napi::Value deterministic_v = options.Get("deterministic");
+    if (!deterministic_v.IsUndefined()) {
+      if (!deterministic_v.IsBoolean()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.deterministic\" argument must be a boolean.");
+        return env.Undefined();
+      }
+      deterministic = deterministic_v.As<Napi::Boolean>().Value();
     }
 
-    if (options.Has("directOnly") && options.Get("directOnly").IsBoolean()) {
-      direct_only = options.Get("directOnly").As<Napi::Boolean>().Value();
+    Napi::Value direct_only_v = options.Get("directOnly");
+    if (!direct_only_v.IsUndefined()) {
+      if (!direct_only_v.IsBoolean()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.directOnly\" argument must be a boolean.");
+        return env.Undefined();
+      }
+      direct_only = direct_only_v.As<Napi::Boolean>().Value();
     }
   }
 
   if (!info[fn_index].IsFunction()) {
-    node::THROW_ERR_INVALID_ARG_TYPE(env, "Callback must be a function");
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The \"function\" argument must be a function.");
     return env.Undefined();
   }
 
@@ -907,74 +1142,96 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (!IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 
-  if (info.Length() < 2) {
+  // Node.js doesn't check argument count - it just accesses args directly
+  std::string name = info[0].IsString() ? info[0].As<Napi::String>().Utf8Value()
+                                        : std::string();
+  Napi::Object options =
+      info[1].IsObject() ? info[1].As<Napi::Object>() : Napi::Object();
+
+  if (options.IsEmpty() || options.IsNull() || options.IsUndefined()) {
+    // If options isn't an object, trying to access its properties will fail
+    // Node.js would throw from the property access, we mimic that
+    options = Napi::Object::New(env);
+  }
+
+  // Parse start value
+  Napi::Value start = options.Get("start");
+  if (start.IsUndefined()) {
     node::THROW_ERR_INVALID_ARG_TYPE(
-        env, "Expected at least 2 arguments: name and options");
+        env, "The \"options.start\" argument must be a function or a primitive "
+             "value.");
     return env.Undefined();
   }
 
-  if (!info[0].IsString()) {
-    node::THROW_ERR_INVALID_ARG_TYPE(env, "Function name must be a string");
+  // Parse step function
+  Napi::Value step_v = options.Get("step");
+  if (!step_v.IsFunction()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The \"options.step\" argument must be a function.");
     return env.Undefined();
   }
+  Napi::Function step_fn = step_v.As<Napi::Function>();
 
-  if (!info[1].IsObject()) {
-    node::THROW_ERR_INVALID_ARG_TYPE(env, "Options must be an object");
-    return env.Undefined();
-  }
-
-  std::string name = info[0].As<Napi::String>().Utf8Value();
-  Napi::Object options = info[1].As<Napi::Object>();
-
-  // Parse required options - start can be undefined, will default to null
-  Napi::Value start = env.Null();
-  if (options.Has("start") && !options.Get("start").IsUndefined()) {
-    start = options.Get("start");
-  }
-
-  if (!options.Has("step") || !options.Get("step").IsFunction()) {
-    node::THROW_ERR_INVALID_ARG_TYPE(env, "options.step must be a function");
-    return env.Undefined();
-  }
-
-  Napi::Function step_fn = options.Get("step").As<Napi::Function>();
-
-  // Parse optional options
-  Napi::Function inverse_fn;
-  if (options.Has("inverse") && options.Get("inverse").IsFunction()) {
-    inverse_fn = options.Get("inverse").As<Napi::Function>();
-  }
-
+  // Parse result function (optional)
   Napi::Function result_fn;
-  if (options.Has("result") && options.Get("result").IsFunction()) {
-    result_fn = options.Get("result").As<Napi::Function>();
+  Napi::Value result_v = options.Get("result");
+  if (!result_v.IsUndefined()) {
+    result_fn = result_v.As<Napi::Function>();
   }
 
+  // Parse boolean options with validation
   bool use_bigint_args = false;
-  if (options.Has("useBigIntArguments") &&
-      options.Get("useBigIntArguments").IsBoolean()) {
-    use_bigint_args =
-        options.Get("useBigIntArguments").As<Napi::Boolean>().Value();
+  Napi::Value use_bigint_args_v = options.Get("useBigIntArguments");
+  if (!use_bigint_args_v.IsUndefined()) {
+    if (!use_bigint_args_v.IsBoolean()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env,
+          "The \"options.useBigIntArguments\" argument must be a boolean.");
+      return env.Undefined();
+    }
+    use_bigint_args = use_bigint_args_v.As<Napi::Boolean>().Value();
   }
 
   bool varargs = false;
-  if (options.Has("varargs") && options.Get("varargs").IsBoolean()) {
-    varargs = options.Get("varargs").As<Napi::Boolean>().Value();
+  Napi::Value varargs_v = options.Get("varargs");
+  if (!varargs_v.IsUndefined()) {
+    if (!varargs_v.IsBoolean()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"options.varargs\" argument must be a boolean.");
+      return env.Undefined();
+    }
+    varargs = varargs_v.As<Napi::Boolean>().Value();
   }
 
   bool deterministic = false;
-  if (options.Has("deterministic") &&
-      options.Get("deterministic").IsBoolean()) {
-    deterministic = options.Get("deterministic").As<Napi::Boolean>().Value();
-  }
+  // Note: deterministic is handled via sqlite flags but Node.js
+  // doesn't seem to validate it separately for aggregates
 
   bool direct_only = false;
-  if (options.Has("directOnly") && options.Get("directOnly").IsBoolean()) {
-    direct_only = options.Get("directOnly").As<Napi::Boolean>().Value();
+  Napi::Value direct_only_v = options.Get("directOnly");
+  if (!direct_only_v.IsUndefined()) {
+    if (!direct_only_v.IsBoolean()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"options.directOnly\" argument must be a boolean.");
+      return env.Undefined();
+    }
+    direct_only = direct_only_v.As<Napi::Boolean>().Value();
+  }
+
+  // Parse inverse function (optional)
+  Napi::Function inverse_fn;
+  Napi::Value inverse_v = options.Get("inverse");
+  if (!inverse_v.IsUndefined()) {
+    if (!inverse_v.IsFunction()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"options.inverse\" argument must be a function.");
+      return env.Undefined();
+    }
+    inverse_fn = inverse_v.As<Napi::Function>();
   }
 
   // Determine argument count
@@ -1048,7 +1305,7 @@ Napi::Value DatabaseSync::EnableLoadExtension(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (!IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 
@@ -1088,7 +1345,7 @@ Napi::Value DatabaseSync::LoadExtension(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (!IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "Database is not open");
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 
@@ -1263,9 +1520,10 @@ void DatabaseSync::DeleteAllSessions() {
     // Direct SQLite cleanup since we're in database destruction
     if (session->GetSession()) {
       sqlite3session_delete(session->GetSession());
-      // Clear the session's internal pointers
+      // Clear the session pointer but KEEP database_ so we can detect
+      // "database closed" vs "session closed" in Session methods
       session->session_ = nullptr;
-      session->database_ = nullptr;
+      // Note: Don't null database_ - we need it to check IsOpen()
     }
   }
 }
@@ -1275,14 +1533,17 @@ struct ChangesetCallbacks {
   std::function<int(int)> conflictCallback;
   std::function<bool(std::string)> filterCallback;
   Napi::Env env;
+  // Store pending exception for re-throwing after SQLite call
+  std::string pendingExceptionMessage;
+  bool hasPendingException = false;
 };
 
 static int xConflict(void *pCtx, int eConflict, sqlite3_changeset_iter *pIter) {
   if (!pCtx)
-    return SQLITE_CHANGESET_OMIT;
+    return SQLITE_CHANGESET_ABORT;
   ChangesetCallbacks *callbacks = static_cast<ChangesetCallbacks *>(pCtx);
   if (!callbacks->conflictCallback)
-    return SQLITE_CHANGESET_OMIT;
+    return SQLITE_CHANGESET_ABORT;
   return callbacks->conflictCallback(eConflict);
 }
 
@@ -1290,6 +1551,9 @@ static int xFilter(void *pCtx, const char *zTab) {
   if (!pCtx)
     return 1;
   ChangesetCallbacks *callbacks = static_cast<ChangesetCallbacks *>(pCtx);
+  // Skip filter callback if we already have a pending exception
+  if (callbacks->hasPendingException)
+    return 0;
   if (!callbacks->filterCallback)
     return 1;
   return callbacks->filterCallback(zTab) ? 1 : 0;
@@ -1303,9 +1567,9 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (info.Length() < 1 || !info[0].IsBuffer()) {
+  if (info.Length() < 1 || !info[0].IsTypedArray()) {
     node::THROW_ERR_INVALID_ARG_TYPE(
-        env, "The \"changeset\" argument must be a Buffer.");
+        env, "The \"changeset\" argument must be a Uint8Array.");
     return env.Undefined();
   }
 
@@ -1333,33 +1597,39 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
         }
 
         Napi::Function conflictFunc = conflictValue.As<Napi::Function>();
-        callbacks.conflictCallback = [env,
+        callbacks.conflictCallback = [&callbacks, env,
                                       conflictFunc](int conflictType) -> int {
+          // Skip callback if we already have a pending exception
+          if (callbacks.hasPendingException)
+            return SQLITE_CHANGESET_ABORT;
+
           Napi::HandleScope scope(env);
-          try {
-            Napi::Value result =
-                conflictFunc.Call({Napi::Number::New(env, conflictType)});
+          Napi::Value result =
+              conflictFunc.Call({Napi::Number::New(env, conflictType)});
 
-            if (env.IsExceptionPending()) {
-              // Clear the exception to prevent propagation
-              env.GetAndClearPendingException();
-              // If callback threw, abort the changeset apply
-              return SQLITE_CHANGESET_ABORT;
-            }
-
-            if (!result.IsNumber()) {
-              // If the callback returns a non-numeric value, treat it as ABORT
-              return SQLITE_CHANGESET_ABORT;
-            }
-
-            return result.As<Napi::Number>().Int32Value();
-          } catch (...) {
-            // Catch any C++ exceptions
-            if (env.IsExceptionPending()) {
-              env.GetAndClearPendingException();
-            }
+          // Check for exception - Call() may have thrown
+          if (env.IsExceptionPending()) {
+            // Store the exception message for re-throwing later
+            Napi::Error err = env.GetAndClearPendingException();
+            callbacks.pendingExceptionMessage = err.Message();
+            callbacks.hasPendingException = true;
             return SQLITE_CHANGESET_ABORT;
           }
+
+          // Check for empty result (another exception indicator)
+          if (result.IsEmpty()) {
+            callbacks.pendingExceptionMessage = "Callback threw an exception";
+            callbacks.hasPendingException = true;
+            return SQLITE_CHANGESET_ABORT;
+          }
+
+          // Return -1 (invalid value) for non-integer results
+          // This makes SQLite return SQLITE_MISUSE
+          if (!result.IsNumber()) {
+            return -1;
+          }
+
+          return result.As<Napi::Number>().Int32Value();
         };
       }
     }
@@ -1374,38 +1644,55 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
       }
 
       Napi::Function filterFunc = filterValue.As<Napi::Function>();
-      callbacks.filterCallback = [env,
+      callbacks.filterCallback = [&callbacks, env,
                                   filterFunc](std::string tableName) -> bool {
+        // Skip callback if we already have a pending exception
+        if (callbacks.hasPendingException)
+          return false;
+
         Napi::HandleScope scope(env);
-        try {
-          Napi::Value result =
-              filterFunc.Call({Napi::String::New(env, tableName)});
+        Napi::Value result =
+            filterFunc.Call({Napi::String::New(env, tableName)});
 
-          if (env.IsExceptionPending()) {
-            // Clear the exception to prevent propagation
-            env.GetAndClearPendingException();
-            // If callback threw, exclude the table
-            return false;
-          }
-
-          return result.ToBoolean().Value();
-        } catch (...) {
-          // Catch any C++ exceptions
-          if (env.IsExceptionPending()) {
-            env.GetAndClearPendingException();
-          }
+        // Check for exception - Call() may have thrown
+        if (env.IsExceptionPending()) {
+          // Store the exception message for re-throwing later
+          Napi::Error err = env.GetAndClearPendingException();
+          callbacks.pendingExceptionMessage = err.Message();
+          callbacks.hasPendingException = true;
           return false;
         }
+
+        // Check for empty result (another exception indicator)
+        if (result.IsEmpty()) {
+          callbacks.pendingExceptionMessage =
+              "Filter callback threw an exception";
+          callbacks.hasPendingException = true;
+          return false;
+        }
+
+        return result.ToBoolean().Value();
       };
     }
   }
 
-  // Get the changeset buffer
-  Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
+  // Get the changeset data from TypedArray (Uint8Array or Buffer)
+  Napi::TypedArray typed_array = info[0].As<Napi::TypedArray>();
+  Napi::ArrayBuffer array_buffer = typed_array.ArrayBuffer();
+  size_t byte_offset = typed_array.ByteOffset();
+  size_t byte_length = typed_array.ByteLength();
+  uint8_t *data = static_cast<uint8_t *>(array_buffer.Data()) + byte_offset;
 
   // Apply the changeset with context instead of global state
-  int r = sqlite3changeset_apply(connection(), buffer.Length(), buffer.Data(),
-                                 xFilter, xConflict, &callbacks);
+  int r = sqlite3changeset_apply(connection(), static_cast<int>(byte_length),
+                                 data, xFilter, xConflict, &callbacks);
+
+  // Check for pending exception from callbacks - re-throw it
+  if (callbacks.hasPendingException) {
+    Napi::Error::New(env, callbacks.pendingExceptionMessage)
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (r == SQLITE_OK) {
     return Napi::Boolean::New(env, true);
@@ -1416,10 +1703,9 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
     return Napi::Boolean::New(env, false);
   }
 
-  // Other errors
-  std::string error = "Failed to apply changeset: ";
-  error += sqlite3_errmsg(connection());
-  node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+  // Other errors - use enhanced error with errcode property
+  const char *errMsg = sqlite3_errmsg(connection());
+  node::ThrowEnhancedSqliteError(env, connection(), r, errMsg);
   return env.Undefined();
 }
 
@@ -1431,8 +1717,6 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("get", &StatementSync::Get),
        InstanceMethod("all", &StatementSync::All),
        InstanceMethod("iterate", &StatementSync::Iterate),
-       InstanceMethod("finalize", &StatementSync::FinalizeStatement),
-       InstanceMethod("dispose", &StatementSync::Dispose),
        InstanceMethod("setReadBigInts", &StatementSync::SetReadBigInts),
        InstanceMethod("setReturnArrays", &StatementSync::SetReturnArrays),
        InstanceMethod("setAllowBareNamedParameters",
@@ -1442,8 +1726,6 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("columns", &StatementSync::Columns),
        InstanceAccessor("sourceSQL", &StatementSync::SourceSQLGetter, nullptr),
        InstanceAccessor("expandedSQL", &StatementSync::ExpandedSQLGetter,
-                        nullptr),
-       InstanceAccessor("finalized", &StatementSync::FinalizedGetter,
                         nullptr)});
 
   // Store constructor in per-instance addon data instead of static variable
@@ -1451,21 +1733,6 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
   if (addon_data) {
     addon_data->statementSyncConstructor =
         Napi::Reference<Napi::Function>::New(func);
-  }
-
-  // Add Symbol.dispose to the prototype (Node.js v25+ compatibility)
-  Napi::Value symbolDispose =
-      env.Global().Get("Symbol").As<Napi::Object>().Get("dispose");
-  if (!symbolDispose.IsUndefined()) {
-    func.Get("prototype")
-        .As<Napi::Object>()
-        .Set(symbolDispose,
-             Napi::Function::New(
-                 env, [](const Napi::CallbackInfo &info) -> Napi::Value {
-                   StatementSync *stmt =
-                       StatementSync::Unwrap(info.This().As<Napi::Object>());
-                   return stmt->Dispose(info);
-                 }));
   }
 
   exports.Set("StatementSync", func);
@@ -1481,7 +1748,7 @@ StatementSync::StatementSync(const Napi::CallbackInfo &info)
 void StatementSync::InitStatement(DatabaseSync *database,
                                   const std::string &sql) {
   if (!database || !database->IsOpen()) {
-    throw std::runtime_error("Database is not open");
+    throw std::runtime_error("database is not open");
   }
 
   database_ = database;
@@ -1524,8 +1791,8 @@ void StatementSync::InitStatement(DatabaseSync *database,
       // object and will be retrieved by the caller.
       throw std::runtime_error("");
     }
-    std::string error = "Failed to prepare statement: ";
-    error += sqlite3_errmsg(database->connection());
+    // Use sqlite3_errmsg directly without prefix - matches Node.js error format
+    std::string error = sqlite3_errmsg(database->connection());
     // Use SqliteException to capture error info - avoids Windows ARM ABI issues
     // with std::runtime_error::what() returning corrupted strings
     throw SqliteException(database->connection(), result, error);
@@ -1590,17 +1857,26 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
 
     // Create result object
     Napi::Object result_obj = Napi::Object::New(env);
-    result_obj.Set(
-        "changes",
-        Napi::Number::New(env, sqlite3_changes(database_->connection())));
 
+    // Get changes and lastInsertRowid
+    int changes = sqlite3_changes(database_->connection());
     sqlite3_int64 last_rowid =
         sqlite3_last_insert_rowid(database_->connection());
-    // Use JavaScript's safe integer limits (2^53 - 1)
-    if (last_rowid > JS_MAX_SAFE_INTEGER || last_rowid < JS_MIN_SAFE_INTEGER) {
+
+    // When readBigInts is true, return BigInt for both (matches Node.js)
+    if (use_big_ints_) {
+      result_obj.Set("changes",
+                     Napi::BigInt::New(env, static_cast<int64_t>(changes)));
+      result_obj.Set("lastInsertRowid",
+                     Napi::BigInt::New(env, static_cast<int64_t>(last_rowid)));
+    } else if (last_rowid > JS_MAX_SAFE_INTEGER ||
+               last_rowid < JS_MIN_SAFE_INTEGER) {
+      // Use JavaScript's safe integer limits (2^53 - 1)
+      result_obj.Set("changes", Napi::Number::New(env, changes));
       result_obj.Set("lastInsertRowid",
                      Napi::BigInt::New(env, static_cast<int64_t>(last_rowid)));
     } else {
+      result_obj.Set("changes", Napi::Number::New(env, changes));
       result_obj.Set("lastInsertRowid",
                      Napi::Number::New(env, static_cast<double>(last_rowid)));
     }
@@ -1646,16 +1922,26 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
     int result = sqlite3_step(statement_);
 
     if (result == SQLITE_ROW) {
-      return CreateResult();
+      Napi::Value value = CreateResult();
+      // Reset statement after fetching result to release locks (like Node.js
+      // OnScopeLeave)
+      sqlite3_reset(statement_);
+      return value;
     } else if (result == SQLITE_DONE) {
+      // Reset statement to release locks even when no rows returned
+      sqlite3_reset(statement_);
       return env.Undefined();
     } else {
+      // Reset statement before throwing to release locks
+      sqlite3_reset(statement_);
       std::string error = sqlite3_errmsg(database_->connection());
       ThrowEnhancedSqliteErrorWithDB(env, database_, database_->connection(),
                                      result, error);
       return env.Undefined();
     }
   } catch (const std::exception &e) {
+    // Reset statement on exception to release locks
+    sqlite3_reset(statement_);
     ThrowErrSqliteErrorWithDb(env, database_, e.what());
     return env.Undefined();
   }
@@ -1697,8 +1983,12 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
       if (result == SQLITE_ROW) {
         results.Set(index++, CreateResult());
       } else if (result == SQLITE_DONE) {
+        // Reset statement to release locks (like Node.js OnScopeLeave)
+        sqlite3_reset(statement_);
         break;
       } else {
+        // Reset statement before throwing to release locks
+        sqlite3_reset(statement_);
         std::string error = sqlite3_errmsg(database_->connection());
         node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
         return env.Undefined();
@@ -1707,6 +1997,8 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
 
     return results;
   } catch (const std::exception &e) {
+    // Reset statement on exception to release locks
+    sqlite3_reset(statement_);
     node::THROW_ERR_SQLITE_ERROR(env, e.what());
     return env.Undefined();
   }
@@ -1902,13 +2194,9 @@ StatementSync::SetAllowUnknownNamedParameters(const Napi::CallbackInfo &info) {
 Napi::Value StatementSync::Columns(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  if (finalized_) {
-    node::THROW_ERR_INVALID_STATE(env, "The statement has been finalized");
-    return env.Undefined();
-  }
-
-  if (!database_ || !database_->IsOpen()) {
-    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+  // When database is closed, statement is implicitly finalized by SQLite
+  if (finalized_ || !database_ || !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
     return env.Undefined();
   }
 
@@ -1921,7 +2209,7 @@ Napi::Value StatementSync::Columns(const Napi::CallbackInfo &info) {
   Napi::Array columns = Napi::Array::New(env, column_count);
 
   for (int i = 0; i < column_count; i++) {
-    Napi::Object column_info = Napi::Object::New(env);
+    Napi::Object column_info = CreateObjectWithNullPrototype(env);
 
     // column: The original column name (sqlite3_column_origin_name)
     const char *origin_name = sqlite3_column_origin_name(statement_, i);
@@ -1989,11 +2277,18 @@ void StatementSync::BindParameters(const Napi::CallbackInfo &info,
     return;
   }
 
-  // Check if we have a single object for named parameters
-  if (info.Length() == start_index + 1 && info[start_index].IsObject() &&
-      !info[start_index].IsBuffer() && !info[start_index].IsArray()) {
-    // Named parameters binding
+  // Track where positional parameters start
+  size_t positional_start = start_index;
+
+  // Check if first argument is an object for named parameters
+  // (not a Buffer, TypedArray, or Array - those are positional values)
+  if (info.Length() > start_index && info[start_index].IsObject() &&
+      !info[start_index].IsBuffer() && !info[start_index].IsArray() &&
+      !info[start_index].IsTypedArray()) {
+    // Named parameters binding from the object
     Napi::Object obj = info[start_index].As<Napi::Object>();
+    positional_start =
+        start_index + 1; // Positional args start after the object
 
     // Build bare named params map if needed
     if (allow_bare_named_params_ && !bare_named_params_.has_value()) {
@@ -2046,13 +2341,11 @@ void StatementSync::BindParameters(const Napi::CallbackInfo &info,
 
       if (param_index > 0) {
         Napi::Value value = obj.Get(key_str);
-        try {
-          BindSingleParameter(param_index, value);
-        } catch (const Napi::Error &e) {
-          // Re-throw with parameter info
-          std::string msg =
-              "Error binding parameter '" + key_str + "': " + e.Message();
-          node::THROW_ERR_INVALID_ARG_VALUE(env, msg.c_str());
+        BindSingleParameter(param_index, value);
+        // Check for pending exceptions set by THROW_ERR_* macros
+        // (they use ThrowAsJavaScriptException which doesn't throw C++
+        // exceptions)
+        if (env.IsExceptionPending()) {
           return;
         }
       } else {
@@ -2063,24 +2356,41 @@ void StatementSync::BindParameters(const Napi::CallbackInfo &info,
         } else {
           // Throw error when not allowed (default behavior)
           std::string msg = "Unknown named parameter '" + key_str + "'";
-          node::THROW_ERR_INVALID_ARG_VALUE(env, msg.c_str());
+          node::THROW_ERR_INVALID_STATE(env, msg.c_str());
           return;
         }
       }
     }
-  } else {
-    // Positional parameters binding
-    for (size_t i = start_index; i < info.Length(); i++) {
-      int param_index = static_cast<int>(i - start_index + 1);
-      try {
-        BindSingleParameter(param_index, info[i]);
-      } catch (const Napi::Error &e) {
-        // Re-throw with parameter info
-        std::string msg = "Error binding parameter " +
-                          std::to_string(param_index) + ": " + e.Message();
-        node::THROW_ERR_INVALID_ARG_VALUE(env, msg.c_str());
+  }
+
+  // Bind remaining positional parameters to anonymous placeholders (?)
+  // This handles both: (a) all args are positional, (b) first arg was named
+  // params object and remaining are positional
+  if (positional_start < info.Length()) {
+    int anon_idx = 1;
+    int param_count = sqlite3_bind_parameter_count(statement_);
+
+    for (size_t i = positional_start; i < info.Length(); i++) {
+      // Skip to the next anonymous placeholder (unnamed or ?NNN)
+      while (anon_idx <= param_count) {
+        const char *param_name =
+            sqlite3_bind_parameter_name(statement_, anon_idx);
+        // Anonymous placeholders have nullptr name or start with '?'
+        if (param_name == nullptr || param_name[0] == '?') {
+          break;
+        }
+        anon_idx++;
+      }
+
+      // When anon_idx > param_count, SQLite will return SQLITE_RANGE
+      // and we'll throw an appropriate ERR_SQLITE_ERROR
+
+      BindSingleParameter(anon_idx, info[i]);
+      // Check for pending exceptions set by THROW_ERR_* macros
+      if (env.IsExceptionPending()) {
         return;
       }
+      anon_idx++;
     }
   }
 }
@@ -2091,41 +2401,49 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
     return; // Silent return since error was already thrown by caller
   }
 
+  int rc = SQLITE_OK;
+
   try {
-    if (param.IsNull() || param.IsUndefined()) {
-      sqlite3_bind_null(statement_, param_index);
+    if (param.IsNull()) {
+      rc = sqlite3_bind_null(statement_, param_index);
+    } else if (param.IsUndefined()) {
+      // Node.js throws for undefined (unlike null which binds as SQL NULL)
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          Env(), ("Provided value cannot be bound to SQLite parameter " +
+                  std::to_string(param_index) + ".")
+                     .c_str());
+      return;
     } else if (param.IsBigInt()) {
       // Handle BigInt before IsNumber since BigInt values should bind as int64
       bool lossless;
       int64_t bigint_val = param.As<Napi::BigInt>().Int64Value(&lossless);
       if (lossless) {
-        sqlite3_bind_int64(statement_, param_index,
-                           static_cast<sqlite3_int64>(bigint_val));
+        rc = sqlite3_bind_int64(statement_, param_index,
+                                static_cast<sqlite3_int64>(bigint_val));
       } else {
-        // BigInt too large, convert to text
-        std::string bigint_str =
-            param.As<Napi::BigInt>().ToString().Utf8Value();
-        sqlite3_bind_text(statement_, param_index, bigint_str.c_str(), -1,
-                          SQLITE_TRANSIENT);
+        // BigInt too large for SQLite int64 - throw error (matches Node.js)
+        node::THROW_ERR_INVALID_ARG_VALUE(Env(),
+                                          "BigInt value is too large to bind.");
+        return;
       }
     } else if (param.IsNumber()) {
       double val = param.As<Napi::Number>().DoubleValue();
       if (std::abs(val - std::floor(val)) <
               std::numeric_limits<double>::epsilon() &&
           val >= INT32_MIN && val <= INT32_MAX) {
-        sqlite3_bind_int(statement_, param_index,
-                         param.As<Napi::Number>().Int32Value());
+        rc = sqlite3_bind_int(statement_, param_index,
+                              param.As<Napi::Number>().Int32Value());
       } else {
-        sqlite3_bind_double(statement_, param_index,
-                            param.As<Napi::Number>().DoubleValue());
+        rc = sqlite3_bind_double(statement_, param_index,
+                                 param.As<Napi::Number>().DoubleValue());
       }
     } else if (param.IsString()) {
       std::string str = param.As<Napi::String>().Utf8Value();
-      sqlite3_bind_text(statement_, param_index, str.c_str(), -1,
-                        SQLITE_TRANSIENT);
+      rc = sqlite3_bind_text(statement_, param_index, str.c_str(), -1,
+                             SQLITE_TRANSIENT);
     } else if (param.IsBoolean()) {
-      sqlite3_bind_int(statement_, param_index,
-                       param.As<Napi::Boolean>().Value() ? 1 : 0);
+      rc = sqlite3_bind_int(statement_, param_index,
+                            param.As<Napi::Boolean>().Value() ? 1 : 0);
     } else if (param.IsDataView()) {
       // IMPORTANT: Check DataView BEFORE IsBuffer() because N-API's IsBuffer()
       // returns true for ALL ArrayBufferViews (including DataView), but
@@ -2134,47 +2452,66 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
       Napi::ArrayBuffer arrayBuffer = dataView.ArrayBuffer();
       size_t byteOffset = dataView.ByteOffset();
       size_t byteLength = dataView.ByteLength();
-
+      // Use non-NULL pointer for zero-length blobs to preserve BLOB vs NULL
+      // distinction. See: https://sqlite.org/c3ref/bind_blob.html
+      const void *data = nullptr;
       if (arrayBuffer.Data() != nullptr && byteLength > 0) {
-        const uint8_t *data =
-            static_cast<const uint8_t *>(arrayBuffer.Data()) + byteOffset;
-        sqlite3_bind_blob(statement_, param_index, data,
-                          SafeCastToInt(byteLength), SQLITE_TRANSIENT);
-      } else {
-        sqlite3_bind_null(statement_, param_index);
+        data = static_cast<const uint8_t *>(arrayBuffer.Data()) + byteOffset;
       }
+      rc = sqlite3_bind_blob(statement_, param_index, data ? data : "",
+                             SafeCastToInt(byteLength), SQLITE_TRANSIENT);
     } else if (param.IsBuffer()) {
       // Handles Buffer and TypedArray (both are ArrayBufferViews that work
       // correctly with Buffer cast - Buffer::Data() handles byte offsets
       // internally)
       Napi::Buffer<uint8_t> buffer = param.As<Napi::Buffer<uint8_t>>();
-      sqlite3_bind_blob(statement_, param_index, buffer.Data(),
-                        SafeCastToInt(buffer.Length()), SQLITE_TRANSIENT);
+      // Use non-NULL pointer for zero-length blobs to preserve BLOB vs NULL
+      // distinction. See: https://sqlite.org/c3ref/bind_blob.html
+      const void *data = buffer.Data();
+      rc = sqlite3_bind_blob(statement_, param_index, data ? data : "",
+                             SafeCastToInt(buffer.Length()), SQLITE_TRANSIENT);
     } else if (param.IsFunction()) {
-      // Functions cannot be stored in SQLite - bind as NULL
-      sqlite3_bind_null(statement_, param_index);
+      // Functions cannot be bound to SQLite parameters - throw error
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          Env(), ("Provided value cannot be bound to SQLite parameter " +
+                  std::to_string(param_index) + ".")
+                     .c_str());
+      return;
     } else if (param.IsArrayBuffer()) {
       // Handle ArrayBuffer as binary data
       Napi::ArrayBuffer arrayBuffer = param.As<Napi::ArrayBuffer>();
-      if (!arrayBuffer.IsEmpty() && arrayBuffer.Data() != nullptr) {
-        sqlite3_bind_blob(statement_, param_index, arrayBuffer.Data(),
-                          SafeCastToInt(arrayBuffer.ByteLength()),
-                          SQLITE_TRANSIENT);
-      } else {
-        sqlite3_bind_null(statement_, param_index);
-      }
+      // Use non-NULL pointer for zero-length blobs to preserve BLOB vs NULL
+      // distinction. See: https://sqlite.org/c3ref/bind_blob.html
+      const void *data = arrayBuffer.Data();
+      rc = sqlite3_bind_blob(statement_, param_index, data ? data : "",
+                             SafeCastToInt(arrayBuffer.ByteLength()),
+                             SQLITE_TRANSIENT);
     } else if (param.IsObject()) {
       // Objects and arrays cannot be bound to SQLite parameters (same as
       // Node.js behavior). Note: DataView, Buffer, TypedArray, and ArrayBuffer
       // are handled above and don't reach this branch.
-      throw Napi::Error::New(
-          Env(), "Provided value cannot be bound to SQLite parameter " +
-                     std::to_string(param_index) + ".");
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          Env(), ("Provided value cannot be bound to SQLite parameter " +
+                  std::to_string(param_index) + ".")
+                     .c_str());
+      return;
     } else {
-      // For any other type, throw error like Node.js does
-      throw Napi::Error::New(
-          Env(), "Provided value cannot be bound to SQLite parameter " +
-                     std::to_string(param_index) + ".");
+      // For any other type (Symbol, etc.), throw error like Node.js does
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          Env(), ("Provided value cannot be bound to SQLite parameter " +
+                  std::to_string(param_index) + ".")
+                     .c_str());
+      return;
+    }
+
+    // Check the result of sqlite3_bind_*
+    if (rc != SQLITE_OK) {
+      sqlite3 *db_handle = database_ ? database_->connection() : nullptr;
+      // Get the error message from SQLite
+      const char *err_msg = sqlite3_errstr(rc);
+      node::ThrowEnhancedSqliteError(Env(), db_handle, rc,
+                                     err_msg ? err_msg : "SQLite error");
+      return;
     }
   } catch (const Napi::Error &e) {
     // Re-throw Napi errors
@@ -2220,8 +2557,15 @@ Napi::Value StatementSync::CreateResult() {
           value = Napi::BigInt::New(env, static_cast<int64_t>(int_val));
         } else if (int_val > JS_MAX_SAFE_INTEGER ||
                    int_val < JS_MIN_SAFE_INTEGER) {
-          // Return BigInt for values outside JavaScript's safe integer range
-          value = Napi::BigInt::New(env, static_cast<int64_t>(int_val));
+          // Throw ERR_OUT_OF_RANGE for values outside safe integer range
+          // (matches Node.js behavior)
+          char error_msg[128];
+          snprintf(error_msg, sizeof(error_msg),
+                   "Value is too large to be represented as a JavaScript "
+                   "number: %" PRId64,
+                   static_cast<int64_t>(int_val));
+          node::THROW_ERR_OUT_OF_RANGE(env, error_msg);
+          return env.Undefined();
         } else {
           value = Napi::Number::New(env, static_cast<double>(int_val));
         }
@@ -2244,12 +2588,15 @@ Napi::Value StatementSync::CreateResult() {
         const void *blob_data = sqlite3_column_blob(statement_, i);
         int blob_size = sqlite3_column_bytes(statement_, i);
         // sqlite3_column_blob() can return NULL for zero-length BLOBs or on OOM
+        // Return Uint8Array to match Node.js node:sqlite behavior
         if (!blob_data || blob_size == 0) {
-          // Handle empty/NULL blob - create empty buffer
-          value = Napi::Buffer<uint8_t>::New(env, 0);
+          // Handle empty/NULL blob - create empty Uint8Array
+          auto array_buffer = Napi::ArrayBuffer::New(env, 0);
+          value = Napi::Uint8Array::New(env, 0, array_buffer, 0);
         } else {
-          value = Napi::Buffer<uint8_t>::Copy(
-              env, static_cast<const uint8_t *>(blob_data), blob_size);
+          auto array_buffer = Napi::ArrayBuffer::New(env, blob_size);
+          memcpy(array_buffer.Data(), blob_data, blob_size);
+          value = Napi::Uint8Array::New(env, blob_size, array_buffer, 0);
         }
         break;
       }
@@ -2263,8 +2610,8 @@ Napi::Value StatementSync::CreateResult() {
 
     return result;
   } else {
-    // Return result as object (default behavior)
-    Napi::Object result = Napi::Object::New(env);
+    // Return result as object with null prototype (matches Node.js behavior)
+    Napi::Object result = CreateObjectWithNullPrototype(env);
 
     for (int i = 0; i < column_count; i++) {
       const char *column_name = sqlite3_column_name(statement_, i);
@@ -2283,8 +2630,15 @@ Napi::Value StatementSync::CreateResult() {
           value = Napi::BigInt::New(env, static_cast<int64_t>(int_val));
         } else if (int_val > JS_MAX_SAFE_INTEGER ||
                    int_val < JS_MIN_SAFE_INTEGER) {
-          // Return BigInt for values outside JavaScript's safe integer range
-          value = Napi::BigInt::New(env, static_cast<int64_t>(int_val));
+          // Throw ERR_OUT_OF_RANGE for values outside safe integer range
+          // (matches Node.js behavior)
+          char error_msg[128];
+          snprintf(error_msg, sizeof(error_msg),
+                   "Value is too large to be represented as a JavaScript "
+                   "number: %" PRId64,
+                   static_cast<int64_t>(int_val));
+          node::THROW_ERR_OUT_OF_RANGE(env, error_msg);
+          return env.Undefined();
         } else {
           value = Napi::Number::New(env, static_cast<double>(int_val));
         }
@@ -2307,12 +2661,15 @@ Napi::Value StatementSync::CreateResult() {
         const void *blob_data = sqlite3_column_blob(statement_, i);
         int blob_size = sqlite3_column_bytes(statement_, i);
         // sqlite3_column_blob() can return NULL for zero-length BLOBs or on OOM
+        // Return Uint8Array to match Node.js node:sqlite behavior
         if (!blob_data || blob_size == 0) {
-          // Handle empty/NULL blob - create empty buffer
-          value = Napi::Buffer<uint8_t>::New(env, 0);
+          // Handle empty/NULL blob - create empty Uint8Array
+          auto array_buffer = Napi::ArrayBuffer::New(env, 0);
+          value = Napi::Uint8Array::New(env, 0, array_buffer, 0);
         } else {
-          value = Napi::Buffer<uint8_t>::Copy(
-              env, static_cast<const uint8_t *>(blob_data), blob_size);
+          auto array_buffer = Napi::ArrayBuffer::New(env, blob_size);
+          memcpy(array_buffer.Data(), blob_data, blob_size);
+          value = Napi::Uint8Array::New(env, blob_size, array_buffer, 0);
         }
         break;
       }
@@ -2346,7 +2703,8 @@ Napi::Object StatementSyncIterator::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func =
       DefineClass(env, "StatementSyncIterator",
                   {InstanceMethod("next", &StatementSyncIterator::Next),
-                   InstanceMethod("return", &StatementSyncIterator::Return)});
+                   InstanceMethod("return", &StatementSyncIterator::Return),
+                   InstanceMethod("toArray", &StatementSyncIterator::ToArray)});
 
   // Set up Symbol.iterator on the prototype to make it properly iterable
   Napi::Object prototype = func.Get("prototype").As<Napi::Object>();
@@ -2357,6 +2715,20 @@ Napi::Object StatementSyncIterator::Init(Napi::Env env, Napi::Object exports) {
                 Napi::Function::New(env, [](const Napi::CallbackInfo &info) {
                   return info.This();
                 }));
+
+  // Make our iterator inherit from Iterator.prototype so it's an instanceof
+  // Iterator and gets Iterator Helper methods (map, filter, etc.)
+  Napi::Object global = env.Global();
+  Napi::Value iteratorValue = global.Get("Iterator");
+  if (iteratorValue.IsFunction()) {
+    Napi::Object iteratorProto =
+        iteratorValue.As<Napi::Function>().Get("prototype").As<Napi::Object>();
+    // Use Object.setPrototypeOf to set Iterator.prototype as prototype
+    Napi::Object objectCtor = global.Get("Object").As<Napi::Object>();
+    Napi::Function setPrototypeOf =
+        objectCtor.Get("setPrototypeOf").As<Napi::Function>();
+    setPrototypeOf.Call({prototype, iteratorProto});
+  }
 
   // Store constructor in per-instance addon data instead of static variable
   AddonData *addon_data = GetAddonData(env);
@@ -2408,7 +2780,7 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
   }
 
   if (done_) {
-    Napi::Object result = Napi::Object::New(env);
+    Napi::Object result = CreateObjectWithNullPrototype(env);
     result.Set("done", true);
     result.Set("value", env.Null());
     return result;
@@ -2427,7 +2799,7 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
     sqlite3_reset(stmt_->statement_);
     done_ = true;
 
-    Napi::Object result = Napi::Object::New(env);
+    Napi::Object result = CreateObjectWithNullPrototype(env);
     result.Set("done", true);
     result.Set("value", env.Null());
     return result;
@@ -2436,7 +2808,7 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
   // Create row object using existing CreateResult method
   Napi::Value row_value = stmt_->CreateResult();
 
-  Napi::Object result = Napi::Object::New(env);
+  Napi::Object result = CreateObjectWithNullPrototype(env);
   result.Set("done", false);
   result.Set("value", row_value);
   return result;
@@ -2459,10 +2831,56 @@ Napi::Value StatementSyncIterator::Return(const Napi::CallbackInfo &info) {
   sqlite3_reset(stmt_->statement_);
   done_ = true;
 
-  Napi::Object result = Napi::Object::New(env);
+  Napi::Object result = CreateObjectWithNullPrototype(env);
   result.Set("done", true);
   result.Set("value", env.Null());
   return result;
+}
+
+Napi::Value StatementSyncIterator::ToArray(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!stmt_ || stmt_->finalized_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
+    return env.Undefined();
+  }
+
+  if (!stmt_->database_ || !stmt_->database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
+  Napi::Array arr = Napi::Array::New(env);
+  uint32_t idx = 0;
+
+  while (!done_) {
+    int r = sqlite3_step(stmt_->statement_);
+
+    if (r != SQLITE_ROW) {
+      if (r != SQLITE_DONE) {
+        node::THROW_ERR_SQLITE_ERROR(
+            env, sqlite3_errmsg(stmt_->database_->connection()));
+        return env.Undefined();
+      }
+
+      // End of results
+      sqlite3_reset(stmt_->statement_);
+      done_ = true;
+      break;
+    }
+
+    // Create row object using existing CreateResult method
+    Napi::Value row_value = stmt_->CreateResult();
+
+    // Check if CreateResult threw an error
+    if (env.IsExceptionPending()) {
+      return env.Undefined();
+    }
+
+    arr.Set(idx++, row_value);
+  }
+
+  return arr;
 }
 
 // Session Implementation
@@ -2537,11 +2955,10 @@ void Session::Delete() {
 
   // Remove ourselves from the database's session list BEFORE deleting
   // to avoid any potential issues with the database trying to access us
-  DatabaseSync *database = database_;
-  database_ = nullptr;
-
-  if (database) {
-    database->RemoveSession(this);
+  // Note: Keep database_ non-null so we can check if db is open vs session
+  // closed
+  if (database_) {
+    database_->RemoveSession(this);
   }
 
   // Now it's safe to delete the SQLite session
@@ -2552,12 +2969,20 @@ template <int (*sqliteChangesetFunc)(sqlite3_session *, int *, void **)>
 Napi::Value Session::GenericChangeset(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
+  // Check database first - if db was closed, that's the primary error
+  // Note: database_ is preserved in Delete(), so we can check IsOpen()
+  if (database_ && !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  // Then check if session was explicitly closed
   if (session_ == nullptr) {
     node::THROW_ERR_INVALID_STATE(env, "session is not open");
     return env.Undefined();
   }
 
-  if (!database_ || !database_->IsOpen()) {
+  if (!database_) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
@@ -2574,14 +2999,14 @@ Napi::Value Session::GenericChangeset(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  // Create a Buffer from the changeset data
-  Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::New(env, nChangeset);
-  std::memcpy(buffer.Data(), pChangeset, nChangeset);
+  // Create a Uint8Array from the changeset data (matches node:sqlite API)
+  Napi::ArrayBuffer arrayBuffer = Napi::ArrayBuffer::New(env, nChangeset);
+  std::memcpy(arrayBuffer.Data(), pChangeset, nChangeset);
 
   // Free the changeset allocated by SQLite
   sqlite3_free(pChangeset);
 
-  return buffer;
+  return Napi::Uint8Array::New(env, nChangeset, arrayBuffer, 0);
 }
 
 Napi::Value Session::Changeset(const Napi::CallbackInfo &info) {
@@ -2595,8 +3020,21 @@ Napi::Value Session::Patchset(const Napi::CallbackInfo &info) {
 Napi::Value Session::Close(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
+  // Check database first - if db was closed, that's the primary error
+  // Note: database_ is preserved in Delete(), so we can check IsOpen()
+  if (database_ && !database_->IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  // Then check if session was explicitly closed
   if (session_ == nullptr) {
     node::THROW_ERR_INVALID_STATE(env, "session is not open");
+    return env.Undefined();
+  }
+
+  if (!database_) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 
@@ -2654,7 +3092,8 @@ void BackupJob::Execute(const ExecutionProgress &progress) {
       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, nullptr);
 
   if (backup_status_ != SQLITE_OK) {
-    SetError("Failed to open destination database");
+    // Use SQLite's actual error message
+    SetError(sqlite3_errmsg(dest_));
     return;
   }
 
@@ -2663,39 +3102,42 @@ void BackupJob::Execute(const ExecutionProgress &progress) {
                                 source_db_.c_str());
 
   if (!backup_) {
-    SetError("Failed to initialize backup");
+    // Use SQLite's actual error message from destination db
+    // (sqlite3_backup_init errors are stored in the dest db handle)
+    SetError(sqlite3_errmsg(dest_));
     return;
   }
 
   // Initial page count may be 0 until first step
-  int remaining_pages = sqlite3_backup_remaining(backup_);
   total_pages_ = 0; // Will be updated after first step
+  bool is_first_step = true;
 
-  while ((remaining_pages > 0 || total_pages_ == 0) &&
-         backup_status_ == SQLITE_OK) {
+  while (backup_status_ == SQLITE_OK) {
     // If pages_ is negative, use -1 to copy all remaining pages
     int pages_to_copy = pages_ < 0 ? -1 : pages_;
     backup_status_ = sqlite3_backup_step(backup_, pages_to_copy);
 
     // Update total pages after first step (when SQLite knows the actual count)
-    if (total_pages_ == 0) {
+    if (is_first_step) {
       total_pages_ = sqlite3_backup_pagecount(backup_);
+      is_first_step = false;
     }
 
-    if (backup_status_ == SQLITE_OK || backup_status_ == SQLITE_DONE) {
-      remaining_pages = sqlite3_backup_remaining(backup_);
+    if (backup_status_ == SQLITE_OK) {
+      // More steps remaining - send progress update
+      int remaining_pages = sqlite3_backup_remaining(backup_);
       int current_page = total_pages_ - remaining_pages;
 
       // Send progress update to main thread
-      if (!progress_func_.IsEmpty() && total_pages_ > 0) {
+      // Node.js only calls progress when there are still pages remaining
+      if (!progress_func_.IsEmpty() && total_pages_ > 0 &&
+          remaining_pages > 0) {
         BackupProgress prog = {current_page, total_pages_};
         progress.Send(&prog, 1);
       }
-
-      // Check if we're done
-      if (backup_status_ == SQLITE_DONE) {
-        break;
-      }
+    } else if (backup_status_ == SQLITE_DONE) {
+      // Backup complete - don't send progress for remaining:0
+      break;
     } else if (backup_status_ == SQLITE_BUSY ||
                backup_status_ == SQLITE_LOCKED) {
       // These are retryable errors - continue
@@ -2708,15 +3150,14 @@ void BackupJob::Execute(const ExecutionProgress &progress) {
 
   // Store final status for use in OnOK/OnError
   if (backup_status_ != SQLITE_DONE) {
-    std::string error = "Backup failed with SQLite error: ";
-    error += sqlite3_errmsg(dest_);
-    SetError(error);
+    // Use SQLite's actual error message (matches Node.js behavior)
+    SetError(sqlite3_errmsg(dest_));
   }
 }
 
 void BackupJob::OnProgress(const BackupProgress *data, size_t count) {
   // This runs on the main thread
-  if (!progress_func_.IsEmpty() && count > 0) {
+  if (!progress_func_.IsEmpty() && count > 0 && !progress_error_.has_value()) {
     Napi::HandleScope scope(Env());
     Napi::Function progress_fn = progress_func_.Value();
     Napi::Object progress_info = Napi::Object::New(Env());
@@ -2726,8 +3167,12 @@ void BackupJob::OnProgress(const BackupProgress *data, size_t count) {
 
     try {
       progress_fn.Call(Env().Null(), {progress_info});
+    } catch (const Napi::Error &e) {
+      // Capture error from progress callback - backup should fail with this
+      progress_error_ = e.Message();
     } catch (...) {
-      // Ignore errors in progress callback
+      // Unknown error
+      progress_error_ = "Unknown error in progress callback";
     }
   }
 }
@@ -2738,6 +3183,13 @@ void BackupJob::OnOK() {
 
   // Cleanup SQLite resources
   Cleanup();
+
+  // If progress callback threw an error, reject with that error
+  if (progress_error_.has_value()) {
+    Napi::Error error = Napi::Error::New(Env(), progress_error_.value());
+    deferred_.Reject(error.Value());
+    return;
+  }
 
   // Resolve the promise with the total number of pages
   deferred_.Resolve(Napi::Number::New(Env(), total_pages_));
@@ -2764,7 +3216,19 @@ void BackupJob::OnError(const Napi::Error &error) {
 
   // Use saved values for error details (matching node:sqlite property names)
   if (saved_status != SQLITE_OK && saved_status != SQLITE_DONE) {
-    Napi::Error detailed_error = Napi::Error::New(Env(), error.Message());
+    // Prefer the detailed error message from sqlite3_errmsg(dest_) if it's
+    // useful, otherwise fall back to sqlite3_errstr(status) which is the
+    // generic message. sqlite3_errmsg can return "not an error" if the error
+    // wasn't stored in dest.
+    std::string err_message;
+    if (!saved_errmsg.empty() && saved_errmsg != "not an error") {
+      err_message = saved_errmsg;
+    } else {
+      err_message = sqlite3_errstr(saved_status);
+    }
+
+    Napi::Error detailed_error = Napi::Error::New(Env(), err_message);
+    detailed_error.Set("code", Napi::String::New(Env(), "ERR_SQLITE_ERROR"));
     detailed_error.Set("errcode", Napi::Number::New(Env(), saved_status));
     detailed_error.Set("errstr",
                        Napi::String::New(Env(), sqlite3_errstr(saved_status)));
@@ -2790,29 +3254,24 @@ void BackupJob::Cleanup() {
 }
 
 // DatabaseSync::Backup implementation
+// Note: Validation errors are thrown synchronously (matching Node.js behavior).
+// Only the actual backup operation returns a promise.
 Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  // Create a promise early for error handling
-  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
-
+  // Validation errors throw synchronously (matching Node.js behavior)
   if (!IsOpen()) {
-    deferred.Reject(Napi::Error::New(env, "database is not open").Value());
-    return deferred.Promise();
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
   }
 
-  if (info.Length() < 1) {
-    deferred.Reject(
-        Napi::TypeError::New(env, "The \"destination\" argument is required")
-            .Value());
-    return deferred.Promise();
-  }
-
-  std::optional<std::string> destination_path =
-      ValidateDatabasePath(env, info[0], "destination");
-  if (!destination_path.has_value()) {
-    deferred.Reject(Napi::Error::New(env, "Invalid destination path").Value());
-    return deferred.Promise();
+  // ValidateDatabasePath throws synchronously with ERR_INVALID_ARG_TYPE
+  // Use "path" as argument name to match Node.js
+  std::optional<std::string> dest_path =
+      ValidateDatabasePath(env, info[0], "path");
+  if (!dest_path.has_value()) {
+    // Exception already thrown by ValidateDatabasePath
+    return env.Undefined();
   }
 
   // Default options matching Node.js API
@@ -2824,10 +3283,9 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
   // Parse options if provided
   if (info.Length() > 1) {
     if (!info[1].IsObject()) {
-      deferred.Reject(Napi::TypeError::New(
-                          env, "The \"options\" argument must be an object")
-                          .Value());
-      return deferred.Promise();
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"options\" argument must be an object.");
+      return env.Undefined();
     }
 
     Napi::Object options = info[1].As<Napi::Object>();
@@ -2835,11 +3293,17 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
     // Get rate option (number of pages per step)
     Napi::Value rate_value = options.Get("rate");
     if (!rate_value.IsUndefined()) {
+      // Check if it's a number and an integer (not fractional)
       if (!rate_value.IsNumber()) {
-        deferred.Reject(
-            Napi::TypeError::New(env, "The \"options.rate\" must be a number")
-                .Value());
-        return deferred.Promise();
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.rate\" argument must be an integer.");
+        return env.Undefined();
+      }
+      double rate_double = rate_value.As<Napi::Number>().DoubleValue();
+      if (rate_double != std::trunc(rate_double)) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.rate\" argument must be an integer.");
+        return env.Undefined();
       }
       rate = rate_value.As<Napi::Number>().Int32Value();
       // Note: Node.js allows negative values for rate
@@ -2849,10 +3313,9 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
     Napi::Value source_value = options.Get("source");
     if (!source_value.IsUndefined()) {
       if (!source_value.IsString()) {
-        deferred.Reject(
-            Napi::TypeError::New(env, "The \"options.source\" must be a string")
-                .Value());
-        return deferred.Promise();
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.source\" argument must be a string.");
+        return env.Undefined();
       }
       source_db = source_value.As<Napi::String>().Utf8Value();
     }
@@ -2861,10 +3324,9 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
     Napi::Value target_value = options.Get("target");
     if (!target_value.IsUndefined()) {
       if (!target_value.IsString()) {
-        deferred.Reject(
-            Napi::TypeError::New(env, "The \"options.target\" must be a string")
-                .Value());
-        return deferred.Promise();
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.target\" argument must be a string.");
+        return env.Undefined();
       }
       target_db = target_value.As<Napi::String>().Utf8Value();
     }
@@ -2873,17 +3335,19 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
     Napi::Value progress_value = options.Get("progress");
     if (!progress_value.IsUndefined()) {
       if (!progress_value.IsFunction()) {
-        deferred.Reject(Napi::TypeError::New(
-                            env, "The \"options.progress\" must be a function")
-                            .Value());
-        return deferred.Promise();
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.progress\" argument must be a function.");
+        return env.Undefined();
       }
       progress_func = progress_value.As<Napi::Function>();
     }
   }
 
+  // Create promise for async backup operation
+  Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
+
   // Create and schedule backup job
-  BackupJob *job = new BackupJob(env, this, std::move(destination_path).value(),
+  BackupJob *job = new BackupJob(env, this, std::move(dest_path).value(),
                                  std::move(source_db), std::move(target_db),
                                  rate, progress_func, deferred);
 
@@ -2990,7 +3454,7 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     if (int_result != SQLITE_OK && int_result != SQLITE_DENY &&
         int_result != SQLITE_IGNORE) {
       db->SetDeferredAuthorizerException(
-          "Authorizer callback returned an invalid authorization code");
+          "Authorizer callback returned a invalid authorization code");
       db->SetIgnoreNextSQLiteError(true);
       return SQLITE_DENY;
     }

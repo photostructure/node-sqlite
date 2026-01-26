@@ -43,7 +43,13 @@ struct AddonData {
   Napi::FunctionReference statementSyncConstructor;
   Napi::FunctionReference statementSyncIteratorConstructor;
   Napi::FunctionReference sessionConstructor;
+
+  // Cached Object.create function for creating objects with null prototype
+  Napi::FunctionReference objectCreateFn;
 };
+
+// Helper to create an object with null prototype (matches Node.js behavior)
+Napi::Object CreateObjectWithNullPrototype(Napi::Env env);
 
 // Worker thread support functions
 void RegisterDatabaseInstance(Napi::Env env, DatabaseSync *database);
@@ -103,6 +109,9 @@ public:
   bool get_enable_defensive() const { return defensive_; }
   void set_enable_defensive(bool flag) { defensive_ = flag; }
 
+  bool get_open_uri() const { return open_uri_; }
+  void set_open_uri(bool flag) { open_uri_ = flag; }
+
 private:
   std::string location_;
   bool read_only_ = false;
@@ -113,7 +122,8 @@ private:
   bool return_arrays_ = false;
   bool allow_bare_named_params_ = true;
   bool allow_unknown_named_params_ = false;
-  bool defensive_ = false;
+  bool defensive_ = true; // Node.js v25+ defaults to true
+  bool open_uri_ = false;
 };
 
 // Main database class
@@ -287,6 +297,7 @@ private:
   std::optional<std::map<std::string, std::string>> bare_named_params_;
 
   bool ValidateThread(Napi::Env env) const;
+  friend class DatabaseSync;
   friend class StatementSyncIterator;
 };
 
@@ -302,6 +313,7 @@ public:
   // Iterator methods
   Napi::Value Next(const Napi::CallbackInfo &info);
   Napi::Value Return(const Napi::CallbackInfo &info);
+  Napi::Value ToArray(const Napi::CallbackInfo &info);
 
 private:
   void SetStatement(StatementSync *stmt);
@@ -380,6 +392,9 @@ private:
 
   Napi::FunctionReference progress_func_;
   Napi::Promise::Deferred deferred_;
+
+  // Error from progress callback (set on main thread, checked in OnOK)
+  std::optional<std::string> progress_error_;
 
   static std::atomic<int> active_jobs_;
   static std::mutex active_jobs_mutex_;

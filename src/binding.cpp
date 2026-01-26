@@ -30,6 +30,9 @@ void CleanupAddonData([[maybe_unused]] napi_env env, void *finalize_data,
   if (!addon_data->sessionConstructor.IsEmpty()) {
     addon_data->sessionConstructor.Reset();
   }
+  if (!addon_data->objectCreateFn.IsEmpty()) {
+    addon_data->objectCreateFn.Reset();
+  }
 
   delete addon_data;
 }
@@ -74,6 +77,13 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
         .ThrowAsJavaScriptException();
     return exports;
   }
+
+  // Cache Object.create for creating objects with null prototype
+  Napi::Object global_object = env.Global().Get("Object").As<Napi::Object>();
+  Napi::Function object_create =
+      global_object.Get("create").As<Napi::Function>();
+  addon_data->objectCreateFn =
+      Napi::Reference<Napi::Function>::New(object_create);
 
   DatabaseSync::Init(env, exports);
   StatementSync::Init(env, exports);
@@ -217,18 +227,16 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
           }
         }
         if (db == nullptr) {
-          Napi::TypeError::New(
-              env, "The \"sourceDb\" argument must be a DatabaseSync object")
-              .ThrowAsJavaScriptException();
+          Napi::TypeError error = Napi::TypeError::New(
+              env, "The \"sourceDb\" argument must be an object.");
+          error.Set("code", Napi::String::New(env, "ERR_INVALID_ARG_TYPE"));
+          error.ThrowAsJavaScriptException();
           return env.Undefined();
         }
 
-        // Validate destination path is provided
-        if (info.Length() < 2) {
-          Napi::TypeError::New(env, "The \"destination\" argument is required")
-              .ThrowAsJavaScriptException();
-          return env.Undefined();
-        }
+        // Validate path is provided and valid - delegates to
+        // ValidateDatabasePath which will throw ERR_INVALID_ARG_TYPE with the
+        // proper message
 
         // Delegate to instance method: db.backup(destination, options?)
         std::vector<napi_value> args;

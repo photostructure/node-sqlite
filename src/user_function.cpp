@@ -1,11 +1,16 @@
 #include "user_function.h"
 
+#include <cinttypes>
 #include <climits>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 
+#include "shims/node_errors.h"
 #include "sqlite_impl.h"
+
+// Maximum safe integer for JavaScript numbers (2^53 - 1)
+static constexpr int64_t kMaxSafeJsInteger = 9007199254740991LL;
 
 namespace photostructure::sqlite {
 
@@ -57,73 +62,78 @@ void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
 
   UserDefinedFunction *self = static_cast<UserDefinedFunction *>(user_data);
 
+  Napi::HandleScope scope(self->env_);
+  Napi::CallbackScope callback_scope(self->env_, self->async_context_);
+
+  // Check if function reference is still valid
+  if (self->fn_.IsEmpty()) {
+    sqlite3_result_error(ctx, "Function reference is no longer valid", -1);
+    return;
+  }
+
+  Napi::Value fn_value;
   try {
-    Napi::HandleScope scope(self->env_);
-    Napi::CallbackScope callback_scope(self->env_, self->async_context_);
-
-    // Check if function reference is still valid
-    if (self->fn_.IsEmpty()) {
-      sqlite3_result_error(ctx, "Function reference is no longer valid", -1);
-      return;
-    }
-
-    Napi::Value fn_value;
-    try {
-      fn_value = self->fn_.Value();
-    } catch (const Napi::Error &e) {
-      sqlite3_result_error(ctx, "Failed to retrieve function reference", -1);
-      return;
-    }
-
-    // Additional check for function validity
-    if (!fn_value.IsFunction()) {
-      sqlite3_result_error(ctx, "Invalid function reference - not a function",
-                           -1);
-      return;
-    }
-
-    Napi::Function fn = fn_value.As<Napi::Function>();
-
-    // Convert SQLite arguments to JavaScript values
-    std::vector<napi_value> js_args;
-    js_args.reserve(argc);
-
-    for (int i = 0; i < argc; i++) {
-      Napi::Value js_val = self->SqliteValueToJS(argv[i]);
-      js_args.push_back(js_val);
-    }
-
-    // Call the JavaScript function with safer exception handling
-    napi_value js_result;
-    napi_value js_func = fn;
-    napi_value this_arg = self->env_.Undefined();
-
-    napi_status status =
-        napi_call_function(self->env_, this_arg, js_func, js_args.size(),
-                           js_args.data(), &js_result);
-
-    if (status != napi_ok || self->env_.IsExceptionPending()) {
-      // Handle JavaScript exception by setting a generic SQLite error
-      if (self->env_.IsExceptionPending()) {
-        sqlite3_result_error(ctx, "JavaScript exception in user function", -1);
-      } else {
-        sqlite3_result_error(ctx, "Failed to call user function", -1);
-      }
-      return;
-    }
-
-    Napi::Value result(self->env_, js_result);
-
-    // Convert result back to SQLite
-    self->JSValueToSqliteResult(ctx, result);
-
+    fn_value = self->fn_.Value();
   } catch (const Napi::Error &e) {
-    // Handle JavaScript errors by setting a generic SQLite error
-    sqlite3_result_error(ctx, "JavaScript exception in user function", -1);
-  } catch (const std::exception &e) {
-    sqlite3_result_error(ctx, e.what(), -1);
-  } catch (...) {
-    sqlite3_result_error(ctx, "Unknown error in user-defined function", -1);
+    sqlite3_result_error(ctx, "Failed to retrieve function reference", -1);
+    return;
+  }
+
+  // Additional check for function validity
+  if (!fn_value.IsFunction()) {
+    sqlite3_result_error(ctx, "Invalid function reference - not a function",
+                         -1);
+    return;
+  }
+
+  Napi::Function fn = fn_value.As<Napi::Function>();
+
+  // Convert SQLite arguments to JavaScript values
+  std::vector<napi_value> js_args;
+  js_args.reserve(argc);
+
+  for (int i = 0; i < argc; i++) {
+    Napi::Value js_val = self->SqliteValueToJS(argv[i]);
+
+    // Check if SqliteValueToJS threw an exception (e.g., ERR_OUT_OF_RANGE)
+    if (self->env_.IsExceptionPending()) {
+      // Ignore the SQLite error because a JavaScript exception is pending
+      self->db_->SetIgnoreNextSQLiteError(true);
+      sqlite3_result_error(ctx, "", 0);
+      return;
+    }
+
+    js_args.push_back(js_val);
+  }
+
+  // Call the JavaScript function
+  napi_value js_result;
+  napi_value js_func = fn;
+  napi_value this_arg = self->env_.Undefined();
+
+  napi_status status =
+      napi_call_function(self->env_, this_arg, js_func, js_args.size(),
+                         js_args.data(), &js_result);
+
+  if (status != napi_ok || self->env_.IsExceptionPending()) {
+    // JavaScript exception is pending - let it propagate
+    // Ignore the SQLite error because the JavaScript exception takes precedence
+    self->db_->SetIgnoreNextSQLiteError(true);
+    sqlite3_result_error(ctx, "", 0);
+    return;
+  }
+
+  Napi::Value result(self->env_, js_result);
+
+  // Convert result back to SQLite
+  self->JSValueToSqliteResult(ctx, result);
+
+  // Check if JSValueToSqliteResult threw an exception (e.g., ERR_OUT_OF_RANGE)
+  if (self->env_.IsExceptionPending()) {
+    // Ignore the SQLite error because a JavaScript exception is pending
+    self->db_->SetIgnoreNextSQLiteError(true);
+    sqlite3_result_error(ctx, "", 0);
+    return;
   }
 }
 
@@ -140,19 +150,18 @@ Napi::Value UserDefinedFunction::SqliteValueToJS(sqlite3_value *value) {
 
     if (use_bigint_args_) {
       return Napi::BigInt::New(env_, static_cast<int64_t>(int_val));
-    } else if (int_val >= INT32_MIN && int_val <= INT32_MAX) {
-      return Napi::Number::New(env_, static_cast<int32_t>(int_val));
-    } else {
-      // Large integers that don't fit in int32 but aren't using BigInt
-      // Check if the value can be safely represented as a JavaScript number
-      if (int_val < -0x1FFFFFFFFFFFFF || int_val > 0x1FFFFFFFFFFFFF) {
-        // Value is outside safe integer range for JavaScript numbers
-        std::string error_msg =
-            "Value is too large to be represented as a JavaScript number: " +
-            std::to_string(int_val);
-        throw std::runtime_error(error_msg);
-      }
+    } else if (std::abs(int_val) <= kMaxSafeJsInteger) {
       return Napi::Number::New(env_, static_cast<double>(int_val));
+    } else {
+      // Value is outside safe integer range for JavaScript numbers
+      // Throw ERR_OUT_OF_RANGE directly - we're in a valid N-API context
+      char error_msg[128];
+      snprintf(error_msg, sizeof(error_msg),
+               "Value is too large to be represented as a JavaScript number: "
+               "%" PRId64,
+               static_cast<int64_t>(int_val));
+      node::THROW_ERR_OUT_OF_RANGE(env_, error_msg);
+      return env_.Undefined(); // Return undefined, exception is pending
     }
   }
 
@@ -170,11 +179,14 @@ Napi::Value UserDefinedFunction::SqliteValueToJS(sqlite3_value *value) {
   case SQLITE_BLOB: {
     const void *blob = sqlite3_value_blob(value);
     int bytes = sqlite3_value_bytes(value);
+    // Return Uint8Array to match Node.js node:sqlite behavior
     if (blob && bytes > 0) {
-      return Napi::Buffer<uint8_t>::Copy(
-          env_, static_cast<const uint8_t *>(blob), static_cast<size_t>(bytes));
+      auto array_buffer = Napi::ArrayBuffer::New(env_, bytes);
+      memcpy(array_buffer.Data(), blob, bytes);
+      return Napi::Uint8Array::New(env_, bytes, array_buffer, 0);
     } else {
-      return Napi::Buffer<uint8_t>::New(env_, 0);
+      auto array_buffer = Napi::ArrayBuffer::New(env_, 0);
+      return Napi::Uint8Array::New(env_, 0, array_buffer, 0);
     }
   }
 
@@ -189,48 +201,15 @@ void UserDefinedFunction::JSValueToSqliteResult(sqlite3_context *ctx,
   if (value.IsNull() || value.IsUndefined()) {
     sqlite3_result_null(ctx);
   } else if (value.IsBoolean()) {
-    // Check boolean BEFORE number, since boolean values can also be numbers
-    bool bool_val = value.As<Napi::Boolean>().Value();
-    sqlite3_result_int(ctx, bool_val ? 1 : 0);
-  } else if (value.IsBigInt()) {
-    // Check BigInt BEFORE number to handle large integers properly
-    bool lossless;
-    int64_t bigint_val = value.As<Napi::BigInt>().Int64Value(&lossless);
-    if (lossless) {
-      sqlite3_result_int64(ctx, static_cast<sqlite3_int64>(bigint_val));
-    } else {
-      // BigInt too large, convert to text representation
-      std::string bigint_str = value.As<Napi::BigInt>().ToString().Utf8Value();
-      try {
-        sqlite3_result_text(ctx, bigint_str.c_str(),
-                            SafeCastToInt(bigint_str.length()),
-                            SQLITE_TRANSIENT);
-      } catch (const std::overflow_error &) {
-        sqlite3_result_error(ctx, "BigInt string representation too long", -1);
-      }
-    }
+    // Extension over Node.js: Convert booleans to 0/1
+    sqlite3_result_int(ctx, value.As<Napi::Boolean>().Value() ? 1 : 0);
   } else if (value.IsNumber()) {
-    double num_val = value.As<Napi::Number>().DoubleValue();
-
-    // Check if it's an integer value
-    // Note: We cast INT64_MIN/MAX to double to avoid implicit conversion
-    // warnings
-    if (std::abs(num_val - std::floor(num_val)) <
-            std::numeric_limits<double>::epsilon() &&
-        num_val >= static_cast<double>(INT64_MIN) &&
-        num_val <= static_cast<double>(INT64_MAX)) {
-      sqlite3_result_int64(ctx, static_cast<sqlite3_int64>(num_val));
-    } else {
-      sqlite3_result_double(ctx, num_val);
-    }
+    // Match Node.js: numbers are stored as doubles
+    sqlite3_result_double(ctx, value.As<Napi::Number>().DoubleValue());
   } else if (value.IsString()) {
     std::string str_val = value.As<Napi::String>().Utf8Value();
-    try {
-      sqlite3_result_text(ctx, str_val.c_str(), SafeCastToInt(str_val.length()),
-                          SQLITE_TRANSIENT);
-    } catch (const std::overflow_error &) {
-      sqlite3_result_error(ctx, "String value too long", -1);
-    }
+    sqlite3_result_text(ctx, str_val.c_str(),
+                        static_cast<int>(str_val.length()), SQLITE_TRANSIENT);
   } else if (value.IsDataView()) {
     // IMPORTANT: Check DataView BEFORE IsBuffer() because N-API's IsBuffer()
     // returns true for ALL ArrayBufferViews (including DataView), but
@@ -244,33 +223,41 @@ void UserDefinedFunction::JSValueToSqliteResult(sqlite3_context *ctx,
     if (arrayBuffer.Data() != nullptr && byteLength > 0) {
       const uint8_t *data =
           static_cast<const uint8_t *>(arrayBuffer.Data()) + byteOffset;
-      try {
-        sqlite3_result_blob(ctx, data, SafeCastToInt(byteLength),
-                            SQLITE_TRANSIENT);
-      } catch (const std::overflow_error &) {
-        sqlite3_result_error(ctx, "DataView too large", -1);
-      }
+      sqlite3_result_blob(ctx, data, static_cast<int>(byteLength),
+                          SQLITE_TRANSIENT);
     } else {
       sqlite3_result_zeroblob(ctx, 0);
     }
-  } else if (value.IsBuffer()) {
-    // Handles both Node.js Buffer and TypedArrays (Uint8Array, etc.)
-    Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
-    try {
-      sqlite3_result_blob(ctx, buffer.Data(), SafeCastToInt(buffer.Length()),
-                          SQLITE_TRANSIENT);
-    } catch (const std::overflow_error &) {
-      sqlite3_result_error(ctx, "Buffer too large", -1);
+  } else if (value.IsTypedArray()) {
+    // Handles Uint8Array and other TypedArrays (but not DataView, handled
+    // above)
+    Napi::TypedArray arr = value.As<Napi::TypedArray>();
+    Napi::ArrayBuffer buf = arr.ArrayBuffer();
+    sqlite3_result_blob(
+        ctx, static_cast<const uint8_t *>(buf.Data()) + arr.ByteOffset(),
+        static_cast<int>(arr.ByteLength()), SQLITE_TRANSIENT);
+  } else if (value.IsBigInt()) {
+    // Check BigInt - must fit in int64
+    bool lossless;
+    int64_t bigint_val = value.As<Napi::BigInt>().Int64Value(&lossless);
+    if (!lossless) {
+      // BigInt too large for SQLite - throw ERR_OUT_OF_RANGE
+      node::THROW_ERR_OUT_OF_RANGE(
+          env_,
+          "BigInt value is too large to be represented as a SQLite integer");
+      return;
     }
+    sqlite3_result_int64(ctx, static_cast<sqlite3_int64>(bigint_val));
+  } else if (value.IsPromise()) {
+    // Promises are not supported - must use sqlite3_result_error for this one
+    // because it's an ERR_SQLITE_ERROR per the test expectations
+    sqlite3_result_error(
+        ctx, "Asynchronous user-defined functions are not supported", -1);
   } else {
-    // For any other type, convert to string
-    std::string str_val = value.ToString().Utf8Value();
-    try {
-      sqlite3_result_text(ctx, str_val.c_str(), SafeCastToInt(str_val.length()),
-                          SQLITE_TRANSIENT);
-    } catch (const std::overflow_error &) {
-      sqlite3_result_error(ctx, "Converted string value too long", -1);
-    }
+    // Unsupported type - must use sqlite3_result_error
+    sqlite3_result_error(
+        ctx, "Returned JavaScript value cannot be converted to a SQLite value",
+        -1);
   }
 }
 

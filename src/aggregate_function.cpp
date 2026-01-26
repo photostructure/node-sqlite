@@ -1,12 +1,17 @@
 #include "aggregate_function.h"
 
+#include <cinttypes>
 #include <cmath>
 #include <cstring>
 #include <limits>
 #include <unordered_map>
 #include <vector>
 
+#include "shims/node_errors.h"
 #include "sqlite_impl.h"
+
+// Maximum safe integer for JavaScript numbers (2^53 - 1)
+static constexpr int64_t kMaxSafeJsInteger = 9007199254740991LL;
 
 namespace photostructure::sqlite {
 
@@ -47,13 +52,13 @@ void ValueStorage::Remove(int32_t id) {
   }
 }
 
-CustomAggregate::CustomAggregate(Napi::Env env,
-                                 [[maybe_unused]] DatabaseSync *db,
+CustomAggregate::CustomAggregate(Napi::Env env, DatabaseSync *db,
                                  bool use_bigint_args, Napi::Value start,
                                  Napi::Function step_fn,
                                  Napi::Function inverse_fn,
                                  Napi::Function result_fn)
-    : env_(env), use_bigint_args_(use_bigint_args), async_context_(nullptr) {
+    : env_(env), db_(db), use_bigint_args_(use_bigint_args),
+      async_context_(nullptr) {
   // Handle start value based on type
   if (start.IsNull()) {
     start_type_ = PRIMITIVE_NULL;
@@ -177,7 +182,25 @@ void CustomAggregate::xStepBase(
 
   if (!state->is_initialized) {
     // Initialize with the proper start value
-    Napi::Value start_val = self->GetStartValue();
+    Napi::Value start_val;
+
+    // If start is a function, call it to get the initial value
+    if (self->start_type_ == FUNCTION) {
+      Napi::Function start_func = self->start_fn_.Value();
+      napi_value result;
+      napi_status status = napi_call_function(
+          self->env_, self->env_.Undefined(), start_func, 0, nullptr, &result);
+
+      if (status != napi_ok || self->env_.IsExceptionPending()) {
+        // JavaScript exception is pending - let it propagate
+        self->db_->SetIgnoreNextSQLiteError(true);
+        sqlite3_result_error(ctx, "", 0);
+        return;
+      }
+      start_val = Napi::Value(self->env_, result);
+    } else {
+      start_val = self->GetStartValue();
+    }
 
     // Store the start value in the appropriate type
     if (start_val.IsNumber()) {
@@ -205,9 +228,9 @@ void CustomAggregate::xStepBase(
           std::min(buffer.Length(), sizeof(state->string_buffer) - 1);
       memcpy(state->string_buffer, buffer.Data(), copy_len);
       state->string_length = copy_len;
-    } else if (start_val.IsObject() && !start_val.IsArray() &&
+    } else if ((start_val.IsObject() || start_val.IsArray()) &&
                !start_val.IsBuffer()) {
-      // Store objects as JSON strings
+      // Store objects and arrays as JSON strings
       state->type = AggregateValue::OBJECT_JSON;
       // Use JSON.stringify to serialize the object
       std::string json_str = SafeJsonStringify(self->env_, start_val);
@@ -229,6 +252,7 @@ void CustomAggregate::xStepBase(
     }
 
     state->is_initialized = true;
+    state->xvalue_called = false;
   }
 
   // Get the JavaScript function
@@ -258,11 +282,17 @@ void CustomAggregate::xStepBase(
   case AggregateValue::BOOLEAN:
     current_value = Napi::Boolean::New(self->env_, state->bool_value);
     break;
-  case AggregateValue::BUFFER:
-    current_value = Napi::Buffer<uint8_t>::Copy(
-        self->env_, reinterpret_cast<const uint8_t *>(state->string_buffer),
-        state->string_length);
+  case AggregateValue::BUFFER: {
+    // Return Uint8Array to match Node.js node:sqlite behavior
+    auto array_buffer =
+        Napi::ArrayBuffer::New(self->env_, state->string_length);
+    if (state->string_length > 0) {
+      memcpy(array_buffer.Data(), state->string_buffer, state->string_length);
+    }
+    current_value = Napi::Uint8Array::New(self->env_, state->string_length,
+                                          array_buffer, 0);
     break;
+  }
   case AggregateValue::OBJECT_JSON: {
     // Parse JSON back to object using JSON.parse
     try {
@@ -288,7 +318,17 @@ void CustomAggregate::xStepBase(
 
   // Convert SQLite values to JavaScript
   for (int i = 0; i < argc; ++i) {
-    js_args.push_back(self->SqliteValueToJS(argv[i]));
+    Napi::Value js_val = self->SqliteValueToJS(argv[i]);
+
+    // Check if SqliteValueToJS threw an exception (e.g., ERR_OUT_OF_RANGE)
+    if (self->env_.IsExceptionPending()) {
+      // Ignore the SQLite error because a JavaScript exception is pending
+      self->db_->SetIgnoreNextSQLiteError(true);
+      sqlite3_result_error(ctx, "", 0);
+      return;
+    }
+
+    js_args.push_back(js_val);
   }
 
   // Convert to napi_value array
@@ -303,8 +343,10 @@ void CustomAggregate::xStepBase(
       napi_call_function(self->env_, self->env_.Undefined(), func,
                          raw_args.size(), raw_args.data(), &result);
 
-  if (status != napi_ok) {
-    sqlite3_result_error(ctx, "Error calling aggregate step function", -1);
+  if (status != napi_ok || self->env_.IsExceptionPending()) {
+    // JavaScript exception is pending - let it propagate
+    self->db_->SetIgnoreNextSQLiteError(true);
+    sqlite3_result_error(ctx, "", 0);
     return;
   }
 
@@ -348,11 +390,11 @@ void CustomAggregate::xStepBase(
         std::min(buffer.Length(), sizeof(state->string_buffer) - 1);
     memcpy(state->string_buffer, buffer.Data(), copy_len);
     state->string_length = copy_len;
-  } else if (result_val.IsObject() && !result_val.IsArray() &&
+  } else if ((result_val.IsObject() || result_val.IsArray()) &&
              !result_val.IsBuffer()) {
-    // Store objects as JSON strings
+    // Store objects and arrays as JSON strings
     state->type = AggregateValue::OBJECT_JSON;
-    // Use JSON.stringify to serialize the object
+    // Use JSON.stringify to serialize the object/array
     std::string json_str = SafeJsonStringify(self->env_, result_val);
 
     // If JSON is too long, use a simpler representation
@@ -408,11 +450,17 @@ void CustomAggregate::xValueBase(sqlite3_context *ctx, bool is_final) {
   case AggregateValue::BOOLEAN:
     current_value = Napi::Boolean::New(self->env_, state->bool_value);
     break;
-  case AggregateValue::BUFFER:
-    current_value = Napi::Buffer<uint8_t>::Copy(
-        self->env_, reinterpret_cast<const uint8_t *>(state->string_buffer),
-        state->string_length);
+  case AggregateValue::BUFFER: {
+    // Return Uint8Array to match Node.js node:sqlite behavior
+    auto array_buffer =
+        Napi::ArrayBuffer::New(self->env_, state->string_length);
+    if (state->string_length > 0) {
+      memcpy(array_buffer.Data(), state->string_buffer, state->string_length);
+    }
+    current_value = Napi::Uint8Array::New(self->env_, state->string_length,
+                                          array_buffer, 0);
     break;
+  }
   case AggregateValue::OBJECT_JSON: {
     // Parse JSON back to object using JSON.parse
     try {
@@ -435,9 +483,24 @@ void CustomAggregate::xValueBase(sqlite3_context *ctx, bool is_final) {
     break;
   }
 
-  // Apply result function if provided
+  // For window functions, xValue is called for each row and xFinal is called at
+  // the end. We should only call the result function once per actual result
+  // row.
+  // - xValue (is_final=false): Called for each row in window functions, call
+  // result function
+  // - xFinal (is_final=true): For regular aggregates, call result function
+  //                           For window aggregates (xvalue_called=true), skip
+  //                           result function
+  bool should_call_result = !is_final || !state->xvalue_called;
+
+  if (!is_final) {
+    // Mark that xValue was called (this is a window function)
+    state->xvalue_called = true;
+  }
+
+  // Apply result function if provided and appropriate
   Napi::Value final_value = current_value;
-  if (!self->result_fn_.IsEmpty()) {
+  if (should_call_result && !self->result_fn_.IsEmpty()) {
     Napi::Function result_func = self->result_fn_.Value();
 
     std::vector<napi_value> args = {current_value};
@@ -447,8 +510,10 @@ void CustomAggregate::xValueBase(sqlite3_context *ctx, bool is_final) {
         napi_call_function(self->env_, self->env_.Undefined(), result_func, 1,
                            args.data(), &result);
 
-    if (status != napi_ok) {
-      sqlite3_result_error(ctx, "Error calling aggregate result function", -1);
+    if (status != napi_ok || self->env_.IsExceptionPending()) {
+      // JavaScript exception is pending - let it propagate
+      self->db_->SetIgnoreNextSQLiteError(true);
+      sqlite3_result_error(ctx, "", 0);
       return;
     }
 
@@ -457,6 +522,14 @@ void CustomAggregate::xValueBase(sqlite3_context *ctx, bool is_final) {
 
   // Convert the final JavaScript value to SQLite result
   self->JSValueToSqliteResult(ctx, final_value);
+
+  // Check if JSValueToSqliteResult threw an exception (e.g., ERR_OUT_OF_RANGE)
+  if (self->env_.IsExceptionPending()) {
+    // Ignore the SQLite error because a JavaScript exception is pending
+    self->db_->SetIgnoreNextSQLiteError(true);
+    sqlite3_result_error(ctx, "", 0);
+    return;
+  }
 }
 
 CustomAggregate::AggregateData *
@@ -514,13 +587,24 @@ Napi::Value CustomAggregate::SqliteValueToJS(sqlite3_value *value) {
   case SQLITE_NULL:
     return env_.Null();
 
-  case SQLITE_INTEGER:
+  case SQLITE_INTEGER: {
+    sqlite3_int64 int_val = sqlite3_value_int64(value);
     if (use_bigint_args_) {
-      return Napi::BigInt::New(
-          env_, static_cast<int64_t>(sqlite3_value_int64(value)));
+      return Napi::BigInt::New(env_, static_cast<int64_t>(int_val));
+    } else if (std::abs(int_val) <= kMaxSafeJsInteger) {
+      return Napi::Number::New(env_, static_cast<double>(int_val));
     } else {
-      return Napi::Number::New(env_, sqlite3_value_int64(value));
+      // Value is outside safe integer range for JavaScript numbers
+      // Throw ERR_OUT_OF_RANGE directly - we're in a valid N-API context
+      char error_msg[128];
+      snprintf(error_msg, sizeof(error_msg),
+               "Value is too large to be represented as a JavaScript number: "
+               "%" PRId64,
+               static_cast<int64_t>(int_val));
+      node::THROW_ERR_OUT_OF_RANGE(env_, error_msg);
+      return env_.Undefined(); // Return undefined, exception is pending
     }
+  }
 
   case SQLITE_FLOAT:
     return Napi::Number::New(env_, sqlite3_value_double(value));
@@ -534,11 +618,14 @@ Napi::Value CustomAggregate::SqliteValueToJS(sqlite3_value *value) {
   case SQLITE_BLOB: {
     const void *blob = sqlite3_value_blob(value);
     int bytes = sqlite3_value_bytes(value);
+    // Return Uint8Array to match Node.js node:sqlite behavior
     if (blob && bytes > 0) {
-      return Napi::Buffer<uint8_t>::Copy(
-          env_, static_cast<const uint8_t *>(blob), static_cast<size_t>(bytes));
+      auto array_buffer = Napi::ArrayBuffer::New(env_, bytes);
+      memcpy(array_buffer.Data(), blob, bytes);
+      return Napi::Uint8Array::New(env_, bytes, array_buffer, 0);
     } else {
-      return Napi::Buffer<uint8_t>::New(env_, 0);
+      auto array_buffer = Napi::ArrayBuffer::New(env_, 0);
+      return Napi::Uint8Array::New(env_, 0, array_buffer, 0);
     }
   }
 
@@ -549,34 +636,17 @@ Napi::Value CustomAggregate::SqliteValueToJS(sqlite3_value *value) {
 
 void CustomAggregate::JSValueToSqliteResult(sqlite3_context *ctx,
                                             Napi::Value value) {
-  if (value.IsNull()) {
+  if (value.IsNull() || value.IsUndefined()) {
     sqlite3_result_null(ctx);
-  } else if (value.IsUndefined()) {
-    sqlite3_result_null(ctx);
-  } else if (value.IsNumber()) {
-    double num = value.As<Napi::Number>().DoubleValue();
-    if (std::isnan(num)) {
-      sqlite3_result_null(ctx);
-    } else if (std::floor(num) == num &&
-               num >= std::numeric_limits<int64_t>::min() &&
-               num <= std::numeric_limits<int64_t>::max()) {
-      sqlite3_result_int64(ctx, static_cast<int64_t>(num));
-    } else {
-      sqlite3_result_double(ctx, num);
-    }
   } else if (value.IsBoolean()) {
+    // Extension over Node.js: Convert booleans to 0/1
     sqlite3_result_int(ctx, value.As<Napi::Boolean>().Value() ? 1 : 0);
-  } else if (value.IsBigInt()) {
-    bool lossless;
-    int64_t val = value.As<Napi::BigInt>().Int64Value(&lossless);
-    if (lossless) {
-      sqlite3_result_int64(ctx, val);
-    } else {
-      sqlite3_result_error(ctx, "BigInt value is too large for SQLite", -1);
-    }
+  } else if (value.IsNumber()) {
+    // Match Node.js: numbers are stored as doubles
+    sqlite3_result_double(ctx, value.As<Napi::Number>().DoubleValue());
   } else if (value.IsString()) {
     std::string str = value.As<Napi::String>().Utf8Value();
-    sqlite3_result_text(ctx, str.c_str(), SafeCastToInt(str.length()),
+    sqlite3_result_text(ctx, str.c_str(), static_cast<int>(str.length()),
                         SQLITE_TRANSIENT);
   } else if (value.IsDataView()) {
     // IMPORTANT: Check DataView BEFORE IsBuffer() because N-API's IsBuffer()
@@ -591,21 +661,40 @@ void CustomAggregate::JSValueToSqliteResult(sqlite3_context *ctx,
     if (arrayBuffer.Data() != nullptr && byteLength > 0) {
       const uint8_t *data =
           static_cast<const uint8_t *>(arrayBuffer.Data()) + byteOffset;
-      sqlite3_result_blob(ctx, data, SafeCastToInt(byteLength),
+      sqlite3_result_blob(ctx, data, static_cast<int>(byteLength),
                           SQLITE_TRANSIENT);
     } else {
       sqlite3_result_zeroblob(ctx, 0);
     }
-  } else if (value.IsBuffer()) {
-    // Handles both Node.js Buffer and TypedArrays (Uint8Array, etc.)
-    Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
-    sqlite3_result_blob(ctx, buffer.Data(), SafeCastToInt(buffer.Length()),
-                        SQLITE_TRANSIENT);
+  } else if (value.IsTypedArray()) {
+    // Handles Uint8Array and other TypedArrays (but not DataView, handled
+    // above)
+    Napi::TypedArray arr = value.As<Napi::TypedArray>();
+    Napi::ArrayBuffer buf = arr.ArrayBuffer();
+    sqlite3_result_blob(
+        ctx, static_cast<const uint8_t *>(buf.Data()) + arr.ByteOffset(),
+        static_cast<int>(arr.ByteLength()), SQLITE_TRANSIENT);
+  } else if (value.IsBigInt()) {
+    // Check BigInt - must fit in int64
+    bool lossless;
+    int64_t bigint_val = value.As<Napi::BigInt>().Int64Value(&lossless);
+    if (!lossless) {
+      // BigInt too large for SQLite - throw ERR_OUT_OF_RANGE
+      node::THROW_ERR_OUT_OF_RANGE(
+          env_,
+          "BigInt value is too large to be represented as a SQLite integer");
+      return;
+    }
+    sqlite3_result_int64(ctx, static_cast<sqlite3_int64>(bigint_val));
+  } else if (value.IsPromise()) {
+    // Promises are not supported
+    sqlite3_result_error(
+        ctx, "Asynchronous user-defined functions are not supported", -1);
   } else {
-    // For other types (objects, functions, etc.), convert to string
-    std::string str = value.ToString().Utf8Value();
-    sqlite3_result_text(ctx, str.c_str(), SafeCastToInt(str.length()),
-                        SQLITE_TRANSIENT);
+    // Unsupported type
+    sqlite3_result_error(
+        ctx, "Returned JavaScript value cannot be converted to a SQLite value",
+        -1);
   }
 }
 
