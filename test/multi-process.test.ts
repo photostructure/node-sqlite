@@ -260,6 +260,15 @@ describe("Multi-Process Database Access", () => {
         let workerExited = false;
         let workerError: Error | null = null;
 
+        // Create exit promise early to avoid race conditions
+        // This ensures we don't miss the exit event even if it fires
+        // before the Promise.race wait begins
+        const workerExitPromise = new Promise<number | null>((resolve) => {
+          lockHolderWorker.on("exit", (code) => {
+            resolve(code);
+          });
+        });
+
         // Handle worker messages
         lockHolderWorker.on("message", (msg) => {
           if (msg.type === "LOCK_ACQUIRED") {
@@ -270,6 +279,12 @@ describe("Multi-Process Database Access", () => {
             workerError = new Error(msg.error);
           } else if (msg.type === "EXIT") {
             workerExited = true;
+            // Explicitly terminate the worker when it signals EXIT
+            // On some platforms (macOS), the worker may not exit naturally
+            // if native addons have active handles
+            lockHolderWorker.terminate().catch(() => {
+              // Ignore termination errors
+            });
           }
         });
 
@@ -408,22 +423,17 @@ describe("Multi-Process Database Access", () => {
         );
 
         // Wait for lock holder to finish with timeout
+        // Use the workerExitPromise created earlier to avoid race conditions
         console.log("Waiting for lock holder to finish...");
         const lockFinishTimeout = lockHoldTime + 10000 * multiplier;
-        let timeoutHandle: NodeJS.Timeout | undefined;
 
         const lockFinished = await Promise.race([
-          new Promise<boolean>((resolve) => {
-            lockHolderWorker.on("exit", (code) => {
-              console.log(`Lock holder exited with code ${code}`);
-              if (timeoutHandle) {
-                clearTimeout(timeoutHandle);
-              }
-              resolve(true);
-            });
+          workerExitPromise.then((code) => {
+            console.log(`Lock holder exited with code ${code}`);
+            return true;
           }),
           new Promise<boolean>((resolve) => {
-            timeoutHandle = setTimeout(async () => {
+            setTimeout(async () => {
               console.error("Lock holder timeout - terminating worker");
               await lockHolderWorker.terminate();
               resolve(false);
