@@ -10,8 +10,13 @@ const os = require("node:os");
 
 // Use process.pid to create a unique subdirectory per test process.
 // This prevents concurrent test files from stomping on each other's temp directories.
+// Use fs.realpathSync to resolve symlinks (e.g., /var -> /private/var on macOS)
+// to ensure path comparisons work correctly with sqlite3_db_filename().
 const baseDir = path.join(os.tmpdir(), "node-sqlite-compat-tests");
-const testDir = path.join(baseDir, `pid-${process.pid}`);
+// Create the base directory first so realpathSync can resolve it
+fs.mkdirSync(baseDir, { recursive: true });
+const realBaseDir = fs.realpathSync(baseDir);
+const testDir = path.join(realBaseDir, `pid-${process.pid}`);
 
 const tmpdir = {
   path: testDir,
