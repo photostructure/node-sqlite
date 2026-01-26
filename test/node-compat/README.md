@@ -12,6 +12,7 @@ node --test 'test/node-compat/*.test.{js,mjs}'
 ```
 
 Or run a specific test:
+
 ```bash
 node --test test/node-compat/test-sqlite-statement-sync-columns.test.js
 ```

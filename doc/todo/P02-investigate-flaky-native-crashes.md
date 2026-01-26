@@ -15,11 +15,11 @@
 
 Same commit (`80fa40d`) showed different failures across runs:
 
-| Run ID | Time | Failed Alpine Jobs |
-|--------|------|-------------------|
+| Run ID      | Time     | Failed Alpine Jobs    |
+| ----------- | -------- | --------------------- |
 | 21346776312 | 4:56:24Z | **None - all passed** |
-| 21346793811 | 4:57:29Z | x64/23, arm64/24 |
-| 21347456610 | 5:36:26Z | x64/20, arm64/23 |
+| 21346793811 | 4:57:29Z | x64/23, arm64/24      |
+| 21347456610 | 5:36:26Z | x64/20, arm64/23      |
 
 Crash signals: `SIGSEGV` (segfault), `SIGTRAP` (assertion)
 Affected tests: `extension-loading.test.ts`, `session-lifecycle.test.ts`
@@ -29,6 +29,7 @@ Affected tests: `extension-loading.test.ts`, `session-lifecycle.test.ts`
 **The bug**: `BackupJob` held a raw pointer to `DatabaseSync*` but nothing prevented the database from closing while backup ran on worker thread.
 
 **How it manifested**:
+
 1. User starts backup (`db.backup(...)`)
 2. `BackupJob::Execute()` runs on worker thread
 3. Database closes (test cleanup, GC, etc.)
@@ -37,6 +38,7 @@ Affected tests: `extension-loading.test.ts`, `session-lifecycle.test.ts`
 **Why flaky**: Only manifests when database closes during active backup. CI's higher resource pressure makes this timing more likely.
 
 **Evidence found**:
+
 - Upstream Node.js tracks backups via `AddBackup()`, `RemoveBackup()`, `FinalizeBackups()`
 - Our implementation was **missing all backup tracking**
 - See: `src/upstream/node_sqlite.cc:685-791`
@@ -46,6 +48,7 @@ Affected tests: `extension-loading.test.ts`, `session-lifecycle.test.ts`
 ### Changes Made
 
 **[src/sqlite_impl.h](../../src/sqlite_impl.h)**:
+
 - Added forward declaration for `BackupJob`
 - Added `std::set<BackupJob*> backups_` and `std::mutex backups_mutex_`
 - Added `AddBackup()`, `RemoveBackup()`, `FinalizeBackups()` declarations
@@ -53,6 +56,7 @@ Affected tests: `extension-loading.test.ts`, `session-lifecycle.test.ts`
 - Added `sqlite3* source_connection_` to capture connection at construction
 
 **[src/sqlite_impl.cpp](../../src/sqlite_impl.cpp)**:
+
 - `BackupJob` constructor captures `source_->connection()` and calls `source_->AddBackup(this)`
 - `BackupJob` destructor calls `source_->RemoveBackup(this)` if source valid
 - `BackupJob::Execute()` uses `source_connection_` (not `source_->connection()`)
@@ -113,12 +117,12 @@ grep -n "FinalizeBackups\|AddBackup\|source_connection_" src/sqlite_impl.cpp
 
 ### Files to Study
 
-| File | What to Look For |
-|------|-----------------|
-| `src/upstream/node_sqlite.cc:685-791` | Upstream backup tracking pattern |
-| `src/sqlite_impl.cpp:1530-1560` | Our new backup tracking |
-| `src/sqlite_impl.cpp:3097-3135` | BackupJob constructor (registration) |
-| `src/sqlite_impl.cpp:1001-1005` | InternalClose calls FinalizeBackups |
+| File                                  | What to Look For                     |
+| ------------------------------------- | ------------------------------------ |
+| `src/upstream/node_sqlite.cc:685-791` | Upstream backup tracking pattern     |
+| `src/sqlite_impl.cpp:1530-1560`       | Our new backup tracking              |
+| `src/sqlite_impl.cpp:3097-3135`       | BackupJob constructor (registration) |
+| `src/sqlite_impl.cpp:1001-1005`       | InternalClose calls FinalizeBackups  |
 
 ## Remaining Work
 
@@ -127,16 +131,19 @@ grep -n "FinalizeBackups\|AddBackup\|source_connection_" src/sqlite_impl.cpp
 **Success**: 10 consecutive CI runs pass without native crashes
 
 **Implementation**:
+
 1. Push the fix to trigger CI
 2. Monitor CI runs for crashes
 3. If crashes persist, they're a different bug (open new TPP)
 
 **If crashes continue**:
+
 - Check crash location (different from `source_->connection()`?)
 - Look for other raw pointers in async contexts
 - Grep: `grep -rn "AsyncProgressWorker\|AsyncWorker" src/*.cpp`
 
 **Completion checklist**:
+
 - [ ] Push changes
 - [ ] 10 CI runs complete
 - [ ] No SIGSEGV/SIGTRAP crashes
