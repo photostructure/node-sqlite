@@ -31,7 +31,28 @@ const color = (colorCode: string, text: string): string =>
 
 console.log(color(colors.BLUE, "=== SQLite Memory Leak Detection Suite ==="));
 
+// Remove Electron environment variables that VSCode sets.
+// These cause node-gyp-build to incorrectly detect runtime as "electron"
+// instead of "node", which breaks native module loading.
+const cleanEnv = { ...process.env };
+delete cleanEnv.ELECTRON_RUN_AS_NODE;
+delete cleanEnv.ELECTRON_NO_ATTACH_CONSOLE;
+
 let exitCode = 0;
+
+// Ensure native module is built (may have been cleaned by previous ASAN run)
+console.log(color(colors.YELLOW, "\nEnsuring native module is built..."));
+try {
+  execFileSync("npm", ["run", "build:native"], {
+    stdio: "inherit",
+    env: cleanEnv,
+  });
+  console.log(color(colors.GREEN, "✓ Native module ready"));
+} catch (error) {
+  console.log(color(colors.RED, "✗ Failed to build native module"));
+  console.error("Error:", (error as Error).message);
+  process.exit(1);
+}
 
 // 1. Run JavaScript memory tests (all platforms)
 console.log(color(colors.YELLOW, "\nRunning JavaScript memory tests..."));
@@ -71,7 +92,7 @@ try {
   execFileSync(nodeExe, args, {
     stdio: "inherit",
     env: {
-      ...process.env,
+      ...cleanEnv,
       TEST_MEMORY: "1",
       // Run memory tests in CJS mode to avoid Jest ESM hanging issue
       // TEST_ESM: "1",
@@ -107,7 +128,10 @@ if (os.platform() === "linux") {
       console.log("Running debug memory leak script...");
       try {
         const debugScript = path.join(__dirname, "debug-memory-leak.sh");
-        execFileSync("/bin/bash", [debugScript], { stdio: "inherit" });
+        execFileSync("/bin/bash", [debugScript], {
+          stdio: "inherit",
+          env: cleanEnv,
+        });
       } catch {
         // Don't fail on debug script errors
         console.log("Debug script failed (continuing anyway)");
@@ -116,7 +140,10 @@ if (os.platform() === "linux") {
 
     try {
       const valgrindScript = path.join(__dirname, "valgrind-test.sh");
-      execFileSync("/bin/bash", [valgrindScript], { stdio: "inherit" });
+      execFileSync("/bin/bash", [valgrindScript], {
+        stdio: "inherit",
+        env: cleanEnv,
+      });
       console.log(color(colors.GREEN, "✓ Valgrind tests passed"));
     } catch {
       console.log(color(colors.RED, "✗ Valgrind tests failed"));
@@ -137,7 +164,10 @@ if (os.platform() === "linux") {
   );
   try {
     const asanScript = path.join(__dirname, "sanitizers-test.sh");
-    execFileSync("/bin/bash", [asanScript], { stdio: "inherit" });
+    execFileSync("/bin/bash", [asanScript], {
+      stdio: "inherit",
+      env: cleanEnv,
+    });
     console.log(
       color(colors.GREEN, "✓ AddressSanitizer and LeakSanitizer tests passed"),
     );
@@ -148,8 +178,21 @@ if (os.platform() === "linux") {
     exitCode = 1;
   }
 
-  // Note: The ASAN script now cleans up after itself
-  // No need to rebuild here
+  // Rebuild native module after ASAN tests to restore a usable build
+  console.log(
+    color(colors.YELLOW, "\nRebuilding native module (post-ASAN cleanup)..."),
+  );
+  try {
+    execFileSync("npm", ["run", "build:native"], {
+      stdio: "inherit",
+      env: cleanEnv,
+    });
+    console.log(color(colors.GREEN, "✓ Native module restored"));
+  } catch (rebuildError) {
+    console.log(color(colors.RED, "✗ Failed to restore native module"));
+    console.error("Error:", (rebuildError as Error).message);
+    // Don't fail the overall check, just warn
+  }
 }
 
 if (exitCode === 0) {

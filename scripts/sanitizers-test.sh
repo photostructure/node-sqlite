@@ -75,8 +75,11 @@ if [[ -z "${LD_PRELOAD:-}" ]]; then
 fi
 
 # Build the native module
+# Use separate clean/configure/build steps to avoid node-gyp .deps issues
 echo "Building with AddressSanitizer..."
-npm run build:native:rebuild
+npx node-gyp clean 2>/dev/null || true
+npx node-gyp configure
+npx node-gyp build
 
 # Build the distribution bundle
 echo "Building distribution bundle..."

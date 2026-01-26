@@ -102,7 +102,12 @@ const config = {
   // Global test timeout with platform-aware default
   testTimeout: 60000,
   // Exclude api-compatibility test from main test suite (runs separately)
-  testPathIgnorePatterns: ["/node_modules/", "api-compatibility\\.test\\.ts"],
+  // Exclude node-compat tests (use node:test runner, run via 'npm run test:node')
+  testPathIgnorePatterns: [
+    "/node_modules/",
+    "api-compatibility\\.test\\.ts",
+    "/test/node-compat/",
+  ],
 };
 
 module.exports = config;

@@ -32,6 +32,16 @@ export default [
       },
     },
   },
+  // Additional configuration for ESM test files
+  {
+    files: ["test/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.jest,
+      },
+    },
+  },
   // Ignore build artifacts and upstream files
   {
     ignores: [
@@ -44,6 +54,8 @@ export default [
       "node_modules",
       "src/upstream/**", // Ignore upstream Node.js files
       "src/shims/**", // Ignore Node.js compatibility shims
+      "test/upstream/**", // Ignore upstream Node.js test files
+      "test/node-compat/**", // Ignore Node.js compatibility test files
     ],
   },
   pluginJs.configs.recommended,

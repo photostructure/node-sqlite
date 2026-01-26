@@ -104,7 +104,8 @@ class PhotostructureDriver extends BaseDriver {
       all: (...params) => stmt.all(...params),
       run: (...params) => stmt.run(...params),
       iterate: (...params) => stmt.iterate(...params),
-      finalize: () => stmt.finalize(),
+      // Node.js sqlite auto-finalizes statements, no explicit finalize needed
+      finalize: () => {},
     };
   }
 

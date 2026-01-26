@@ -50,22 +50,21 @@ async function runTests() {
       }
     }
 
-    insert.finalize();
-    select.finalize();
+    // Statements are automatically finalized when db.close() is called
     db.close();
   }
 
-  // Test 2: Exercise prepare/finalize cycles
+  // Test 2: Exercise statement lifecycle
   console.log("Test 2: Statement lifecycle");
   for (let i = 0; i < 10; i++) {
     const db = new DatabaseSync(":memory:");
     db.exec("CREATE TABLE lifecycle_test (id INTEGER, data TEXT)");
 
-    // Create and destroy multiple statements
+    // Create and use multiple statements (no explicit finalize needed)
     for (let j = 0; j < 5; j++) {
       const stmt = db.prepare("INSERT INTO lifecycle_test VALUES (?, ?)");
       stmt.run(j, `data${j}`);
-      stmt.finalize();
+      // Statements are finalized automatically when db is closed
     }
 
     db.close();
@@ -91,7 +90,7 @@ async function runTests() {
     insert.run(999, "should_rollback");
     db.exec("ROLLBACK");
 
-    insert.finalize();
+    // Statements are finalized automatically when db.close() is called
     db.close();
   }
 
