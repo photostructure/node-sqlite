@@ -1514,12 +1514,19 @@ void DatabaseSync::RemoveSession(Session *session) {
 }
 
 void DatabaseSync::DeleteAllSessions() {
-  std::lock_guard<std::mutex> lock(sessions_mutex_);
-  // Copy the set to avoid iterator invalidation
-  std::set<Session *> sessions_copy = sessions_;
-  sessions_.clear(); // Clear first to prevent re-entrance
+  // Copy and clear sessions while holding the lock, then release lock
+  // before calling Reset() which can trigger GC. GC can finalize other
+  // Session objects which call Delete() -> RemoveSession() which also
+  // tries to lock sessions_mutex_. Since std::mutex is not recursive,
+  // we must release the lock before any operation that could trigger GC.
+  std::set<Session *> sessions_copy;
+  {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    sessions_copy = sessions_;
+    sessions_.clear(); // Clear first so RemoveSession() becomes a no-op
+  }
 
-  // Now delete each session
+  // Now delete each session WITHOUT holding the mutex
   for (auto *session : sessions_copy) {
     // Direct SQLite cleanup since we're in database destruction
     if (session->GetSession()) {
@@ -1531,6 +1538,7 @@ void DatabaseSync::DeleteAllSessions() {
     }
     // Release the database reference now rather than waiting for Session
     // destructor. This ensures cleanup happens while environment is valid.
+    // This can trigger GC which may finalize other Session objects.
     if (!session->database_ref_.IsEmpty()) {
       session->database_ref_.Reset();
     }
