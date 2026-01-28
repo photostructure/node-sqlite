@@ -89,11 +89,29 @@ Affected tests: `extension-loading.test.ts`, `session-lifecycle.test.ts`, `sessi
 
 **Commit**: `dadbb86`
 
+### Bug 2d: Double-Free in DeleteAllSessions During GC
+
+**The bug**: `DeleteAllSessions()` interleaved SQLite cleanup and `database_ref_.Reset()` calls in a single loop. When `Reset()` triggers GC, other Session objects in the iteration list may be finalized, causing their destructors to call `sqlite3session_delete()` on sessions that the loop will later process.
+
+**How it manifested**:
+
+1. `DeleteAllSessions()` iterates over `sessions_copy`
+2. For session X: `sqlite3session_delete(X)`, `X->session_ = nullptr`, `X->database_ref_.Reset()`
+3. `Reset()` triggers GC which finalizes session Y (also in `sessions_copy`, not yet processed)
+4. Y's destructor calls `Delete()` → `sqlite3session_delete(Y->session_)` (Y's session_ is still valid!)
+5. Loop continues to Y → calls `sqlite3session_delete(Y)` again → **double-free → SIGABRT**
+
+**Fix**: Split cleanup into two passes:
+1. Pass 1: Delete all SQLite sessions and clear all `session_` pointers
+2. Pass 2: Release database references (can trigger GC, but Delete() is now a no-op for all sessions)
+
+**Commit**: `3a6aaff`
+
 ---
 
 ## Fixes Implemented
 
-### Session Fixes (Commits: a151cb6, fb283df, dadbb86)
+### Session Fixes (Commits: a151cb6, fb283df, dadbb86, 3a6aaff)
 
 **[src/sqlite_impl.h](../../src/sqlite_impl.h)**:
 
@@ -118,7 +136,7 @@ Napi::ObjectReference database_ref_;
    }
    ```
 
-3. `DeleteAllSessions()` - Release mutex before cleanup loop:
+3. `DeleteAllSessions()` - Two-pass cleanup to prevent double-free:
 
    ```cpp
    std::set<Session *> sessions_copy;
@@ -127,9 +145,18 @@ Napi::ObjectReference database_ref_;
      sessions_copy = sessions_;
      sessions_.clear();  // RemoveSession() becomes no-op
    }
-   // Now iterate WITHOUT holding mutex
+   // Pass 1: Delete SQLite sessions and clear pointers
    for (auto *session : sessions_copy) {
-     // ... cleanup including database_ref_.Reset()
+     if (session->GetSession()) {
+       sqlite3session_delete(session->GetSession());
+       session->session_ = nullptr;  // Makes Delete() a no-op
+     }
+   }
+   // Pass 2: Release references (can trigger GC safely now)
+   for (auto *session : sessions_copy) {
+     if (!session->database_ref_.IsEmpty()) {
+       session->database_ref_.Reset();
+     }
    }
    ```
 
@@ -289,9 +316,10 @@ docker run --rm -v "$(pwd)":/host:ro node:22-alpine sh -c '\
 
 ## Commits Summary
 
-| Commit    | Description                                      |
-| --------- | ------------------------------------------------ |
-| `a151cb6` | Add `database_ref_` to Session                   |
-| `fb283df` | Release `database_ref_` in DeleteAllSessions     |
-| `dadbb86` | Release mutex before GC-triggering operations    |
-| `5d86172` | Fix multi-process test expected values (unrelated) |
+| Commit    | Description                                          |
+| --------- | ---------------------------------------------------- |
+| `a151cb6` | Add `database_ref_` to Session                       |
+| `fb283df` | Release `database_ref_` in DeleteAllSessions         |
+| `dadbb86` | Release mutex before GC-triggering operations        |
+| `3a6aaff` | Two-pass cleanup to prevent double-free during GC    |
+| `5d86172` | Fix multi-process test expected values (unrelated)   |
