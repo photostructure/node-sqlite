@@ -1526,9 +1526,12 @@ void DatabaseSync::DeleteAllSessions() {
     sessions_.clear(); // Clear first so RemoveSession() becomes a no-op
   }
 
-  // Now delete each session WITHOUT holding the mutex
+  // TWO-PASS cleanup to prevent double-free race condition:
+  // Pass 1: Delete all SQLite sessions and clear session_ pointers.
+  // This MUST happen before any Reset() calls because Reset() can trigger GC,
+  // which may finalize other Session objects whose destructors call Delete().
+  // By clearing all session_ pointers first, those Delete() calls become no-ops.
   for (auto *session : sessions_copy) {
-    // Direct SQLite cleanup since we're in database destruction
     if (session->GetSession()) {
       sqlite3session_delete(session->GetSession());
       // Clear the session pointer but KEEP database_ so we can detect
@@ -1536,9 +1539,11 @@ void DatabaseSync::DeleteAllSessions() {
       session->session_ = nullptr;
       // Note: Don't null database_ - we need it to check IsOpen()
     }
-    // Release the database reference now rather than waiting for Session
-    // destructor. This ensures cleanup happens while environment is valid.
-    // This can trigger GC which may finalize other Session objects.
+  }
+
+  // Pass 2: Release database references. This can trigger GC which may finalize
+  // Session objects, but their Delete() calls are now no-ops (session_ == nullptr).
+  for (auto *session : sessions_copy) {
     if (!session->database_ref_.IsEmpty()) {
       session->database_ref_.Reset();
     }
