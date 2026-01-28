@@ -1515,10 +1515,9 @@ void DatabaseSync::RemoveSession(Session *session) {
 
 void DatabaseSync::DeleteAllSessions() {
   // Copy and clear sessions while holding the lock, then release lock
-  // before calling Reset() which can trigger GC. GC can finalize other
-  // Session objects which call Delete() -> RemoveSession() which also
-  // tries to lock sessions_mutex_. Since std::mutex is not recursive,
-  // we must release the lock before any operation that could trigger GC.
+  // before doing cleanup. GC can finalize Session objects which call
+  // Delete() -> RemoveSession() which also tries to lock sessions_mutex_.
+  // Since std::mutex is not recursive, we must release the lock first.
   std::set<Session *> sessions_copy;
   {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
@@ -1526,11 +1525,12 @@ void DatabaseSync::DeleteAllSessions() {
     sessions_.clear(); // Clear first so RemoveSession() becomes a no-op
   }
 
-  // TWO-PASS cleanup to prevent double-free race condition:
-  // Pass 1: Delete all SQLite sessions and clear session_ pointers.
-  // This MUST happen before any Reset() calls because Reset() can trigger GC,
-  // which may finalize other Session objects whose destructors call Delete().
-  // By clearing all session_ pointers first, those Delete() calls become no-ops.
+  // Delete all SQLite sessions and clear session_ pointers.
+  // We do NOT call database_ref_.Reset() here because:
+  // 1. Reset() can trigger GC which may finalize Session JS objects
+  // 2. That would destroy objects we're still iterating over (dangling pointers!)
+  // 3. The Sessions will release their references when naturally GC'd later,
+  //    and their Delete() will be a no-op since session_ is nullptr.
   for (auto *session : sessions_copy) {
     if (session->GetSession()) {
       sqlite3session_delete(session->GetSession());
@@ -1538,14 +1538,6 @@ void DatabaseSync::DeleteAllSessions() {
       // "database closed" vs "session closed" in Session methods
       session->session_ = nullptr;
       // Note: Don't null database_ - we need it to check IsOpen()
-    }
-  }
-
-  // Pass 2: Release database references. This can trigger GC which may finalize
-  // Session objects, but their Delete() calls are now no-ops (session_ == nullptr).
-  for (auto *session : sessions_copy) {
-    if (!session->database_ref_.IsEmpty()) {
-      session->database_ref_.Reset();
     }
   }
 }
