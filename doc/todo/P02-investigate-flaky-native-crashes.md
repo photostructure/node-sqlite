@@ -101,17 +101,15 @@ Affected tests: `extension-loading.test.ts`, `session-lifecycle.test.ts`, `sessi
 4. Y's destructor calls `Delete()` → `sqlite3session_delete(Y->session_)` (Y's session_ is still valid!)
 5. Loop continues to Y → calls `sqlite3session_delete(Y)` again → **double-free → SIGABRT**
 
-**Fix**: Split cleanup into two passes:
-1. Pass 1: Delete all SQLite sessions and clear all `session_` pointers
-2. Pass 2: Release database references (can trigger GC, but Delete() is now a no-op for all sessions)
+**Fix**: Don't call `database_ref_.Reset()` in DeleteAllSessions() at all. The iteration loop only uses pure C/C++ operations (no Napi calls that could trigger GC), so it's safe. When Sessions are later GC'd, their `Delete()` returns early (session_ is nullptr) and Napi::ObjectReference destructor handles cleanup automatically.
 
-**Commit**: `3a6aaff`
+**Commit**: `e1a3fcb`
 
 ---
 
 ## Fixes Implemented
 
-### Session Fixes (Commits: a151cb6, fb283df, dadbb86, 3a6aaff)
+### Session Fixes (Commits: a151cb6, fb283df, dadbb86, e1a3fcb)
 
 **[src/sqlite_impl.h](../../src/sqlite_impl.h)**:
 
@@ -136,7 +134,7 @@ Napi::ObjectReference database_ref_;
    }
    ```
 
-3. `DeleteAllSessions()` - Two-pass cleanup to prevent double-free:
+3. `DeleteAllSessions()` - Only clean up SQLite sessions, don't call Reset():
 
    ```cpp
    std::set<Session *> sessions_copy;
@@ -145,19 +143,15 @@ Napi::ObjectReference database_ref_;
      sessions_copy = sessions_;
      sessions_.clear();  // RemoveSession() becomes no-op
    }
-   // Pass 1: Delete SQLite sessions and clear pointers
+   // Only pure C/C++ operations - no Napi calls that could trigger GC
    for (auto *session : sessions_copy) {
      if (session->GetSession()) {
        sqlite3session_delete(session->GetSession());
-       session->session_ = nullptr;  // Makes Delete() a no-op
+       session->session_ = nullptr;  // Makes later Delete() a no-op
      }
    }
-   // Pass 2: Release references (can trigger GC safely now)
-   for (auto *session : sessions_copy) {
-     if (!session->database_ref_.IsEmpty()) {
-       session->database_ref_.Reset();
-     }
-   }
+   // DON'T call database_ref_.Reset() - it can trigger GC and create
+   // dangling pointers. Let Sessions clean up when naturally GC'd.
    ```
 
 ### Verification Commands
@@ -321,5 +315,5 @@ docker run --rm -v "$(pwd)":/host:ro node:22-alpine sh -c '\
 | `a151cb6` | Add `database_ref_` to Session                       |
 | `fb283df` | Release `database_ref_` in DeleteAllSessions         |
 | `dadbb86` | Release mutex before GC-triggering operations        |
-| `3a6aaff` | Two-pass cleanup to prevent double-free during GC    |
+| `e1a3fcb` | Remove Reset() from DeleteAllSessions (prevents dangling ptrs) |
 | `5d86172` | Fix multi-process test expected values (unrelated)   |
