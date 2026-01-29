@@ -1514,49 +1514,22 @@ void DatabaseSync::RemoveSession(Session *session) {
 }
 
 void DatabaseSync::DeleteAllSessions() {
-  // Copy and clear sessions while holding the lock, then release lock
-  // before doing cleanup. GC can finalize Session objects which call
-  // Delete() -> RemoveSession() which also tries to lock sessions_mutex_.
-  // Since std::mutex is not recursive, we must release the lock first.
-  std::set<Session *> sessions_copy;
-  {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
-    sessions_copy = sessions_;
-    sessions_.clear(); // Clear first so RemoveSession() becomes a no-op
-  }
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  // Copy the set to avoid iterator invalidation
+  std::set<Session *> sessions_copy = sessions_;
+  sessions_.clear(); // Clear first to prevent re-entrance
 
-  // Hold strong references to all Session JS objects during cleanup.
-  // This prevents GC from destroying Sessions while we iterate over them.
-  // Without this, Reset() calls below could trigger GC which might destroy
-  // Session objects we haven't processed yet, causing dangling pointers.
-  std::vector<Napi::ObjectReference> session_refs;
-  session_refs.reserve(sessions_copy.size());
+  // Now delete each session
   for (auto *session : sessions_copy) {
-    session_refs.push_back(Napi::Persistent(session->Value()));
-  }
-
-  // Pass 1: Delete SQLite sessions and clear session_ pointers.
-  // This makes Session::Delete() a no-op when called later.
-  for (auto *session : sessions_copy) {
+    // Direct SQLite cleanup since we're in database destruction
     if (session->GetSession()) {
       sqlite3session_delete(session->GetSession());
+      // Clear the session pointer but KEEP database_ so we can detect
+      // "database closed" vs "session closed" in Session methods
       session->session_ = nullptr;
+      // Note: Don't null database_ - we need it to check IsOpen()
     }
   }
-
-  // Pass 2: Clear database references. This might trigger GC, but:
-  // 1. session_refs keeps all Sessions alive, so no dangling pointers
-  // 2. If GC runs, Session::Delete() is a no-op (session_ is nullptr)
-  // 3. This prevents V8 JIT corruption on Alpine/musl that happens when
-  //    ObjectReference destructors run during Jest cleanup
-  for (auto *session : sessions_copy) {
-    if (!session->database_ref_.IsEmpty()) {
-      session->database_ref_.Reset();
-    }
-  }
-
-  // session_refs destructor releases references, Sessions can be GC'd now.
-  // But their database_ref_ is already empty, so no corruption.
 }
 
 void DatabaseSync::AddBackup(BackupJob *backup) {
@@ -2994,26 +2967,13 @@ Napi::Object Session::Create(Napi::Env env, DatabaseSync *database,
 Session::Session(const Napi::CallbackInfo &info)
     : Napi::ObjectWrap<Session>(info), session_(nullptr) {}
 
-Session::~Session() {
-  // Set flag so Delete() knows not to call database_ref_.Reset() explicitly.
-  // On Alpine/musl, calling Reset() during GC finalization corrupts V8's JIT
-  // page allocations. By letting the ObjectReference destructor handle cleanup
-  // (which runs after Delete() returns), we avoid this corruption.
-  in_destructor_ = true;
-  Delete();
-}
+Session::~Session() { Delete(); }
 
 void Session::SetSession(DatabaseSync *database, sqlite3_session *session) {
   database_ = database;
   session_ = session;
   if (database_) {
     database_->AddSession(this);
-    // Create a strong reference to the database object to prevent it from being
-    // garbage collected while this session exists. This fixes use-after-free
-    // when the database is GC'd before its sessions.
-    // See: https://github.com/nodejs/node/pull/56840 (similar fix for
-    // statements)
-    database_ref_ = Napi::Persistent(database->Value());
   }
 }
 
@@ -3036,15 +2996,6 @@ void Session::Delete() {
 
   // Now it's safe to delete the SQLite session
   sqlite3session_delete(session_to_delete);
-
-  // Release the strong reference to the database object.
-  // IMPORTANT: Only call Reset() if NOT in destructor. On Alpine/musl,
-  // calling Reset() during GC finalization (destructor path) corrupts V8's
-  // JIT page allocations. When in_destructor_ is true, we let the
-  // ObjectReference destructor handle cleanup instead, which is GC-safe.
-  if (!in_destructor_ && !database_ref_.IsEmpty()) {
-    database_ref_.Reset();
-  }
 }
 
 template <int (*sqliteChangesetFunc)(sqlite3_session *, int *, void **)>
