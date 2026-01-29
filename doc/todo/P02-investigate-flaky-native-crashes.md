@@ -77,7 +77,7 @@ Affected tests: Various, shifting between runs due to Jest worker assignment
 
 **Commit**: `e1a3fcb`
 
-### Bug 2e: V8 JIT Corruption on Alpine During Jest Cleanup (FINAL FIX)
+### Bug 2e: V8 JIT Corruption on Alpine During Jest Cleanup
 
 **The bug**: When Sessions are GC'd during Jest cleanup (process exit), their `Napi::ObjectReference` destructors call `Reset()`. On Alpine/musl, this corrupts V8's JIT page allocations.
 
@@ -89,47 +89,33 @@ Affected tests: Various, shifting between runs due to Jest worker assignment
 4. V8 JIT corruption: `Check failed: it != jit_page_->allocations_.end()`
 5. **SIGSEGV** or **SIGABRT**
 
-**Why it only happened on Alpine/musl**:
+**Partial Fix**: Hold strong references to Session JS objects during `DeleteAllSessions()` cleanup, preventing GC from destroying them while we iterate.
 
-- Different GC timing during process exit
-- musl's allocator behavior differs from glibc
-- V8's JIT page management is more sensitive in this environment
+**Commit**: `413c93f`
 
-**Key Insight**: The crash happens during Jest cleanup, NOT during normal test execution. Tests pass with `--forceExit` (which skips cleanup).
+### Bug 2f: Explicit Reset() in Destructor Path Corrupts V8 (FINAL FIX)
 
-**The Fix**: Hold strong references to Session JS objects during `DeleteAllSessions()` cleanup, preventing GC from destroying them while we iterate. Then explicitly clear `database_ref_` for all sessions. When the temporary references are released, Sessions can be GC'd with already-empty `database_ref_`.
+**The bug**: Even with the `DeleteAllSessions()` fix, crashes still occurred when Sessions were GC'd without an explicit `db.close()` call. The root cause: `Session::Delete()` was calling `database_ref_.Reset()` during GC finalization, which corrupts V8's JIT on Alpine/musl.
+
+**Key Insight**: The `Napi::ObjectReference` destructor is designed to be GC-safe. But **explicitly** calling `Reset()` during GC finalization is NOT safe on Alpine/musl.
+
+**The Fix**: Add an `in_destructor_` flag to Session. When `Delete()` is called from the destructor, skip the explicit `Reset()` call and let the ObjectReference destructor handle cleanup naturally.
 
 ```cpp
-void DatabaseSync::DeleteAllSessions() {
-  std::set<Session *> sessions_copy;
-  {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
-    sessions_copy = sessions_;
-    sessions_.clear();
-  }
+Session::~Session() {
+  in_destructor_ = true;  // Signal we're in destructor path
+  Delete();
+}
 
-  // Hold strong references to prevent GC during iteration
-  std::vector<Napi::ObjectReference> session_refs;
-  session_refs.reserve(sessions_copy.size());
-  for (auto *session : sessions_copy) {
-    session_refs.push_back(Napi::Persistent(session->Value()));
-  }
+void Session::Delete() {
+  // ... existing cleanup code ...
 
-  // Pass 1: Clear SQLite sessions
-  for (auto *session : sessions_copy) {
-    if (session->GetSession()) {
-      sqlite3session_delete(session->GetSession());
-      session->session_ = nullptr;
-    }
+  // Only call Reset() if NOT in destructor path
+  // On Alpine/musl, calling Reset() during GC corrupts V8's JIT
+  if (!in_destructor_ && !database_ref_.IsEmpty()) {
+    database_ref_.Reset();
   }
-
-  // Pass 2: Clear database references (might trigger GC, but safe)
-  for (auto *session : sessions_copy) {
-    if (!session->database_ref_.IsEmpty()) {
-      session->database_ref_.Reset();
-    }
-  }
-  // session_refs released here - Sessions can be GC'd with empty database_ref_
+  // If in destructor, ObjectReference destructor handles cleanup (GC-safe)
 }
 ```
 
@@ -260,7 +246,8 @@ docker run --rm -v "$(pwd)":/host:ro node:24-alpine sh -c '
 | `fb283df` | Release `database_ref_` in DeleteAllSessions              |
 | `dadbb86` | Release mutex before GC-triggering operations             |
 | `e1a3fcb` | Remove Reset() from DeleteAllSessions (incomplete fix)    |
-| (pending) | Hold refs during cleanup to prevent V8 JIT corruption     |
+| `413c93f` | Hold refs during cleanup to prevent V8 JIT corruption     |
+| (pending) | Skip Reset() in destructor path - let ObjectRef handle it |
 
 ---
 
@@ -272,14 +259,14 @@ docker run --rm -v "$(pwd)":/host:ro node:24-alpine sh -c '
 
 **Implementation**:
 
-1. Commit the final fix (session_refs approach)
+1. Commit the final fix (in_destructor_ flag approach)
 2. Push to trigger CI
 3. Monitor Alpine test jobs
 
 **Completion checklist**:
 
 - [ ] Commit pushed
-- [ ] test-alpine jobs pass for all Node versions (20, 22, 23, 24)
+- [ ] test-alpine jobs pass for all Node versions (20, 22, 24, 25)
 - [ ] test-alpine jobs pass for both architectures (x64, arm64)
 - [ ] No SIGSEGV/SIGABRT crashes in 5+ consecutive runs
 - [ ] Move TPP to `doc/done/`
