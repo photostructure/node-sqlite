@@ -45,6 +45,10 @@ run({
   cmd: "npm install --ignore-scripts=false",
   desc: "Installing dependencies",
 });
+run({
+  cmd: "npm audit fix || true",
+  desc: "Fixing vulnerabilities",
+});
 run({ cmd: "npm run clean", desc: "Start fresh" });
 run({
   cmd: "npm run sync:node",
