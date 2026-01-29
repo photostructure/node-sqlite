@@ -1525,21 +1525,38 @@ void DatabaseSync::DeleteAllSessions() {
     sessions_.clear(); // Clear first so RemoveSession() becomes a no-op
   }
 
-  // Delete all SQLite sessions and clear session_ pointers.
-  // We do NOT call database_ref_.Reset() here because:
-  // 1. Reset() can trigger GC which may finalize Session JS objects
-  // 2. That would destroy objects we're still iterating over (dangling pointers!)
-  // 3. The Sessions will release their references when naturally GC'd later,
-  //    and their Delete() will be a no-op since session_ is nullptr.
+  // Hold strong references to all Session JS objects during cleanup.
+  // This prevents GC from destroying Sessions while we iterate over them.
+  // Without this, Reset() calls below could trigger GC which might destroy
+  // Session objects we haven't processed yet, causing dangling pointers.
+  std::vector<Napi::ObjectReference> session_refs;
+  session_refs.reserve(sessions_copy.size());
+  for (auto *session : sessions_copy) {
+    session_refs.push_back(Napi::Persistent(session->Value()));
+  }
+
+  // Pass 1: Delete SQLite sessions and clear session_ pointers.
+  // This makes Session::Delete() a no-op when called later.
   for (auto *session : sessions_copy) {
     if (session->GetSession()) {
       sqlite3session_delete(session->GetSession());
-      // Clear the session pointer but KEEP database_ so we can detect
-      // "database closed" vs "session closed" in Session methods
       session->session_ = nullptr;
-      // Note: Don't null database_ - we need it to check IsOpen()
     }
   }
+
+  // Pass 2: Clear database references. This might trigger GC, but:
+  // 1. session_refs keeps all Sessions alive, so no dangling pointers
+  // 2. If GC runs, Session::Delete() is a no-op (session_ is nullptr)
+  // 3. This prevents V8 JIT corruption on Alpine/musl that happens when
+  //    ObjectReference destructors run during Jest cleanup
+  for (auto *session : sessions_copy) {
+    if (!session->database_ref_.IsEmpty()) {
+      session->database_ref_.Reset();
+    }
+  }
+
+  // session_refs destructor releases references, Sessions can be GC'd now.
+  // But their database_ref_ is already empty, so no corruption.
 }
 
 void DatabaseSync::AddBackup(BackupJob *backup) {
