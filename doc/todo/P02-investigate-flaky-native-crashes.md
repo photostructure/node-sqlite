@@ -193,6 +193,6 @@ docker run --rm -v "$(pwd)":/host:ro node:24-alpine sh -c '
 - [x] Code reverted to simple design (b5835fa state)
 - [x] Rebuild and test locally (793 tests passed)
 - [x] Test in Alpine Docker (5 consecutive runs - all passed)
-- [x] Commit revert with clear explanation (8441235)
-- [ ] Push and validate CI
+- [x] Commit revert with clear explanation (4da0638)
+- [x] Push and validate CI (5 workflows started - monitoring)
 - [ ] Move TPP to `doc/done/`
