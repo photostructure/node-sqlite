@@ -364,6 +364,10 @@ private:
   // This fixes use-after-free when database is GC'd before its sessions.
   // See: https://github.com/nodejs/node/pull/56840 (similar fix for statements)
   Napi::ObjectReference database_ref_;
+  // Flag to detect if Delete() is called from destructor.
+  // When true, we skip explicit database_ref_.Reset() and let the
+  // ObjectReference destructor handle it, which is GC-safe on Alpine/musl.
+  bool in_destructor_ = false;
 
   friend class DatabaseSync;
 };

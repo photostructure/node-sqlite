@@ -2994,7 +2994,14 @@ Napi::Object Session::Create(Napi::Env env, DatabaseSync *database,
 Session::Session(const Napi::CallbackInfo &info)
     : Napi::ObjectWrap<Session>(info), session_(nullptr) {}
 
-Session::~Session() { Delete(); }
+Session::~Session() {
+  // Set flag so Delete() knows not to call database_ref_.Reset() explicitly.
+  // On Alpine/musl, calling Reset() during GC finalization corrupts V8's JIT
+  // page allocations. By letting the ObjectReference destructor handle cleanup
+  // (which runs after Delete() returns), we avoid this corruption.
+  in_destructor_ = true;
+  Delete();
+}
 
 void Session::SetSession(DatabaseSync *database, sqlite3_session *session) {
   database_ = database;
@@ -3030,8 +3037,12 @@ void Session::Delete() {
   // Now it's safe to delete the SQLite session
   sqlite3session_delete(session_to_delete);
 
-  // Release the strong reference to the database object
-  if (!database_ref_.IsEmpty()) {
+  // Release the strong reference to the database object.
+  // IMPORTANT: Only call Reset() if NOT in destructor. On Alpine/musl,
+  // calling Reset() during GC finalization (destructor path) corrupts V8's
+  // JIT page allocations. When in_destructor_ is true, we let the
+  // ObjectReference destructor handle cleanup instead, which is GC-safe.
+  if (!in_destructor_ && !database_ref_.IsEmpty()) {
     database_ref_.Reset();
   }
 }

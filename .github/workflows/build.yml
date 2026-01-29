@@ -159,7 +159,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-15-intel, macos-14, windows-latest, windows-11-arm]
-        node-version: [20, 22, 23, 24]
+        node-version: [20, 22, 24, 25]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -183,7 +183,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
         arch: [x64, arm64]
-        node-version: [20, 22, 23, 24]
+        node-version: [20, 22, 24, 25]
     runs-on: ${{ matrix.arch == 'arm64' && format('{0}-arm', matrix.os) || matrix.os }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -205,7 +205,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x64, arm64]
-        node-version: [20, 22, 23, 24]
+        node-version: [20, 22, 24, 25]
         include:
           - arch: x64
             runner: ubuntu-24.04
