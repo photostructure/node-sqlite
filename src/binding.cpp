@@ -19,8 +19,9 @@ void CleanupAddonData([[maybe_unused]] napi_env env, void *finalize_data,
 
   // Let Napi::FunctionReference destructors handle cleanup naturally.
   // Explicitly calling Reset() during worker termination causes JIT corruption
-  // on Alpine/musl. The references will be cleaned up when addon_data is deleted.
-  // See: nodejs/node-addon-api#660, P02-investigate-flaky-native-crashes.md
+  // on Alpine/musl. The references will be cleaned up when addon_data is
+  // deleted. See: nodejs/node-addon-api#660,
+  // P02-investigate-flaky-native-crashes.md
 
   delete addon_data;
 }
