@@ -226,6 +226,8 @@ jobs:
           name: test-extension-linux-${{ matrix.arch }}-musl
           path: ./test/fixtures/test-extension
         continue-on-error: true
+      # Parallel test execution works on Alpine now that database_ref_ is removed
+      # from StatementSync (commit 0691ae5). No need for --runInBand workaround.
       - run: |
           docker run --rm -v $(pwd):/tmp/project --entrypoint /bin/sh --platform ${{ matrix.platform }} node:${{ matrix.node-version }}-alpine -c "\
           apk add build-base git python3 py3-setuptools --update-cache && \
