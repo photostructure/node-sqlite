@@ -1785,11 +1785,6 @@ void StatementSync::InitStatement(DatabaseSync *database,
   }
 
   database_ = database;
-  // Create a strong reference to the database object to prevent it from being
-  // garbage collected while this statement exists. This fixes use-after-free
-  // when the database is GC'd before its statements.
-  // See: https://github.com/nodejs/node/pull/56840
-  database_ref_ = Napi::Persistent(database->Value());
   source_sql_ = sql;
 
   // Apply database-level defaults
@@ -1836,10 +1831,10 @@ StatementSync::~StatementSync() {
   if (statement_ && !finalized_) {
     sqlite3_finalize(statement_);
   }
-  // Release the strong reference to the database object
-  if (!database_ref_.IsEmpty()) {
-    database_ref_.Reset();
-  }
+  // Raw pointer to database is managed by DatabaseSync::FinalizeStatements()
+  // which is called before DatabaseSync destructor. This avoids N-API
+  // Reset() calls during GC which cause JIT corruption on Alpine/musl.
+  // See: commit 4da0638, nodejs/node-addon-api#660
 }
 
 Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {

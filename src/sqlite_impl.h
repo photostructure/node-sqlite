@@ -288,10 +288,6 @@ private:
   void Reset();
 
   DatabaseSync *database_ = nullptr;
-  // Strong reference to database object to prevent GC while statement exists.
-  // This fixes use-after-free when database is GC'd before its statements.
-  // See: https://github.com/nodejs/node/pull/56840
-  Napi::ObjectReference database_ref_;
   sqlite3_stmt *statement_ = nullptr;
   std::string source_sql_;
   bool finalized_ = false;
