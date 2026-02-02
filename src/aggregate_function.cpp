@@ -47,7 +47,10 @@ void ValueStorage::Remove(int32_t id) {
   const std::lock_guard<std::mutex> lock(mutex_);
   auto it = storage_.find(id);
   if (it != storage_.end()) {
-    it->second.Reset();
+    // Don't call Reset() explicitly - let the Napi::Reference destructor
+    // handle cleanup naturally when erased. Explicit Reset() during GC
+    // causes JIT corruption on Alpine/musl.
+    // See: nodejs/node-addon-api#660, P02-investigate-flaky-native-crashes.md
     storage_.erase(it);
   }
 }

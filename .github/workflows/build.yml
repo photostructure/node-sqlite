@@ -226,13 +226,19 @@ jobs:
           name: test-extension-linux-${{ matrix.arch }}-musl
           path: ./test/fixtures/test-extension
         continue-on-error: true
+      # Use --runInBand on Alpine to prevent remaining SIGSEGV crashes.
+      # Even after removing explicit Reset() calls, Napi::FunctionReference
+      # destructors still cause JIT corruption on Alpine x64 Node 20/24 during
+      # parallel worker termination. Node 22/25 and ARM64 work, but for
+      # reliability we run sequentially on all Alpine builds.
+      # See: nodejs/node-addon-api#660, P02-investigate-flaky-native-crashes.md
       - run: |
           docker run --rm -v $(pwd):/tmp/project --entrypoint /bin/sh --platform ${{ matrix.platform }} node:${{ matrix.node-version }}-alpine -c "\
           apk add build-base git python3 py3-setuptools --update-cache && \
           cd /tmp/project && \
           npm ci && \
           npm run build:dist && \
-          npm test"
+          npm test -- --runInBand"
 
   # Node.js compatibility tests require --experimental-sqlite flag and Node 22+
   # We test only on Node 24 as the experimental SQLite API may change between versions
