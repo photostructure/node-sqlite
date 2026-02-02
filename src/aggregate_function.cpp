@@ -101,42 +101,22 @@ CustomAggregate::CustomAggregate(Napi::Env env, DatabaseSync *db,
 }
 
 CustomAggregate::~CustomAggregate() {
+  // Let Napi::FunctionReference destructors handle cleanup naturally.
+  // Explicitly calling Reset() during GC causes JIT corruption on Alpine/musl.
+  // See: nodejs/node-addon-api#660, P02-investigate-flaky-native-crashes.md
+
   // Check if environment is still valid before N-API operations.
-  // During shutdown, env_ may be torn down and N-API operations would crash.
-  // Try to create a handle scope - if this fails, env is invalid.
   napi_handle_scope scope;
   napi_status status = napi_open_handle_scope(env_, &scope);
 
   if (status == napi_ok) {
-    // Safe to do N-API operations
-    // Only clean up our own function references
-    // Do NOT touch any aggregate contexts - SQLite owns those
-    if (!step_fn_.IsEmpty()) {
-      step_fn_.Reset();
-    }
-    if (!inverse_fn_.IsEmpty()) {
-      inverse_fn_.Reset();
-    }
-    if (!result_fn_.IsEmpty()) {
-      result_fn_.Reset();
-    }
-    if (!start_fn_.IsEmpty()) {
-      start_fn_.Reset();
-    }
-    if (start_type_ == OBJECT && !object_ref_.IsEmpty()) {
-      object_ref_.Reset();
-    }
-
     // Clean up async context if it was created
     if (async_context_ != nullptr) {
       napi_async_destroy(env_, async_context_);
       async_context_ = nullptr;
     }
-
     napi_close_handle_scope(env_, scope);
   }
-  // If status != napi_ok, env is invalid - skip cleanup.
-  // References will be leaked, but that's better than crashing.
 }
 
 void CustomAggregate::xStep(sqlite3_context *ctx, int argc,

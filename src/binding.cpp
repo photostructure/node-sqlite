@@ -17,22 +17,10 @@ void CleanupAddonData([[maybe_unused]] napi_env env, void *finalize_data,
     addon_data->databases.clear();
   }
 
-  // Clean up persistent references to prevent memory leaks
-  if (!addon_data->databaseSyncConstructor.IsEmpty()) {
-    addon_data->databaseSyncConstructor.Reset();
-  }
-  if (!addon_data->statementSyncConstructor.IsEmpty()) {
-    addon_data->statementSyncConstructor.Reset();
-  }
-  if (!addon_data->statementSyncIteratorConstructor.IsEmpty()) {
-    addon_data->statementSyncIteratorConstructor.Reset();
-  }
-  if (!addon_data->sessionConstructor.IsEmpty()) {
-    addon_data->sessionConstructor.Reset();
-  }
-  if (!addon_data->objectCreateFn.IsEmpty()) {
-    addon_data->objectCreateFn.Reset();
-  }
+  // Let Napi::FunctionReference destructors handle cleanup naturally.
+  // Explicitly calling Reset() during worker termination causes JIT corruption
+  // on Alpine/musl. The references will be cleaned up when addon_data is deleted.
+  // See: nodejs/node-addon-api#660, P02-investigate-flaky-native-crashes.md
 
   delete addon_data;
 }
