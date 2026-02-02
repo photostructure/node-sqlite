@@ -9,6 +9,8 @@
  */
 
 "use strict";
+// Flags: --expose-gc
+
 const assert = require("assert");
 const { DatabaseSync } = require("@photostructure/sqlite");
 const { test, beforeEach } = require("node:test");
@@ -191,5 +193,41 @@ test("sql error messages are descriptive", () => {
       code: "ERR_SQLITE_ERROR",
       message: /no such table/i,
     },
+  );
+});
+
+test.skip("a tag store keeps the database alive by itself" /* Requires --expose-gc flag */, () => {
+  const sql = new DatabaseSync(":memory:").createTagStore();
+
+  sql.db.exec("CREATE TABLE test (data INTEGER)");
+
+  global.gc();
+
+  // eslint-disable-next-line no-unused-expressions
+  sql.run`INSERT INTO test (data) VALUES (1)`;
+});
+
+test.skip("tag store prevents circular reference leaks" /* Requires --expose-gc flag and Node.js internal GC test utilities */, async () => {
+  const { gcUntil } = require("../common/gc");
+
+  const before = process.memoryUsage().heapUsed;
+
+  // Create many SQLTagStore + DatabaseSync pairs with circular references
+  for (let i = 0; i < 1000; i++) {
+    const sql = new DatabaseSync(":memory:").createTagStore();
+    sql.db.exec("CREATE TABLE test (data INTEGER)");
+    // eslint-disable-next-line no-void
+    sql.db.setAuthorizer(() => void sql.db);
+  }
+
+  // GC until memory stabilizes or give up after 20 attempts
+  await gcUntil(
+    "tag store leak check",
+    () => {
+      const after = process.memoryUsage().heapUsed;
+      // Memory should not grow significantly (allow 50% margin for noise)
+      return after < before * 1.5;
+    },
+    20,
   );
 });

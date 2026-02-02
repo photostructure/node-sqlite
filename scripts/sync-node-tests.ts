@@ -59,6 +59,17 @@ const skipTests: Record<string, Array<{ name: string; reason: string }>> = {
       reason: "Worker thread changeset serialization issue",
     },
   ],
+  "test-sqlite-template-tag.js": [
+    {
+      name: "a tag store keeps the database alive by itself",
+      reason: "Requires --expose-gc flag",
+    },
+    {
+      name: "tag store prevents circular reference leaks",
+      reason:
+        "Requires --expose-gc flag and Node.js internal GC test utilities",
+    },
+  ],
 };
 
 /**
