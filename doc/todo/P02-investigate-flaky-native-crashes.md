@@ -14,6 +14,7 @@
 **Fix Applied**: Removed `Napi::ObjectReference database_ref_` from StatementSync class (commit 0691ae5).
 
 **Validation Results**:
+
 - ✅ 779/813 tests pass on Alpine x64 WITHOUT --runInBand
 - ✅ session-lifecycle.test.ts passes (was crashing with SIGSEGV)
 - ✅ No SIGSEGV crashes in parallel test execution
@@ -31,36 +32,37 @@
 
 ### Reproduction Results
 
-| Test Configuration | Result |
-|-------------------|--------|
-| Alpine + parallel workers | ~25% crash rate |
-| Alpine + --runInBand | **0% crash rate** |
-| Ubuntu/macOS + parallel | 0% crash rate |
-| Single test file | 0% crash rate |
+| Test Configuration        | Result            |
+| ------------------------- | ----------------- |
+| Alpine + parallel workers | ~25% crash rate   |
+| Alpine + --runInBand      | **0% crash rate** |
+| Ubuntu/macOS + parallel   | 0% crash rate     |
+| Single test file          | 0% crash rate     |
 
 ### Code Locations Affected
 
 The following code locations call `Reset()` during cleanup:
 
-| File | Function | Issue |
-|------|----------|-------|
-| `src/sqlite_impl.cpp:1844-1852` | StatementSync::~StatementSync() | Calls `database_ref_.Reset()` |
-| `src/user_function.cpp:31-53` | UserDefinedFunction::~UserDefinedFunction() | Calls `fn_.Reset()` |
-| `src/aggregate_function.cpp:103-140` | CustomAggregate::~CustomAggregate() | Calls multiple `Reset()` |
-| `src/binding.cpp:9-38` | CleanupAddonData() | Calls `Reset()` on all FunctionReferences |
+| File                                 | Function                                    | Issue                                     |
+| ------------------------------------ | ------------------------------------------- | ----------------------------------------- |
+| `src/sqlite_impl.cpp:1844-1852`      | StatementSync::~StatementSync()             | Calls `database_ref_.Reset()`             |
+| `src/user_function.cpp:31-53`        | UserDefinedFunction::~UserDefinedFunction() | Calls `fn_.Reset()`                       |
+| `src/aggregate_function.cpp:103-140` | CustomAggregate::~CustomAggregate()         | Calls multiple `Reset()`                  |
+| `src/binding.cpp:9-38`               | CleanupAddonData()                          | Calls `Reset()` on all FunctionReferences |
 
 ### What Was Tried
 
-| Approach | Result |
-|----------|--------|
-| Make Session use atomic pointers | Reduced crashes from ~25% to ~20%, not eliminated |
-| Remove all explicit Reset() calls | Still crashes + may cause memory leaks |
-| Add `cleaned_by_database_` flag | Partial improvement, race still exists |
-| Use `--runInBand` on Alpine | **100% success** |
+| Approach                          | Result                                            |
+| --------------------------------- | ------------------------------------------------- |
+| Make Session use atomic pointers  | Reduced crashes from ~25% to ~20%, not eliminated |
+| Remove all explicit Reset() calls | Still crashes + may cause memory leaks            |
+| Add `cleaned_by_database_` flag   | Partial improvement, race still exists            |
+| Use `--runInBand` on Alpine       | **100% success**                                  |
 
 ### Why --runInBand Works
 
 Jest's `--runInBand` flag runs all tests sequentially in a single process:
+
 - No parallel worker processes = no simultaneous worker termination
 - No race condition between multiple workers calling N-API cleanup code
 - Single process exit means orderly cleanup without interference
@@ -72,10 +74,12 @@ Jest's `--runInBand` flag runs all tests sequentially in a single process:
 ### Difference from Node.js Upstream
 
 Node.js upstream uses `BaseObjectWeakPtr<DatabaseSync>` for Session's reference to DatabaseSync, which is essentially a `std::weak_ptr`. This allows:
+
 - Safe checking if the database is still valid
 - No crash if database is GC'd before session
 
 Our implementation uses raw `DatabaseSync*` pointers, which:
+
 - Cannot detect if database has been freed
 - Leads to use-after-free when GC order is non-deterministic
 
@@ -129,12 +133,12 @@ Added `--runInBand` to Alpine test job in `.github/workflows/build.yml`:
 
 ### Trade-offs
 
-| Aspect | Impact |
-|--------|--------|
-| Test Speed | Slower on Alpine (sequential vs parallel) |
-| Reliability | 100% reliable (no crashes) |
-| Maintenance | No ongoing code changes needed |
-| Other Platforms | Unaffected (still run parallel) |
+| Aspect          | Impact                                    |
+| --------------- | ----------------------------------------- |
+| Test Speed      | Slower on Alpine (sequential vs parallel) |
+| Reliability     | 100% reliable (no crashes)                |
+| Maintenance     | No ongoing code changes needed            |
+| Other Platforms | Unaffected (still run parallel)           |
 
 ---
 
@@ -168,8 +172,8 @@ Added `--runInBand` to Alpine test job in `.github/workflows/build.yml`:
 
 ## Files Modified
 
-| File | Change |
-|------|--------|
+| File                          | Change                               |
+| ----------------------------- | ------------------------------------ |
 | `.github/workflows/build.yml` | Added `--runInBand` for Alpine tests |
 
 ---
@@ -193,6 +197,7 @@ Changes not staged for commit:
 ### Crashes Still Happening
 
 Recent CI failures (all on Alpine with Node 20/24):
+
 - Run 21496858734 (Jan 29): `SIGSEGV in test/session-lifecycle.test.ts`
 - Test: "A jest worker process (pid=149) was terminated by another process: signal=SIGSEGV"
 - Pattern: 100% reproducible on Alpine x64 and ARM64
@@ -201,12 +206,13 @@ Recent CI failures (all on Alpine with Node 20/24):
 
 Commit 4da0638 reverted Session class to remove `database_ref_`, but **StatementSync was not fixed**:
 
-| Class | Status | Current Code | Node.js Upstream |
-|-------|--------|-------------|------------------|
-| Session | ✅ Fixed | Raw `DatabaseSync*` pointer | `BaseObjectWeakPtr<DatabaseSync>` |
-| StatementSync | ❌ **NOT FIXED** | `Napi::ObjectReference database_ref_` | `BaseObjectPtr<DatabaseSync>` |
+| Class         | Status           | Current Code                          | Node.js Upstream                  |
+| ------------- | ---------------- | ------------------------------------- | --------------------------------- |
+| Session       | ✅ Fixed         | Raw `DatabaseSync*` pointer           | `BaseObjectWeakPtr<DatabaseSync>` |
+| StatementSync | ❌ **NOT FIXED** | `Napi::ObjectReference database_ref_` | `BaseObjectPtr<DatabaseSync>`     |
 
 **StatementSync destructor still calls Reset():**
+
 ```cpp
 // src/sqlite_impl.cpp:1843-1845
 if (!database_ref_.IsEmpty()) {
@@ -217,6 +223,7 @@ if (!database_ref_.IsEmpty()) {
 ### Why session-lifecycle.test.ts Crashes
 
 The test creates both Sessions AND Statements:
+
 ```typescript
 db.prepare("INSERT INTO test VALUES (?, ?)").run(1, "test");
        ↑
@@ -264,11 +271,12 @@ docker run --rm -v "$(pwd)":/tmp/project --platform linux/amd64 node:20-alpine s
 
 ## Recommended Fix
 
-### Option 1: Remove database_ref_ from StatementSync (Preferred)
+### Option 1: Remove database*ref* from StatementSync (Preferred)
 
 Follow the same pattern as Session class (commit 4da0638):
 
 1. **Change StatementSync to use raw pointer** (like Session does):
+
    ```cpp
    // In sqlite_impl.h
    class StatementSync {
@@ -278,6 +286,7 @@ Follow the same pattern as Session class (commit 4da0638):
    ```
 
 2. **Remove Reset() call from destructor**:
+
    ```cpp
    // In sqlite_impl.cpp
    StatementSync::~StatementSync() {
@@ -291,20 +300,23 @@ Follow the same pattern as Session class (commit 4da0638):
 3. **Rely on DatabaseSync::FinalizeStatements()** for cleanup ordering (already implemented)
 
 **Trade-offs:**
+
 - ✅ Matches Session class design (consistent)
 - ✅ Matches Node.js upstream pattern (weak/smart pointers)
 - ✅ Eliminates N-API Reset() calls during GC
 - ✅ No performance impact
-- ⚠️  Requires testing to ensure no use-after-free
+- ⚠️ Requires testing to ensure no use-after-free
 
 ### Option 2: Keep --runInBand Workaround (Quick but suboptimal)
 
 Commit the working directory changes:
+
 1. Commit `.github/workflows/build.yml` with `--runInBand`
 2. Commit documentation updates
 3. Accept slower Alpine CI tests
 
 **Trade-offs:**
+
 - ✅ Minimal code changes
 - ✅ Low risk
 - ❌ Doesn't fix root cause
@@ -320,6 +332,7 @@ Commit the working directory changes:
 ## Completion Checklist
 
 **Investigation:**
+
 - [x] Identified crash timing: Jest parallel worker cleanup
 - [x] Verified tests pass with --runInBand (in working dir, not committed)
 - [x] Verified tests pass in isolation
@@ -331,13 +344,15 @@ Commit the working directory changes:
 - [x] Investigated alternative fixes (atomic pointers, removing Reset())
 
 **CRITICAL FINDINGS (Jan 31):**
+
 - [x] Discovered --runInBand "fix" was never committed
 - [x] Confirmed crashes still occurring in latest CI runs
 - [x] Identified StatementSync as unfixed source of crashes
 
 **Fix Implementation:**
+
 - [ ] Commit --runInBand workaround for immediate CI stability
-- [ ] Remove database_ref_ from StatementSync (proper fix)
+- [ ] Remove database*ref* from StatementSync (proper fix)
 - [ ] Test proper fix on Alpine locally and in CI
 - [ ] Validate fix with 10 consecutive CI runs
 - [ ] Remove --runInBand workaround once proper fix validated
@@ -365,15 +380,18 @@ Commit the working directory changes:
 ### Key Technical Insights
 
 **Node.js Pattern for Object References:**
+
 - Session: Uses `BaseObjectWeakPtr<DatabaseSync>` (weak pointer)
 - StatementSync: Uses `BaseObjectPtr<DatabaseSync>` (smart pointer)
 - Both avoid calling Reset() during GC finalization
 
 **Our Current Pattern:**
+
 - Session: Raw `DatabaseSync*` pointer (fixed in commit 4da0638)
 - StatementSync: `Napi::ObjectReference database_ref_` (**not fixed**, calls Reset())
 
 **Why It Crashes:**
+
 - N-API `ObjectReference::~ObjectReference()` is safe during GC
 - Explicitly calling `Reset()` during GC is **NOT safe** on musl
 - Race condition: parallel workers call Reset() simultaneously → JIT corruption
@@ -382,7 +400,7 @@ Commit the working directory changes:
 
 ### If Implementing the Proper Fix
 
-1. **Remove database_ref_ from StatementSync**: Use raw pointer like Session does
+1. **Remove database*ref* from StatementSync**: Use raw pointer like Session does
 2. **Verify DatabaseSync::FinalizeStatements()**: Ensure cleanup ordering is correct
 3. **Test on Alpine**: Both with and without --runInBand
 4. **Check other classes**: Ensure no other classes have the same pattern
