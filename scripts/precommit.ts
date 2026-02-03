@@ -183,9 +183,7 @@ function run({
       desc: "Run behavioral compatibility tests (validates runtime behavior matches node:sqlite)",
     });
   } else {
-    console.log(
-      "\n⚠ Skipping API compatibility checks (requires Node.js 22+)",
-    );
+    console.log("\n⚠ Skipping API compatibility checks (requires Node.js 22+)");
   }
 
   // Platform-specific checks
