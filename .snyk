@@ -1,0 +1,25 @@
+# Snyk (https://snyk.io) policy file
+# For more information, see https://docs.snyk.io/scan-using-snyk/policies/the-.snyk-file
+version: v1.25.0
+
+# Ignores vulnerabilities that have no fix available or are false positives
+ignore:
+  # inflight@1.0.6 - Missing Release of Resource after Effective Lifetime
+  # https://security.snyk.io/vuln/SNYK-JS-INFLIGHT-6095116
+  #
+  # This is a dev-only transitive dependency deeply nested in Jest's tree:
+  # jest > @jest/core > @jest/reporters > @jest/transform > babel-plugin-istanbul >
+  # test-exclude > glob@7.x > inflight
+  #
+  # The package is unmaintained with no fix available. The vulnerability involves
+  # potential memory leaks in flight tracking, which has minimal impact in the
+  # context of running tests (short-lived processes). This is not a production
+  # dependency.
+  #
+  # Tracked at: https://github.com/npm/inflight/issues/6
+  SNYK-JS-INFLIGHT-6095116:
+    - "*":
+        reason: >-
+          No fix available. Dev-only transitive dependency via Jest.
+          Memory leak risk is minimal for short-lived test processes.
+        expires: 2027-02-03T00:00:00.000Z
