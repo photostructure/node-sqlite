@@ -3,74 +3,115 @@
 ## Goal Definition
 
 - **What Success Looks Like**: CI passes reliably without random SIGSEGV/SIGTRAP crashes
-- **Core Problem**: Native code crashes randomly in CI across different tests, Node versions, and architectures
+- **Core Problem**: Native code crashes randomly in CI on Alpine/musl across different tests, Node versions, and architectures
 - **Key Constraints**: Must identify root cause (memory corruption, race condition, or CI environment issue)
-- **Success Validation**: 10 consecutive CI runs without native crashes
+- **Success Validation**: 10 consecutive CI runs without native crashes on Alpine
 
-## Current Status: 🔧 WORKAROUND APPLIED (Feb 1, 2026)
+## Current Status: 🔴 UNRESOLVED (Feb 2, 2026)
 
-**Root Cause**: N-API `Napi::Reference` destructors call `napi_delete_reference` during Jest worker process termination on Alpine/musl, which corrupts V8's JIT page allocations.
+**Root Cause Identified**: Memory corruption occurs on Alpine/musl during N-API operations. This manifests as:
+1. SIGSEGV/SIGABRT during process exit
+2. String corruption during normal test execution (e.g., `'Updated${i}'` becomes `'UpdatedheH��'`)
 
-**Workaround Applied**: Added `--runInBand` to Alpine CI tests to prevent parallel worker termination.
+**Workaround Attempted**: `--runInBand` reduces but does NOT eliminate crashes.
 
-**Why Full Fix Is Complex**: The fundamental issue is that `Napi::Reference` (including `FunctionReference`, `ObjectReference`) has an automatic destructor that calls `napi_delete_reference`. This happens even without explicit `Reset()` calls. Switching to `v8::Global<>` (like better-sqlite3 does) would require significant refactoring.
+**CI Run Evidence**: https://github.com/photostructure/node-sqlite/actions/runs/21609574822
+- 5 Alpine jobs failed even WITH `--runInBand`
+- Failures include both SIGSEGV at exit AND memory corruption during tests
 
 ---
 
-## Investigation Summary (Feb 1, 2026)
+## Investigation Summary (Feb 2, 2026)
 
-### Critical Discovery
+### Key Findings
 
-Previous analysis claimed the fix was "committed" but **the `--runInBand` workaround was never actually committed to the workflow**. The local working directory had the change, but CI was running without it.
+1. **Memory corruption is happening during normal operation, not just at exit**
+   - Test failure shows corrupted string: `unrecognized token: "'UpdatedheH��"`
+   - This is NOT a cleanup race condition - it's active memory corruption
 
-### Root Cause Analysis
+2. **The same test passes on glibc (Ubuntu), fails on musl (Alpine)**
+   - Test: "should not leak memory when callbacks throw repeatedly"
+   - Ubuntu Node 20: PASS
+   - Alpine Node 20: FAIL with corrupted memory
 
-1. **What Happens**: When a Jest worker process terminates, V8 runs garbage collection and finalizers
-2. **The Problem**: `Napi::Reference` destructors call `napi_delete_reference` during this finalization
-3. **Why musl Is Different**: musl libc handles thread-local storage cleanup differently than glibc, exposing a race condition in V8's JIT page allocations
-4. **Reference**: nodejs/node-addon-api#660
+3. **`--runInBand` does NOT fix all crashes**
+   - Prevents parallel worker termination races
+   - Does NOT prevent single-process memory corruption
+   - Does NOT prevent SIGSEGV during process exit
 
-### Reproduction Results (Local Testing)
+4. **Prior analysis was incorrect**
+   - Previous claim: "0% crash rate WITH fix" was false
+   - Previous claim: "nodejs/node-addon-api#660 was fixed" - that fix was for a different issue
+   - The `--runInBand` workaround was never committed for weeks
 
-| Configuration | Result |
-|---------------|--------|
-| Alpine Node 20 + parallel (maxWorkers=4) | ~80% crash rate |
-| Alpine Node 20 + `--runInBand` | **0% crash rate** |
-| Ubuntu/macOS + parallel | 0% crash rate |
+### Crash Patterns Observed
+
+| Scenario | glibc (Ubuntu) | musl (Alpine) |
+|----------|----------------|---------------|
+| Single test file | PASS | Usually PASS |
+| Full suite parallel | PASS | ~50% crash rate |
+| Full suite --runInBand | PASS | ~30% crash rate |
+| Process exit cleanup | PASS | SIGSEGV/SIGABRT |
 
 ### What better-sqlite3 Does Differently
 
-Analysis of better-sqlite3 shows they use `v8::Global<>` instead of N-API's `Napi::Reference`. V8's `Global<>` has different cleanup semantics that work better with environment teardown:
+Analysis of better-sqlite3 shows they avoid N-API references entirely:
 
-1. Uses `v8::Global<>` for persistent references (not N-API refs)
-2. Registers cleanup via `node::AddEnvironmentCleanupHook()`
-3. Doesn't call `.Reset()` in destructors - lets destructor run naturally
-4. SQLite function callbacks use `xDestroy` for cleanup (called by SQLite, not GC)
+1. **Uses `v8::Global<>` instead of `Napi::Reference`**
+   - V8's Global has different cleanup semantics
+   - Works correctly with environment teardown on musl
 
-### Places Where N-API References Are Destroyed
+2. **Uses `node::AddEnvironmentCleanupHook()`**
+   - Explicit cleanup before environment teardown
+   - Avoids automatic destructor issues
 
-| Class | Member | Destructor Behavior |
-|-------|--------|-------------------|
-| `UserDefinedFunction` | `fn_` | Automatic destructor calls `napi_delete_reference` |
-| `CustomAggregate` | `step_fn_`, `inverse_fn_`, `result_fn_`, etc. | Automatic destructor calls `napi_delete_reference` |
-| `BackupJob` | `progress_func_` | Automatic destructor calls `napi_delete_reference` |
-| `ValueStorage` | `storage_` map | Was calling explicit `Reset()` - **fixed** |
-| `AddonData` | `objectCreateFn`, constructors | Lives for addon lifetime |
+3. **SQLite callbacks use `xDestroy`**
+   - Called by SQLite, not by GC
+   - Deterministic cleanup order
 
 ---
 
-## Fixes Applied
+## Technical Analysis
 
-### 1. ValueStorage::Remove() Fix
+### N-API References in Our Code
 
-Removed explicit `Reset()` call in `ValueStorage::Remove()` that was being called during aggregate cleanup:
+| Class | Member | Risk |
+|-------|--------|------|
+| `UserDefinedFunction` | `fn_` (FunctionReference) | Destructor calls `napi_delete_reference` |
+| `CustomAggregate` | `step_fn_`, `inverse_fn_`, `result_fn_`, etc. | Multiple destructors |
+| `BackupJob` | `progress_func_` (FunctionReference) | Destructor during async completion |
+| `ValueStorage` | `storage_` map of References | Was calling explicit Reset() - FIXED |
+| `AddonData` | Constructor references | Lives for addon lifetime |
+
+### The Fundamental Problem
+
+`Napi::FunctionReference` and `Napi::Reference` destructors call `napi_delete_reference()` internally. On musl libc, this appears to corrupt V8's memory/JIT during:
+1. Garbage collection
+2. Process exit
+3. Possibly during high-frequency allocation/deallocation
+
+This is NOT just a cleanup issue - the string corruption proves memory is being corrupted during normal operation.
+
+### Relevant Upstream Issues
+
+- [nodejs/node-addon-api#660](https://github.com/nodejs/node-addon-api/issues/660) - ObjectWrap destructor crashes (fixed 2020, different issue)
+- [nodejs/node#37236](https://github.com/nodejs/node/issues/37236) - Crash on node-api add-on finalization (fixed, different issue)
+- [nodejs/node-addon-api#591](https://github.com/nodejs/node-addon-api/issues/591) - Fatal error with async code from exit hooks
+
+---
+
+## Fixes Applied (Partial)
+
+### 1. ValueStorage::Remove() - Committed
+
+Removed explicit `Reset()` call:
 
 ```cpp
 // Before (problematic):
 void ValueStorage::Remove(int32_t id) {
   auto it = storage_.find(id);
   if (it != storage_.end()) {
-    it->second.Reset();  // Explicit Reset() during cleanup - DANGEROUS
+    it->second.Reset();  // Explicit Reset() - DANGEROUS
     storage_.erase(it);
   }
 }
@@ -79,92 +120,163 @@ void ValueStorage::Remove(int32_t id) {
 void ValueStorage::Remove(int32_t id) {
   auto it = storage_.find(id);
   if (it != storage_.end()) {
-    // Let destructor handle cleanup naturally
+    // Let destructor handle cleanup
     storage_.erase(it);
   }
 }
 ```
 
-### 2. CI Workflow Workaround
+**Impact**: Reduced crash frequency but did NOT eliminate crashes.
 
-Added `--runInBand` to Alpine test job in `.github/workflows/build.yml`:
+### 2. --runInBand for Alpine CI - Committed
 
+Added to `.github/workflows/build.yml`:
 ```yaml
 npm test -- --runInBand
 ```
 
-This prevents parallel Jest workers from terminating simultaneously, eliminating the race condition that triggers the crash.
+**Impact**: Prevents parallel worker termination races but crashes still occur during single-process execution and exit.
 
 ---
 
-## Why `--runInBand` Is Necessary
+## Attempted Fixes That Did NOT Work
 
-Even after removing all explicit `Reset()` calls, crashes still occur because:
+### 1. SuppressDestruct() on Addon References
 
-1. `Napi::FunctionReference` destructor implicitly calls `napi_delete_reference`
-2. When Jest worker processes terminate, multiple destructors run in parallel
-3. On musl libc, this triggers a race condition in V8's JIT page allocations
-4. The only safe workaround without major refactoring is to prevent parallel worker termination
-
----
-
-## Alternative Solutions (Not Implemented)
-
-### Option 1: Switch to v8::Global<> (Major Refactor)
-
-Like better-sqlite3, use `v8::Global<>` instead of N-API references. This would require:
-- Replacing all `Napi::FunctionReference` with `v8::Global<v8::Function>`
-- Changing constructor patterns to capture `v8::Isolate*`
-- Updating all callback registration code
-
-**Pros**: Eliminates the issue entirely
-**Cons**: Major refactoring, breaks N-API abstraction
-
-### Option 2: Use Raw napi_ref with Manual Lifecycle
-
-Replace `Napi::Reference` with raw `napi_ref` and manually check environment validity before calling `napi_delete_reference`:
+Tried calling `SuppressDestruct()` on addon-level `FunctionReference` members:
 
 ```cpp
-~MyClass() {
-  napi_status status = napi_delete_reference(env_, ref_);
-  // Ignore status - environment may already be torn down
-}
+addon_data->databaseSyncConstructor.SuppressDestruct();
 ```
 
-**Pros**: Less invasive than v8::Global
-**Cons**: More error-prone, requires manual memory management
+**Result**: No improvement. Crashes come from per-function/per-aggregate references, not addon-level ones.
 
-### Option 3: Use SuppressDestruct() Selectively
+### 2. Removing All Explicit Reset() Calls
 
-Call `ref.SuppressDestruct()` on references that might outlive the environment:
+Previous commit `c86810b` removed Reset() calls from destructors.
 
-**Pros**: Simple change
-**Cons**: May leak memory in normal operation, only appropriate for addon-lifetime objects
+**Result**: Crashes continued because `Napi::Reference` destructors IMPLICITLY call `napi_delete_reference`.
 
 ---
 
-## Validation
+## Potential Solutions (NOT Implemented)
 
-With both fixes applied:
+### Option 1: Switch to v8::Global<> (Recommended, Major Refactor)
 
-1. ✅ `npm test -- --runInBand` passes 100% on Alpine Node 20
-2. ✅ CI should pass with `--runInBand` in workflow
-3. ✅ Other platforms (Ubuntu, macOS, Windows) unaffected
+Replace all `Napi::FunctionReference` with `v8::Global<v8::Function>`:
+
+```cpp
+// Current (problematic):
+Napi::FunctionReference fn_;
+
+// Better (like better-sqlite3):
+v8::Global<v8::Function> fn_;
+```
+
+**Pros**:
+- Eliminates N-API reference issues entirely
+- Proven to work (better-sqlite3 uses this)
+
+**Cons**:
+- Major refactoring effort
+- Breaks N-API abstraction
+- Need to capture `v8::Isolate*` in constructors
+
+### Option 2: Mark Alpine Tests as Allowed-to-Fail
+
+```yaml
+test-alpine:
+  continue-on-error: true
+```
+
+**Pros**: Unblocks CI immediately
+
+**Cons**: Loses Alpine test coverage, may ship broken Alpine builds
+
+### Option 3: Skip Problematic Tests on Alpine
+
+```typescript
+const describeOrSkip = process.platform === 'linux' && isMusl() ? describe.skip : describe;
+```
+
+**Pros**: Other tests still run
+
+**Cons**: Reduced coverage, doesn't fix root cause
+
+### Option 4: Explicit Teardown Before Exit
+
+Register cleanup via `process.on('beforeExit')` or `napi_add_env_cleanup_hook`:
+
+```cpp
+napi_add_env_cleanup_hook(env, CleanupAllReferences, data);
+```
+
+**Pros**: May allow safe cleanup ordering
+
+**Cons**: Requires significant restructuring, may not fix all cases
 
 ---
 
-## Completion Checklist
+## Reproduction Steps
 
-- [x] Identified root cause: N-API reference cleanup during worker termination
-- [x] Reproduced locally on Alpine Node 20
-- [x] Removed explicit Reset() call in ValueStorage::Remove()
-- [x] Added --runInBand to workflow for Alpine tests
-- [x] Verified --runInBand fixes the issue locally
-- [x] Analyzed better-sqlite3 approach for reference
-- [x] Documented why full fix requires major refactoring
-- [ ] Commit and push fixes
-- [ ] Validate 10 consecutive CI runs
-- [ ] Move document to `doc/done/`
+### Reproduce on Alpine (crashes ~50% of time):
+
+```bash
+docker run --rm -v $(pwd):/tmp/project --platform linux/amd64 node:20-alpine sh -c "
+  cd /tmp/project &&
+  apk add build-base git python3 py3-setuptools &&
+  rm -f build/Release/*.node &&
+  npx node-gyp rebuild &&
+  npm run build:dist &&
+  npm test -- --maxWorkers=4
+"
+```
+
+### Verify same test passes on Ubuntu:
+
+```bash
+docker run --rm -v $(pwd):/tmp/project --platform linux/amd64 node:20-bullseye sh -c "
+  cd /tmp/project &&
+  apt-get update && apt-get install -y build-essential python3 &&
+  rm -f build/Release/*.node &&
+  npx node-gyp rebuild &&
+  npm run build:dist &&
+  npm test -- --maxWorkers=4
+"
+```
+
+---
+
+## Handoff Notes for Next Engineer
+
+### What's Been Done
+
+1. ✅ Identified that crashes are musl-specific (glibc works fine)
+2. ✅ Identified that it's memory corruption, not just cleanup races
+3. ✅ Removed explicit Reset() call in ValueStorage::Remove()
+4. ✅ Added --runInBand workaround (partial fix)
+5. ✅ Analyzed better-sqlite3 approach (uses v8::Global<>)
+6. ✅ Tested SuppressDestruct() (didn't help)
+
+### What Needs To Be Done
+
+1. ❌ Implement proper fix (likely Option 1: switch to v8::Global<>)
+2. ❌ OR accept Alpine as unsupported/best-effort
+3. ❌ Update documentation if Alpine support is dropped
+
+### Key Files
+
+- `src/user_function.cpp` - UserDefinedFunction with FunctionReference
+- `src/aggregate_function.cpp` - CustomAggregate with multiple References
+- `src/sqlite_impl.cpp` - BackupJob with FunctionReference
+- `src/binding.cpp` - AddonData cleanup
+- `.github/workflows/build.yml` - CI configuration
+
+### Questions to Research
+
+1. Why does musl trigger this but glibc doesn't?
+2. Is there a way to detect musl at runtime and avoid the problematic code paths?
+3. Could we use a hybrid approach (N-API on glibc, v8::Global on musl)?
 
 ---
 
@@ -172,5 +284,5 @@ With both fixes applied:
 
 - [nodejs/node-addon-api#660](https://github.com/nodejs/node-addon-api/issues/660) - ObjectWrap destructor crashes
 - [nodejs/node#37236](https://github.com/nodejs/node/issues/37236) - Crash on node-api add-on finalization
-- [lovell/sharp#2570](https://github.com/lovell/sharp/issues/2570) - Segfault on Alpine/musl
-- better-sqlite3 source code - uses v8::Global<> instead of N-API references
+- [nodejs/node-addon-api#591](https://github.com/nodejs/node-addon-api/issues/591) - Fatal error with N-API async from exit hooks
+- [better-sqlite3 source](https://github.com/WiseLibs/better-sqlite3) - Uses v8::Global<> instead of N-API references
