@@ -67,7 +67,8 @@
       "WebFetch(domain:nodejs.org)",
       "WebFetch(domain:sqlite.org)",
       "WebFetch(domain:stackoverflow.com)",
-      "WebFetch(domain:www.sqlite.org)"
+      "WebFetch(domain:www.sqlite.org)",
+      "WebFetch(domain:docs.anthropic.com)"
     ],
     "additionalDirectories": [
       "/home/mrm/src/node-addon-examples",
