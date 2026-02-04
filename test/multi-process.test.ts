@@ -83,7 +83,7 @@ describe("Multi-Process Database Access", () => {
           expect(data.sum).toBe(4950); // Sum of 0-99
         });
       },
-      getTestTimeout(10000),
+      getTestTimeout(15000), // Multi-process test needs generous base timeout, we had rare timeouts in GHA with 10s
     );
 
     test(
@@ -133,7 +133,7 @@ describe("Multi-Process Database Access", () => {
 
         verifyDb.close();
       },
-      getTestTimeout(10000),
+      getTestTimeout(15000), // Multi-process test needs generous base timeout
     );
   });
 
