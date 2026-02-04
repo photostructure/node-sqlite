@@ -468,7 +468,9 @@ async function main() {
 
     console.log("\n✅ Sync complete!");
     console.log("\nNext steps:");
-    console.log("1. Run `npm run build:native` to ensure the native addon compiles");
+    console.log(
+      "1. Run `npm run build:native` to ensure the native addon compiles",
+    );
     console.log("2. Run `npm test` to verify everything works");
     console.log(
       "3. Update CHANGELOG.md with the new Node.js version before release",
