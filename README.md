@@ -70,12 +70,6 @@ db.close();
 - [Build Flags & Configuration](./doc/build-flags.md)
 - [Library Comparison](./doc/library-comparison.md)
 
-## Support
-
-- 🐛 [Issues](https://github.com/photostructure/node-sqlite/issues)
-- 💬 [Discussions](https://github.com/photostructure/node-sqlite/discussions)
-- 📧 [Security](./SECURITY.md)
-
 ## License
 
 MIT - see [LICENSE](./LICENSE) for details.
