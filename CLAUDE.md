@@ -59,8 +59,10 @@ node-sqlite/
 │       ├── node_mem.h        # Memory management utilities
 │       ├── util.h            # Node.js utility functions
 │       └── ...               # Other Node.js internal headers
-├── ../better-sqlite3/           # better-sqlite3 for API reference (optional, clone separately)
-├── ../node/                     # Node.js repository for reference (optional, clone separately)
+├── ../node-addon-api/           # ⚠️ CRITICAL: Official N-API docs (clone from github.com/nodejs/node-addon-api)
+├── ../node-addon-examples/      # ⚠️ CRITICAL: Official N-API examples (clone from github.com/nodejs/node-addon-examples)
+├── ../better-sqlite3/           # Optional: better-sqlite3 for API reference (clone separately if needed)
+├── ../node/                     # Optional: Node.js repository for reference (clone separately if needed)
 ├── scripts/
 │   └── sync-from-node.js     # Automated sync from Node.js repository
 ├── test/                     # Test suite with comprehensive coverage
@@ -99,11 +101,25 @@ node-sqlite/
 - Loads native binding and exports typed interfaces
 - Handles Symbol.dispose integration
 
-**External Reference Implementations** (optional, clone separately):
+**External Reference Implementations** (CRITICAL - clone these repositories):
 
-- **`../better-sqlite3/`**: Reference implementation for better-sqlite3 API compatibility
+- **`../node-addon-api/`**: Official Node-API C++ wrapper (REQUIRED)
+  - Clone from https://github.com/nodejs/node-addon-api
+  - PRIMARY resource for all N-API development questions
+  - Contains API reference, implementation details, and test examples
+
+- **`../node-addon-examples/`**: Official Node-API examples (REQUIRED)
+  - Clone from https://github.com/nodejs/node-addon-examples
+  - Comprehensive working examples for every N-API pattern
+  - Use for learning implementation patterns and best practices
+
+- **`../better-sqlite3/`**: Reference for better-sqlite3 API compatibility (optional)
   - Clone from https://github.com/WiseLibs/better-sqlite3 if needed for API reference
   - Used when implementing better-sqlite3 drop-in replacement features
+
+- **`../node/`**: Node.js source repository (optional)
+  - Clone from https://github.com/nodejs/node for reference
+  - Used for understanding Node.js internals and upstream SQLite implementation
 
 ### Documentation Structure
 
@@ -156,6 +172,35 @@ This project follows consistent naming patterns for npm scripts to improve disco
 ## Development Notes
 
 - If you need to run a command with `sudo`, ask the user to run the command. You can't run `sudo`.
+
+### PRIMARY N-API RESOURCES
+
+**CRITICAL**: For ANY N-API or native addon issues, ALWAYS consult these repositories FIRST:
+
+- **`../node-addon-api/`** - The official Node-API C++ wrapper documentation and examples
+  - Clone from https://github.com/nodejs/node-addon-api
+  - Contains the complete API reference and implementation details
+  - Use this for understanding N-API types, methods, and patterns
+  - Check test files for real-world usage examples
+
+- **`../node-addon-examples/`** - Comprehensive examples of N-API patterns
+  - Clone from https://github.com/nodejs/node-addon-examples
+  - Contains working examples for every N-API feature
+  - Use this for learning how to implement specific functionality
+  - Includes examples of callbacks, async work, object wrapping, etc.
+
+**When to use these resources**:
+- ❓ Any N-API type confusion (Napi::Value, Napi::Object, etc.)
+- ❓ Memory management questions (References, ObjectWrap, etc.)
+- ❓ Callback and function invocation patterns
+- ❓ Async worker implementation questions
+- ❓ Error handling and exception patterns
+- ❓ Build system issues (binding.gyp, node-gyp)
+- ❓ Cross-platform compatibility concerns
+- ❓ TypedArray, Buffer, or ArrayBuffer handling
+- ❓ Basically ANY native addon development question
+
+**DO NOT** rely on web search, Stack Overflow, or AI suggestions for N-API questions without first checking these authoritative sources. The official examples and documentation are always more reliable and up-to-date.
 
 ### Working with Node.js C++ Code
 
