@@ -11,13 +11,12 @@
         "src/upstream/sqlite3.c"
       ],
       "include_dirs": [
-        "<!@(node -p \"require('node-addon-api').include\")",
         "src",
         "src/upstream",
         "src/shims"
       ],
       "dependencies": [
-        "<!(node -p \"require('node-addon-api').gyp\")"
+        "<!(node -p \"require('node-addon-api').targets + ':node_addon_api_except'\")"
       ],
       # SQLite build flags - see doc/build-flags.md for comprehensive documentation
       # including comparison with Node.js configuration and rationale for our choices
