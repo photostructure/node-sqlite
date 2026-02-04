@@ -439,6 +439,28 @@ async function main() {
 
     // Note: SQLite version update removed since we sync SQLite files from SQLite.org, not Node.js
 
+    // Update README.md with the Node.js version
+    if (nodeVersion) {
+      try {
+        const readmePath = path.join(packageRoot, "README.md");
+        let readme = fs.readFileSync(readmePath, "utf8");
+        // Update "Synced with Node.js vXX.X.X" pattern
+        readme = readme.replace(
+          /Synced with Node\.js v[\d.]+/g,
+          `Synced with Node.js ${nodeVersion}`,
+        );
+        // Update "compatible with Node.js vXX.X.X" pattern
+        readme = readme.replace(
+          /compatible with Node\.js v[\d.]+ built-in/g,
+          `compatible with Node.js ${nodeVersion} built-in`,
+        );
+        fs.writeFileSync(readmePath, readme);
+        console.log(`Updated README.md with Node.js version ${nodeVersion}`);
+      } catch (err: any) {
+        console.error("Failed to update README.md:", err.message);
+      }
+    }
+
     // Update sync cache with the current SHA
     if (nodeCommitSha) {
       updateSyncCache(args.repo, args.branch, nodeCommitSha);
@@ -446,8 +468,11 @@ async function main() {
 
     console.log("\n✅ Sync complete!");
     console.log("\nNext steps:");
-    console.log("1. Run `npm run build:native` to ensure the native addon ");
+    console.log("1. Run `npm run build:native` to ensure the native addon compiles");
     console.log("2. Run `npm test` to verify everything works");
+    console.log(
+      "3. Update CHANGELOG.md with the new Node.js version before release",
+    );
   } else if (!args.dryRun && successCount < totalCount) {
     console.log(`\n⚠️  ${totalCount - successCount} files failed to download`);
     console.log("Some files may be missing from the specified branch/tag.");
