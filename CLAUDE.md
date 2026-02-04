@@ -190,6 +190,7 @@ This project follows consistent naming patterns for npm scripts to improve disco
   - Includes examples of callbacks, async work, object wrapping, etc.
 
 **When to use these resources**:
+
 - ❓ Any N-API type confusion (Napi::Value, Napi::Object, etc.)
 - ❓ Memory management questions (References, ObjectWrap, etc.)
 - ❓ Callback and function invocation patterns
@@ -201,6 +202,8 @@ This project follows consistent naming patterns for npm scripts to improve disco
 - ❓ Basically ANY native addon development question
 
 **DO NOT** rely on web search, Stack Overflow, or AI suggestions for N-API questions without first checking these authoritative sources. The official examples and documentation are always more reliable and up-to-date.
+
+**Success Story**: The Alpine/musl SIGSEGV issue (session callback crashes) was solved by consulting `node-addon-api/doc/error_handling.md`, which documented how primitives are wrapped when thrown from JavaScript. Web searches and AI suggestions led us in the wrong direction initially - the authoritative docs had the answer all along.
 
 ### Working with Node.js C++ Code
 
@@ -292,6 +295,38 @@ This approach reduces test brittleness while ensuring error handling works corre
 - **Native rebuilds** use `npm run build:native:rebuild`
 - **Multi-platform prebuilds** are generated via GitHub Actions
 
+### Git Commit Messages
+
+Follow Conventional Commits format with these guidelines:
+
+**Format**: `<type>(<scope>): <summary>`
+
+- **First line**: Include the file or module being changed, with a summary under 50 characters
+- **Type**: Use conventional commit types (feat, fix, chore, docs, test, refactor, build, ci, perf, style)
+- **Scope**: The primary file, module, or component being changed (e.g., `gyp`, `test`, `precommit`, `ci`)
+- **Summary**: Imperative mood, lowercase, no period at end
+
+**Additional lines** (if needed):
+- Keep terse and precise
+- Focus on the **why**, not the what (code diffs show the what)
+- Explain motivation, context, or non-obvious implications
+- Leave blank line between summary and body
+
+**Examples**:
+```
+refactor(test): simplify control flow in permission test
+
+Replace nested try-catch with try-finally pattern for cleaner
+resource management and linear error validation flow.
+```
+
+```
+build(gyp): modernize node-addon-api integration
+
+Use targets property instead of deprecated include/gyp for
+alignment with node-addon-api v8.0+ recommendations.
+```
+
 ## Example Usage (Target API)
 
 ```typescript
@@ -379,6 +414,81 @@ if (param.IsBuffer()) {
   // Never reached for DataView
 }
 ```
+
+### C++ Exceptions Through C Callback Boundaries
+
+**CRITICAL**: C++ exceptions CANNOT safely propagate through C callback boundaries. This causes SIGSEGV, especially on Alpine/musl.
+
+**The Problem**:
+
+When JavaScript callbacks are invoked from C code (like SQLite's `sqlite3changeset_apply`):
+
+1. JavaScript callback throws → `Napi::Function::Call()` converts to C++ `Napi::Error` exception
+2. Exception propagates: Lambda → `std::function` → C function pointer → C library code
+3. **C code + C++ exceptions = undefined behavior = SIGSEGV**
+
+**The Solution - Always Wrap Callbacks in Try-Catch**:
+
+```cpp
+// JavaScript callback stored in lambda, passed to C API
+callbacks.myCallback = [&callbacks, env, jsFunc](int arg) -> int {
+  try {
+    // Call JavaScript function
+    Napi::HandleScope scope(env);
+    Napi::Value result = jsFunc.Call({Napi::Number::New(env, arg)});
+
+    // Check for JS exception (normal path)
+    if (env.IsExceptionPending()) {
+      Napi::Error err = env.GetAndClearPendingException();
+      try {
+        // Extract thrown value (works for primitives and objects)
+        callbacks.errorMessage = err.Value().ToString().Utf8Value();
+      } catch (...) {
+        callbacks.errorMessage = err.Message();
+      }
+      callbacks.hasError = true;
+      return ERROR_CODE;
+    }
+
+    return result.As<Napi::Number>().Int32Value();
+
+  } catch (const Napi::Error &e) {
+    // Catch N-API exceptions (thrown when Call() fails)
+    try {
+      callbacks.errorMessage = e.Value().ToString().Utf8Value();
+    } catch (...) {
+      callbacks.errorMessage = e.Message();
+    }
+    callbacks.hasError = true;
+    return ERROR_CODE;
+  } catch (const std::exception &e) {
+    // Catch other C++ exceptions as fallback
+    callbacks.errorMessage = std::string("C++ exception: ") + e.what();
+    callbacks.hasError = true;
+    return ERROR_CODE;
+  } catch (...) {
+    // Catch everything else
+    callbacks.errorMessage = "Unknown exception in callback";
+    callbacks.hasError = true;
+    return ERROR_CODE;
+  }
+};
+```
+
+**Key Points**:
+
+1. **Catch `Napi::Error` BEFORE `std::exception`** - `Napi::Error` inherits from both
+2. **Use `err.Value().ToString()`** - Simpler than checking for the special property `"4bda9e7e-4913-4dbc-95de-891cbf66598e-errorVal"`
+3. **Store error messages, re-throw later** - Can't throw across C boundary, so store and re-throw after C call returns
+4. **Always return safe error codes** - C functions need valid return values, not exceptions
+
+**Why This Matters**:
+
+- Works on glibc (permissive) but **crashes on musl** (strict) without this protection
+- Applies to **any** JavaScript callback invoked from C code: SQLite callbacks, libuv callbacks, etc.
+- The crash is often delayed/intermittent, making it hard to debug without knowing this pattern
+
+**Reference**: See `src/sqlite_impl.cpp` lines 1648-1750 (ApplyChangeset callbacks) for complete working example.
 
 ### Async Cleanup Anti-Patterns
 
