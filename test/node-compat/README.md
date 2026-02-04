@@ -18,4 +18,4 @@ node --test test/node-compat/test-sqlite-statement-sync-columns.test.js
 ```
 
 Source: https://github.com/nodejs/node/tree/main/test/parallel
-Commit: 7bd2fea78b32e848d7e5ecc40d400c832a2fedf2
+Commit: 8c323899ffd289465d838138c41be3e5d8e572e4
