@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [0.4.0] - to be released
 
+API compatible with `node:sqlite` from Node.js v25.6.1.
+
 ### Added
 
 - **`enhance()` function** - Adds better-sqlite3-style `.pragma()` and `.transaction()` methods to any compatible database instance
@@ -13,6 +15,8 @@ All notable changes to this project will be documented in this file.
 - **Node.js test sync script** - `npm run sync:tests` downloads and adapts upstream Node.js SQLite tests for compatibility validation
 - **Percentile extension** - `SQLITE_ENABLE_PERCENTILE` now enabled, adding `percentile()`, `median()`, `percentile_cont()`, `percentile_disc()` SQL functions (Node.js v25+)
 - **Prepare options** - `db.prepare(sql, options)` now accepts per-statement options: `readBigInts`, `returnArrays`, `allowBareNamedParameters`, `allowUnknownNamedParameters` to override database-level defaults. **Note:** This is a Node.js v25+ feature; `node:sqlite` on v24 and earlier silently ignores these options.
+- **StatementColumnMetadata type** - `stmt.columns()` now returns richer metadata including `column`, `database`, `table`, and `type` properties alongside `name`
+- **SQLite 3.51.2** - Updated embedded SQLite from 3.51.1 to 3.51.2
 
 ### Changed
 
@@ -20,12 +24,16 @@ All notable changes to this project will be documented in this file.
   - Removed `stmt.finalize()` method (use database close for cleanup)
   - Removed `stmt.finalized` property
   - Removed `stmt[Symbol.dispose]` (still available on `DatabaseSync` and `Session`)
-  - Removed `db.backup()` instance method (use standalone `backup(db, path)` function)
+  - Removed `db.backup()` instance method (use standalone `backup(db, path)` function instead)
 - **BREAKING**: `Session.changeset()` and `Session.patchset()` now return `Uint8Array` instead of `Buffer` to match `node:sqlite` API
 - **BREAKING**: Defensive mode now defaults to `true` instead of `false` to match Node.js v25+ behavior. Use `{ defensive: false }` to restore old behavior.
 
 ### Fixed
 
+- **Alpine Linux / musl stability** - Resolved native crashes on Alpine Linux by removing N-API reference cleanup from destructors that could corrupt V8 JIT state
+- **Session lifecycle management** - Fixed use-after-free, double-free, and mutex deadlock issues when databases are garbage collected before their sessions
+- **Worker thread stability** - Added proper cleanup hooks and exception handling for worker thread termination
+- **Callback error preservation** - `applyChangeset()` now correctly preserves the original error message when JavaScript callbacks throw
 - `createTagStore()` now throws errors with `code: 'ERR_INVALID_STATE'` property when database is closed, matching Node.js error format
 
 ## [0.3.0] (2025-12-16)
