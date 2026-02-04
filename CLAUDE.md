@@ -307,12 +307,14 @@ Follow Conventional Commits format with these guidelines:
 - **Summary**: Imperative mood, lowercase, no period at end
 
 **Additional lines** (if needed):
+
 - Keep terse and precise
 - Focus on the **why**, not the what (code diffs show the what)
 - Explain motivation, context, or non-obvious implications
 - Leave blank line between summary and body
 
 **Examples**:
+
 ```
 refactor(test): simplify control flow in permission test
 
