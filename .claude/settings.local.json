@@ -34,6 +34,7 @@
       "Bash(npm info:*)",
       "Bash(npm install:*)",
       "Bash(npm install)",
+      "Bash(npx jest:*)",
       "Bash(npm ls:*)",
       "Bash(npm ls:*)",
       "Bash(npm rebuild:*)",
@@ -44,7 +45,6 @@
       "Bash(npm update:*)",
       "Bash(npm view:*)",
       "Bash(npx eslint:*)",
-      "Bash(npx jest test:*)",
       "Bash(npx node-gyp:*)",
       "Bash(npx prettier:*)",
       "Bash(npx tsc:*)",
@@ -62,14 +62,16 @@
       "WebFetch(domain:en.cppreference.com)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:google.github.io)",
-      "WebFetch(domain:gyp.gsrc.io)",
       "WebFetch(domain:hub.docker.com)",
       "WebFetch(domain:jestjs.io)",
       "WebFetch(domain:nodejs.org)",
-      "WebFetch(domain:osv.dev)",
       "WebFetch(domain:sqlite.org)",
       "WebFetch(domain:stackoverflow.com)",
       "WebFetch(domain:www.sqlite.org)"
+    ],
+    "additionalDirectories": [
+      "/home/mrm/src/node-addon-examples",
+      "/home/mrm/src/node-addon-api"
     ]
   },
   "enableAllProjectMcpServers": false
