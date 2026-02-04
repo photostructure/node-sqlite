@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.4.0] - to be released
+## [0.4.0] (2026-02-04)
 
 API compatible with `node:sqlite` from Node.js v25.6.1.
 
