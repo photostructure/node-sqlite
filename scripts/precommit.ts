@@ -20,7 +20,17 @@ async function checkRootOwnedFiles(): Promise<void> {
     // Include node_modules and build/ since Docker commonly creates root-owned artifacts
     const result = spawnSync(
       "find",
-      [".", "-user", "root", "-not", "-path", "./.git/*"],
+      [
+        ".",
+        "-user",
+        "root",
+        "-not",
+        "-path",
+        "./.git/*",
+        "-not",
+        "-path",
+        "./.cache/*",
+      ],
       { encoding: "utf8", timeout: 30000 },
     );
 
