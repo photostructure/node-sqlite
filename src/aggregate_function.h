@@ -19,15 +19,10 @@ class DatabaseSync;
 // Thread-safe external storage for N-API values
 // This solves the problem of storing N-API objects in SQLite-allocated memory
 class ValueStorage {
-private:
-  static std::unordered_map<int32_t, Napi::Reference<Napi::Value>> storage_;
-  static std::mutex mutex_;
-  static std::atomic<int32_t> next_id_;
-
 public:
   static int32_t Store(Napi::Env env, Napi::Value value);
   static Napi::Value Get(Napi::Env env, int32_t id);
-  static void Remove(int32_t id);
+  static void Remove(Napi::Env env, int32_t id);
 };
 
 class CustomAggregate {
@@ -46,6 +41,8 @@ public:
   static void xDestroy(void *self);
 
 private:
+  // Environment cleanup hook - called before environment teardown
+  static void CleanupHook(void *arg);
   // Comprehensive aggregate value storage (no Napi::Reference)
   struct AggregateValue {
     enum Type {

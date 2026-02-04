@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_map>
 
 // Include our shims
 #include "shims/base_object.h"
@@ -47,6 +48,11 @@ struct AddonData {
 
   // Cached Object.create function for creating objects with null prototype
   Napi::FunctionReference objectCreateFn;
+
+  // ValueStorage data
+  std::mutex value_storage_mutex;
+  std::unordered_map<int32_t, Napi::Reference<Napi::Value>> value_storage;
+  std::atomic<int32_t> next_value_id{0};
 };
 
 // Helper to create an object with null prototype (matches Node.js behavior)
@@ -237,6 +243,9 @@ private:
   // Authorization callback storage
   std::unique_ptr<Napi::FunctionReference> authorizer_callback_;
 
+  // Environment cleanup hook - called before environment teardown
+  static void CleanupHook(void *arg);
+
   // Store database-level defaults for statement options
   DatabaseOpenConfiguration config_;
 
@@ -406,6 +415,10 @@ private:
 
   // Error from progress callback (set on main thread, checked in OnOK)
   std::optional<std::string> progress_error_;
+
+  // Environment cleanup hook - called before environment teardown
+  static void CleanupHook(void *arg);
+  napi_env env_;
 
   static std::atomic<int> active_jobs_;
   static std::mutex active_jobs_mutex_;

@@ -18,6 +18,12 @@ UserDefinedFunction::UserDefinedFunction(Napi::Env env, Napi::Function fn,
                                          DatabaseSync *db, bool use_bigint_args)
     : env_(env), fn_(Napi::Reference<Napi::Function>::New(fn, 1)), db_(db),
       use_bigint_args_(use_bigint_args), async_context_(nullptr) {
+  // Register cleanup hook to Reset() reference before environment teardown.
+  // This is required for worker thread support per Node-API best practices.
+  // See:
+  // https://nodejs.github.io/node-addon-examples/special-topics/context-awareness/
+  napi_add_env_cleanup_hook(env_, CleanupHook, this);
+
   // Create async context for callbacks
   const napi_status status = napi_async_init(
       env, nullptr, Napi::String::New(env, "SQLiteUserFunction"),
@@ -29,11 +35,13 @@ UserDefinedFunction::UserDefinedFunction(Napi::Env env, Napi::Function fn,
 }
 
 UserDefinedFunction::~UserDefinedFunction() noexcept {
-  // Let Napi::FunctionReference destructor handle fn_ cleanup naturally.
-  // Explicitly calling Reset() during GC causes JIT corruption on Alpine/musl.
-  // See: nodejs/node-addon-api#660, P02-investigate-flaky-native-crashes.md
+  // Remove cleanup hook if still registered
+  napi_remove_env_cleanup_hook(env_, CleanupHook, this);
 
-  // Check if environment is still valid before N-API operations.
+  // Don't call fn_.Reset() here - CleanupHook already handled it,
+  // or the environment is being torn down and Reset() would be unsafe.
+
+  // Clean up async context if environment is still valid
   napi_handle_scope scope;
   napi_status status = napi_open_handle_scope(env_, &scope);
 
@@ -43,6 +51,14 @@ UserDefinedFunction::~UserDefinedFunction() noexcept {
       async_context_ = nullptr;
     }
     napi_close_handle_scope(env_, scope);
+  }
+}
+
+void UserDefinedFunction::CleanupHook(void *arg) {
+  // Called before environment teardown - safe to Reset() here
+  auto *self = static_cast<UserDefinedFunction *>(arg);
+  if (!self->fn_.IsEmpty()) {
+    self->fn_.Reset();
   }
 }
 

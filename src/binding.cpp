@@ -2,6 +2,7 @@
 #include <napi.h>
 #include <set>
 
+#include "aggregate_function.h"
 #include "sqlite_impl.h"
 
 namespace photostructure::sqlite {
@@ -15,6 +16,17 @@ void CleanupAddonData([[maybe_unused]] napi_env env, void *finalize_data,
   {
     const std::lock_guard<std::mutex> mutex_lock(addon_data->mutex);
     addon_data->databases.clear();
+  }
+
+  // Clean up ValueStorage references
+  {
+    std::lock_guard<std::mutex> lock(addon_data->value_storage_mutex);
+    for (auto &[id, ref] : addon_data->value_storage) {
+      if (!ref.IsEmpty()) {
+        ref.Reset();
+      }
+    }
+    addon_data->value_storage.clear();
   }
 
   // Let Napi::FunctionReference destructors handle cleanup naturally.

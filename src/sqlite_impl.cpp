@@ -374,6 +374,9 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
   // Register this instance for cleanup tracking
   RegisterDatabaseInstance(info.Env(), this);
 
+  // Register cleanup hook to clean up references before environment teardown
+  napi_add_env_cleanup_hook(env_, CleanupHook, this);
+
   // Node.js requires a path argument - throw if missing
   if (info.Length() == 0 || info[0].IsUndefined()) {
     node::THROW_ERR_INVALID_ARG_TYPE(
@@ -575,11 +578,24 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
 }
 
 DatabaseSync::~DatabaseSync() {
+  // Remove cleanup hook if still registered
+  napi_remove_env_cleanup_hook(env_, CleanupHook, this);
+
   // Unregister this instance
   UnregisterDatabaseInstance(env_, this);
 
   if (connection_) {
     InternalClose();
+  }
+}
+
+void DatabaseSync::CleanupHook(void *arg) {
+  // Called before environment teardown - safe to Reset() references here
+  auto *self = static_cast<DatabaseSync *>(arg);
+
+  // Clean up authorizer callback if it exists
+  if (self->authorizer_callback_) {
+    self->authorizer_callback_->Reset();
   }
 }
 
@@ -1632,37 +1648,91 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
         Napi::Function conflictFunc = conflictValue.As<Napi::Function>();
         callbacks.conflictCallback = [&callbacks, env,
                                       conflictFunc](int conflictType) -> int {
-          // Skip callback if we already have a pending exception
-          if (callbacks.hasPendingException)
+          // Wrap in try-catch to prevent C++ exceptions from propagating
+          // through C callback boundary into SQLite (causes SIGSEGV)
+          try {
+            // Skip callback if we already have a pending exception
+            if (callbacks.hasPendingException)
+              return SQLITE_CHANGESET_ABORT;
+
+            Napi::HandleScope scope(env);
+            Napi::Value result =
+                conflictFunc.Call({Napi::Number::New(env, conflictType)});
+
+            // Check for exception - Call() may have thrown
+            if (env.IsExceptionPending()) {
+              // Store the exception for re-throwing later
+              Napi::Error err = env.GetAndClearPendingException();
+              // Convert the thrown value to string
+              try {
+                callbacks.pendingExceptionMessage =
+                    err.Value().ToString().Utf8Value();
+              } catch (...) {
+                callbacks.pendingExceptionMessage = err.Message();
+              }
+              callbacks.hasPendingException = true;
+              return SQLITE_CHANGESET_ABORT;
+            }
+
+            // Check for empty result (another exception indicator)
+            if (result.IsEmpty()) {
+              callbacks.pendingExceptionMessage = "Callback threw an exception";
+              callbacks.hasPendingException = true;
+              return SQLITE_CHANGESET_ABORT;
+            }
+
+            // Return -1 (invalid value) for non-integer results
+            // This makes SQLite return SQLITE_MISUSE
+            if (!result.IsNumber()) {
+              return -1;
+            }
+
+            return result.As<Napi::Number>().Int32Value();
+          } catch (const Napi::Error &e) {
+            // Catch Napi::Error specifically (inherits from std::exception)
+            // This is thrown when JavaScript throws a value
+            // e.Value() returns the thrown value (primitives are
+            // auto-unwrapped)
+            try {
+              Napi::Value thrownValue = e.Value();
+              // Convert whatever was thrown to a string
+              Napi::String strValue = thrownValue.ToString();
+              callbacks.pendingExceptionMessage = strValue.Utf8Value();
+            } catch (...) {
+              // Fallback if value extraction fails
+              callbacks.pendingExceptionMessage = e.Message();
+              if (callbacks.pendingExceptionMessage.empty()) {
+                callbacks.pendingExceptionMessage =
+                    "onConflict callback threw an exception";
+              }
+            }
+            callbacks.hasPendingException = true;
             return SQLITE_CHANGESET_ABORT;
-
-          Napi::HandleScope scope(env);
-          Napi::Value result =
-              conflictFunc.Call({Napi::Number::New(env, conflictType)});
-
-          // Check for exception - Call() may have thrown
-          if (env.IsExceptionPending()) {
-            // Store the exception message for re-throwing later
-            Napi::Error err = env.GetAndClearPendingException();
-            callbacks.pendingExceptionMessage = err.Message();
+          } catch (const std::exception &e) {
+            // Catch non-Napi C++ exceptions (e.g., SqliteException)
+            // The Napi::Error catch above handles all JavaScript exceptions
+            callbacks.pendingExceptionMessage =
+                std::string("C++ exception in onConflict: ") + e.what();
+            callbacks.hasPendingException = true;
+            return SQLITE_CHANGESET_ABORT;
+          } catch (...) {
+            // Catch all other exceptions
+            if (env.IsExceptionPending()) {
+              try {
+                Napi::Error err = env.GetAndClearPendingException();
+                callbacks.pendingExceptionMessage =
+                    err.Value().ToString().Utf8Value();
+              } catch (...) {
+                callbacks.pendingExceptionMessage =
+                    "Exception in onConflict callback";
+              }
+            } else {
+              callbacks.pendingExceptionMessage =
+                  "Unknown exception in onConflict callback";
+            }
             callbacks.hasPendingException = true;
             return SQLITE_CHANGESET_ABORT;
           }
-
-          // Check for empty result (another exception indicator)
-          if (result.IsEmpty()) {
-            callbacks.pendingExceptionMessage = "Callback threw an exception";
-            callbacks.hasPendingException = true;
-            return SQLITE_CHANGESET_ABORT;
-          }
-
-          // Return -1 (invalid value) for non-integer results
-          // This makes SQLite return SQLITE_MISUSE
-          if (!result.IsNumber()) {
-            return -1;
-          }
-
-          return result.As<Napi::Number>().Int32Value();
         };
       }
     }
@@ -1679,32 +1749,85 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
       Napi::Function filterFunc = filterValue.As<Napi::Function>();
       callbacks.filterCallback = [&callbacks, env,
                                   filterFunc](std::string tableName) -> bool {
-        // Skip callback if we already have a pending exception
-        if (callbacks.hasPendingException)
-          return false;
+        // Wrap in try-catch to prevent C++ exceptions from propagating
+        // through C callback boundary into SQLite (causes SIGSEGV)
+        try {
+          // Skip callback if we already have a pending exception
+          if (callbacks.hasPendingException)
+            return false;
 
-        Napi::HandleScope scope(env);
-        Napi::Value result =
-            filterFunc.Call({Napi::String::New(env, tableName)});
+          Napi::HandleScope scope(env);
+          Napi::Value result =
+              filterFunc.Call({Napi::String::New(env, tableName)});
 
-        // Check for exception - Call() may have thrown
-        if (env.IsExceptionPending()) {
-          // Store the exception message for re-throwing later
-          Napi::Error err = env.GetAndClearPendingException();
-          callbacks.pendingExceptionMessage = err.Message();
+          // Check for exception - Call() may have thrown
+          if (env.IsExceptionPending()) {
+            // Store the exception for re-throwing later
+            Napi::Error err = env.GetAndClearPendingException();
+            // Convert the thrown value to string
+            try {
+              callbacks.pendingExceptionMessage =
+                  err.Value().ToString().Utf8Value();
+            } catch (...) {
+              callbacks.pendingExceptionMessage = err.Message();
+            }
+            callbacks.hasPendingException = true;
+            return false;
+          }
+
+          // Check for empty result (another exception indicator)
+          if (result.IsEmpty()) {
+            callbacks.pendingExceptionMessage =
+                "Filter callback threw an exception";
+            callbacks.hasPendingException = true;
+            return false;
+          }
+
+          return result.ToBoolean().Value();
+        } catch (const Napi::Error &e) {
+          // Catch Napi::Error specifically (inherits from std::exception)
+          // This is thrown when JavaScript throws a value
+          // e.Value() returns the thrown value (primitives are auto-unwrapped)
+          try {
+            Napi::Value thrownValue = e.Value();
+            // Convert whatever was thrown to a string
+            Napi::String strValue = thrownValue.ToString();
+            callbacks.pendingExceptionMessage = strValue.Utf8Value();
+          } catch (...) {
+            // Fallback if value extraction fails
+            callbacks.pendingExceptionMessage = e.Message();
+            if (callbacks.pendingExceptionMessage.empty()) {
+              callbacks.pendingExceptionMessage =
+                  "Filter callback threw an exception";
+            }
+          }
           callbacks.hasPendingException = true;
           return false;
-        }
-
-        // Check for empty result (another exception indicator)
-        if (result.IsEmpty()) {
+        } catch (const std::exception &e) {
+          // Catch non-Napi C++ exceptions (e.g., SqliteException)
+          // The Napi::Error catch above handles all JavaScript exceptions
           callbacks.pendingExceptionMessage =
-              "Filter callback threw an exception";
+              std::string("C++ exception in filter: ") + e.what();
+          callbacks.hasPendingException = true;
+          return false;
+        } catch (...) {
+          // Catch all other exceptions
+          if (env.IsExceptionPending()) {
+            try {
+              Napi::Error err = env.GetAndClearPendingException();
+              callbacks.pendingExceptionMessage =
+                  err.Value().ToString().Utf8Value();
+            } catch (...) {
+              callbacks.pendingExceptionMessage =
+                  "Exception in filter callback";
+            }
+          } else {
+            callbacks.pendingExceptionMessage =
+                "Unknown exception in filter callback";
+          }
           callbacks.hasPendingException = true;
           return false;
         }
-
-        return result.ToBoolean().Value();
       };
     }
   }
@@ -3091,6 +3214,14 @@ std::atomic<int> BackupJob::active_jobs_(0);
 std::mutex BackupJob::active_jobs_mutex_;
 std::set<BackupJob *> BackupJob::active_job_instances_;
 
+void BackupJob::CleanupHook(void *arg) {
+  // Called before environment teardown - safe to Reset() references here
+  auto *self = static_cast<BackupJob *>(arg);
+  if (!self->progress_func_.IsEmpty()) {
+    self->progress_func_.Reset();
+  }
+}
+
 // BackupJob Implementation
 BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
                      std::string destination_path, std::string source_db,
@@ -3107,16 +3238,29 @@ BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
       source_connection_(source->connection()),
       destination_path_(std::move(destination_path)),
       source_db_(std::move(source_db)), dest_db_(std::move(dest_db)),
-      pages_(pages), deferred_(deferred) {
+      pages_(pages), deferred_(deferred), env_(env) {
   if (!progress_func.IsEmpty() && !progress_func.IsUndefined()) {
     progress_func_ = Napi::Reference<Napi::Function>::New(progress_func);
   }
+
+  // Register cleanup hook to Reset() reference before environment teardown.
+  // This is required for worker thread support per Node-API best practices.
+  // See:
+  // https://nodejs.github.io/node-addon-examples/special-topics/context-awareness/
+  napi_add_env_cleanup_hook(env_, CleanupHook, this);
+
   active_jobs_++;
   // Register with database for proper cleanup coordination
   source_->AddBackup(this);
 }
 
 BackupJob::~BackupJob() {
+  // Remove cleanup hook if still registered
+  napi_remove_env_cleanup_hook(env_, CleanupHook, this);
+
+  // Don't call progress_func_.Reset() here - CleanupHook already handled it,
+  // or the environment is being torn down and Reset() would be unsafe.
+
   active_jobs_--;
   // Unregister from database
   // Note: source_ may be null if FinalizeBackups was called

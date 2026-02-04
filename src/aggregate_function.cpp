@@ -15,44 +15,66 @@ static constexpr int64_t kMaxSafeJsInteger = 9007199254740991LL;
 
 namespace photostructure::sqlite {
 
-// Static member definitions for ValueStorage
-std::unordered_map<int32_t, Napi::Reference<Napi::Value>>
-    ValueStorage::storage_;
-std::mutex ValueStorage::mutex_;
-std::atomic<int32_t> ValueStorage::next_id_{0};
-
 // ValueStorage implementation
-int32_t ValueStorage::Store([[maybe_unused]] Napi::Env env, Napi::Value value) {
-  const std::lock_guard<std::mutex> lock(mutex_);
-  const int32_t id = ++next_id_;
+int32_t ValueStorage::Store(Napi::Env env, Napi::Value value) {
+  AddonData *addon_data = GetAddonData(env);
+  if (!addon_data)
+    throw Napi::Error::New(env, "Addon data not found");
 
-  // Try direct napi_value persistence instead of Napi::Reference
+  std::lock_guard<std::mutex> lock(addon_data->value_storage_mutex);
+  const int32_t id =
+      addon_data->next_value_id.fetch_add(1, std::memory_order_relaxed);
   try {
-    storage_[id] = Napi::Reference<Napi::Value>::New(value, 1);
+    addon_data->value_storage[id] = Napi::Reference<Napi::Value>::New(value, 1);
   } catch (...) {
     // If Reference creation fails, throw to let caller handle
     throw;
   }
-
   return id;
 }
 
 Napi::Value ValueStorage::Get(Napi::Env env, int32_t id) {
-  const std::lock_guard<std::mutex> lock(mutex_);
-  auto it = storage_.find(id);
-  return (it != storage_.end()) ? it->second.Value() : env.Undefined();
+  AddonData *addon_data = GetAddonData(env);
+  if (!addon_data)
+    return env.Null();
+
+  std::lock_guard<std::mutex> lock(addon_data->value_storage_mutex);
+  auto it = addon_data->value_storage.find(id);
+  if (it == addon_data->value_storage.end() || it->second.IsEmpty()) {
+    return env.Null();
+  }
+  return it->second.Value();
 }
 
-void ValueStorage::Remove(int32_t id) {
-  const std::lock_guard<std::mutex> lock(mutex_);
-  auto it = storage_.find(id);
-  if (it != storage_.end()) {
-    // Don't call Reset() explicitly - let the Napi::Reference destructor
-    // handle cleanup naturally when erased. Explicit Reset() during GC
-    // causes JIT corruption on Alpine/musl.
-    // See: nodejs/node-addon-api#660, P02-investigate-flaky-native-crashes.md
-    storage_.erase(it);
+void ValueStorage::Remove(Napi::Env env, int32_t id) {
+  AddonData *addon_data = GetAddonData(env);
+  if (!addon_data)
+    return;
+
+  std::lock_guard<std::mutex> lock(addon_data->value_storage_mutex);
+  auto it = addon_data->value_storage.find(id);
+  if (it != addon_data->value_storage.end()) {
+    // Don't call Reset() here - it's unsafe during environment teardown on
+    // musl. The Cleanup() hook will reset all remaining references safely. For
+    // refs removed during normal operation, they'll be cleaned up by GC.
+    addon_data->value_storage.erase(it);
   }
+}
+
+void CustomAggregate::CleanupHook(void *arg) {
+  // Called before environment teardown - safe to Reset() references here
+  auto *self = static_cast<CustomAggregate *>(arg);
+
+  if (!self->start_fn_.IsEmpty())
+    self->start_fn_.Reset();
+  if (!self->object_ref_.IsEmpty())
+    self->object_ref_.Reset();
+  if (!self->step_fn_.IsEmpty())
+    self->step_fn_.Reset();
+  if (!self->inverse_fn_.IsEmpty())
+    self->inverse_fn_.Reset();
+  if (!self->result_fn_.IsEmpty())
+    self->result_fn_.Reset();
 }
 
 CustomAggregate::CustomAggregate(Napi::Env env, DatabaseSync *db,
@@ -99,14 +121,22 @@ CustomAggregate::CustomAggregate(Napi::Env env, DatabaseSync *db,
     result_fn_ = Napi::Reference<Napi::Function>::New(result_fn, 1);
   }
 
+  // Register cleanup hook to Reset() references before environment teardown.
+  // This is required for worker thread support per Node-API best practices.
+  // See:
+  // https://nodejs.github.io/node-addon-examples/special-topics/context-awareness/
+  napi_add_env_cleanup_hook(env_, CleanupHook, this);
+
   // Don't create async context immediately - we'll create it lazily if needed
   async_context_ = nullptr;
 }
 
 CustomAggregate::~CustomAggregate() {
-  // Let Napi::FunctionReference destructors handle cleanup naturally.
-  // Explicitly calling Reset() during GC causes JIT corruption on Alpine/musl.
-  // See: nodejs/node-addon-api#660, P02-investigate-flaky-native-crashes.md
+  // Remove cleanup hook if still registered
+  napi_remove_env_cleanup_hook(env_, CleanupHook, this);
+
+  // Don't call Reset() on references here - CleanupHook already handled them,
+  // or the environment is being torn down and Reset() would be unsafe.
 
   // Check if environment is still valid before N-API operations.
   napi_handle_scope scope;
@@ -132,7 +162,10 @@ void CustomAggregate::xInverse(sqlite3_context *ctx, int argc,
   xStepBase(ctx, argc, argv, &CustomAggregate::inverse_fn_);
 }
 
-void CustomAggregate::xFinal(sqlite3_context *ctx) { xValueBase(ctx, true); }
+void CustomAggregate::xFinal(sqlite3_context *ctx) {
+  xValueBase(ctx, true);
+  DestroyAggregateData(ctx);
+}
 
 void CustomAggregate::xValue(sqlite3_context *ctx) { xValueBase(ctx, false); }
 
@@ -556,13 +589,16 @@ CustomAggregate::GetAggregate(sqlite3_context *ctx) {
 }
 
 void CustomAggregate::DestroyAggregateData(sqlite3_context *ctx) {
+  CustomAggregate *self =
+      static_cast<CustomAggregate *>(sqlite3_user_data(ctx));
   AggregateData *agg = static_cast<AggregateData *>(
       sqlite3_aggregate_context(ctx, sizeof(AggregateData)));
 
-  if (agg && agg->initialized) {
-    ValueStorage::Remove(agg->value_id);
-    agg->initialized = false;
+  if (!self || !agg || !agg->initialized) {
+    return;
   }
+  ValueStorage::Remove(self->env_, agg->value_id);
+  agg->initialized = false;
 }
 
 Napi::Value CustomAggregate::SqliteValueToJS(sqlite3_value *value) {

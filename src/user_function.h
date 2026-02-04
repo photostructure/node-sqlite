@@ -24,6 +24,9 @@ public:
   static void xDestroy(void *self);
 
 private:
+  // Environment cleanup hook - called before environment teardown
+  static void CleanupHook(void *arg);
+
   Napi::Env env_;
   Napi::FunctionReference fn_;
   DatabaseSync *db_;
