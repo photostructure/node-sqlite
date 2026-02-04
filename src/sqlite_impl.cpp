@@ -394,7 +394,7 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
   }
 
   try {
-    std::string loc = std::move(location.value());
+    std::string loc = std::move(*location);
     // Check if this is a file:// URI (for SQLite URI mode)
     bool is_uri = (loc.compare(0, 7, "file://") == 0);
     DatabaseOpenConfiguration config(std::move(loc));
@@ -764,17 +764,16 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
 
     // Apply per-statement option overrides (if explicitly provided)
     if (opt_read_big_ints.has_value()) {
-      stmt->use_big_ints_ = opt_read_big_ints.value();
+      stmt->use_big_ints_ = *opt_read_big_ints;
     }
     if (opt_return_arrays.has_value()) {
-      stmt->return_arrays_ = opt_return_arrays.value();
+      stmt->return_arrays_ = *opt_return_arrays;
     }
     if (opt_allow_bare_named_params.has_value()) {
-      stmt->allow_bare_named_params_ = opt_allow_bare_named_params.value();
+      stmt->allow_bare_named_params_ = *opt_allow_bare_named_params;
     }
     if (opt_allow_unknown_named_params.has_value()) {
-      stmt->allow_unknown_named_params_ =
-          opt_allow_unknown_named_params.value();
+      stmt->allow_unknown_named_params_ = *opt_allow_unknown_named_params;
     }
 
     return stmt_obj;
@@ -1587,6 +1586,55 @@ struct ChangesetCallbacks {
   bool hasPendingException = false;
 };
 
+// Helper to extract error message from Napi::Error
+// Handles both Error objects (use .message property) and primitive throws.
+// For GetAndClearPendingException(), err.Value() returns the ORIGINAL thrown
+// value - if JS throws "string", Value() IS the string, not a wrapper.
+// See: node-addon-api/test/error.cc line 306-310 (CatchError function)
+static std::string GetErrorMessage(const Napi::Error &err,
+                                   const char *fallback) {
+  // Try 1: Message() works for Error objects with .message property
+  try {
+    std::string msg = err.Message();
+    if (!msg.empty()) {
+      return msg;
+    }
+  } catch (...) {
+    // Message() failed, continue trying
+  }
+
+  // Try 2: For primitives or when Message() is empty, err.Value() returns
+  // the original thrown value. Just convert it to string directly.
+  // This works for: throw "string", throw 42, throw new Error("msg")
+  try {
+    Napi::Value val = err.Value();
+    if (!val.IsEmpty() && !val.IsUndefined() && !val.IsNull()) {
+      return val.ToString().Utf8Value();
+    }
+  } catch (...) {
+    // Value() or ToString() failed, continue
+  }
+
+  // Try 3: For C++ catch blocks, check ERROR_WRAP_VALUE property
+  // (only relevant when catching Napi::Error as C++ exception)
+  try {
+    Napi::Value val = err.Value();
+    if (val.IsObject()) {
+      Napi::Object errObj = val.As<Napi::Object>();
+      static const char *ERROR_WRAP_VALUE =
+          "4bda9e7e-4913-4dbc-95de-891cbf66598e-errorVal";
+      Napi::Value wrapped = errObj.Get(ERROR_WRAP_VALUE);
+      if (!wrapped.IsUndefined()) {
+        return wrapped.ToString().Utf8Value();
+      }
+    }
+  } catch (...) {
+    // Property access failed, continue
+  }
+
+  return fallback;
+}
+
 static int xConflict(void *pCtx, int eConflict, sqlite3_changeset_iter *pIter) {
   if (!pCtx)
     return SQLITE_CHANGESET_ABORT;
@@ -1623,7 +1671,7 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
   }
 
   // Create callback context to avoid global state
-  ChangesetCallbacks callbacks{nullptr, nullptr, env};
+  ChangesetCallbacks callbacks{nullptr, nullptr, env, "", false};
 
   // Parse options if provided
   if (info.Length() > 1 && !info[1].IsUndefined()) {
@@ -1661,15 +1709,9 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
 
             // Check for exception - Call() may have thrown
             if (env.IsExceptionPending()) {
-              // Store the exception for re-throwing later
               Napi::Error err = env.GetAndClearPendingException();
-              // Convert the thrown value to string
-              try {
-                callbacks.pendingExceptionMessage =
-                    err.Value().ToString().Utf8Value();
-              } catch (...) {
-                callbacks.pendingExceptionMessage = err.Message();
-              }
+              callbacks.pendingExceptionMessage = GetErrorMessage(
+                  err, "onConflict callback threw an exception");
               callbacks.hasPendingException = true;
               return SQLITE_CHANGESET_ABORT;
             }
@@ -1690,27 +1732,12 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
             return result.As<Napi::Number>().Int32Value();
           } catch (const Napi::Error &e) {
             // Catch Napi::Error specifically (inherits from std::exception)
-            // This is thrown when JavaScript throws a value
-            // e.Value() returns the thrown value (primitives are
-            // auto-unwrapped)
-            try {
-              Napi::Value thrownValue = e.Value();
-              // Convert whatever was thrown to a string
-              Napi::String strValue = thrownValue.ToString();
-              callbacks.pendingExceptionMessage = strValue.Utf8Value();
-            } catch (...) {
-              // Fallback if value extraction fails
-              callbacks.pendingExceptionMessage = e.Message();
-              if (callbacks.pendingExceptionMessage.empty()) {
-                callbacks.pendingExceptionMessage =
-                    "onConflict callback threw an exception";
-              }
-            }
+            callbacks.pendingExceptionMessage =
+                GetErrorMessage(e, "onConflict callback threw an exception");
             callbacks.hasPendingException = true;
             return SQLITE_CHANGESET_ABORT;
           } catch (const std::exception &e) {
             // Catch non-Napi C++ exceptions (e.g., SqliteException)
-            // The Napi::Error catch above handles all JavaScript exceptions
             callbacks.pendingExceptionMessage =
                 std::string("C++ exception in onConflict: ") + e.what();
             callbacks.hasPendingException = true;
@@ -1718,14 +1745,9 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
           } catch (...) {
             // Catch all other exceptions
             if (env.IsExceptionPending()) {
-              try {
-                Napi::Error err = env.GetAndClearPendingException();
-                callbacks.pendingExceptionMessage =
-                    err.Value().ToString().Utf8Value();
-              } catch (...) {
-                callbacks.pendingExceptionMessage =
-                    "Exception in onConflict callback";
-              }
+              Napi::Error err = env.GetAndClearPendingException();
+              callbacks.pendingExceptionMessage =
+                  GetErrorMessage(err, "Exception in onConflict callback");
             } else {
               callbacks.pendingExceptionMessage =
                   "Unknown exception in onConflict callback";
@@ -1762,15 +1784,9 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
 
           // Check for exception - Call() may have thrown
           if (env.IsExceptionPending()) {
-            // Store the exception for re-throwing later
             Napi::Error err = env.GetAndClearPendingException();
-            // Convert the thrown value to string
-            try {
-              callbacks.pendingExceptionMessage =
-                  err.Value().ToString().Utf8Value();
-            } catch (...) {
-              callbacks.pendingExceptionMessage = err.Message();
-            }
+            callbacks.pendingExceptionMessage =
+                GetErrorMessage(err, "Filter callback threw an exception");
             callbacks.hasPendingException = true;
             return false;
           }
@@ -1786,26 +1802,12 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
           return result.ToBoolean().Value();
         } catch (const Napi::Error &e) {
           // Catch Napi::Error specifically (inherits from std::exception)
-          // This is thrown when JavaScript throws a value
-          // e.Value() returns the thrown value (primitives are auto-unwrapped)
-          try {
-            Napi::Value thrownValue = e.Value();
-            // Convert whatever was thrown to a string
-            Napi::String strValue = thrownValue.ToString();
-            callbacks.pendingExceptionMessage = strValue.Utf8Value();
-          } catch (...) {
-            // Fallback if value extraction fails
-            callbacks.pendingExceptionMessage = e.Message();
-            if (callbacks.pendingExceptionMessage.empty()) {
-              callbacks.pendingExceptionMessage =
-                  "Filter callback threw an exception";
-            }
-          }
+          callbacks.pendingExceptionMessage =
+              GetErrorMessage(e, "Filter callback threw an exception");
           callbacks.hasPendingException = true;
           return false;
         } catch (const std::exception &e) {
           // Catch non-Napi C++ exceptions (e.g., SqliteException)
-          // The Napi::Error catch above handles all JavaScript exceptions
           callbacks.pendingExceptionMessage =
               std::string("C++ exception in filter: ") + e.what();
           callbacks.hasPendingException = true;
@@ -1813,14 +1815,9 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
         } catch (...) {
           // Catch all other exceptions
           if (env.IsExceptionPending()) {
-            try {
-              Napi::Error err = env.GetAndClearPendingException();
-              callbacks.pendingExceptionMessage =
-                  err.Value().ToString().Utf8Value();
-            } catch (...) {
-              callbacks.pendingExceptionMessage =
-                  "Exception in filter callback";
-            }
+            Napi::Error err = env.GetAndClearPendingException();
+            callbacks.pendingExceptionMessage =
+                GetErrorMessage(err, "Exception in filter callback");
           } else {
             callbacks.pendingExceptionMessage =
                 "Unknown exception in filter callback";
@@ -3375,7 +3372,7 @@ void BackupJob::OnOK() {
 
   // If progress callback threw an error, reject with that error
   if (progress_error_.has_value()) {
-    Napi::Error error = Napi::Error::New(Env(), progress_error_.value());
+    Napi::Error error = Napi::Error::New(Env(), *progress_error_);
     deferred_.Reject(error.Value());
     return;
   }
@@ -3536,9 +3533,9 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
   Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
 
   // Create and schedule backup job
-  BackupJob *job = new BackupJob(env, this, std::move(dest_path).value(),
-                                 std::move(source_db), std::move(target_db),
-                                 rate, progress_func, deferred);
+  BackupJob *job =
+      new BackupJob(env, this, std::move(*dest_path), std::move(source_db),
+                    std::move(target_db), rate, progress_func, deferred);
 
   // Queue the async work - AsyncWorker will delete itself when complete
   job->Queue();

@@ -215,7 +215,7 @@ public:
     return deferred_authorizer_exception_.has_value();
   }
   const std::string &GetDeferredAuthorizerException() const {
-    return deferred_authorizer_exception_.value();
+    return *deferred_authorizer_exception_;
   }
 
 private:
