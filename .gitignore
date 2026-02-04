@@ -82,6 +82,9 @@ stress-test-results.md
 .temp-sqlite-download/
 packages/better-sqlite3-compat/temp/
 
+# Cache directory (Docker builds, etc)
+.cache/
+
 # Sync cache files
 .sync-cache.json
 .sync-tests-cache.json
