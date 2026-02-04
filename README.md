@@ -30,14 +30,14 @@ db.close();
 - 100% compatible with Node.js v25.6.1 built-in `node:sqlite` module\*
 - Zero dependencies - native SQLite implementation
 - Synchronous API - no async overhead
-- Performance matches leading SQLite libraries
+- Performance comparable to better-sqlite3
 - Full SQLite feature set ([details](./doc/features.md))
 - TypeScript support with complete type definitions
 - Cross-platform prebuilt binaries (Windows/macOS/Linux, x64/ARM64)
 - User-defined functions and aggregates
 - Database backups and session/changeset support
 - Session class exposed for advanced replication workflows
-- Native Symbol.dispose for improved resource management
+- Native `Symbol.dispose` for resource management
 - `enhance()` function for better-sqlite3 style `.pragma()` and `.transaction()` methods
 - URI filename support for advanced configuration
 - Worker thread safe

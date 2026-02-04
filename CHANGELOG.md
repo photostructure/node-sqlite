@@ -8,15 +8,15 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 
 ### Added
 
-- **`enhance()` function** - Adds better-sqlite3-style `.pragma()` and `.transaction()` methods to any compatible database instance
-- **`isEnhanced()` type guard** - Check if a database has enhanced methods
-- **Transaction helper** - Automatic BEGIN/COMMIT/ROLLBACK with savepoint support for nested transactions
-- **Pragma convenience method** - Simple API for reading and setting SQLite pragmas with `simple` option
-- **Node.js test sync script** - `npm run sync:tests` downloads and adapts upstream Node.js SQLite tests for compatibility validation
-- **Percentile extension** - `SQLITE_ENABLE_PERCENTILE` now enabled, adding `percentile()`, `median()`, `percentile_cont()`, `percentile_disc()` SQL functions (Node.js v25+)
-- **Prepare options** - `db.prepare(sql, options)` now accepts per-statement options: `readBigInts`, `returnArrays`, `allowBareNamedParameters`, `allowUnknownNamedParameters` to override database-level defaults. **Note:** This is a Node.js v25+ feature; `node:sqlite` on v24 and earlier silently ignores these options.
-- **StatementColumnMetadata type** - `stmt.columns()` now returns richer metadata including `column`, `database`, `table`, and `type` properties alongside `name`
-- **SQLite 3.51.2** - Updated embedded SQLite from 3.51.1 to 3.51.2
+- **`enhance()` function**: Adds better-sqlite3-style `.pragma()` and `.transaction()` methods to any compatible database instance
+- **`isEnhanced()` type guard**: Check if a database has enhanced methods
+- **Transaction helper**: Automatic BEGIN/COMMIT/ROLLBACK with savepoint support for nested transactions
+- **Pragma convenience method**: Simple API for reading and setting SQLite pragmas with `simple` option
+- **Node.js test sync script**: `npm run sync:tests` downloads and adapts upstream Node.js SQLite tests
+- **Percentile extension**: `SQLITE_ENABLE_PERCENTILE` now enabled, adding `percentile()`, `median()`, `percentile_cont()`, `percentile_disc()` SQL functions (Node.js v25+)
+- **Prepare options**: `db.prepare(sql, options)` now accepts per-statement options (`readBigInts`, `returnArrays`, `allowBareNamedParameters`, `allowUnknownNamedParameters`) to override database-level defaults. This is a Node.js v25+ feature; `node:sqlite` on v24 and earlier silently ignores these options.
+- **StatementColumnMetadata type**: `stmt.columns()` now returns richer metadata including `column`, `database`, `table`, and `type` properties alongside `name`
+- **SQLite 3.51.2**: Updated from 3.51.1
 
 ### Changed
 
@@ -30,10 +30,10 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 
 ### Fixed
 
-- **Alpine Linux / musl stability** - Resolved native crashes on Alpine Linux by removing N-API reference cleanup from destructors that could corrupt V8 JIT state
-- **Session lifecycle management** - Fixed use-after-free, double-free, and mutex deadlock issues when databases are garbage collected before their sessions
-- **Worker thread stability** - Added proper cleanup hooks and exception handling for worker thread termination
-- **Callback error preservation** - `applyChangeset()` now correctly preserves the original error message when JavaScript callbacks throw
+- **Alpine Linux / musl stability**: Fixed native crashes by removing N-API reference cleanup from destructors that corrupted V8 JIT state
+- **Session lifecycle management**: Fixed use-after-free, double-free, and mutex deadlock when databases are garbage collected before their sessions
+- **Worker thread stability**: Added cleanup hooks and exception handling for worker thread termination
+- **Callback error preservation**: `applyChangeset()` now preserves the original error message when JavaScript callbacks throw
 - `createTagStore()` now throws errors with `code: 'ERR_INVALID_STATE'` property when database is closed, matching Node.js error format
 
 ## [0.3.0] (2025-12-16)
@@ -65,11 +65,11 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - **Defensive mode**: `enableDefensive()` method to prevent SQL from deliberately corrupting the database
 - **Statement enhancements**: `setAllowUnknownNamedParameters()` method, `finalized` property
 - **Type identification**: `sqlite-type` symbol property on DatabaseSync (Node.js PR #59405)
-- **Enhanced SQLite errors**: New properties `sqliteCode`, `sqliteExtendedCode`, `code`, `sqliteErrorString`, `systemErrno`
+- **SQLite error properties**: `sqliteCode`, `sqliteExtendedCode`, `code`, `sqliteErrorString`, `systemErrno`
 - **ARM64 prebuilds**: macOS Apple Silicon and Windows ARM64 binaries
 - **Tagged template literals**: `db.createTagStore()` for cached prepared statements (Node.js PR #58748)
 - **Authorization API**: `db.setAuthorizer()` for security callbacks (Node.js PR #59928)
-- **Standalone backup**: `backup(srcDb, destFile, options?)` for one-liner database backups with progress callbacks
+- **Standalone backup**: `backup(srcDb, destFile, options?)` for database backups with progress callbacks
 
 ### Fixed
 
@@ -83,16 +83,16 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 
 ### Added
 
-- Initial release of `@photostructure/sqlite` - standalone SQLite for Node.js 20+
-- Full compatibility with Node.js built-in SQLite module API
+- Initial release of `@photostructure/sqlite`, standalone SQLite for Node.js 20+
+- Compatible with Node.js built-in SQLite module API
 - Core SQLite operations with `DatabaseSync` and `StatementSync` classes
-- User-defined scalar and aggregate functions with full window function support
-- Database backup and restoration capabilities
+- User-defined scalar and aggregate functions with window function support
+- Database backup and restoration
 - SQLite sessions and changesets for change tracking
-- Extension loading support with automatic platform-specific file resolution
-- TypeScript definitions with complete type coverage
+- Extension loading with automatic platform-specific file resolution
+- TypeScript definitions
 - Cross-platform prebuilt binaries for Windows, macOS, and Linux (x64, ARM64)
-- Comprehensive test suite with 89+ tests covering all functionality
+- Test suite with 89+ tests
 - Memory safety validation with Valgrind and sanitizers
 - Performance benchmarking suite comparing to better-sqlite3
 - Automated synchronization from Node.js upstream SQLite implementation
@@ -100,15 +100,15 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 
 ### Features
 
-- **Synchronous API**: Fast, blocking database operations ideal for scripts and tools
-- **Parameter binding**: Support for all SQLite data types including BigInt
+- **Synchronous API**: Blocking database operations for scripts and tools
+- **Parameter binding**: All SQLite data types including BigInt
 - **Error handling**: Detailed error messages with SQLite error codes
 - **Resource limits**: Control memory usage and query complexity
 - **Safe integer handling**: JavaScript-safe integer conversion with overflow detection
-- **Multi-process support**: Safe concurrent access from multiple Node.js processes
-- **Worker thread support**: Full functionality in worker threads
-- **URI filename support**: Full SQLite URI syntax support for advanced database configuration
-- **Strict tables**: Support for SQLite's strict table mode
+- **Multi-process support**: Concurrent access from multiple Node.js processes
+- **Worker thread support**: Works in worker threads
+- **URI filename support**: SQLite URI syntax for advanced database configuration
+- **Strict tables**: SQLite strict table mode
 - **Double-quoted strings**: Configurable SQL syntax compatibility
 
 ### Platform Support
