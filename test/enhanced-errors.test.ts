@@ -60,6 +60,12 @@ describe("Enhanced SQLite Error Information", () => {
     // See: https://sqlite.org/forum/info/42cf8e985bb051a2
     if (isAlpineLinux()) return;
 
+    // Skip if running as root (UID 0) - root can often bypass file permissions
+    if (process.getuid && process.getuid() === 0) {
+      console.log("Skipping test: running as root");
+      return;
+    }
+
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sqlite-test-"));
 
     try {
@@ -74,34 +80,58 @@ describe("Enhanced SQLite Error Information", () => {
       fs.chmodSync(tempDir, 0o555);
       fs.chmodSync(dbPath, 0o444);
 
-      // Try to open it for writing (this should fail)
-      try {
-        const db2 = new DatabaseSync(dbPath, { readOnly: false });
-        db2.exec("CREATE TABLE test2 (id INTEGER)"); // Try to write
-        db2.close();
-        throw new Error("Should have thrown");
-      } catch (error: any) {
-        if (error.message === "Should have thrown") {
-          throw error;
-        }
-
-        // The error might be SQLITE_CANTOPEN or SQLITE_READONLY depending on SQLite version
-        expect(error.sqliteCode).toBeGreaterThanOrEqual(8); // At least SQLITE_READONLY
-        expect(error.sqliteExtendedCode).toBeGreaterThanOrEqual(8);
-
-        // System errno might be set for permission errors
-        // but SQLite might handle this at a higher level
-        // without hitting the OS error
-        console.log("Permission error systemErrno:", error.systemErrno);
-
-        console.log("Permission denied error properties:", {
-          sqliteCode: error.sqliteCode,
-          sqliteExtendedCode: error.sqliteExtendedCode,
-          systemErrno: error.systemErrno,
-          code: error.code,
-          message: error.message,
-        });
+      // Verify the file is actually read-only by checking stats
+      const stats = fs.statSync(dbPath);
+      const mode = stats.mode & 0o777;
+      if (mode !== 0o444) {
+        console.log(
+          `Skipping test: chmod did not work (mode=${mode.toString(8)})`,
+        );
+        fs.chmodSync(dbPath, 0o644);
+        fs.chmodSync(tempDir, 0o755);
+        return;
       }
+
+      // Try to open the database and perform a write operation
+      // This should fail with SQLITE_READONLY or similar
+      const db2 = new DatabaseSync(dbPath, { readOnly: false });
+      let writeError: any = null;
+
+      try {
+        // Try to write - this should fail if the database is truly read-only
+        db2.exec("CREATE TABLE test2 (id INTEGER)");
+      } catch (error: any) {
+        writeError = error;
+      } finally {
+        db2.close();
+      }
+
+      // If write succeeded, the environment doesn't enforce read-only file permissions
+      // properly (e.g., Docker with overlayfs, certain filesystems)
+      if (!writeError) {
+        console.log(
+          "Skipping test: write succeeded despite read-only file permissions",
+        );
+        return;
+      }
+
+      // Validate the error we caught
+      // The error might be SQLITE_CANTOPEN or SQLITE_READONLY depending on SQLite version
+      expect(writeError.sqliteCode).toBeGreaterThanOrEqual(8); // At least SQLITE_READONLY
+      expect(writeError.sqliteExtendedCode).toBeGreaterThanOrEqual(8);
+
+      // System errno might be set for permission errors
+      // but SQLite might handle this at a higher level
+      // without hitting the OS error
+      console.log("Permission error systemErrno:", writeError.systemErrno);
+
+      console.log("Permission denied error properties:", {
+        sqliteCode: writeError.sqliteCode,
+        sqliteExtendedCode: writeError.sqliteExtendedCode,
+        systemErrno: writeError.systemErrno,
+        code: writeError.code,
+        message: writeError.message,
+      });
 
       // Cleanup: restore write permissions
       fs.chmodSync(dbPath, 0o644);
