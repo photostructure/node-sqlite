@@ -320,6 +320,21 @@ const db = enhance(new DatabaseSync("mydb.sqlite"));
 1. **Use `enhance()` for better-sqlite3 compatibility** - Wrap your database with `enhance()` to get `.transaction()` and `.pragma()` methods
 2. **Property name changes** - `.name` → `.location()`, `.open` → `.isOpen`, `.inTransaction` → `.isTransaction`
 3. **No virtual table API** - Use raw SQL if needed
+4. **`undefined` is not a valid binding value** - Both `node:sqlite` and `@photostructure/sqlite` reject `undefined` in parameter bindings (better-sqlite3 silently treated it as NULL). Use `null` instead. This commonly surfaces with ORMs like Knex that produce `undefined` in multi-row inserts for missing columns:
+
+   ```javascript
+   // better-sqlite3: worked (undefined treated as NULL)
+   stmt.run("Alice", undefined);
+
+   // @photostructure/sqlite: throws "Provided value cannot be bound to SQLite parameter"
+   stmt.run("Alice", undefined);
+
+   // Fix: use null explicitly
+   stmt.run("Alice", null);
+
+   // When using Knex or other query builders, sanitize bindings:
+   const bindings = bindings.map((v) => (v === undefined ? null : v));
+   ```
 
 ## Need help?
 

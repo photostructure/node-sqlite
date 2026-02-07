@@ -361,6 +361,13 @@ try {
 
 ## NULL Handling
 
+Use `null` (not `undefined`) to bind SQL NULL values. Passing `undefined` as a binding throws an error, matching `node:sqlite` behavior:
+
+```javascript
+stmt.run("Alice", null); // Correct: binds SQL NULL
+stmt.run("Alice", undefined); // Error: "Provided value cannot be bound to SQLite parameter"
+```
+
 ```javascript
 // Inserting NULL values
 const stmt = db.prepare("INSERT INTO users (name, email) VALUES (?, ?)");
