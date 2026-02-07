@@ -101,7 +101,7 @@ _The original asynchronous SQLite binding for Node.js, [unmaintained since Decem
 | ------------------------ | ---------------------- | ------------- | ---------------- | ------------- |
 | **API Compatibility**    | node:sqlite            | -             | Custom           | Custom        |
 | **Min Node.js Version**  | 20.0.0                 | 22.5.0        | 14.0.0           | 10.0.0        |
-| **Experimental Flag**    | ❌ Not needed          | ❌ Not needed | ❌ Not needed    | ❌ Not needed |
+| **Experimental Flag**    | ✅ Not needed          | ❌ needed!    | ✅ Not needed    | ✅ Not needed |
 | **Synchronous API**      | ✅                     | ✅            | ✅               | ❌            |
 | **Asynchronous API**     | ❌                     | ❌            | ❌               | ✅            |
 | **TypeScript Types**     | ✅ Built-in            | ✅ Built-in   | ✅ Via @types    | ✅ Via @types |
