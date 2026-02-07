@@ -222,7 +222,6 @@ async function main() {
           `   @photostructure/sqlite: ${Math.round(result.opsPerSec).toLocaleString()} ops/sec`,
         ),
       );
-      stmt.finalize();
       db.close();
     }
 
