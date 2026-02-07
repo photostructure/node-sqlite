@@ -20,7 +20,7 @@ const db = new DatabaseSync("mydb.sqlite", { readOnly: true });
 
 ### Statement preparation
 
-Both libraries use prepared statements, but with different property names:
+Both libraries use prepared statements with the same syntax:
 
 ```javascript
 // better-sqlite3
