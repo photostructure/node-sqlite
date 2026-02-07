@@ -40,7 +40,7 @@ process.env.NODE_ENV = "production"; // Controlled by app, not user
 execSync("NODE_ENV=production npm run build");
 ```
 
-### ⚠️ MISLEADING: "Safe" Looking But Still Dangerous
+### Misleading: "safe" looking but still dangerous
 
 ```javascript
 // Looks safe because of validation, but still risky
@@ -83,7 +83,7 @@ execFileSync(tool, ["--help"]); // User can run ANY executable!
 // Executes: /bin/rm --help (but what if args were different?)
 ```
 
-### ⚠️ FALSE SECURITY: Shell Features Still Available
+### False security: shell features still available
 
 ```javascript
 // Some programs interpret shell-like syntax themselves
@@ -94,7 +94,7 @@ execFileSync("eval", [userInput]); // If such a program existed
 
 ## Real-World Security Patterns
 
-### Pattern 1: Static Commands (Both Are Safe)
+### Pattern 1: static commands (both are safe)
 
 ```javascript
 // These are equally safe - no user input involved
@@ -105,7 +105,7 @@ execFileSync("docker", ["build", "-t", "myapp:latest", "."]);
 // The execFileSync version is more verbose with no security benefit here
 ```
 
-### Pattern 2: User Input as Arguments (execFileSync Wins)
+### Pattern 2: user input as arguments (execFileSync wins)
 
 ```javascript
 // DANGEROUS - shell interprets special characters
@@ -116,7 +116,7 @@ execSync(`grep "${searchTerm}" logfile.txt`);
 execFileSync("grep", [searchTerm, "logfile.txt"]);
 ```
 
-### Pattern 3: Complex Commands (execSync More Practical)
+### Pattern 3: complex commands (execSync more practical)
 
 ```javascript
 // Complex pipeline - execSync is cleaner
@@ -126,7 +126,7 @@ execSync('ps aux | grep node | grep -v grep | awk "{print $2}"');
 // Not more secure if the command is static!
 ```
 
-### Pattern 4: Running User Scripts (Both Dangerous)
+### Pattern 4: running user scripts (both dangerous)
 
 ```javascript
 // User uploads script.sh
@@ -140,9 +140,9 @@ execFileSync("bash", [uploadedScriptPath]);
 // The security issue is running untrusted code, not the exec method!
 ```
 
-## Security Best Practices
+## Security best practices
 
-### 1. Identify the Real Threat
+### 1. Identify the real threat
 
 ```javascript
 // Ask: "What part is user-controlled?"
@@ -157,7 +157,7 @@ execFileSync("git", ["checkout", userBranch]); // ✅ Safer
 execFileSync(userCommand, args); // ❌ Still dangerous
 ```
 
-### 2. Validate at the Right Level
+### 2. Validate at the right level
 
 ```javascript
 // ✅ GOOD: Whitelist allowed operations
@@ -171,7 +171,7 @@ const sanitized = userInput.replace(/[;&|`$]/g, ""); // Incomplete, error-prone
 execSync(sanitized); // Still dangerous!
 ```
 
-### 3. Use the Right Tool for the Job
+### 3. Use the right tool for the job
 
 ```javascript
 // For static commands, use what's clearer
@@ -197,17 +197,17 @@ execFileSync("tar", ["-czf", "archive.tgz", ...files]); // Safe argument passing
 
 ## Key Takeaways
 
-1. **execSync with static strings is perfectly safe** - The risk comes from interpolating user input, not the function itself.
+1. **execSync with static strings is perfectly safe.** The risk comes from interpolating user input, not the function itself.
 
-2. **execFileSync prevents shell interpretation** - But it doesn't prevent running malicious executables or scripts.
+2. **execFileSync prevents shell interpretation**, but it doesn't prevent running malicious executables or scripts.
 
 3. **The real security question** is "what does the user control?" not "which exec function am I using?"
 
-4. **Security theater is dangerous** - Blindly using execFileSync everywhere might hide real vulnerabilities while making code harder to maintain.
+4. **Security theater is dangerous.** Blindly using execFileSync everywhere might hide real vulnerabilities while making code harder to maintain.
 
-5. **Context matters** - A hardcoded `execSync('npm install')` is safer than `execFileSync(userPath, userArgs)`.
+5. **Context matters.** A hardcoded `execSync('npm install')` is safer than `execFileSync(userPath, userArgs)`.
 
-## Examples: Right Tool for the Job
+## Examples: right tool for the job
 
 ```javascript
 // ✅ Static command - execSync is fine and clearer

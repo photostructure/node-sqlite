@@ -1,8 +1,8 @@
 # Async API Design Analysis for @photostructure/sqlite
 
-## Executive Summary
+## Summary
 
-This document analyzes options for adding asynchronous API support to the @photostructure/sqlite library, which currently provides a synchronous SQLite interface matching Node.js's built-in sqlite module. After careful analysis, we recommend creating a separate package for the async API rather than integrating it into the existing library.
+This document analyzes options for adding asynchronous API support to @photostructure/sqlite (currently sync-only, matching Node.js's built-in sqlite module). We recommend a separate package for the async API rather than integrating it into the existing library.
 
 ## Current State
 
@@ -291,7 +291,7 @@ const user = await stmt.get(userId);
 
 ## Conclusion
 
-Creating a separate async package is the recommended approach. It provides the clearest path forward, aligns with Node.js's design philosophy, and minimizes risk to existing users. The AsyncWorker pattern from node-addon-api provides a solid foundation for implementation.
+A separate async package is the recommended approach. It follows Node.js's own design philosophy and avoids any risk to existing sync users. The AsyncWorker pattern from node-addon-api is the right building block.
 
 ## Next Steps
 

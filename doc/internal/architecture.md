@@ -160,4 +160,4 @@ The shim layer approach allows us to ship a standalone npm package that:
 - Maintains full API compatibility
 - Can track upstream improvements
 
-While this required significant effort to create the compatibility layer, it provides the best balance between compatibility, maintainability, and usability.
+The compatibility layer took real effort to build, but it keeps the package compatible, maintainable, and easy to use.

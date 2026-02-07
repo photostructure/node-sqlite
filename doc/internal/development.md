@@ -2,50 +2,37 @@
 
 Information about the development of @photostructure/sqlite.
 
-## Project Timeline
+## Project overview
 
-This project demonstrates modern software development practices with AI assistance:
+- Full API compliance running in both ESM and CJS modes
+- Multi-platform CI/CD with dedicated ARM64 and x64 build jobs across all platforms
+- Security scanning and memory leak detection
+- Automated sync from Node.js and SQLite upstream
+- [Benchmarking suite](../../benchmark/README.md) covering popular Node.js SQLite libraries
 
-- **900+ lines of C++** - Core SQLite binding implementation
-- **17,000+ lines of TypeScript tests** - Comprehensive test coverage
-- **400+ tests** with full API compliance running in both ESM and CJS modes
-- **Multi-platform CI/CD** with dedicated ARM64 and x64 build jobs across all platforms
-- **Security scanning** and memory leak detection
-- **Automated sync** from Node.js and SQLite upstream
-- **Robust [benchmarking suite](../../benchmark/README.md)** including all popular Node.js SQLite libraries
-
-## AI-Assisted Development
+## AI-assisted development
 
 This project was built with substantial assistance from [Claude Code](https://claude.ai/referral/gM3vgw7pfA), an AI coding assistant.
 
-### Development Cost
+### Development process
 
-- **API usage**: ~$1400 in Claude API tokens
-- **Actual cost**: $200/month MAX 20x plan subscription
-- **Time saved**: At least a month of setup, analysis, porting and testing
-
-### Development Process
-
-1. **Initial Analysis**: Claude analyzed the Node.js SQLite source code and architecture
-2. **Shim Layer Design**: Developed compatibility layer for Node.js internals
+1. **Analysis**: Claude analyzed the Node.js SQLite source code and architecture
+2. **Shim layer**: Developed compatibility layer for Node.js internals
 3. **Implementation**: Ported C++ code with N-API adaptations
-4. **Testing**: Created comprehensive test suite with 400+ tests
+4. **Testing**: Created test suite
 5. **Documentation**: Generated user and API documentation
 6. **CI/CD**: Set up multi-platform build and release pipeline
 
-### Quality Assurance
+### Quality assurance
 
-While AI significantly accelerated development, all code underwent:
+All code was reviewed by a human and validated by automated tests before merging:
 
-- Human review before merging
-- Comprehensive automated testing
+- Automated testing across platforms
 - Memory leak detection (Valgrind, ASAN)
 - Security scanning (npm audit, OSV, CodeQL)
 - Performance benchmarking
 
-This approach demonstrates how AI-assisted development can accelerate complex system programming while maintaining high code quality through comprehensive testing and human oversight.
-
-## Building from Source
+## Building from source
 
 ### Prerequisites
 
@@ -56,7 +43,7 @@ This approach demonstrates how AI-assisted development can accelerate complex sy
   - **macOS**: Xcode Command Line Tools
   - **Windows**: Visual Studio 2019+
 
-### Build Commands
+### Build commands
 
 ```bash
 # Install dependencies
@@ -72,7 +59,7 @@ npm test
 npm run benchmark
 ```
 
-### Development Workflow
+### Development workflow
 
 ```bash
 # Watch mode for TypeScript
@@ -106,31 +93,31 @@ See [Architecture Documentation](./architecture.md) for details on:
 5. Ensure all tests pass
 6. Submit a pull request
 
-### Code Style
+### Code style
 
 - TypeScript/JavaScript: Prettier with project config
 - C++: clang-format with project style
 - Commit messages: Conventional Commits format
 
-### Testing Requirements
+### Testing requirements
 
 - New features must include tests
 - Tests must pass on all platforms
 - Memory leak tests for native code
 - Benchmark comparisons for performance changes
 
-## Release Process
+## Release process
 
 See [Release Process](./release-process.md) for detailed release instructions.
 
-## Upstream Synchronization
+## Upstream synchronization
 
 The project maintains synchronization with:
 
 - Node.js SQLite implementation
 - SQLite amalgamation source
 
-### GitHub API Authentication
+### GitHub API authentication
 
 To avoid rate limiting when syncing from GitHub (60 requests/hour for unauthenticated requests), set up authentication:
 
@@ -147,7 +134,7 @@ You can create a personal access token at: https://github.com/settings/tokens
 
 The token only needs public repository read access.
 
-### Sync Commands
+### Sync commands
 
 ```bash
 # Sync from Node.js
