@@ -1,8 +1,8 @@
-# Testing Philosophy
+# Testing philosophy
 
 This document outlines the testing approach for @photostructure/sqlite.
 
-## Core Principle: Exact node:sqlite Compatibility
+## Core principle: exact node:sqlite compatibility
 
 Our goal is to be a **drop-in replacement** for Node.js's built-in `node:sqlite` module. This means:
 
@@ -10,14 +10,14 @@ Our goal is to be a **drop-in replacement** for Node.js's built-in `node:sqlite`
 - **Exact same error codes** - ERR_INVALID_ARG_TYPE, ERR_SQLITE_ERROR, etc.
 - **Exact same behavior** - Pass the Node.js SQLite test suite
 
-### Why Exact Compatibility Matters
+### Why exact compatibility matters
 
 1. **Drop-in replacement**: Users should be able to swap imports without any code changes
 2. **Test suite compatibility**: We sync and run Node.js's own SQLite tests
 3. **Error handling code**: User code that catches and parses errors must work identically
 4. **Documentation accuracy**: Node.js docs should apply to our package
 
-## Node.js Test Suite Synchronization
+## Node.js test suite synchronization
 
 We sync test files from the Node.js repository and adapt them to use our package:
 
@@ -28,7 +28,7 @@ node --test test/node-compat/   # Run adapted tests
 
 These tests verify exact compatibility with node:sqlite behavior, including error messages.
 
-## Error Message Requirements
+## Error message requirements
 
 When implementing error handling, always match Node.js's exact error messages:
 
@@ -44,7 +44,7 @@ Napi::TypeError::New(env,
 
 Reference the upstream Node.js source (`src/upstream/node_sqlite.cc`) to find exact error messages.
 
-## SQLite Error Properties
+## SQLite error properties
 
 SQLite errors must include all standard properties:
 
@@ -60,20 +60,20 @@ SQLite errors must include all standard properties:
 }
 ```
 
-## Platform Considerations
+## Platform considerations
 
-### CI Environment Differences
+### CI environment differences
 
 - GitHub Actions runners vary significantly in performance
 - Alpine Linux ARM64 emulation is 5-20x slower
 - Windows process operations are 4x slower
 - Use adaptive timeouts from `test-timeout-config.cjs`
 
-### Test Isolation
+### Test isolation
 
 The node-compat tests share a temp directory and must run with `--test-concurrency=1` to avoid database locking conflicts.
 
-## Test Organization
+## Test organization
 
 - `test/*.test.ts` - Jest-based unit and integration tests
 - `test/node-compat/*.test.js` - Adapted Node.js test suite (node:test runner)

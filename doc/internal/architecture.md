@@ -1,12 +1,12 @@
-# Why We Had to Reimplement Node.js's SQLite Code
+# Why we had to reimplement Node.js's SQLite code
 
 This document explains why we couldn't directly use Node.js's C++ SQLite implementation and instead had to create a compatibility layer.
 
-## The Core Problem: Node.js Internals
+## The core problem: Node.js internals
 
 Node.js's SQLite implementation (`node_sqlite.cc`) is deeply integrated with Node.js internals that are not accessible to addon developers. These internals include:
 
-### 1. BaseObject Class Hierarchy
+### 1. BaseObject class hierarchy
 
 ```cpp
 // Node.js internal code
@@ -19,7 +19,7 @@ class DatabaseSync : public BaseObject {
 - Provides automatic memory management and handle wrapping
 - Not exposed in Node.js public headers
 
-### 2. Environment Class
+### 2. Environment class
 
 ```cpp
 // Extensive use of Environment throughout
@@ -34,7 +34,7 @@ env->sqlite_*_string()  // Cached strings
 - Permission system integration
 - Not available to addons
 
-### 3. Internal Headers
+### 3. Internal headers
 
 The implementation requires headers that aren't installed with Node.js:
 
@@ -44,7 +44,7 @@ The implementation requires headers that aren't installed with Node.js:
 - `node_mem-inl.h`
 - `util-inl.h`
 
-### 4. Error Handling System
+### 4. Error handling system
 
 ```cpp
 // Internal error macros
@@ -56,7 +56,7 @@ CHECK_ERROR_OR_THROW(env, r, SQLITE_OK, void());
 - Integrated with Node.js error codes
 - Not available in public API
 
-### 5. Memory Tracking
+### 5. Memory tracking
 
 ```cpp
 void MemoryInfo(MemoryTracker* tracker) const override {
@@ -68,7 +68,7 @@ void MemoryInfo(MemoryTracker* tracker) const override {
 - Required for all BaseObject derivatives
 - Not relevant for addons
 
-### 6. ThreadPoolWork Integration
+### 6. ThreadPoolWork integration
 
 ```cpp
 class NodeSqliteWork : public ThreadPoolWork {
@@ -79,7 +79,7 @@ class NodeSqliteWork : public ThreadPoolWork {
 - Direct integration with libuv thread pool
 - Not exposed to addon developers
 
-## Our Solution: Shim Layer
+## Our solution: shim layer
 
 Instead of rewriting from scratch, we created a shim layer (`src/shims/`) that provides minimal implementations of these Node.js internals:
 
@@ -93,7 +93,7 @@ class BaseObject : public Napi::ObjectWrap<T> {
 };
 ```
 
-### 2. Environment → Minimal Implementation
+### 2. Environment → minimal implementation
 
 ```cpp
 // Our shim provides just what SQLite needs
@@ -104,7 +104,7 @@ class Environment {
 };
 ```
 
-### 3. Error Handling → N-API
+### 3. Error handling → N-API
 
 ```cpp
 // Convert internal macros to N-API
@@ -112,7 +112,7 @@ class Environment {
   Napi::TypeError::New(env, msg).ThrowAsJavaScriptException()
 ```
 
-### 4. Memory Tracking → Stub
+### 4. Memory tracking → stub
 
 ```cpp
 // Stub implementation since we don't need heap snapshots
@@ -130,7 +130,7 @@ void QueueWork(std::function<void()> work) {
 }
 ```
 
-## Key Adaptations Made
+## Key adaptations made
 
 1. **V8 API → N-API**: Converted all direct V8 API usage to N-API equivalents
 2. **Internal Classes → N-API Patterns**: Replaced BaseObject with Napi::ObjectWrap
@@ -138,14 +138,14 @@ void QueueWork(std::function<void()> work) {
 4. **String Caching → Local Implementation**: Created simple string cache for performance
 5. **Memory Tracking → Removed**: Not needed for addon use case
 
-## Benefits of This Approach
+## Benefits of this approach
 
 1. **Maintains Compatibility**: Same API surface as Node.js built-in
 2. **Preserves Logic**: SQLite usage patterns remain identical
 3. **Easier Updates**: Can sync with upstream changes
 4. **Cross-Version Support**: Works with any Node.js version that has N-API
 
-## Alternative Approaches Considered
+## Alternative approaches considered
 
 1. **Complete Rewrite**: Would lose compatibility and require extensive testing
 2. **Fork Node.js**: Would require users to use custom Node.js build

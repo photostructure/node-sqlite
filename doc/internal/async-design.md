@@ -1,12 +1,12 @@
-# Async API Design Analysis for @photostructure/sqlite
+# Async API design analysis for @photostructure/sqlite
 
 ## Summary
 
 This document analyzes options for adding asynchronous API support to @photostructure/sqlite (currently sync-only, matching Node.js's built-in sqlite module). We recommend a separate package for the async API rather than integrating it into the existing library.
 
-## Current State
+## Current state
 
-### What We Have
+### What we have
 
 The @photostructure/sqlite library provides:
 
@@ -16,7 +16,7 @@ The @photostructure/sqlite library provides:
 - **Full SQLite functionality** including user-defined functions, aggregates, and more
 - **Cross-platform support** with prebuilds for major platforms
 
-### Technical Foundation
+### Technical foundation
 
 The library is built on:
 
@@ -24,7 +24,7 @@ The library is built on:
 - **Node-addon-api** for C++ to JavaScript bindings
 - **Synchronous execution model** where all operations block the JavaScript thread
 
-## The Challenge
+## The challenge
 
 SQLite's C API is fundamentally synchronous. Operations like `sqlite3_step()`, `sqlite3_exec()`, and `sqlite3_prepare()` block until completion. To provide an async API, we need to:
 
@@ -33,9 +33,9 @@ SQLite's C API is fundamentally synchronous. Operations like `sqlite3_step()`, `
 3. Handle concurrent access safely
 4. Maintain proper connection lifecycle
 
-## Design Options Analysis
+## Design options analysis
 
-### Option 1: Integrated Async API in Existing Library
+### Option 1: integrated async API in existing library
 
 Add async classes alongside sync classes in the same package:
 
@@ -60,7 +60,7 @@ export { Database, Statement } from "./async";
 - Larger package size for all users
 - Testing complexity increases significantly
 
-### Option 2: Separate Async Package (Recommended)
+### Option 2: separate async package (recommended)
 
 Create a new package `@photostructure/sqlite-async`:
 
@@ -89,7 +89,7 @@ export class Statement { ... }
 - Some code duplication
 - Need to coordinate SQLite version updates
 
-### Option 3: Modular Architecture
+### Option 3: modular architecture
 
 Create three packages with shared core:
 
@@ -111,7 +111,7 @@ Create three packages with shared core:
 - Three packages to maintain
 - Dependency versioning complexity
 
-## Recommended Approach: Separate Async Package
+## Recommended approach: separate async package
 
 We recommend **Option 2** for these reasons:
 
@@ -120,9 +120,9 @@ We recommend **Option 2** for these reasons:
 3. **Risk Mitigation**: No chance of breaking existing sync users
 4. **Clean Implementation**: Can use AsyncWorker pattern from the start
 
-## Async API Design Principles
+## Async API design principles
 
-### 1. Promise-Based API
+### 1. Promise-based API
 
 All operations return promises:
 
@@ -146,7 +146,7 @@ class Statement {
 }
 ```
 
-### 2. Connection Pooling
+### 2. Connection pooling
 
 Since operations run on worker threads, we can support concurrent operations:
 
@@ -158,7 +158,7 @@ interface PoolOptions {
 }
 ```
 
-### 3. AsyncWorker Implementation
+### 3. AsyncWorker implementation
 
 Use node-addon-api's AsyncWorker for all operations:
 
@@ -181,14 +181,14 @@ class OpenWorker : public Napi::AsyncWorker {
 };
 ```
 
-### 4. Thread Safety
+### 4. Thread safety
 
 - Each Database instance owns its sqlite3\* connection
 - Operations are serialized per connection
 - Multiple Database instances can work in parallel
 - Use SQLITE_OPEN_FULLMUTEX for thread safety
 
-### 5. Streaming Support
+### 5. Streaming support
 
 For large result sets:
 
@@ -202,45 +202,45 @@ for await (const row of statement.iterate()) {
 statement.stream().pipe(transform).pipe(output);
 ```
 
-## Implementation Roadmap
+## Implementation roadmap
 
-### Phase 1: Core Architecture
+### Phase 1: core architecture
 
 1. Create new repository/package structure
 2. Set up AsyncWorker base classes
 3. Implement Database.open() and Database.close()
 4. Add basic error handling
 
-### Phase 2: Statement Operations
+### Phase 2: statement operations
 
 1. Implement prepare() with AsyncWorker
 2. Add run(), get(), all() methods
 3. Implement parameter binding
 4. Add finalize() support
 
-### Phase 3: Advanced Features
+### Phase 3: advanced features
 
 1. Connection pooling
 2. Async iterators
 3. Stream support
 4. Transaction helpers
 
-### Phase 4: Feature Parity
+### Phase 4: feature parity
 
 1. User-defined functions (async callbacks)
 2. Backup API (progress callbacks)
 3. Busy handlers
 4. All remaining features
 
-## Technical Considerations
+## Technical considerations
 
-### 1. Memory Management
+### 1. Memory management
 
 - AsyncWorker automatically handles worker thread lifecycle
 - Need careful management of sqlite3\* pointers
 - Statement objects must track their parent Database
 
-### 2. Error Handling
+### 2. Error handling
 
 - Errors in Execute() are automatically converted to promise rejections
 - SQLite error messages must be copied (not referenced)
@@ -258,7 +258,7 @@ statement.stream().pipe(transform).pipe(output);
 - Match Node.js sqlite error behaviors
 - Provide migration guide from sync API
 
-## Testing Strategy
+## Testing strategy
 
 1. **Port existing tests** - Adapt sync tests to async
 2. **Concurrency tests** - Verify thread safety
@@ -266,7 +266,7 @@ statement.stream().pipe(transform).pipe(output);
 4. **Stress tests** - Connection pool limits
 5. **Integration tests** - Real-world usage patterns
 
-## Migration Guide (Future)
+## Migration guide (future)
 
 For users moving from sync to async:
 
@@ -282,7 +282,7 @@ const stmt = await db.prepare("SELECT * FROM users WHERE id = ?");
 const user = await stmt.get(userId);
 ```
 
-## Open Questions
+## Open questions
 
 1. **Package naming**: `@photostructure/sqlite-async` or `@photostructure/async-sqlite`?
 2. **API style**: Mirror better-sqlite3's async API or create our own?
@@ -293,7 +293,7 @@ const user = await stmt.get(userId);
 
 A separate async package is the recommended approach. It follows Node.js's own design philosophy and avoids any risk to existing sync users. The AsyncWorker pattern from node-addon-api is the right building block.
 
-## Next Steps
+## Next steps
 
 1. **Decision**: Confirm separate package approach
 2. **Repository**: Create new repo or subdirectory

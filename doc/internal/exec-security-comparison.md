@@ -1,12 +1,12 @@
-# execSync vs execFileSync: Real Security Analysis
+# execSync vs execFileSync: real security analysis
 
 ## Overview
 
 The common wisdom is "never use execSync, always use execFileSync for security." But this oversimplifies the actual security implications. Let's examine when each is truly dangerous versus safe.
 
-## execSync Security Analysis
+## execSync security analysis
 
-### ❌ DANGEROUS: Dynamic String Concatenation
+### Dangerous: dynamic string concatenation
 
 ```javascript
 // User input directly concatenated into command string
@@ -17,7 +17,7 @@ execSync(`cat ${userInput}`); // Command injection vulnerability!
 // Executes: cat file.txt; rm -rf /
 ```
 
-### ❌ DANGEROUS: Template Literals with Variables
+### Dangerous: template literals with variables
 
 ```javascript
 const filename = getUserInput();
@@ -27,7 +27,7 @@ execSync(`grep -r "${pattern}" ${filename}`); // Still vulnerable!
 // filename = '"; rm -rf / #'
 ```
 
-### ✅ SAFE: Static/Hardcoded Commands
+### Safe: static/hardcoded commands
 
 ```javascript
 // Completely static string - no injection possible
@@ -48,9 +48,9 @@ const cmd = userInput.match(/^[a-zA-Z0-9_-]+$/) ? userInput : "default";
 execSync(`npm run ${cmd}`); // If validation fails, injection still possible
 ```
 
-## execFileSync Security Analysis
+## execFileSync security analysis
 
-### ✅ SAFER: Argument Separation
+### Safer: argument separation
 
 ```javascript
 // Arguments are passed separately, not interpreted by shell
@@ -61,7 +61,7 @@ execFileSync("cat", [filename]); // filename is treated as single argument
 // Executes: cat "file.txt; rm -rf /" (tries to read file with that exact name)
 ```
 
-### ❌ STILL DANGEROUS: Malicious Executables
+### Still dangerous: malicious executables
 
 ```javascript
 // If scriptPath is user-controlled, this is dangerous!
@@ -72,7 +72,7 @@ execFileSync("/bin/bash", [scriptPath]); // Runs arbitrary commands in script!
 // Result: Commands in script are executed
 ```
 
-### ❌ DANGEROUS: Path Traversal
+### Dangerous: path traversal
 
 ```javascript
 // User controls which binary runs
@@ -92,7 +92,7 @@ execFileSync("bash", ["-c", userInput]); // Ditto
 execFileSync("eval", [userInput]); // If such a program existed
 ```
 
-## Real-World Security Patterns
+## Real-world security patterns
 
 ### Pattern 1: static commands (both are safe)
 
@@ -195,7 +195,7 @@ execFileSync("tar", ["-czf", "archive.tgz", ...files]); // Safe argument passing
 | Running user-provided scripts    | ❌ Dangerous | ❌ Dangerous  | Arbitrary code execution |
 | Complex shell pipelines/features | ✅ Practical | 🤔 Cumbersome | Depends on input         |
 
-## Key Takeaways
+## Key takeaways
 
 1. **execSync with static strings is perfectly safe.** The risk comes from interpolating user input, not the function itself.
 

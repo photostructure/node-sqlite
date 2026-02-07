@@ -1,4 +1,4 @@
-# Node-addon-api Threading and Promise Handling Guide
+# Node-addon-api threading and promise handling guide
 
 This document summarizes key concepts from Node-addon-api documentation for handling threads, promises, and async operations in native addons.
 
@@ -12,7 +12,7 @@ This document summarizes key concepts from Node-addon-api documentation for hand
 
 ## ThreadSafeFunction
 
-### Key Concepts
+### Key concepts
 
 1. **Purpose**: Allows calling JavaScript functions from any thread
 2. **Lifecycle**:
@@ -21,7 +21,7 @@ This document summarizes key concepts from Node-addon-api documentation for hand
    - Threads call `Release()` when done
    - Destroyed when all threads have released
 
-### Best Practices
+### Best practices
 
 1. **Creation**:
 
@@ -51,13 +51,13 @@ ThreadSafeFunction tsfn = ThreadSafeFunction::New(
 
 ## Promises
 
-### Key Concepts
+### Key concepts
 
 1. **Creation**: Use `Promise::Deferred` objects
 2. **Resolution**: Must explicitly call `Resolve()` or `Reject()`
 3. **Thread Safety**: Promise operations must happen on the main thread
 
-### Best Practices
+### Best practices
 
 ```cpp
 Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
@@ -69,7 +69,7 @@ deferred.Resolve(result);  // or
 deferred.Reject(error);
 ```
 
-## Thread Safety Rules
+## Thread safety rules
 
 1. **Main Thread Only**:
    - All operations requiring `Napi::Env`, `Napi::Value`, or `Napi::Reference`
@@ -80,9 +80,9 @@ deferred.Reject(error);
    - ThreadSafeFunction `Acquire()`, `Release()`, `BlockingCall()`
    - Pure C++ operations
 
-## Common Pitfalls and Solutions
+## Common pitfalls and solutions
 
-### Problem: Hanging Process on Exit
+### Problem: hanging process on exit
 
 **Cause**: ThreadSafeFunction not properly released or threads still running
 
@@ -92,7 +92,7 @@ deferred.Reject(error);
 2. Always pair `Acquire()` with `Release()`
 3. Handle `napi_closing` status gracefully
 
-### Problem: Unresolved Promises
+### Problem: unresolved promises
 
 **Cause**: Async operation fails to resolve/reject promise before shutdown
 
@@ -102,7 +102,7 @@ deferred.Reject(error);
 2. In error paths, always reject promises
 3. Consider implementing cleanup in destructors
 
-### Problem: Use-After-Free with Detached Threads
+### Problem: use-after-free with detached threads
 
 **Cause**: Object deleted while detached thread still running
 
@@ -112,9 +112,9 @@ deferred.Reject(error);
 2. Ensure proper synchronization between threads
 3. Join threads in finalizers when possible
 
-## AsyncWorker Pattern
+## AsyncWorker pattern
 
-### Key Concepts
+### Key concepts
 
 1. **Purpose**: Provides a clean abstraction for running CPU-intensive tasks on worker threads
 2. **Thread Management**: Automatically handles thread creation, joining, and cleanup
@@ -124,7 +124,7 @@ deferred.Reject(error);
    - `OnError()`: Called on main thread if an error occurs
    - Destructor automatically handles cleanup
 
-### Basic AsyncWorker Example
+### Basic AsyncWorker example
 
 ```cpp
 class MyWorker : public Napi::AsyncWorker {
@@ -154,7 +154,7 @@ private:
 };
 ```
 
-### AsyncProgressWorker for Progress Updates
+### AsyncProgressWorker for progress updates
 
 ```cpp
 class ProgressWorker : public Napi::AsyncProgressWorker<int> {
@@ -182,7 +182,7 @@ private:
 };
 ```
 
-## Recommendations for SQLite Backup Implementation
+## Recommendations for SQLite backup implementation
 
 Based on this analysis, the current BackupJob implementation has several issues:
 
@@ -190,13 +190,13 @@ Based on this analysis, the current BackupJob implementation has several issues:
 2. **Detached Threads**: Using detached threads makes it impossible to join them during shutdown
 3. **Promise Lifecycle**: Unresolved promises during shutdown can cause hangs
 
-### Proposed Fixes:
+### Proposed fixes:
 
 1. Replace ThreadPoolWork with AsyncProgressWorker for automatic thread management
 2. Use AsyncProgressWorker's built-in progress reporting instead of manual ThreadSafeFunction
 3. Let AsyncWorker handle thread lifecycle and promise resolution
 
-### Why Detached Threads Are Problematic
+### Why detached threads are problematic
 
 The current implementation uses `std::thread(...).detach()` which means:
 
