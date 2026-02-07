@@ -1,19 +1,19 @@
-# SQLite Stress Test Demo
+# SQLite stress test demo
 
-This document demonstrates how to use the comprehensive stress test system that generates 100MB+ databases and tests performance against other SQLite libraries.
+This document explains how to use the stress test system that generates 100MB+ databases and tests performance against other SQLite libraries.
 
 ## Features
 
-- **Complex Schema**: Users, Posts, Comments, Categories, Tags with foreign keys and junction tables
-- **Natural Data**: Realistic names, emails, content without external dependencies
-- **Advanced SQLite Features**: FTS5 full-text search, JSON columns, composite/partial indexes
-- **100MB+ Datasets**: Chunked generation to prevent memory issues
-- **Performance Scenarios**: Complex JOINs, FTS searches, bulk operations, concurrent access
-- **Cross-Library Comparison**: @photostructure/sqlite vs better-sqlite3, node:sqlite, sqlite3
+- **Complex schema**: Users, Posts, Comments, Categories, Tags with foreign keys and junction tables
+- **Natural data**: Realistic names, emails, content without external dependencies
+- **Advanced SQLite features**: FTS5 full-text search, JSON columns, composite/partial indexes
+- **100MB+ datasets**: Chunked generation to prevent memory issues
+- **Performance scenarios**: Complex JOINs, FTS searches, bulk operations, concurrent access
+- **Cross-library comparison**: @photostructure/sqlite vs better-sqlite3, node:sqlite, sqlite3
 
-## Quick Start
+## Quick start
 
-### Run Default Stress Test (100MB database)
+### Run default stress test (100MB database)
 
 ```bash
 npm run stress
@@ -26,7 +26,7 @@ This will:
 3. Run all stress scenarios
 4. Display performance comparison table
 
-### Custom Options
+### Custom options
 
 ```bash
 # Test specific drivers
@@ -48,7 +48,7 @@ npm run stress -- --verbose
 npm run stress -- --skip-generation --db-path ./my-large-db.db
 ```
 
-## Schema Overview
+## Schema overview
 
 The stress test creates a realistic blog/CMS schema:
 
@@ -61,7 +61,7 @@ The stress test creates a realistic blog/CMS schema:
 - **comments**: Threaded comments system
 - **post_tags**: Many-to-many junction table
 
-### Advanced Features
+### Advanced features
 
 - **FTS5**: Full-text search on posts (title, excerpt, content)
 - **JSON Columns**: Metadata, preferences, stats stored as JSON
@@ -69,9 +69,9 @@ The stress test creates a realistic blog/CMS schema:
 - **Composite Indexes**: Multi-column indexes for common queries
 - **Partial Indexes**: Conditional indexes for performance
 
-## Performance Scenarios
+## Performance scenarios
 
-### 1. Complex JOIN Operations
+### 1. Complex JOIN operations
 
 Multi-table queries with aggregations:
 
@@ -79,7 +79,7 @@ Multi-table queries with aggregations:
 - User statistics with post/comment counts
 - Category breakdowns with author counts
 
-### 2. Full-Text Search Performance
+### 2. Full-text search performance
 
 FTS5 searches across large content:
 
@@ -87,7 +87,7 @@ FTS5 searches across large content:
 - Title-only searches
 - Phrase searches with ranking
 
-### 3. Bulk Operations with Constraints
+### 3. Bulk operations with constraints
 
 Large transactions with foreign keys:
 
@@ -95,7 +95,7 @@ Large transactions with foreign keys:
 - Batch update post statistics
 - Mass tag assignments
 
-### 4. Concurrent Read Operations
+### 4. Concurrent read operations
 
 Simulating multiple read patterns:
 
@@ -104,18 +104,18 @@ Simulating multiple read patterns:
 - Post with comments aggregation
 - User profile loading
 
-## Data Generation
+## Data generation
 
 The system generates natural-looking data without external dependencies:
 
-### User Data
+### User data
 
 - Real first/last names from curated lists
 - Realistic email addresses with common domains
 - Phone numbers, bios, avatar URLs
 - JSON preferences and statistics
 
-### Content Data
+### Content data
 
 - Article titles and excerpts
 - Natural language content using common words
@@ -129,14 +129,14 @@ The system generates natural-looking data without external dependencies:
 - Threaded comment hierarchies
 - Realistic data distribution
 
-## Example Output
+## Example output
 
 ```
-🚀 SQLite Stress Test Suite
+SQLite Stress Test Suite
 Target size: 100MB
 Drivers: @photostructure/sqlite, better-sqlite3, node:sqlite
 
-📝 Generating test dataset...
+Generating test dataset...
 Database generated in 45.3s
 Final size: 103.2MB
 
@@ -148,17 +148,17 @@ Table statistics:
   tags: 200 records
   post_tags: 400,000 records
 
-📊 Testing @photostructure/sqlite
+Testing @photostructure/sqlite
   Running Complex JOIN Operations...
-    ✓ 1,245 ops/sec
+    1,245 ops/sec
   Running Full-Text Search Performance...
-    ✓ 523 ops/sec
+    523 ops/sec
   Running Bulk Operations with Constraints...
-    ✓ 89 ops/sec
+    89 ops/sec
   Running Concurrent Read Operations...
-    ✓ 2,134 ops/sec
+    2,134 ops/sec
 
-📈 Stress Test Results
+Stress Test Results
 Database size: 103.2MB
 
 | Scenario | @photostructure/sqlite | better-sqlite3 | node:sqlite |
@@ -168,21 +168,21 @@ Database size: 103.2MB
 | Bulk Operations with Constraints | 89 ops/s | 92 ops/s | 87 ops/s |
 | Concurrent Read Operations | 2,134 ops/s | 2,198 ops/s | 2,087 ops/s |
 
-🏆 Overall Performance Ranking
+Overall Performance Ranking
 
 | Rank | Driver | Score |
 |---:|---|---:|
-| 1 🥇 | better-sqlite3 | 98% |
-| 2 🥈 | @photostructure/sqlite | 94% |
-| 3 🥉 | node:sqlite | 91% |
+| 1 | better-sqlite3 | 98% |
+| 2 | @photostructure/sqlite | 94% |
+| 3 | node:sqlite | 91% |
 
-💾 Resource Usage
+Resource Usage
 Database Size: 103.2MB
 Total Records: 140,000
 Fastest Operation: 2,198 ops/sec (better-sqlite3)
 ```
 
-## Validation Tests
+## Validation tests
 
 Run unit tests for the stress test components:
 
@@ -198,9 +198,9 @@ This validates:
 - Foreign key relationships are maintained
 - Scenarios execute without errors
 
-## Use Cases
+## Use cases
 
-### Performance Regression Testing
+### Performance regression testing
 
 Run before/after releases to detect performance regressions:
 
@@ -214,7 +214,7 @@ npm run stress -- --output json > after.json
 # Compare results programmatically
 ```
 
-### Library Comparison
+### Library comparison
 
 Compare performance across SQLite libraries:
 
@@ -222,7 +222,7 @@ Compare performance across SQLite libraries:
 npm run stress -- --drivers @photostructure/sqlite,better-sqlite3,node:sqlite
 ```
 
-### Scalability Testing
+### Scalability testing
 
 Test how performance scales with database size:
 
@@ -233,7 +233,7 @@ npm run stress -- --size 100  # 100MB
 npm run stress -- --size 500  # 500MB
 ```
 
-### Scenario-Specific Testing
+### Scenario-specific testing
 
 Focus on specific performance aspects:
 
@@ -245,15 +245,15 @@ npm run stress -- --scenarios stress-fts-search
 npm run stress -- --scenarios stress-complex-joins
 ```
 
-## Architecture Notes
+## Architecture notes
 
-### Memory Management
+### Memory management
 
 - Chunked data generation prevents OOM on large datasets
 - Progress reporting every 10 chunks
 - Automatic cleanup of temporary files
 
-### Cross-Platform
+### Cross-platform
 
 - Deterministic data generation for reproducible results
 - Platform-aware file handling

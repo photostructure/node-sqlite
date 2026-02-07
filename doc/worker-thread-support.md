@@ -1,47 +1,47 @@
-# Worker Thread Support
+# Worker thread support
 
-This document describes the implementation of Node.js worker thread support for @photostructure/sqlite.
+This document describes the worker thread support implementation for @photostructure/sqlite.
 
 ## Summary
 
 Worker thread support is **fully implemented and working** in @photostructure/sqlite. The implementation provides complete thread safety through per-worker instance data management and thread validation, ensuring that database connections cannot be shared between threads.
 
-### Key Features
+### Key features
 
-- ✅ Full worker thread compatibility with no special initialization required
-- ✅ Automatic per-worker instance data management
-- ✅ Thread safety validation prevents cross-thread object usage
-- ✅ Proper cleanup when worker threads terminate
-- ✅ Clear error messages when thread violations occur
-- ✅ 100% test success rate with comprehensive test coverage
+- Full worker thread compatibility with no special initialization required
+- Automatic per-worker instance data management
+- Thread safety validation prevents cross-thread object usage
+- Proper cleanup when worker threads terminate
+- Clear error messages when thread violations occur
+- 100% test success rate with full test coverage
 
-## Research Summary
+## Research summary
 
-### SQLite Thread Safety Configuration
+### SQLite thread safety configuration
 
 SQLite supports three threading modes:
 
 - **Single-thread** (`SQLITE_THREADSAFE=0`): No thread safety, one thread only
-- **Multi-thread** (`SQLITE_THREADSAFE=2`): Multiple threads, separate connections per thread ✅ **CURRENT**
+- **Multi-thread** (`SQLITE_THREADSAFE=2`): Multiple threads, separate connections per thread **CURRENT**
 - **Serialized** (`SQLITE_THREADSAFE=1`): Full thread safety with mutexes (default)
 
-**Current Configuration:** Using `SQLITE_THREADSAFE=2` (multi-thread mode) - the correct choice for worker threads where each thread gets its own database connection.
+**Current Configuration:** Using `SQLITE_THREADSAFE=2` (multi-thread mode), the correct choice for worker threads where each thread gets its own database connection.
 
-### Implemented Components
+### Implemented components
 
-1. **Context-Aware Addons**: ✅ N-API provides automatic context awareness
-2. **Instance Data Management**: ✅ Implemented using `napi_set_instance_data` in `src/binding.cpp`
-3. **Cleanup Hooks**: ✅ Implemented `CleanupAddonData` for worker termination
-4. **Connection Isolation**: ✅ Thread ID validation prevents cross-thread connection sharing
-5. **Thread-Safe Functions**: ⚠️ Not implemented (not required for basic worker thread support)
+1. **Context-Aware Addons**: N-API provides automatic context awareness
+2. **Instance Data Management**: Implemented using `napi_set_instance_data` in `src/binding.cpp`
+3. **Cleanup Hooks**: Implemented `CleanupAddonData` for worker termination
+4. **Connection Isolation**: Thread ID validation prevents cross-thread connection sharing
+5. **Thread-Safe Functions**: Not implemented (not required for basic worker thread support)
 
-### Key Implementation Details
+### Key implementation details
 
-**What Was Fixed:**
+**What was fixed:**
 
 The root cause was **static `Napi::FunctionReference` constructors** that were shared across all worker threads but belonged to the main thread's V8 isolate. When worker threads tried to access these static constructors, it caused the "HandleScope::HandleScope Entering the V8 API without proper locking in place" error.
 
-**The Solution:**
+**The solution:**
 
 1. **Removed all static constructors** from DatabaseSync, StatementSync, StatementSyncIterator, and Session classes
 2. **Moved constructors to per-instance AddonData** that is properly initialized for each worker thread context
@@ -49,9 +49,9 @@ The root cause was **static `Napi::FunctionReference` constructors** that were s
 4. **Added thread ID tracking** to DatabaseSync and StatementSync objects
 5. **Implemented ValidateThread()** method to ensure objects are only used from their creation thread
 
-## Technical Architecture
+## Technical architecture
 
-### Per-Worker Instance Data
+### Per-worker instance data
 
 Each worker thread has its own `AddonData` instance managed through N-API:
 
@@ -72,7 +72,7 @@ This data is:
 - Associated with the worker using `napi_set_instance_data`
 - Automatically cleaned up via `CleanupAddonData` when the worker terminates
 
-### Thread Safety Validation
+### Thread safety validation
 
 Each database and statement object tracks its creation thread:
 
@@ -90,9 +90,9 @@ class DatabaseSync {
 
 This prevents cross-thread usage and provides clear error messages when violations occur
 
-## Technical Implementation Details
+## Technical implementation details
 
-### Thread Safety Model
+### Thread safety model
 
 **Connection Isolation Pattern** (Recommended):
 
@@ -100,7 +100,7 @@ This prevents cross-thread usage and provides clear error messages when violatio
 - No sharing of `sqlite3*` handles between threads
 - Each thread's connections are completely independent
 
-**Implementation Pattern:**
+**Implementation pattern:**
 
 ```javascript
 // main.js
@@ -119,7 +119,7 @@ const db = new DatabaseSync(workerData.dbPath);
 db.close(); // Clean up when done
 ```
 
-### Memory Management Strategy
+### Memory management strategy
 
 1. **Per-Worker Instance Data**:
 
@@ -142,9 +142,9 @@ db.close(); // Clean up when done
    - Track object dependencies for proper cleanup order
    - Implement RAII patterns for automatic cleanup
 
-### Error Handling
+### Error handling
 
-**Cross-Thread Usage Detection**:
+**Cross-thread usage detection**:
 
 ```cpp
 class DatabaseSync {
@@ -158,15 +158,15 @@ class DatabaseSync {
 };
 ```
 
-**Error Categories**:
+**Error categories**:
 
 1. **Thread Affinity Errors**: Using objects from wrong thread
 2. **Lifecycle Errors**: Using objects after worker termination
 3. **Resource Errors**: Memory/handle leaks during cleanup
 
-## Testing Strategy
+## Testing strategy
 
-### Test Categories
+### Test categories
 
 1. **Basic Functionality**:
    - Create database in worker thread
@@ -188,28 +188,28 @@ class DatabaseSync {
    - Stress testing with many workers
    - Long-running worker scenarios
 
-### Test Files
+### Test files
 
 - `test/worker-threads-simple.test.ts` - Basic functionality tests
 - `test/worker-threads-simple-init.test.ts` - Worker initialization tests
 - `test/worker-threads-initialization.test.ts` - Module initialization in workers
 - `test/worker-threads-error.test.ts` - Error handling and cross-thread validation tests
 
-## Risk Assessment
+## Risk assessment
 
-### Low Risk
+### Low risk
 
 - **SQLite Thread Safety**: Well-established multi-thread mode
 - **N-API Context Awareness**: Proven technology
 - **Basic Pattern**: Simple connection-per-thread model
 
-### Medium Risk
+### Medium risk
 
 - **Current Segfaults**: Need investigation but likely solvable
 - **Resource Management**: Requires careful implementation
-- **Test Coverage**: Need comprehensive validation
+- **Test Coverage**: Need thorough validation
 
-### High Risk
+### High risk
 
 - **Production Deployment**: Should thoroughly test before release
 - **Performance Impact**: Thread safety may add overhead
@@ -217,40 +217,40 @@ class DatabaseSync {
 
 ## Results
 
-- ✅ **100% test success rate** with worker threads
-- ✅ **No HandleScope errors**
-- ✅ **No special initialization required**
-- ✅ **Each worker thread properly isolated**
-- ✅ **Thread safety validation working correctly**
-- ✅ **Proper cleanup on worker termination**
-- ✅ **Clear error messages for cross-thread usage**
-- ✅ **Zero memory leaks or stability issues**
+- 100% test success rate with worker threads
+- No HandleScope errors
+- No special initialization required
+- Each worker thread properly isolated
+- Thread safety validation working correctly
+- Proper cleanup on worker termination
+- Clear error messages for cross-thread usage
+- Zero memory leaks or stability issues
 
-## References and Prior Art
+## References and prior art
 
-### better-sqlite3 Worker Thread Implementation
+### better-sqlite3 worker thread implementation
 
 - **Pattern**: Each worker creates own connection
 - **Message Passing**: Simple SQL execution via worker messages
 - **Isolation**: No connection sharing between threads
 - **Documentation**: Clear usage examples and limitations
 
-### Node.js Worker Thread Best Practices
+### Node.js worker thread best practices
 
 - **Context Awareness**: Use N-API for automatic context handling
 - **Instance Data**: Use `napi_set_instance_data` for per-worker state
 - **Cleanup Hooks**: Use `napi_add_env_cleanup_hook` for proper cleanup
 - **Thread-Safe Functions**: Use `Napi::ThreadSafeFunction` for callbacks
 
-### SQLite Multi-Threading Documentation
+### SQLite multi-threading documentation
 
 - **Thread Safety Modes**: Multi-thread mode prevents connection sharing
 - **Connection Isolation**: Each thread must have separate connections
 - **Performance**: Minimal overhead in multi-thread mode
 
-## Files Requiring Modification
+## Files requiring modification
 
-### Core Implementation
+### Core implementation
 
 - `src/binding.cpp` - Add instance data management and cleanup hooks
 - `src/sqlite_impl.h` - Add thread ID tracking and validation declarations
@@ -269,14 +269,14 @@ class DatabaseSync {
 - `docs/WORKER-THREADS.md` - Create detailed usage guide
 - `CLAUDE.md` - Update with worker thread implementation notes
 
-### Build Configuration
+### Build configuration
 
 - `binding.gyp` - Ensure proper threading flags are set
 - `package.json` - Update test scripts for worker thread testing
 
-## Future Enhancements
+## Future work
 
-While worker thread support is fully functional, potential future enhancements could include:
+While worker thread support is fully functional, potential future work includes:
 
 1. **Thread-Safe Function support**
    - Implement `Napi::ThreadSafeFunction` for cross-thread callbacks
@@ -289,11 +289,11 @@ While worker thread support is fully functional, potential future enhancements c
    - Connection pooling strategies
 
 3. **Performance optimizations**
-   - Further optimize for multi-threaded scenarios
+   - Optimize further for multi-threaded scenarios
    - Reduce lock contention where possible
    - Memory allocation optimizations
 
 4. **Additional stress testing**
-   - More comprehensive stress tests with many concurrent workers
+   - More stress tests with many concurrent workers
    - Long-running worker scenarios
    - Resource exhaustion testing

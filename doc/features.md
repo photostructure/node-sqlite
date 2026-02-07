@@ -1,8 +1,8 @@
 # Features
 
-Comprehensive list of features and capabilities in @photostructure/sqlite.
+Features and capabilities in @photostructure/sqlite.
 
-## Core Features
+## Core features
 
 - **100% API Compatible** with Node.js built-in sqlite module
 - **Synchronous Operations** - Fast, blocking database operations
@@ -12,33 +12,33 @@ Comprehensive list of features and capabilities in @photostructure/sqlite.
 - **TypeScript Support** - Complete type definitions included
 - **Performance** - Matches leading SQLite libraries in benchmarks
 
-## SQLite Version
+## SQLite version
 
 This package includes SQLite 3.51.1 with extensive compile-time options enabled. For complete build flag documentation, comparison with Node.js, and customization options, see [Build Flags & Configuration](./build-flags.md).
 
-## Enabled SQLite Features
+## Enabled SQLite features
 
-### Full-Text Search
+### Full-text search
 
 - `SQLITE_ENABLE_FTS3` - Full-text search version 3
 - `SQLITE_ENABLE_FTS3_PARENTHESIS` - Enhanced FTS3 query syntax
 - `SQLITE_ENABLE_FTS4` - Full-text search version 4
 - `SQLITE_ENABLE_FTS5` - Full-text search version 5 (latest)
 
-### JSON Support
+### JSON support
 
 - `SQLITE_ENABLE_JSON1` - JSON functions and operators
 - Full JSON path expressions
 - JSON aggregation functions
 
-### Advanced Features
+### Advanced features
 
 - `SQLITE_ENABLE_RTREE` - R\*Tree spatial indexing
 - `SQLITE_ENABLE_GEOPOLY` - GeoJSON and polygon functions
 - `SQLITE_ENABLE_MATH_FUNCTIONS` - Math functions (sin, cos, sqrt, etc.)
 - `SQLITE_SOUNDEX` - Soundex algorithm
 
-### Session Extension
+### Session extension
 
 - `SQLITE_ENABLE_SESSION` - Session and changeset support
 - `SQLITE_ENABLE_PREUPDATE_HOOK` - Pre-update hooks for sessions
@@ -46,13 +46,13 @@ This package includes SQLite 3.51.1 with extensive compile-time options enabled.
 - Database replication capabilities
 - Change tracking and synchronization
 
-### Performance & Statistics
+### Performance and statistics
 
 - `SQLITE_ENABLE_STAT4` - Advanced query planner statistics
 - `SQLITE_ENABLE_DBSTAT_VTAB` - Database statistics virtual table
 - `SQLITE_ENABLE_RBU` - Resumable Bulk Update support
 
-### Other Features
+### Other features
 
 - `SQLITE_ENABLE_COLUMN_METADATA` - Column metadata APIs
 - `SQLITE_ENABLE_UPDATE_DELETE_LIMIT` - LIMIT clause on UPDATE/DELETE
@@ -62,22 +62,22 @@ This package includes SQLite 3.51.1 with extensive compile-time options enabled.
 - `SQLITE_DEFAULT_FOREIGN_KEYS=1` - Foreign keys enabled by default
 - `SQLITE_THREADSAFE=2` - Multi-thread safe (serialized mode)
 
-### Security & Safety
+### Security and safety
 
 - `SQLITE_DQS=0` - Double-quoted strings disabled by default
 - `SQLITE_DEFAULT_WAL_SYNCHRONOUS=1` - Safe WAL mode defaults
 - `SQLITE_OMIT_DEPRECATED` - Deprecated features removed
 - `SQLITE_OMIT_SHARED_CACHE` - Shared cache mode disabled (deprecated)
 
-### Default Configuration
+### Default configuration
 
 - `SQLITE_DEFAULT_CACHE_SIZE=-16000` - 16MB default cache
 - Thread-safe multi-connection access
-- Robust error handling with detailed error codes
+- Error handling with detailed error codes
 
-## JavaScript/TypeScript Features
+## JavaScript/TypeScript features
 
-### Database Management
+### Database management
 
 - In-memory databases (`:memory:`)
 - File-based databases with full path support
@@ -86,14 +86,14 @@ This package includes SQLite 3.51.1 with extensive compile-time options enabled.
 - Configurable busy timeout
 - Foreign key constraint enforcement
 
-### better-sqlite3 Compatibility
+### better-sqlite3 compatibility
 
 - **`enhance()` function** - Adds `.pragma()` and `.transaction()` methods to any compatible database
 - **Works with `node:sqlite`** - Enhance native `node:sqlite` DatabaseSync instances
 - **Transaction helpers** - Automatic BEGIN/COMMIT/ROLLBACK with savepoint support for nested transactions
 - **Pragma convenience** - Simple API for reading and setting SQLite pragmas
 
-### Statement Features
+### Statement features
 
 - Prepared statements with parameter binding
 - Named and positional parameters
@@ -102,7 +102,7 @@ This package includes SQLite 3.51.1 with extensive compile-time options enabled.
 - Anonymous parameter support
 - Automatic type conversions
 
-### Custom Functions
+### Custom functions
 
 - Scalar function registration
 - Aggregate function support
@@ -118,7 +118,7 @@ This package includes SQLite 3.51.1 with extensive compile-time options enabled.
 - Conflict resolution callbacks
 - Extension loading support
 
-### Data Type Support
+### Data type support
 
 - INTEGER (number and BigInt)
 - REAL (number)
@@ -127,14 +127,14 @@ This package includes SQLite 3.51.1 with extensive compile-time options enabled.
 - NULL (null)
 - Automatic BigInt for large integers
 
-### Resource Management
+### Resource management
 
 - **Automatic disposal** - DatabaseSync and StatementSync implement `Symbol.dispose` natively in C++
 - **`using` statement support** - Automatic cleanup with explicit resource management
 - **Manual cleanup** - Traditional close()/finalize() methods
 - **Exception safety** - Resources cleaned up even when errors occur
 
-### Error Handling
+### Error handling
 
 - Enhanced error information
 - SQLite error codes
@@ -142,16 +142,16 @@ This package includes SQLite 3.51.1 with extensive compile-time options enabled.
 - System error numbers
 - Human-readable error descriptions
 
-## Platform Support
+## Platform support
 
-### Operating Systems
+### Operating systems
 
 - **Windows**: 10 and later (x64, ARM64)
 - **macOS**: 10.15 and later (x64, Apple Silicon)
 - **Linux**: GLIBC 2.31+ (Ubuntu 20.04+, Debian 11+, RHEL 8+)
 - **Alpine Linux**: 3.21+ (musl libc)
 
-### Node.js Versions
+### Node.js versions
 
 - Node.js 20.0.0 and later
 - Full worker thread support
@@ -164,7 +164,7 @@ This package includes SQLite 3.51.1 with extensive compile-time options enabled.
 - Prebuilt binaries for all platforms
 - Automatic compilation fallback
 
-## Not Included
+## Not included
 
 These SQLite features are not enabled in this build:
 
@@ -174,24 +174,23 @@ These SQLite features are not enabled in this build:
 - `SQLITE_ENABLE_UNLOCK_NOTIFY` - Unlock notification
 - `SQLITE_ENABLE_ATOMIC_WRITE` - Atomic write support
 
-## Comparison with Alternatives
+## Comparison with alternatives
 
 See our [detailed comparison](./library-comparison.md) with:
 
 - Node.js built-in sqlite module
 - better-sqlite3
-- node-sqlite3
+- node-sqlite3 (deprecated)
 
-## Performance Characteristics
+## Performance characteristics
 
 - **Synchronous operations** eliminate async overhead
 - **Direct SQLite C API** access
 - **Minimal JavaScript wrapper** overhead
 - **Efficient parameter binding**
 - **Prepared statement caching**
-- **Native performance** matching C applications
 
-## Security Features
+## Security features
 
 - **SQL injection protection** via prepared statements
 - **Read-only database** support
@@ -200,7 +199,7 @@ See our [detailed comparison](./library-comparison.md) with:
 - **Memory limits** configurable
 - **Resource cleanup** on errors
 
-## Next Steps
+## Next steps
 
 - [Getting Started](./getting-started.md) - Installation and first database
 - [Build Flags & Configuration](./build-flags.md) - Complete build flag documentation

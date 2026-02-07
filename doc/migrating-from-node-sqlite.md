@@ -2,7 +2,7 @@
 
 @photostructure/sqlite provides **100% API compatibility** with Node.js's built-in SQLite module. This means you can use it as a drop-in replacement without changing any code.
 
-## Drop-in Replacement
+## Drop-in replacement
 
 Simply change your import statement:
 
@@ -24,11 +24,11 @@ import { DatabaseSync } from "node:sqlite";
 import { DatabaseSync } from "@photostructure/sqlite";
 ```
 
-**That's it!** All your existing code will work exactly the same.
+All your existing code will work exactly the same.
 
-## Key Differences
+## Key differences
 
-### No Experimental Flag Required
+### No experimental flag required
 
 ```bash
 # Node.js built-in requires:
@@ -38,12 +38,12 @@ node --experimental-sqlite app.js
 node app.js
 ```
 
-### Broader Node.js Version Support
+### Broader Node.js version support
 
 - **node:sqlite**: Available in Node.js 22.5.0+ (experimental status)
 - **@photostructure/sqlite**: Works with Node.js 20.0.0 or higher
 
-### Same API, Same Behavior
+### Same API, same behavior
 
 All classes, methods, and properties are identical:
 
@@ -56,7 +56,7 @@ All classes, methods, and properties are identical:
 - Native Symbol.dispose implementation for improved resource management
 - Session class exposed for advanced replication workflows
 
-## Example: Identical Code Works in Both
+## Example: identical code works in both
 
 ```javascript
 // This code works identically with both libraries
@@ -92,20 +92,20 @@ console.log(upper.name); // ALICE
 db.close();
 ```
 
-## Migration Checklist
+## Migration checklist
 
-1. ✅ Install @photostructure/sqlite: `npm install @photostructure/sqlite`
-2. ✅ Change imports from `'node:sqlite'` to `'@photostructure/sqlite'`
-3. ✅ Remove `--experimental-sqlite` flag from your npm scripts
-4. ✅ Run your tests - they should all pass!
+1. Install @photostructure/sqlite: `npm install @photostructure/sqlite`
+2. Change imports from `'node:sqlite'` to `'@photostructure/sqlite'`
+3. Remove `--experimental-sqlite` flag from your npm scripts
+4. Run your tests
 
-## Additional Constants
+## Additional constants
 
 @photostructure/sqlite exports 20 additional `SQLITE_OPEN_*` constants for advanced database opening scenarios. These are available via `constants.SQLITE_OPEN_*` and are useful for low-level control. These constants are additive and don't affect API compatibility.
 
-## Unsupported Features
+## Unsupported features
 
-### Node.js Permission Model
+### Node.js permission model
 
 Node.js's [permission model](https://nodejs.org/api/permissions.html#permission-model) (`--permission` flag) provides security restrictions that are enforced at the Node.js runtime level. Since @photostructure/sqlite is a userland package, it cannot integrate with this internal security mechanism.
 
@@ -113,7 +113,7 @@ If you use the permission model and need SQLite extension loading restrictions e
 
 **Workaround**: For extension loading control, you can simply avoid calling `loadExtension()` or set `allowExtension: false` (the default) when creating databases.
 
-## When to Keep Using node:sqlite
+## When to keep using node:sqlite
 
 You might want to stick with the built-in module if:
 
@@ -122,7 +122,7 @@ You might want to stick with the built-in module if:
 - You're building for an environment where the flag is already enabled
 - You require Node.js permission model integration for extension loading restrictions
 
-## When to Use @photostructure/sqlite
+## When to use @photostructure/sqlite
 
 Choose this package when:
 
@@ -131,7 +131,7 @@ Choose this package when:
 - You need the exact same API but with broader compatibility
 - You're distributing a library and want to support more Node.js versions
 
-## Future Migration Path
+## Future migration path
 
 When `node:sqlite` becomes stable (removes the experimental flag), migrating back is trivial:
 
@@ -141,4 +141,4 @@ import { DatabaseSync } from "node:sqlite";
 // All your code continues to work unchanged
 ```
 
-This makes @photostructure/sqlite a perfect bridge solution while waiting for the official module to stabilize.
+This makes @photostructure/sqlite a useful bridge while waiting for the official module to stabilize.

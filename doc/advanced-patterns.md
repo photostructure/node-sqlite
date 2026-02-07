@@ -1,12 +1,12 @@
-# Advanced Patterns
+# Advanced patterns
 
 This guide covers advanced usage patterns including worker threads, database backups, sessions/changesets, and performance optimization.
 
-## Worker Thread Support
+## Worker thread support
 
 This package has full support for Node.js worker threads. Each worker thread gets its own isolated SQLite environment.
 
-### Basic Worker Thread Usage
+### Basic worker thread usage
 
 **main.js:**
 
@@ -63,7 +63,7 @@ process.on("exit", () => {
 });
 ```
 
-### Worker Pool Pattern
+### Worker pool pattern
 
 ```javascript
 const { Worker } = require("worker_threads");
@@ -165,9 +165,9 @@ const results = await Promise.all([
 await pool.close();
 ```
 
-## Database Backups
+## Database backups
 
-### Simple Backup
+### Simple backup
 
 ```javascript
 const { DatabaseSync } = require("@photostructure/sqlite");
@@ -189,7 +189,7 @@ async function backupDatabase(sourcePath, backupPath) {
 await backupDatabase("./production.db", "./backup-2024-01-15.db");
 ```
 
-### Backup with Progress Monitoring
+### Backup with progress monitoring
 
 ```javascript
 async function backupWithProgress(sourcePath, backupPath) {
@@ -213,7 +213,7 @@ async function backupWithProgress(sourcePath, backupPath) {
 }
 ```
 
-### Automated Backup Strategy
+### Automated backup strategy
 
 ```javascript
 const fs = require("fs").promises;
@@ -287,11 +287,11 @@ const backupManager = new DatabaseBackupManager("./app.db", "./backups", {
 backupManager.startAutoBackup();
 ```
 
-## Session-based Change Tracking
+## Session-based change tracking
 
 SQLite's session extension allows you to record changes and apply them to other databases - perfect for synchronization, replication, or undo/redo functionality.
 
-### Basic Change Tracking
+### Basic change tracking
 
 ```javascript
 const { DatabaseSync } = require("@photostructure/sqlite");
@@ -325,7 +325,7 @@ db.close();
 replicaDb.close();
 ```
 
-### Conflict Resolution
+### Conflict resolution
 
 ```javascript
 const { DatabaseSync, constants } = require("@photostructure/sqlite");
@@ -371,7 +371,7 @@ function syncDatabases(primaryPath, replicaPath) {
 }
 ```
 
-### Change Tracking Example
+### Change tracking example
 
 Sessions track changes that can be applied to other databases for synchronization:
 
@@ -412,9 +412,9 @@ targetDb.close();
 
 > **Note:** The `changesetInvert()` function for creating inverse changesets is not currently exposed in the JavaScript API. For undo/redo functionality, consider storing the original data before modifications or using SQLite triggers to maintain a history table.
 
-## Performance Optimization
+## Performance optimization
 
-### URI Configuration for Performance
+### URI configuration for performance
 
 ```javascript
 // High-performance read-only configuration
@@ -430,7 +430,7 @@ const db = new DatabaseSync("large.db");
 db.exec("PRAGMA mmap_size = 268435456"); // 256MB memory map
 ```
 
-### Connection Pooling
+### Connection pooling
 
 ```javascript
 class DatabasePool {
@@ -490,7 +490,7 @@ const results = await Promise.all([
 pool.close();
 ```
 
-### Bulk Operations
+### Bulk operations
 
 ```javascript
 // Efficient bulk insert
@@ -533,9 +533,9 @@ console.log(
 );
 ```
 
-## Memory Management
+## Memory management
 
-### Setting Memory Limits
+### Setting memory limits
 
 ```javascript
 const db = new DatabaseSync("app.db");
@@ -552,7 +552,7 @@ const memoryUsed = db.prepare("PRAGMA cache_stats").get();
 console.log("Cache statistics:", memoryUsed);
 ```
 
-## Next Steps
+## Next steps
 
 - [Extending SQLite](./extending-sqlite.md) - Custom functions and extensions
 - [API Reference](./api-reference.md) - Complete API documentation

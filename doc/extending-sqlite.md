@@ -521,7 +521,7 @@ function testFunction(db, functionName, testCases) {
       );
     }
   }
-  console.log(`✓ ${functionName} passed all tests`);
+  console.log(`${functionName} passed all tests`);
 }
 
 // Test custom functions

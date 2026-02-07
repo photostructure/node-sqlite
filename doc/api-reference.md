@@ -1,18 +1,18 @@
-# API Reference
+# API reference
 
 Complete API documentation for @photostructure/sqlite. This package provides 100% compatibility with Node.js's built-in SQLite module.
 
-## Table of Contents
+## Table of contents
 
-- [Module Exports](#module-exports)
-- [Enhancement Utilities](#enhancement-utilities)
+- [Module exports](#module-exports)
+- [Enhancement utilities](#enhancement-utilities)
 - [DatabaseSync](#databasesync)
 - [StatementSync](#statementsync)
-- [Types and Interfaces](#types-and-interfaces)
+- [Types and interfaces](#types-and-interfaces)
 - [Constants](#constants)
-- [Error Handling](#error-handling)
+- [Error handling](#error-handling)
 
-## Module Exports
+## Module exports
 
 The module exports the following items that match `node:sqlite`:
 
@@ -26,7 +26,7 @@ import {
 } from "@photostructure/sqlite";
 ```
 
-Additionally, this package provides enhancement utilities for (some) better-sqlite3 compatibility:
+This package also provides enhancement utilities for (some) better-sqlite3 compatibility:
 
 ```typescript
 import {
@@ -72,7 +72,7 @@ await backup(db, "backup.db", {
 });
 ```
 
-## Enhancement Utilities
+## Enhancement utilities
 
 These utilities add better-sqlite3-style convenience methods to database instances. They are an extension beyond the `node:sqlite` API.
 
@@ -129,7 +129,7 @@ if (isEnhanced(db)) {
 }
 ```
 
-### Enhanced Methods
+### Enhanced methods
 
 When a database is enhanced, it gains these methods:
 
@@ -195,7 +195,7 @@ insertMany.exclusive(["Eve"]); // BEGIN EXCLUSIVE
 insertMany.deferred(["Frank"]); // BEGIN DEFERRED (default)
 ```
 
-**Nested Transactions:** When called inside an existing transaction, uses savepoints automatically:
+**Nested transactions:** When called inside an existing transaction, uses savepoints automatically:
 
 ```javascript
 const outer = db.transaction(() => {
@@ -816,7 +816,7 @@ stmt.get(42);
 console.log(stmt.expandedSQL); // "SELECT * FROM users WHERE id = 42"
 ```
 
-## Types and Interfaces
+## Types and interfaces
 
 ### DatabaseSyncOptions
 
@@ -978,7 +978,7 @@ constants.SQLITE_SELECT;
 // ... and more
 ```
 
-### TypeScript Type Categories
+### TypeScript type categories
 
 > **Note:** These categorized type interfaces are an extension provided by `@photostructure/sqlite`.
 > The `node:sqlite` module exports only a flat `constants` object without these type categories.
@@ -998,7 +998,7 @@ import {
 } from "@photostructure/sqlite";
 ```
 
-#### SqliteOpenFlags (Extension)
+#### SqliteOpenFlags (extension)
 
 Database open flags. **These constants are an extension beyond `node:sqlite`** - the `node:sqlite` module does not export `SQLITE_OPEN_*` constants.
 
@@ -1066,7 +1066,7 @@ Action codes passed to `setAuthorizer()` callbacks (34 total):
 | `SQLITE_DETACH`       | Detach a database      |
 | ...                   | (24 more action codes) |
 
-### Using Type Categories
+### Using type categories
 
 The categorized types enable strongly-typed function signatures:
 
@@ -1091,9 +1091,9 @@ db.applyChangeset(changeset, {
 });
 ```
 
-## Error Handling
+## Error handling
 
-All errors thrown include enhanced information:
+All errors include additional information:
 
 ```typescript
 interface SQLiteError extends Error {
@@ -1116,7 +1116,7 @@ try {
 }
 ```
 
-## See Also
+## See also
 
 - [SQLite C API Reference](./reference/sqlite-api.md) - Low-level C API documentation
 - [Working with Data](./working-with-data.md) - Practical examples and patterns

@@ -1,4 +1,4 @@
-# Getting Started with @photostructure/sqlite
+# Getting started with @photostructure/sqlite
 
 This guide will help you get up and running with @photostructure/sqlite, a native SQLite implementation for Node.js.
 
@@ -14,13 +14,13 @@ Or with yarn:
 yarn add @photostructure/sqlite
 ```
 
-## Platform Requirements
+## Platform requirements
 
 - **Node.js**: v20 or higher
 - **Operating Systems**: Windows 10+, macOS 10.15+, Linux (GLIBC 2.31+)
 - **Architectures**: x64 and ARM64
 
-### Linux Distribution Requirements
+### Linux distribution requirements
 
 **Supported distributions** (with prebuilt binaries):
 
@@ -40,7 +40,7 @@ yarn add @photostructure/sqlite
 
 > **Note**: While Node.js 20 itself supports these older distributions, our prebuilt binaries require GLIBC 2.31+ due to toolchain requirements. Users on older distributions can still compile from source if they have a compatible compiler (GCC 10+ with C++20 support).
 
-## Development Requirements
+## Development requirements
 
 If prebuilt binaries aren't available for your platform, the package will compile from source. You'll need:
 
@@ -49,9 +49,9 @@ If prebuilt binaries aren't available for your platform, the package will compil
 - **Windows**: Visual Studio Build Tools 2019 or newer
 - **Python**: 3.8 or higher (required by node-gyp v11)
 
-## Your First Database
+## Your first database
 
-### In-Memory Database
+### In-memory database
 
 ```javascript
 import { DatabaseSync } from "@photostructure/sqlite";
@@ -85,7 +85,7 @@ console.log(users);
 db.close();
 ```
 
-### File-Based Database
+### File-based database
 
 ```javascript
 import { DatabaseSync } from "@photostructure/sqlite";
@@ -126,7 +126,7 @@ if (user) {
 db.close();
 ```
 
-## Common Patterns
+## Common patterns
 
 ### Using try-finally for cleanup
 
@@ -144,7 +144,7 @@ try {
 }
 ```
 
-### Automatic Resource Management with `using`
+### Automatic resource management with `using`
 
 For Node.js 20+ with `--experimental-explicit-resource-management` flag, or TypeScript 5.2+ with disposable support, you can use the `using` statement for automatic cleanup:
 
@@ -186,7 +186,7 @@ try {
 }
 ```
 
-### Using enhance() for better-sqlite3 Style
+### Using enhance() for better-sqlite3 style
 
 If you're coming from better-sqlite3 or prefer its transaction helper pattern, use `enhance()`:
 
@@ -218,8 +218,9 @@ const cacheSize = db.pragma("cache_size", { simple: true });
 db.close();
 ```
 
-## Next Steps
+## Next steps
 
 - [Working with Data](./working-with-data.md) - Learn about prepared statements, parameter binding, and transactions
 - [API Reference](./api-reference.md) - Complete documentation of all classes and methods
-- [Migrating from other libraries](./migrating-from-better-sqlite3.md) - If you're coming from better-sqlite3 or node-sqlite3
+- [Migrating from other libraries](./migrating-from-better-sqlite3.md) - If you're coming from better-sqlite3
+- [Library comparison](./library-comparison.md) - Compare with other SQLite libraries (note: sqlite3/node-sqlite3 is [deprecated](https://github.com/TryGhost/node-sqlite3/pull/1844))

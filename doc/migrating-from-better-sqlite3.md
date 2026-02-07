@@ -2,9 +2,9 @@
 
 This guide helps you migrate from better-sqlite3 to @photostructure/sqlite. While both libraries provide synchronous SQLite access, they have different APIs.
 
-## Key API Differences
+## Key API differences
 
-### Database Creation
+### Database creation
 
 ```javascript
 // better-sqlite3
@@ -18,7 +18,7 @@ const db = new DatabaseSync("mydb.sqlite");
 const db = new DatabaseSync("mydb.sqlite", { readOnly: true });
 ```
 
-### Statement Preparation
+### Statement preparation
 
 Both libraries use prepared statements, but with different property names:
 
@@ -28,10 +28,10 @@ const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
 
 // @photostructure/sqlite
 const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
-// Same syntax! ✅
+// Same syntax!
 ```
 
-### Executing Statements
+### Executing statements
 
 ```javascript
 // better-sqlite3
@@ -43,7 +43,7 @@ const info = stmt.run(data);
 const row = stmt.get(userId);
 const rows = stmt.all();
 const info = stmt.run(data);
-// Same methods! ✅
+// Same methods!
 ```
 
 ### Iteration
@@ -58,10 +58,38 @@ for (const row of stmt.iterate()) {
 for (const row of stmt.iterate()) {
   console.log(row);
 }
-// Same syntax! ✅
+// Same syntax!
 ```
 
-### Property Differences
+### Pluck, raw, and expand (statement modes)
+
+```javascript
+// better-sqlite3
+const names = db.prepare("SELECT name FROM users").pluck().all();
+const count = db.prepare("SELECT COUNT(*) FROM users").pluck().get();
+const rows = db.prepare("SELECT id, name FROM users").raw().all();
+const joined = db
+  .prepare("SELECT u.name, p.title FROM users u JOIN posts p ON ...")
+  .expand()
+  .all();
+
+// @photostructure/sqlite - use enhance() for better-sqlite3 compatibility
+const { DatabaseSync, enhance } = require("@photostructure/sqlite");
+const db = enhance(new DatabaseSync("mydb.sqlite"));
+
+const names = db.prepare("SELECT name FROM users").pluck().all();
+const count = db.prepare("SELECT COUNT(*) FROM users").pluck().get();
+const rows = db.prepare("SELECT id, name FROM users").raw().all();
+const joined = db
+  .prepare("SELECT u.name, p.title FROM users u JOIN posts p ON ...")
+  .expand()
+  .all();
+// Same syntax with enhance()!
+```
+
+These modes are mutually exclusive; enabling one disables the others.
+
+### Property differences
 
 ```javascript
 // better-sqlite3
@@ -78,7 +106,7 @@ console.log(db.isTransaction); // true/false (different property name)
 // Note: memory, readonly properties not available - use options at construction
 ```
 
-### Custom Functions
+### Custom functions
 
 ```javascript
 // better-sqlite3
@@ -100,10 +128,10 @@ db.function(
   },
   (a, b) => a + b,
 );
-// Same syntax! ✅
+// Same syntax!
 ```
 
-### Aggregate Functions
+### Aggregate functions
 
 ```javascript
 // better-sqlite3
@@ -119,7 +147,7 @@ db.aggregate("custom_sum", {
   step: (total, nextValue) => total + nextValue,
   result: (total) => total, // Optional in @photostructure/sqlite
 });
-// Nearly identical! ✅
+// Nearly identical!
 ```
 
 ### Transactions
@@ -143,7 +171,7 @@ const transaction = db.transaction((items) => {
   }
 });
 transaction(items);
-// Same syntax with enhance()! ✅
+// Same syntax with enhance()!
 ```
 
 ### Pragmas
@@ -161,42 +189,46 @@ const db = enhance(new DatabaseSync("mydb.sqlite"));
 db.pragma("journal_mode = WAL");
 const result = db.pragma("cache_size");
 const cacheSize = db.pragma("cache_size", { simple: true });
-// Same syntax with enhance()! ✅
+// Same syntax with enhance()!
 ```
 
-## Feature Differences
+## Feature differences
 
-### Features Available via enhance()
+### Features available via enhance()
 
 These better-sqlite3 features are available when using `enhance()`:
 
-- ✅ `.transaction()` helper method - automatic BEGIN/COMMIT/ROLLBACK with savepoint support
-- ✅ `.pragma()` convenience method - same API as better-sqlite3
+- `.transaction()` helper method, with automatic BEGIN/COMMIT/ROLLBACK and savepoint support
+- `.pragma()` convenience method, same API as better-sqlite3
+- `stmt.pluck()`, return only the first column value from queries
+- `stmt.raw()`, return rows as arrays instead of objects
+- `stmt.expand()`, return rows namespaced by table (useful for JOINs)
+- `stmt.database`, reference back to the parent database instance (note: use `.isOpen` instead of `.open`)
 
-### Features Only in better-sqlite3
+### Features only in better-sqlite3
 
-- ❌ `.serialize()` method
-- ❌ `.defaultSafeIntegers()` method (use `stmt.setReadBigInts()` instead)
-- ❌ `.unsafeMode()` method
+- `.serialize()` method (not supported)
+- `.defaultSafeIntegers()` method (use `stmt.setReadBigInts()` instead)
+- `.unsafeMode()` method (not supported)
 
-### Features Only in @photostructure/sqlite
+### Features only in @photostructure/sqlite
 
-- ✅ SQLite sessions and changesets
-- ✅ 100% compatibility with node:sqlite
-- ✅ `.enableLoadExtension()` method
-- ✅ Node.js-style backup API
-- ✅ `enhance()` function to add better-sqlite3-style methods to any compatible database
+- SQLite sessions and changesets
+- 100% compatibility with node:sqlite
+- `.enableLoadExtension()` method
+- Node.js-style backup API
+- `enhance()` function to add better-sqlite3-style methods to any compatible database
 
-### Common Features
+### Common features
 
-- ✅ Synchronous API
-- ✅ Prepared statements
-- ✅ Parameter binding
-- ✅ Custom functions
-- ✅ Aggregate functions
-- ✅ TypeScript support
+- Synchronous API
+- Prepared statements
+- Parameter binding
+- Custom functions
+- Aggregate functions
+- TypeScript support
 
-## Migration Script Example
+## Migration script example
 
 Here's a script to help automate common migrations:
 
@@ -256,7 +288,7 @@ function migrateFile(filePath) {
 // Usage: node migrate-from-better-sqlite3.js src/**/*.js
 ```
 
-## Performance Considerations
+## Performance considerations
 
 Both libraries offer similar performance characteristics:
 
@@ -264,7 +296,7 @@ Both libraries offer similar performance characteristics:
 - Direct SQLite C API access
 - Minimal JavaScript wrapper overhead
 
-## TypeScript Migration
+## TypeScript migration
 
 Update your type imports:
 
@@ -283,13 +315,13 @@ const db = enhance(new DatabaseSync("mydb.sqlite"));
 // Now db.pragma() and db.transaction() are available
 ```
 
-## Common Gotchas
+## Common gotchas
 
 1. **Use `enhance()` for better-sqlite3 compatibility** - Wrap your database with `enhance()` to get `.transaction()` and `.pragma()` methods
 2. **Property name changes** - `.name` → `.location()`, `.open` → `.isOpen`, `.inTransaction` → `.isTransaction`
 3. **No virtual table API** - Use raw SQL if needed
 
-## Need Help?
+## Need help?
 
 - Check the [API Reference](./api-reference.md) for detailed method documentation
 - See [Working with Data](./working-with-data.md) for transaction examples
