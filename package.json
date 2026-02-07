@@ -70,7 +70,7 @@
     "lint:full": "run-s lint lint:native lint:api",
     "//fmt": "code formatting",
     "fmt": "run-p fmt:prettier fmt:native",
-    "fmt:prettier": "prettier --write .",
+    "fmt:prettier": "prettier --cache --write .",
     "fmt:native": "clang-format --style=LLVM -i src/shims/*.h src/*.cpp src/*.h test/fixtures/test-extension/*.c || true",
     "//memory": "memory analysis tools",
     "memory:check": "npx --yes tsx scripts/check-memory.ts",
