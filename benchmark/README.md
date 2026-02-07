@@ -10,7 +10,7 @@ The performance of @photostructure/sqlite is quite similar to node:sqlite and be
 
 - **@photostructure/sqlite** - This package
 - **better-sqlite3** - Popular synchronous SQLite3 binding
-- **sqlite3** - Classic asynchronous SQLite3 binding
+- **sqlite3** - Classic asynchronous SQLite3 binding ([deprecated](https://github.com/TryGhost/node-sqlite3/pull/1844))
 - **node:sqlite** - Node.js built-in SQLite (when available)
 
 ## Installation
@@ -119,7 +119,7 @@ tsx --expose-gc memory-benchmark.ts --scenarios blob-handling
 
 The benchmark outputs clean markdown tables that can be directly copied into documentation:
 
-### 📈 Summary
+### Summary
 
 | Scenario              | @photostructure/sqlite | better-sqlite3 |   node:sqlite |      sqlite3 |
 | --------------------- | ---------------------: | -------------: | ------------: | -----------: |
@@ -133,14 +133,14 @@ The benchmark outputs clean markdown tables that can be directly copied into doc
 | UPDATE with Index     |              750 ops/s |      720 ops/s |     740 ops/s |    720 ops/s |
 | DELETE Bulk           |               89 ops/s |       90 ops/s |      83 ops/s |     25 ops/s |
 
-### 🏆 Overall Performance Ranking
+### Overall performance ranking
 
 | Rank | Driver                 | Score |
 | ---: | ---------------------- | ----: |
-| 1 🥇 | better-sqlite3         |   99% |
-| 2 🥈 | @photostructure/sqlite |   94% |
-| 3 🥉 | node:sqlite            |   94% |
-| 4 🐌 | sqlite3                |   58% |
+|    1 | better-sqlite3         |   99% |
+|    2 | @photostructure/sqlite |   94% |
+|    3 | node:sqlite            |   94% |
+|    4 | sqlite3                |   58% |
 
 Key features:
 
@@ -154,25 +154,25 @@ Key features:
 Memory benchmarks also output markdown-ready tables:
 
 ```
-💾 SQLite Driver Memory Benchmark
+SQLite Driver Memory Benchmark
 
-📊 Testing @photostructure/sqlite
+Testing @photostructure/sqlite
 
   Statement Prepare/Finalize: Tests for memory leaks in statement lifecycle
-    ✓ No memory leak detected
+    OK - No memory leak detected
     Heap growth: 0.12 KB/iteration (R²=0.045)
     External growth: 0.00 KB/iteration (R²=0.001)
 
-📈 Summary
+Summary
 
-| Scenario | @photostructure/sqlite | better-sqlite3 | node:sqlite | sqlite3 |
-|---|---|---|---|---|
-| Statement Prepare/Finalize | ✓ OK | ✓ OK | ✓ OK | ✓ OK |
-| Large Result Sets | ✓ OK | ✓ OK | ✓ OK | ✓ OK |
-| BLOB Memory Management | ✓ OK | ✓ OK | ✓ OK | ✓ OK |
-
-📋 Memory table generated above - copy/paste ready for documentation!
+| Scenario                   | @photostructure/sqlite | better-sqlite3 | node:sqlite | sqlite3 |
+| -------------------------- | ---------------------- | -------------- | ----------- | ------- |
+| Statement Prepare/Finalize | OK                     | OK             | OK          | OK      |
+| Large Result Sets          | OK                     | OK             | OK          | OK      |
+| BLOB Memory Management     | OK                     | OK             | OK          | OK      |
 ```
+
+Memory table generated above - copy/paste ready for documentation!
 
 Features:
 
@@ -203,7 +203,7 @@ The benchmark system automatically calibrates iteration counts and scales result
 
 ## Notes
 
-- **sqlite3 Performance**: The sqlite3 driver shows lower performance in synchronous-style benchmarks because it's inherently asynchronous.
+- **sqlite3 Performance**: The sqlite3 driver shows lower performance in synchronous-style benchmarks because it's inherently asynchronous. Note: sqlite3 is [deprecated and unmaintained](https://github.com/TryGhost/node-sqlite3/pull/1844) since December 2025.
 - **Memory Testing**: Always run memory benchmarks with `--expose-gc` for accurate garbage collection control.
 - **Real-world Performance**: These benchmarks test specific patterns. Real application performance depends on your specific use case.
 
