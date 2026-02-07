@@ -39,6 +39,7 @@ export {
   type EnhanceableDatabaseSync,
   type EnhancedDatabaseSync,
   type EnhancedMethods,
+  type EnhancedStatementMethods,
 } from "./enhance";
 
 // Use _dirname() helper that works in both CJS/ESM and Jest

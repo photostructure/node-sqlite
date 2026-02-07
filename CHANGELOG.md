@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] (2026-02-06)
+
+### Added
+
+- **Statement modes via `enhance()`**: `stmt.pluck()`, `stmt.raw()`, `stmt.expand()` for better-sqlite3 compatibility
+  - `.pluck()` returns only the first column value from queries
+  - `.raw()` returns rows as arrays instead of objects
+  - `.expand()` returns rows namespaced by table, correctly handling duplicate column names across JOINs
+  - All three modes are mutually exclusive, matching better-sqlite3's toggle semantics
+- **`stmt.database`**: Back-reference from prepared statements to their parent database instance
+- **`EnhancedStatementMethods` type**: TypeScript interface for `pluck()`, `raw()`, `expand()`, and `database`
+
 ## [0.4.0] (2026-02-04)
 
 API compatible with `node:sqlite` from Node.js v25.6.1.
@@ -118,6 +130,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - macOS (x64, ARM64)
 - Linux (x64, ARM64), (glibc 2.28+, musl)
 
+[0.5.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.5.0
 [0.4.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.4.0
 [0.3.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.3.0
 [0.2.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.1

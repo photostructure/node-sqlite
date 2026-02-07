@@ -379,7 +379,9 @@ describe("enhance() Tests", () => {
         expect(typeof db.pragma).toBe("undefined");
         expect(typeof db.transaction).toBe("undefined");
 
-        const enhanced = enhance(db);
+        // Cast to our interface to avoid TS4111 (index signature access)
+        // from require("node:sqlite")'s inferred types
+        const enhanced = enhance(db as unknown as EnhanceableDatabaseSync);
 
         // Now it should have them
         expect(typeof enhanced.pragma).toBe("function");
@@ -391,7 +393,9 @@ describe("enhance() Tests", () => {
 
         // Test transaction works
         enhanced.exec("CREATE TABLE test (id INTEGER PRIMARY KEY)");
-        const insert = enhanced.prepare("INSERT INTO test (id) VALUES (?)");
+        const insert = (enhanced as any).prepare(
+          "INSERT INTO test (id) VALUES (?)",
+        );
         const insertMany = enhanced.transaction((ids: number[]) => {
           for (const id of ids) {
             insert.run(id);
