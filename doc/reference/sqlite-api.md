@@ -1,18 +1,18 @@
-# SQLite C/C++ API Reference - Index
+# SQLite C/C++ API reference - index
 
-> **⚠️ Important Note:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. Most functions documented here (like `sqlite3_config()`, `sqlite3_limit()`, `sqlite3_blob_open()`) are **NOT directly callable from JavaScript**.
+> **Important:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. Most functions documented here (like `sqlite3_config()`, `sqlite3_limit()`, `sqlite3_blob_open()`) are **not directly callable from JavaScript**.
 >
 > For the JavaScript API, see [API Reference](../api-reference.md).
 >
-> This reference is provided for understanding the underlying SQLite capabilities and for developers working on the native bindings.
+> This reference is for understanding the underlying SQLite capabilities and for developers working on the native bindings.
 
-This is the main index for the SQLite C/C++ API documentation. The API has been organized into logical sections for easier navigation and understanding. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
+Main index for the SQLite C/C++ API documentation. The API is organized into logical sections for navigation. This is a machine-generated summary of documentation found on sqlite.org, used as a reference during development.
 
 ## Overview
 
-The SQLite C/C++ API is extensive and provides low-level access to all SQLite functionality. This documentation set covers the essential APIs needed for building SQLite library implementations, organized into digestible sections.
+The SQLite C/C++ API provides low-level access to all SQLite functionality. This documentation covers the essential APIs needed for building SQLite library implementations.
 
-## API Documentation Sections
+## API documentation sections
 
 ### 1. [Core API](sqlite-api-core.md)
 
@@ -26,7 +26,7 @@ The SQLite C/C++ API is extensive and provides low-level access to all SQLite fu
 
 ### 2. [Statement API](sqlite-api-statements.md)
 
-**Prepared statements and data handling**
+**Prepared statement and data handling**
 
 - Compiling and preparing SQL statements
 - Parameter binding
@@ -36,7 +36,7 @@ The SQLite C/C++ API is extensive and provides low-level access to all SQLite fu
 
 ### 3. [Extension API](sqlite-api-extensions.md)
 
-**Extending SQLite with custom functionality**
+**Custom functionality extensions**
 
 - User-defined scalar functions
 - Aggregate functions
@@ -45,7 +45,7 @@ The SQLite C/C++ API is extensive and provides low-level access to all SQLite fu
 - Virtual tables
 - Auxiliary data management
 
-### 4. [Advanced Features](sqlite-api-advanced.md)
+### 4. [Advanced features](sqlite-api-advanced.md)
 
 **Specialized APIs for advanced use cases**
 
@@ -57,7 +57,7 @@ The SQLite C/C++ API is extensive and provides low-level access to all SQLite fu
 - Extension loading
 - WAL mode operations
 
-### 5. [Memory & Configuration](sqlite-api-memory-config.md)
+### 5. [Memory & configuration](sqlite-api-memory-config.md)
 
 **System configuration and resource management**
 
@@ -68,11 +68,11 @@ The SQLite C/C++ API is extensive and provides low-level access to all SQLite fu
 - Compile-time options
 - Status and statistics monitoring
 
-## Quick Reference
+## Quick reference
 
-### Essential Functions by Category
+### Essential functions by category
 
-**Getting Started**
+**Getting started**
 
 - `sqlite3_open()` - Open database
 - `sqlite3_close()` - Close database
@@ -99,31 +99,31 @@ The SQLite C/C++ API is extensive and provides low-level access to all SQLite fu
 - `sqlite3_db_config()` - Database configuration
 - `sqlite3_limit()` - Set runtime limits
 
-## Additional Resources
+## Additional resources
 
-### Related Documentation
+### Related documentation
 
 - [SQLite Extensions API](sqlite-api-extensions.md) - Extension and user-defined function APIs
 
-### External References
+### External references
 
 - [Official SQLite C/C++ Interface](https://sqlite.org/c3ref/intro.html)
 - [SQLite Introduction to C Interface](https://sqlite.org/cintro.html)
 - [SQLite Architecture](https://sqlite.org/arch.html)
 
-## Usage Notes
+## Usage notes
 
-1. **API Stability**: SQLite maintains excellent backward compatibility. Functions are rarely deprecated.
+1. **API stability**: SQLite maintains strong backward compatibility. Functions are rarely deprecated.
 
-2. **Thread Safety**: Configure threading mode appropriately using `sqlite3_config()` before using SQLite.
+2. **Thread safety**: Configure threading mode with `sqlite3_config()` before using SQLite.
 
-3. **Error Checking**: Always check return codes. Most functions return `SQLITE_OK` on success.
+3. **Error checking**: Always check return codes. Most functions return `SQLITE_OK` on success.
 
-4. **Memory Management**: Understand ownership rules for strings and memory passed to/from SQLite.
+4. **Memory management**: Understand ownership rules for strings and memory passed to/from SQLite.
 
-5. **Version Compatibility**: Use `sqlite3_libversion()` to check SQLite version at runtime.
+5. **Version compatibility**: Use `sqlite3_libversion()` to check SQLite version at runtime.
 
-## Implementation Checklist
+## Implementation checklist
 
 When implementing a SQLite wrapper or binding:
 
@@ -137,9 +137,9 @@ When implementing a SQLite wrapper or binding:
 - [ ] Memory management and limits
 - [ ] Status and statistics reporting
 
-## Navigation Tips
+## Navigation tips
 
-- Each section builds on previous ones - read in order if new to SQLite
+- Each section builds on previous ones; read in order if new to SQLite
 - Use your editor's search across all files to find specific functions
 - Function names in code blocks can be searched in official SQLite docs
 - Examples show common usage patterns

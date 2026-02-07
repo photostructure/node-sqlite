@@ -1,20 +1,20 @@
-# SQLite Statement API Reference
+# SQLite statement API reference
 
-> **⚠️ Important Note:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. These C functions are **NOT directly callable from JavaScript**. For the JavaScript API, see [API Reference](../api-reference.md).
+> **Important:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. These C functions are **not directly callable from JavaScript**. For the JavaScript API, see [API Reference](../api-reference.md).
 
-This document covers SQLite's prepared statement APIs, parameter binding, and result retrieval. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
+This document covers SQLite's prepared statement APIs, parameter binding, and result retrieval. This is a machine-generated summary of documentation found on sqlite.org, used as a reference during development.
 
-## Table of Contents
+## Table of contents
 
-1. [Prepared Statements](#prepared-statements)
-2. [Parameter Binding](#parameter-binding)
-3. [Result Retrieval](#result-retrieval)
-4. [Statement Metadata](#statement-metadata)
-5. [Data Types](#data-types)
+1. [Prepared statements](#prepared-statements)
+2. [Parameter binding](#parameter-binding)
+3. [Result retrieval](#result-retrieval)
+4. [Statement metadata](#statement-metadata)
+5. [Data types](#data-types)
 
-## Prepared Statements
+## Prepared statements
 
-### Compiling SQL Statements
+### Compiling SQL statements
 
 ```c
 int sqlite3_prepare_v2(
@@ -43,7 +43,7 @@ int sqlite3_prepare16_v2(
 );
 ```
 
-**Description**: Compiles SQL text into a prepared statement.
+Compiles SQL text into a prepared statement.
 
 **Parameters**:
 
@@ -52,13 +52,13 @@ int sqlite3_prepare16_v2(
 
 **Reference**: https://sqlite.org/c3ref/prepare.html
 
-### Executing Prepared Statements
+### Executing prepared statements
 
 ```c
 int sqlite3_step(sqlite3_stmt*);
 ```
 
-**Description**: Evaluates a prepared statement.
+Evaluates a prepared statement.
 
 **Returns**:
 
@@ -69,41 +69,41 @@ int sqlite3_step(sqlite3_stmt*);
 
 **Reference**: https://sqlite.org/c3ref/step.html
 
-### Resetting Statements
+### Resetting statements
 
 ```c
 int sqlite3_reset(sqlite3_stmt *pStmt);
 ```
 
-**Description**: Resets a prepared statement to its initial state.
+Resets a prepared statement to its initial state.
 
 **Note**: Does not clear parameter bindings (use `sqlite3_clear_bindings()` for that)
 
 **Reference**: https://sqlite.org/c3ref/reset.html
 
-### Clearing Bindings
+### Clearing bindings
 
 ```c
 int sqlite3_clear_bindings(sqlite3_stmt*);
 ```
 
-**Description**: Resets all parameter bindings to NULL.
+Resets all parameter bindings to NULL.
 
 **Reference**: https://sqlite.org/c3ref/clear_bindings.html
 
-### Finalizing Statements
+### Finalizing statements
 
 ```c
 int sqlite3_finalize(sqlite3_stmt *pStmt);
 ```
 
-**Description**: Destroys a prepared statement object.
+Destroys a prepared statement object.
 
 **Reference**: https://sqlite.org/c3ref/finalize.html
 
-## Parameter Binding
+## Parameter binding
 
-### Binding Functions
+### Binding functions
 
 ```c
 int sqlite3_bind_blob(sqlite3_stmt*, int, const void*, int n, void(*)(void*));
@@ -121,7 +121,7 @@ int sqlite3_bind_zeroblob(sqlite3_stmt*, int, int n);
 int sqlite3_bind_zeroblob64(sqlite3_stmt*, int, sqlite3_uint64);
 ```
 
-**Description**: Binds values to parameters in prepared statements.
+Binds values to parameters in prepared statements.
 
 **Parameters**:
 
@@ -135,7 +135,7 @@ int sqlite3_bind_zeroblob64(sqlite3_stmt*, int, sqlite3_uint64);
 
 **Reference**: https://sqlite.org/c3ref/bind_blob.html
 
-### Parameter Information
+### Parameter information
 
 ```c
 int sqlite3_bind_parameter_count(sqlite3_stmt*);
@@ -143,13 +143,13 @@ const char *sqlite3_bind_parameter_name(sqlite3_stmt*, int);
 int sqlite3_bind_parameter_index(sqlite3_stmt*, const char *zName);
 ```
 
-**Description**: Query information about statement parameters.
+Queries information about statement parameters.
 
 **Reference**: https://sqlite.org/c3ref/bind_parameter_count.html
 
-## Result Retrieval
+## Result retrieval
 
-### Column Value Functions
+### Column value functions
 
 ```c
 const void *sqlite3_column_blob(sqlite3_stmt*, int iCol);
@@ -164,13 +164,13 @@ int sqlite3_column_bytes16(sqlite3_stmt*, int iCol);
 int sqlite3_column_type(sqlite3_stmt*, int iCol);
 ```
 
-**Description**: Extract column values from result rows.
+Extracts column values from result rows.
 
 **Note**: Column indices are 0-based
 
 **Reference**: https://sqlite.org/c3ref/column_blob.html
 
-### Column Metadata
+### Column metadata
 
 ```c
 int sqlite3_column_count(sqlite3_stmt *pStmt);
@@ -178,11 +178,11 @@ const char *sqlite3_column_name(sqlite3_stmt*, int N);
 const void *sqlite3_column_name16(sqlite3_stmt*, int N);
 ```
 
-**Description**: Query result set structure.
+Queries result set structure.
 
 **Reference**: https://sqlite.org/c3ref/column_count.html
 
-### Extended Column Metadata
+### Extended column metadata
 
 ```c
 const char *sqlite3_column_database_name(sqlite3_stmt*,int);
@@ -193,15 +193,15 @@ const char *sqlite3_column_origin_name(sqlite3_stmt*,int);
 const void *sqlite3_column_origin_name16(sqlite3_stmt*,int);
 ```
 
-**Description**: Get source database, table, and column names for result columns.
+Gets the source database, table, and column names for result columns.
 
 **Note**: Requires `SQLITE_ENABLE_COLUMN_METADATA` compile option.
 
 **Reference**: https://sqlite.org/c3ref/column_database_name.html
 
-## Statement Metadata
+## Statement metadata
 
-### SQL Text
+### SQL text
 
 ```c
 const char *sqlite3_sql(sqlite3_stmt *pStmt);
@@ -209,7 +209,7 @@ char *sqlite3_expanded_sql(sqlite3_stmt *pStmt);
 const char *sqlite3_normalized_sql(sqlite3_stmt *pStmt);
 ```
 
-**Description**: Get SQL text of prepared statement.
+Gets the SQL text of a prepared statement.
 
 - `sqlite3_sql()` - Original SQL text
 - `sqlite3_expanded_sql()` - SQL with bound parameters expanded
@@ -217,7 +217,7 @@ const char *sqlite3_normalized_sql(sqlite3_stmt *pStmt);
 
 **Reference**: https://sqlite.org/c3ref/expanded_sql.html
 
-### Statement Status
+### Statement status
 
 ```c
 int sqlite3_stmt_busy(sqlite3_stmt*);
@@ -238,19 +238,19 @@ int sqlite3_stmt_status(sqlite3_stmt*, int op, int resetFlg);
 
 **Reference**: https://sqlite.org/c3ref/stmt_busy.html
 
-### Database Handle
+### Database handle
 
 ```c
 sqlite3 *sqlite3_db_handle(sqlite3_stmt*);
 ```
 
-**Description**: Get the database connection that owns a prepared statement.
+Gets the database connection that owns a prepared statement.
 
 **Reference**: https://sqlite.org/c3ref/db_handle.html
 
-## Data Types
+## Data types
 
-### Type Constants
+### Type constants
 
 ```c
 #define SQLITE_INTEGER  1
@@ -260,7 +260,7 @@ sqlite3 *sqlite3_db_handle(sqlite3_stmt*);
 #define SQLITE_NULL     5
 ```
 
-### Text Encodings
+### Text encodings
 
 ```c
 #define SQLITE_UTF8           1    /* IMP: R-37514-35566 */
@@ -271,14 +271,14 @@ sqlite3 *sqlite3_db_handle(sqlite3_stmt*);
 #define SQLITE_UTF16_ALIGNED  8    /* sqlite3_create_collation only */
 ```
 
-### Memory Management Constants
+### Memory management constants
 
 ```c
 #define SQLITE_STATIC      ((void(*)(void *))0)
 #define SQLITE_TRANSIENT   ((void(*)(void *))-1)
 ```
 
-## Value Object Functions
+## Value object functions
 
 ```c
 const void *sqlite3_value_blob(sqlite3_value*);
@@ -303,13 +303,13 @@ void sqlite3_value_free(sqlite3_value*);
 
 **Reference**: https://sqlite.org/c3ref/value_blob.html
 
-## Best Practices
+## Best practices
 
 1. **Always finalize statements** when done to avoid memory leaks
 2. **Reset statements** for reuse instead of re-preparing
-3. **Use parameter binding** instead of string concatenation to avoid SQL injection
+3. **Use parameter binding** instead of string concatenation to prevent SQL injection
 4. **Check return codes** from all API calls
-5. **Handle SQLITE_BUSY** by implementing retry logic
+5. **Handle SQLITE_BUSY** with retry logic
 6. **Use sqlite3_prepare_v2** instead of the older sqlite3_prepare
 7. **Bind parameters** starting at index 1, not 0
 

@@ -1,12 +1,12 @@
-# Technical Project Plan (TPP) Guide
+# Technical project plan (TPP) guide
 
 ## Purpose
 
-A TPP transfers expertise, not just instructions. A great TPP lets another engineer complete the work without asking questions—even if the code changed since you wrote it.
+A TPP transfers expertise, not just instructions. A great TPP lets another engineer complete the work without asking questions, even if the code changed since you wrote it.
 
 **The golden rule**: If an implementer fails because context was missing from your TPP, that's your failure, not theirs.
 
-## Required Reading
+## Required reading
 
 Before writing any TPP, read and incorporate:
 
@@ -15,9 +15,9 @@ Before writing any TPP, read and incorporate:
 
 These are not optional. TPPs that ignore them will be rejected.
 
-## TPP Structure
+## TPP structure
 
-### Part 1: Define Success (5 minutes max)
+### Part 1: Define success (5 minutes max)
 
 Write one clear sentence for each:
 
@@ -26,7 +26,7 @@ Write one clear sentence for each:
 **Why it matters**: Breaks compatibility with node:sqlite which returns []
 **Solution**: Match node:sqlite behavior in StatementSync::All()
 **Success test**: `npm t -- --grep "empty result"`
-**Key constraint**: Must match node:sqlite exactly—test against Node.js built-in
+**Key constraint**: Must match node:sqlite exactly. Test against Node.js built-in
 ```
 
 This is your North Star. Implementation details may change; the user need stays constant.
@@ -40,7 +40,7 @@ This is your North Star. Implementation details may change; the user need stays 
 **Fix approach**: Add null check matching node_sqlite.cc:892
 ```
 
-#### When TDD Isn't Possible
+#### When TDD isn't possible
 
 Some bugs can't be reproduced in tests:
 
@@ -63,11 +63,11 @@ For these, document explicitly:
 
 Don't pretend a test covers something it doesn't. Be explicit about what's validated and what isn't.
 
-### Part 2: Share Your Expertise
+### Part 2: Share your expertise
 
-This section prevents surprises. Skip it for straightforward changes—document only what's non-obvious.
+This section prevents surprises. Skip it for straightforward changes. Document only what's non-obvious.
 
-#### A. Find the Patterns
+#### A. Find the patterns
 
 Show what already works similarly:
 
@@ -83,9 +83,9 @@ ls src/upstream/
 Document what you find:
 
 - "Copy pattern from `src/sqlite_impl.cpp:DatabaseSync::Exec` for statement execution"
-- "NEVER edit `src/upstream/*`—these files are synced from Node.js"
+- "NEVER edit `src/upstream/*` (these files are synced from Node.js)"
 
-#### B. Document the Landmines
+#### B. Document the landmines
 
 Share what will break and why:
 
@@ -97,13 +97,13 @@ npm t 2>&1 | grep -i "parameter"  # Tests that catch mistakes
 
 Document the dangers:
 
-- "N-API's `IsBuffer()` returns true for ALL ArrayBufferView types—check `IsDataView()` FIRST"
-- "Cannot use `Napi::Reference` from SQLite callbacks—store POD types only"
-- "Windows requires retry logic for temp file cleanup—use `useTempDir()` utility"
+- "N-API's `IsBuffer()` returns true for ALL ArrayBufferView types. Check `IsDataView()` FIRST"
+- "Cannot use `Napi::Reference` from SQLite callbacks. Store POD types only"
+- "Windows requires retry logic for temp file cleanup. Use `useTempDir()` utility"
 
-**Apply SIMPLE-DESIGN.md Rule 2 (Reveals Intention)**: Don't just say "this breaks"—explain why it was designed this way.
+**Apply SIMPLE-DESIGN.md Rule 2 (Reveals Intention)**: Don't just say "this breaks". Explain why it was designed this way.
 
-#### C. Plan for Change
+#### C. Plan for change
 
 If architecture changes, how should the implementer adapt?
 
@@ -115,7 +115,7 @@ If BindValue() was refactored:
 3. Core goal: JS values → SQLite-bound parameters
 ```
 
-### Part 3: Define Clear Tasks
+### Part 3: Define clear tasks
 
 Each task needs:
 
@@ -146,9 +146,9 @@ Each task needs:
 - [ ] Old code removed: No workarounds remain (Rule 4 - fewest elements)
 ```
 
-## node-sqlite Specific Concerns
+## node-sqlite specific concerns
 
-### API Compatibility Is Non-Negotiable
+### API compatibility is non-negotiable
 
 Every feature must match `node:sqlite` exactly:
 
@@ -163,7 +163,7 @@ const ourResult = new OurDB(":memory:").prepare("SELECT 1").get();
 expect(ourResult).toEqual(nodeResult);
 ```
 
-### Upstream Files Are Sacred
+### Upstream files are sacred
 
 Never modify files in `src/upstream/`. They're synced from Node.js.
 
@@ -175,7 +175,7 @@ ls src/upstream/
 # Reference: third-party/node/src/node_sqlite.cc
 ```
 
-### N-API Gotchas to Document
+### N-API gotchas to document
 
 When your task involves native code, document these traps:
 
@@ -186,24 +186,24 @@ When your task involves native code, document these traps:
 | Aggregate state          | Memory corruption          | JSON serialize complex objects           |
 | Resource cleanup         | Jest hangs                 | Close all databases in afterEach         |
 
-### Platform-Specific Failures
+### Platform-specific failures
 
 Document when behavior varies:
 
 ```markdown
-**Windows**: File locks persist longer—use retry logic in cleanup
-**Alpine ARM64**: 10x slower in CI—use `getTestTimeout()` for timing tests
-**macOS**: VM performance varies—avoid exact timing assertions
+**Windows**: File locks persist longer. Use retry logic in cleanup
+**Alpine ARM64**: 10x slower in CI. Use `getTestTimeout()` for timing tests
+**macOS**: VM performance varies. Avoid exact timing assertions
 ```
 
-## Anti-Patterns to Avoid
+## Anti-patterns to avoid
 
-### "It Works" Without Proof
+### "It works" without proof
 
 Bad: "I tested it and it works"
 Good: "Test passes: `npm t -- --grep 'specific test name'`"
 
-### Shelf-ware Code
+### Shelf-ware code
 
 Implementation exists but nothing uses it. Every feature needs integration proof:
 
@@ -212,25 +212,25 @@ Implementation exists but nothing uses it. Every feature needs integration proof
 grep -r "newFunction" src/ test/  # Must appear in both
 ```
 
-### The 95% Trap
+### The 95% trap
 
-"Just needs cleanup" = 50% more work. Tasks are complete or incomplete—no percentages.
+"Just needs cleanup" = 50% more work. Tasks are complete or incomplete. No percentages.
 
-### Bogus Guardrails
+### Bogus guardrails
 
 Per [SIMPLE-DESIGN.md](./SIMPLE-DESIGN.md) Rule 5: Don't add defensive code for impossible cases. If assumptions are violated, fail visibly.
 
-### Testing the Wrong Thing
+### Testing the wrong thing
 
 Bad: "Added test for NULL handling" (but test exercises `SQLITE_NULL` type, not NULL pointer from extraction failure)
 
-Good: "Added regression test for TEXT/BLOB paths. The actual NULL-pointer edge case is untestable—validated via code review against `aggregate_function.cpp:515-530`"
+Good: "Added regression test for TEXT/BLOB paths. The actual NULL-pointer edge case is untestable. Validated via code review against `aggregate_function.cpp:515-530`"
 
 Be precise about what your test actually validates vs. what remains validated only by code review.
 
-## Validation Requirements
+## Validation requirements
 
-### Required Evidence Types
+### Required evidence types
 
 Every checkbox needs proof another engineer can verify:
 
@@ -239,7 +239,7 @@ Every checkbox needs proof another engineer can verify:
 - **Integration proof**: `grep` commands showing production usage
 - **Behavior comparison**: Test output against node:sqlite
 
-### Completeness Validation
+### Completeness validation
 
 For fixes that apply to multiple locations, the TPP must include a scope check:
 
@@ -254,7 +254,7 @@ A fix for one instance that misses others is incomplete. Document:
 - Which files contain them
 - Validation that ALL were addressed
 
-### Definition of Complete
+### Definition of complete
 
 A task is complete when:
 
@@ -264,7 +264,7 @@ A task is complete when:
 4. All validation commands pass
 5. `npm t` shows no regressions
 
-### Common Over-Selling Patterns
+### Common over-selling patterns
 
 Do NOT mark complete if:
 
@@ -273,7 +273,7 @@ Do NOT mark complete if:
 - "Ready for review" but `npm run lint` fails
 - "Feature complete" but old path still active
 
-## Quality Checklist
+## Quality checklist
 
 Before marking your TPP ready:
 
@@ -282,33 +282,33 @@ Before marking your TPP ready:
 - [ ] Documented at least one "learned the hard way" lesson
 - [ ] Each task has verifiable success command
 - [ ] Explained how to adapt if code was refactored
-- [ ] Bug fixes start with failing test ([TDD.md](./TDD.md))—or document why TDD isn't possible
+- [ ] Bug fixes start with failing test ([TDD.md](./TDD.md)), or document why TDD isn't possible
 - [ ] Code follows Four Rules ([SIMPLE-DESIGN.md](./SIMPLE-DESIGN.md))
 - [ ] API compatibility with node:sqlite verified
 - [ ] If fix applies to multiple locations, included grep to find ALL instances
 - [ ] Test descriptions clarify what IS and ISN'T covered
 
-## The Ultimate Test
+## The ultimate test
 
-Hand this TPP to someone unfamiliar with the codebase. If they can implement the solution without asking questions—even if the code was refactored—you've written an excellent TPP.
+Hand this TPP to someone unfamiliar with the codebase. If they can implement the solution without asking questions, even if the code was refactored, you've written an excellent TPP.
 
-## TPP Template
+## TPP template
 
 Copy this structure for new TPPs--but omit sections that aren't relevant or helpful.
 
 ```markdown
 # TPP: [Specific Project Name]
 
-## Goal Definition
+## Goal definition
 
-- **What Success Looks Like**: [1 sentence]
-- **Core Problem**: [1 sentence]
-- **Key Constraints**: [1 sentence—include API compatibility requirement]
-- **Success Validation**: [1 sentence—include test command]
+- **What success looks like**: [1 sentence]
+- **Core problem**: [1 sentence]
+- **Key constraints**: [1 sentence, include API compatibility requirement]
+- **Success validation**: [1 sentence, include test command]
 
-## Context Research
+## Context research
 
-### Existing Patterns
+### Existing patterns
 
 [What similar code exists? Where?]
 
@@ -316,7 +316,7 @@ Copy this structure for new TPPs--but omit sections that aren't relevant or help
 
 [What breaks easily? N-API gotchas? Platform issues?]
 
-### node:sqlite Behavior
+### node:sqlite behavior
 
 [What does the built-in do? Reference node_sqlite.cc lines]
 
@@ -345,8 +345,8 @@ As additional research and implementation details are completed, reconsider thes
 
 **What this test validates** (be precise):
 
-- ✅ [What the test DOES cover]
-- ❌ [What remains validated only by code review]
+- [What the test DOES cover]
+- [What remains validated only by code review]
 
 **Completion checklist**:
 
@@ -364,7 +364,7 @@ As additional research and implementation details are completed, reconsider thes
 - [ ] API matches node:sqlite
 ```
 
-## File Naming
+## File naming
 
 Place TPPs in `doc/todo/${priority}-${desc}.md` during work, move to `doc/done/${date}-${priority}-${desc}.md` when complete:
 

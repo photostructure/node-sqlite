@@ -1,19 +1,19 @@
-# SQLite Core API Reference
+# SQLite core API reference
 
-> **⚠️ Important Note:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. These C functions are **NOT directly callable from JavaScript**. For the JavaScript API, see [API Reference](../api-reference.md).
+> **Important:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. These C functions are **not directly callable from JavaScript**. For the JavaScript API, see [API Reference](../api-reference.md).
 
-This document covers the fundamental SQLite C/C++ APIs for database connections, basic operations, and error handling. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
+This document covers the fundamental SQLite C/C++ APIs for database connections, basic operations, and error handling. This is a machine-generated summary of documentation found on sqlite.org, used as a reference during development.
 
-## Table of Contents
+## Table of contents
 
-1. [Core Concepts](#core-concepts)
-2. [Database Connection](#database-connection)
-3. [SQL Statement Execution](#sql-statement-execution)
-4. [Error Handling](#error-handling)
-5. [Transaction Control](#transaction-control)
-6. [Utility Functions](#utility-functions)
+1. [Core concepts](#core-concepts)
+2. [Database connection](#database-connection)
+3. [SQL statement execution](#sql-statement-execution)
+4. [Error handling](#error-handling)
+5. [Transaction control](#transaction-control)
+6. [Utility functions](#utility-functions)
 
-## Core Concepts
+## Core concepts
 
 SQLite uses several key objects:
 
@@ -22,9 +22,9 @@ SQLite uses several key objects:
 - **sqlite3_value**: A protected value object
 - **sqlite3_context**: Function context for user-defined functions
 
-## Database Connection
+## Database connection
 
-### Opening a Database
+### Opening a database
 
 ```c
 int sqlite3_open(
@@ -45,7 +45,7 @@ int sqlite3_open_v2(
 );
 ```
 
-**Description**: Opens a connection to an SQLite database file.
+Opens a connection to an SQLite database file.
 
 **Special filenames**:
 
@@ -68,14 +68,14 @@ int sqlite3_open_v2(
 
 **Reference**: https://sqlite.org/c3ref/open.html
 
-### Closing a Database
+### Closing a database
 
 ```c
 int sqlite3_close(sqlite3*);
 int sqlite3_close_v2(sqlite3*);
 ```
 
-**Description**: Closes a database connection and releases resources.
+Closes a database connection and releases resources.
 
 **Difference**:
 
@@ -84,9 +84,9 @@ int sqlite3_close_v2(sqlite3*);
 
 **Reference**: https://sqlite.org/c3ref/close.html
 
-## SQL Statement Execution
+## SQL statement execution
 
-### One-Step Query Execution
+### One-step query execution
 
 ```c
 int sqlite3_exec(
@@ -98,7 +98,7 @@ int sqlite3_exec(
 );
 ```
 
-**Description**: Convenience wrapper that executes SQL without preparing statements.
+Convenience wrapper that executes SQL without preparing statements.
 
 **Callback parameters**:
 
@@ -109,9 +109,9 @@ int sqlite3_exec(
 
 **Reference**: https://sqlite.org/c3ref/exec.html
 
-## Error Handling
+## Error handling
 
-### Error Code Functions
+### Error code functions
 
 ```c
 int sqlite3_errcode(sqlite3 *db);
@@ -121,11 +121,11 @@ const void *sqlite3_errmsg16(sqlite3*);
 const char *sqlite3_errstr(int);
 ```
 
-**Description**: Retrieve error information.
+Retrieves error information.
 
 **Reference**: https://sqlite.org/c3ref/errcode.html
 
-### Result Codes
+### Result codes
 
 Primary result codes:
 
@@ -151,7 +151,7 @@ Primary result codes:
 
 **Reference**: https://sqlite.org/rescode.html
 
-## Transaction Control
+## Transaction control
 
 SQLite transactions are controlled using SQL statements executed through the API:
 
@@ -179,29 +179,29 @@ void *sqlite3_rollback_hook(sqlite3*, void(*)(void *), void*);
 
 **Reference**: https://sqlite.org/lang_transaction.html
 
-## Utility Functions
+## Utility functions
 
-### Row ID Functions
+### Row ID functions
 
 ```c
 sqlite3_int64 sqlite3_last_insert_rowid(sqlite3*);
 void sqlite3_set_last_insert_rowid(sqlite3*,sqlite3_int64);
 ```
 
-### Change Counting
+### Change counting
 
 ```c
 int sqlite3_changes(sqlite3*);
 int sqlite3_total_changes(sqlite3*);
 ```
 
-### Interrupt Operations
+### Interrupt operations
 
 ```c
 void sqlite3_interrupt(sqlite3*);
 ```
 
-### Library Version
+### Library version
 
 ```c
 const char *sqlite3_libversion(void);
@@ -215,16 +215,16 @@ int sqlite3_libversion_number(void);
 void sqlite3_randomness(int N, void *P);
 ```
 
-### Status Information
+### Status information
 
 ```c
 int sqlite3_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
 int sqlite3_status64(int op, sqlite3_int64 *pCurrent, sqlite3_int64 *pHighwater, int resetFlag);
 ```
 
-## Important Constants
+## Important constants
 
-### Open Flags
+### Open flags
 
 ```c
 #define SQLITE_OPEN_READONLY         0x00000001  /* Ok for sqlite3_open_v2() */

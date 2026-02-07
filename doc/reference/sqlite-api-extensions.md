@@ -1,21 +1,21 @@
-# SQLite Extension API Reference
+# SQLite extension API reference
 
-> **⚠️ Important Note:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. These C functions are **NOT directly callable from JavaScript**. For the JavaScript API (including `db.function()` and `db.aggregate()`), see [API Reference](../api-reference.md) and [Extending SQLite](../extending-sqlite.md).
+> **Important:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. These C functions are **not directly callable from JavaScript**. For the JavaScript API (including `db.function()` and `db.aggregate()`), see [API Reference](../api-reference.md) and [Extending SQLite](../extending-sqlite.md).
 
-This document covers SQLite's extension APIs including user-defined functions, aggregate functions, collations, and virtual tables. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
+This document covers SQLite's extension APIs: user-defined functions, aggregate functions, collations, and virtual tables. This is a machine-generated summary of documentation found on sqlite.org, used as a reference during development.
 
-## Table of Contents
+## Table of contents
 
-1. [User-Defined Functions](#user-defined-functions)
-2. [Aggregate Functions](#aggregate-functions)
-3. [Window Functions](#window-functions)
+1. [User-defined functions](#user-defined-functions)
+2. [Aggregate functions](#aggregate-functions)
+3. [Window functions](#window-functions)
 4. [Collations](#collations)
-5. [Virtual Tables](#virtual-tables)
-6. [Auxiliary Data](#auxiliary-data)
+5. [Virtual tables](#virtual-tables)
+6. [Auxiliary data](#auxiliary-data)
 
-## User-Defined Functions
+## User-defined functions
 
-### Function Registration
+### Function registration
 
 ```c
 int sqlite3_create_function(
@@ -63,7 +63,7 @@ int sqlite3_create_function_v2(
 
 **Reference**: https://sqlite.org/c3ref/create_function.html
 
-### Function Context
+### Function context
 
 ```c
 // Get user data passed during registration
@@ -73,7 +73,7 @@ void *sqlite3_user_data(sqlite3_context*);
 sqlite3 *sqlite3_context_db_handle(sqlite3_context*);
 ```
 
-### Setting Function Results
+### Setting function results
 
 ```c
 // Basic result setters
@@ -115,7 +115,7 @@ void sqlite3_result_pointer(sqlite3_context*, void*, const char*, void(*)(void*)
 
 **Reference**: https://sqlite.org/c3ref/result_blob.html
 
-### Type Constants
+### Type constants
 
 ```c
 #define SQLITE_INTEGER  1
@@ -127,7 +127,7 @@ void sqlite3_result_pointer(sqlite3_context*, void*, const char*, void(*)(void*)
 
 These constants are returned by `sqlite3_value_type()` and are used to identify the datatype of a value object.
 
-### Value Extraction
+### Value extraction
 
 ```c
 // Type checking
@@ -153,11 +153,11 @@ int sqlite3_value_frombind(sqlite3_value*);
 
 **Reference**: https://sqlite.org/c3ref/value_blob.html
 
-## Aggregate Functions
+## Aggregate functions
 
-Aggregate functions are created using the same `sqlite3_create_function` APIs but with both `xStep` and `xFinal` callbacks.
+Aggregate functions are created with the same `sqlite3_create_function` APIs but with both `xStep` and `xFinal` callbacks.
 
-### Step Function
+### Step function
 
 Called once for each row in the group:
 
@@ -165,7 +165,7 @@ Called once for each row in the group:
 void xStep(sqlite3_context *ctx, int argc, sqlite3_value **argv);
 ```
 
-### Final Function
+### Final function
 
 Called once after all rows have been processed:
 
@@ -173,7 +173,7 @@ Called once after all rows have been processed:
 void xFinal(sqlite3_context *ctx);
 ```
 
-### Aggregate Context
+### Aggregate context
 
 Use `sqlite3_aggregate_context()` to maintain state between calls:
 
@@ -181,7 +181,7 @@ Use `sqlite3_aggregate_context()` to maintain state between calls:
 void *sqlite3_aggregate_context(sqlite3_context*, int nBytes);
 ```
 
-**Important Notes**:
+**Key points**:
 
 - SQLite allocates the memory and zeros it on first call with nBytes > 0
 - Subsequent calls return the same memory pointer
@@ -215,7 +215,7 @@ void myFinal(sqlite3_context *ctx) {
 }
 ```
 
-**C++ Object Initialization**:
+**C++ object initialization**:
 
 For C++ objects that need proper construction, use placement new:
 
@@ -240,7 +240,7 @@ void cppStep(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 }
 ```
 
-## Window Functions
+## Window functions
 
 Window functions extend aggregate functions with additional callbacks:
 
@@ -268,7 +268,7 @@ int sqlite3_create_window_function(
 
 ## Collations
 
-### Creating Collations
+### Creating collations
 
 ```c
 int sqlite3_create_collation(
@@ -309,7 +309,7 @@ int xCompare(
 
 **Reference**: https://sqlite.org/c3ref/create_collation.html
 
-### Collation Needed Callback
+### Collation needed callback
 
 ```c
 int sqlite3_collation_needed(
@@ -319,13 +319,13 @@ int sqlite3_collation_needed(
 );
 ```
 
-**Description**: Register a callback to be invoked when an unknown collation is needed.
+Registers a callback invoked when an unknown collation is needed.
 
-## Virtual Tables
+## Virtual tables
 
-Virtual tables allow custom data sources to appear as regular SQLite tables.
+Custom data sources that appear as regular SQLite tables.
 
-### Module Registration
+### Module registration
 
 ```c
 int sqlite3_create_module(
@@ -344,7 +344,7 @@ int sqlite3_create_module_v2(
 );
 ```
 
-### Module Structure
+### Module structure
 
 ```c
 struct sqlite3_module {
@@ -384,9 +384,9 @@ struct sqlite3_module {
 
 **Reference**: https://sqlite.org/vtab.html
 
-## Auxiliary Data
+## Auxiliary data
 
-Auxiliary data allows caching expensive computations in user-defined functions:
+Auxiliary data caches expensive computations in user-defined functions:
 
 ```c
 void *sqlite3_get_auxdata(sqlite3_context*, int N);
@@ -401,7 +401,7 @@ void sqlite3_set_auxdata(sqlite3_context*, int N, void*, void (*)(void*));
 
 **Example use case**: Caching compiled regular expressions
 
-## Function Flags
+## Function flags
 
 ```c
 #define SQLITE_DETERMINISTIC    0x000000800
@@ -417,13 +417,13 @@ void sqlite3_set_auxdata(sqlite3_context*, int N, void*, void (*)(void*));
 - `SQLITE_SUBTYPE`: Function distinguishes between TEXT subtypes
 - `SQLITE_INNOCUOUS`: Function has no side effects
 
-## JavaScript/N-API Specific Considerations
+## JavaScript/N-API considerations
 
-When implementing SQLite functions using Node.js N-API:
+When implementing SQLite functions with Node.js N-API:
 
-### HandleScope Management
+### HandleScope management
 
-**Critical**: SQLite callbacks are invoked from SQLite's context, not directly from JavaScript. This affects V8 HandleScope lifetime:
+**Critical**: SQLite callbacks run in SQLite's context, not directly from JavaScript. This affects V8 HandleScope lifetime:
 
 ```cpp
 // DON'T do this - HandleScope will be destroyed before value is used:
@@ -439,9 +439,9 @@ Napi::Value GetValue() {
 }
 ```
 
-### BigInt Support
+### BigInt support
 
-For handling large integers beyond JavaScript's safe integer range:
+For large integers beyond JavaScript's safe integer range:
 
 ```cpp
 // Check if using BigInt arguments
@@ -454,7 +454,7 @@ if (use_bigint_args_) {
 }
 ```
 
-### Exception Handling
+### Exception handling
 
 Convert JavaScript exceptions to SQLite errors:
 
@@ -475,22 +475,22 @@ try {
 }
 ```
 
-### Thread Safety
+### Thread safety
 
 - SQLite may call functions from different threads
 - Ensure N-API calls are thread-safe
 - Use `napi_threadsafe_function` for callbacks if needed
 
-## Function Name Constraints
+## Function name constraints
 
 - **Maximum length**: 255 UTF-8 bytes (not characters!)
 - **Return value**: SQLITE_MISUSE if name exceeds limit
 - **Character encoding**: Name length is measured in UTF-8 bytes
 - **Example**: A name with 100 emojis (4 bytes each) would exceed the limit
 
-## Best Practices
+## Best practices
 
-1. **Use SQLITE_TRANSIENT** when setting text/blob results unless certain the memory won't change
+1. **Use SQLITE_TRANSIENT** when setting text/blob results unless certain the memory will not change
 2. **Check types** before extracting values from sqlite3_value
 3. **Handle NULL** inputs explicitly
 4. **Use SQLITE_DETERMINISTIC** when appropriate for query optimization
@@ -501,7 +501,7 @@ try {
 9. **Manage HandleScope** carefully in N-API implementations
 10. **Support BigInt** for large integer values when interfacing with JavaScript
 
-## Implementation Validation Checklist
+## Implementation validation checklist
 
 For validating user function implementations in N-API/Node.js context:
 
@@ -531,7 +531,7 @@ For validating user function implementations in N-API/Node.js context:
 - [ ] Test memory management (no leaks)
 - [ ] Test edge cases (empty strings, large numbers, special characters)
 
-## Common Pitfalls
+## Common pitfalls
 
 1. **Memory leaks**: Forgetting to use proper destructors
 2. **Type mismatches**: Not checking value types before extraction

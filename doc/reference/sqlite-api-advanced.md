@@ -1,24 +1,24 @@
-# SQLite Advanced Features API Reference
+# SQLite advanced features API reference
 
-> **⚠️ Important Note:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. Most functions documented here (like `sqlite3_blob_open()`, `sqlite3_wal_checkpoint_v2()`) are **NOT directly callable from JavaScript**. Some features like backup and sessions are exposed through the JavaScript API - see [API Reference](../api-reference.md) and [Advanced Patterns](../advanced-patterns.md).
+> **Important:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. Most functions documented here (like `sqlite3_blob_open()`, `sqlite3_wal_checkpoint_v2()`) are **not directly callable from JavaScript**. Some features like backup and sessions are exposed through the JavaScript API; see [API Reference](../api-reference.md) and [Advanced Patterns](../advanced-patterns.md).
 
-This document covers SQLite's advanced APIs including backup operations, blob I/O, sessions, and threading features. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
+This document covers SQLite's advanced APIs: backup operations, blob I/O, sessions, and threading features. This is a machine-generated summary of documentation found on sqlite.org, used as a reference during development.
 
-## Table of Contents
+## Table of contents
 
 1. [Backup API](#backup-api)
 2. [Blob I/O](#blob-io)
-3. [Session Extension](#session-extension)
-4. [Threading and Concurrency](#threading-and-concurrency)
-5. [Hooks and Callbacks](#hooks-and-callbacks)
-6. [Extension Loading](#extension-loading)
-7. [WAL Mode Operations](#wal-mode-operations)
+3. [Session extension](#session-extension)
+4. [Threading and concurrency](#threading-and-concurrency)
+5. [Hooks and callbacks](#hooks-and-callbacks)
+6. [Extension loading](#extension-loading)
+7. [WAL mode operations](#wal-mode-operations)
 
 ## Backup API
 
-The backup API allows copying database content between two databases while they are in use.
+The backup API copies database content between two databases while they are in use.
 
-### Backup Functions
+### Backup functions
 
 ```c
 sqlite3_backup *sqlite3_backup_init(
@@ -61,7 +61,7 @@ if (pBackup) {
 
 Blob I/O provides incremental read/write access to blob values without loading entire blobs into memory.
 
-### Opening Blobs
+### Opening blobs
 
 ```c
 int sqlite3_blob_open(
@@ -83,7 +83,7 @@ int sqlite3_blob_open(
 - `iRow`: Row ID
 - `flags`: 0 for read-only, 1 for read-write
 
-### Blob Operations
+### Blob operations
 
 ```c
 int sqlite3_blob_reopen(sqlite3_blob *, sqlite3_int64);
@@ -109,11 +109,11 @@ if (rc == SQLITE_OK) {
 
 **Reference**: https://sqlite.org/c3ref/blob_open.html
 
-## Session Extension
+## Session extension
 
-The session extension provides change tracking and conflict resolution capabilities.
+The session extension provides change tracking and conflict resolution.
 
-### Session Objects
+### Session objects
 
 ```c
 int sqlite3session_create(
@@ -125,7 +125,7 @@ int sqlite3session_create(
 void sqlite3session_delete(sqlite3_session *pSession);
 ```
 
-### Tracking Changes
+### Tracking changes
 
 ```c
 int sqlite3session_attach(
@@ -146,7 +146,7 @@ int sqlite3session_patchset(
 );
 ```
 
-### Applying Changes
+### Applying changes
 
 ```c
 int sqlite3changeset_apply(
@@ -161,9 +161,9 @@ int sqlite3changeset_apply(
 
 **Reference**: https://sqlite.org/sessionintro.html
 
-## Threading and Concurrency
+## Threading and concurrency
 
-### Thread Safety
+### Thread safety
 
 ```c
 int sqlite3_threadsafe(void);
@@ -175,7 +175,7 @@ int sqlite3_threadsafe(void);
 - 1 - Serialized mode
 - 2 - Multi-thread mode
 
-### Mutex Functions
+### Mutex functions
 
 ```c
 sqlite3_mutex *sqlite3_db_mutex(sqlite3*);
@@ -184,14 +184,14 @@ int sqlite3_mutex_try(sqlite3_mutex*);
 void sqlite3_mutex_leave(sqlite3_mutex*);
 ```
 
-### Busy Handler
+### Busy handler
 
 ```c
 int sqlite3_busy_handler(sqlite3*, int(*)(void*,int), void*);
 int sqlite3_busy_timeout(sqlite3*, int ms);
 ```
 
-**Description**: Set handler for locked database situations.
+Sets a handler for locked database situations.
 
 **Example**:
 
@@ -212,7 +212,7 @@ sqlite3_busy_handler(db, busyHandler, NULL);
 
 **Reference**: https://sqlite.org/c3ref/busy_handler.html
 
-### Unlock Notification
+### Unlock notification
 
 ```c
 int sqlite3_unlock_notify(
@@ -222,13 +222,13 @@ int sqlite3_unlock_notify(
 );
 ```
 
-**Description**: Request notification when database is unlocked.
+Requests notification when a database is unlocked.
 
 **Reference**: https://sqlite.org/unlock_notify.html
 
-## Hooks and Callbacks
+## Hooks and callbacks
 
-### Update Hook
+### Update hook
 
 ```c
 void *sqlite3_update_hook(
@@ -246,14 +246,14 @@ void *sqlite3_update_hook(
 - Table name
 - Row ID
 
-### Commit and Rollback Hooks
+### Commit and rollback hooks
 
 ```c
 void *sqlite3_commit_hook(sqlite3*, int(*)(void*), void*);
 void *sqlite3_rollback_hook(sqlite3*, void(*)(void *), void*);
 ```
 
-### WAL Hook
+### WAL hook
 
 ```c
 void *sqlite3_wal_hook(
@@ -297,7 +297,7 @@ int sqlite3_set_authorizer(
 
 **Reference**: https://sqlite.org/c3ref/set_authorizer.html
 
-### Progress Handler
+### Progress handler
 
 ```c
 void sqlite3_progress_handler(sqlite3*, int, int(*)(void*), void*);
@@ -310,9 +310,9 @@ void sqlite3_progress_handler(sqlite3*, int, int(*)(void*), void*);
 - Callback function (return non-zero to interrupt)
 - User data
 
-## Extension Loading
+## Extension loading
 
-### Loading Extensions
+### Loading extensions
 
 ```c
 int sqlite3_load_extension(
@@ -331,7 +331,7 @@ int sqlite3_enable_load_extension(sqlite3 *db, int onoff);
 - `zProc`: Entry point (NULL for default)
 - `pzErrMsg`: Error message pointer
 
-### Auto-loading Extensions
+### Auto-loading extensions
 
 ```c
 int sqlite3_auto_extension(void(*xEntryPoint)(void));
@@ -341,7 +341,7 @@ void sqlite3_reset_auto_extension(void);
 
 **Reference**: https://sqlite.org/loadext.html
 
-## WAL Mode Operations
+## WAL mode operations
 
 ### Checkpoint
 
@@ -362,7 +362,7 @@ int sqlite3_wal_checkpoint_v2(
 - `SQLITE_CHECKPOINT_RESTART` - Like FULL, also wait for readers
 - `SQLITE_CHECKPOINT_TRUNCATE` - Like RESTART, also truncate WAL
 
-### WAL Filename
+### WAL filename
 
 ```c
 const char *sqlite3_filename_database(const char*);
@@ -370,7 +370,7 @@ const char *sqlite3_filename_journal(const char*);
 const char *sqlite3_filename_wal(const char*);
 ```
 
-## Database Status
+## Database status
 
 ```c
 int sqlite3_db_status(sqlite3*, int op, int *pCur, int *pHiwtr, int resetFlg);
@@ -394,14 +394,14 @@ int sqlite3_db_status(sqlite3*, int op, int *pCur, int *pHiwtr, int resetFlg);
 
 **Reference**: https://sqlite.org/c3ref/db_status.html
 
-## Best Practices
+## Best practices
 
 1. **Backup operations**: Use small page counts for responsive UI
-2. **Blob I/O**: Use for large blobs to reduce memory usage
-3. **Threading**: Choose appropriate threading mode at compile time
+2. **Blob I/O**: Use for large blobs to reduce memory consumption
+3. **Threading**: Choose the appropriate threading mode at compile time
 4. **Busy handling**: Always set a busy handler or timeout
 5. **Hooks**: Return quickly from hook callbacks
-6. **WAL mode**: Use checkpoints during idle time
+6. **WAL mode**: Run checkpoints during idle time
 7. **Extensions**: Validate extensions before loading
 
 ## References

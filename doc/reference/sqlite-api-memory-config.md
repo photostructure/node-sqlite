@@ -1,21 +1,21 @@
-# SQLite Memory Management and Configuration API Reference
+# SQLite memory management and configuration API reference
 
-> **⚠️ Important Note:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. Functions like `sqlite3_config()`, `sqlite3_limit()`, and `sqlite3_status()` are **NOT directly callable from JavaScript**. These are compile-time and native-level configurations. For the JavaScript API, see [API Reference](../api-reference.md).
+> **Important:** This documentation describes the **underlying SQLite C library API**, not the JavaScript API exposed by `@photostructure/sqlite`. Functions like `sqlite3_config()`, `sqlite3_limit()`, and `sqlite3_status()` are **not directly callable from JavaScript**. These are compile-time and native-level configurations. For the JavaScript API, see [API Reference](../api-reference.md).
 
-This document covers SQLite's memory management, configuration options, and runtime limits. This is a machine-generated summary of documentation found on sqlite.org used as a reference during development.
+This document covers SQLite's memory management, configuration options, and runtime limits. This is a machine-generated summary of documentation found on sqlite.org, used as a reference during development.
 
-## Table of Contents
+## Table of contents
 
-1. [Memory Management](#memory-management)
-2. [Global Configuration](#global-configuration)
-3. [Database Configuration](#database-configuration)
-4. [Runtime Limits](#runtime-limits)
-5. [Compile-Time Options](#compile-time-options)
-6. [Status and Statistics](#status-and-statistics)
+1. [Memory management](#memory-management)
+2. [Global configuration](#global-configuration)
+3. [Database configuration](#database-configuration)
+4. [Runtime limits](#runtime-limits)
+5. [Compile-time options](#compile-time-options)
+6. [Status and statistics](#status-and-statistics)
 
-## Memory Management
+## Memory management
 
-### Memory Allocation Functions
+### Memory allocation functions
 
 ```c
 void *sqlite3_malloc(int);
@@ -26,32 +26,32 @@ void sqlite3_free(void*);
 sqlite3_uint64 sqlite3_msize(void*);
 ```
 
-**Description**: SQLite memory allocation routines that track memory usage.
+SQLite memory allocation routines that track memory usage.
 
 **Note**: These functions are thread-safe and include internal bookkeeping.
 
 **Reference**: https://sqlite.org/c3ref/free.html
 
-### Memory Statistics
+### Memory statistics
 
 ```c
 sqlite3_int64 sqlite3_memory_used(void);
 sqlite3_int64 sqlite3_memory_highwater(int resetFlag);
 ```
 
-**Description**: Query global memory usage.
+Queries global memory usage.
 
 **Parameters**:
 
 - `resetFlag`: If true, reset high-water mark after reading
 
-### Soft Heap Limit
+### Soft heap limit
 
 ```c
 sqlite3_int64 sqlite3_soft_heap_limit64(sqlite3_int64 N);
 ```
 
-**Description**: Set a soft limit on heap size. SQLite tries to keep heap usage below this limit.
+Sets a soft limit on heap size. SQLite tries to keep heap usage below this limit.
 
 **Parameters**:
 
@@ -59,16 +59,16 @@ sqlite3_int64 sqlite3_soft_heap_limit64(sqlite3_int64 N);
 
 **Reference**: https://sqlite.org/c3ref/soft_heap_limit64.html
 
-### Memory Debugging
+### Memory debugging
 
 ```c
 void sqlite3_mem_debug(int);
 void sqlite3_mem_trace(int);
 ```
 
-**Description**: Enable memory debugging and tracing (requires special build).
+Enables memory debugging and tracing (requires special build).
 
-## Global Configuration
+## Global configuration
 
 ### sqlite3_config()
 
@@ -78,9 +78,9 @@ int sqlite3_config(int, ...);
 
 **Must be called**: Before any other SQLite functions (except sqlite3_initialize).
 
-### Memory Configuration Options
+### Memory configuration options
 
-#### Custom Memory Allocator
+#### Custom memory allocator
 
 ```c
 sqlite3_mem_methods mem = {
@@ -96,7 +96,7 @@ sqlite3_mem_methods mem = {
 sqlite3_config(SQLITE_CONFIG_MALLOC, &mem);
 ```
 
-#### Static Memory
+#### Static memory
 
 ```c
 static char heap[8192000];
@@ -109,7 +109,7 @@ sqlite3_config(SQLITE_CONFIG_HEAP, heap, sizeof(heap), 64);
 - Buffer size
 - Minimum allocation size
 
-#### Lookaside Memory
+#### Lookaside memory
 
 ```c
 sqlite3_config(SQLITE_CONFIG_LOOKASIDE, 512, 128);
@@ -120,7 +120,7 @@ sqlite3_config(SQLITE_CONFIG_LOOKASIDE, 512, 128);
 - Slot size
 - Number of slots
 
-### Threading Configuration
+### Threading configuration
 
 ```c
 sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
@@ -134,7 +134,7 @@ sqlite3_config(SQLITE_CONFIG_SERIALIZED);
 - `MULTITHREAD`: Thread-safe for separate connections
 - `SERIALIZED`: Fully thread-safe
 
-### Other Global Options
+### Other global options
 
 ```c
 // Enable/disable memory status tracking
@@ -176,7 +176,7 @@ sqlite3_config(SQLITE_CONFIG_SORTERREF_SIZE, nByte);
 
 **Reference**: https://sqlite.org/c3ref/config.html
 
-## Database Configuration
+## Database configuration
 
 ### sqlite3_db_config()
 
@@ -186,7 +186,7 @@ int sqlite3_db_config(sqlite3*, int op, ...);
 
 **Can be called**: On open database connections.
 
-### Security and Safety Options
+### Security and safety options
 
 ```c
 // Enable/disable foreign key constraints
@@ -208,7 +208,7 @@ sqlite3_db_config(db, SQLITE_DBCONFIG_WRITABLE_SCHEMA, 1, &oldVal);
 sqlite3_db_config(db, SQLITE_DBCONFIG_TRUSTED_SCHEMA, 1, &oldVal);
 ```
 
-### Performance Options
+### Performance options
 
 ```c
 // Configure lookaside memory for this connection
@@ -230,7 +230,7 @@ sqlite3_db_config(db, SQLITE_DBCONFIG_STMT_SCANSTATUS, 1, &oldVal);
 sqlite3_db_config(db, SQLITE_DBCONFIG_REVERSE_SCANORDER, 1, &oldVal);
 ```
 
-### Compatibility Options
+### Compatibility options
 
 ```c
 // Legacy ALTER TABLE behavior
@@ -252,14 +252,14 @@ sqlite3_db_config(db, SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER, 1, &oldVal);
 sqlite3_db_config(db, SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, 1, &oldVal);
 ```
 
-### Database Name
+### Database name
 
 ```c
 // Set main database name
 sqlite3_db_config(db, SQLITE_DBCONFIG_MAINDBNAME, "main");
 ```
 
-### Reset Database
+### Reset database
 
 ```c
 // Reset database file (dangerous!)
@@ -268,7 +268,7 @@ sqlite3_db_config(db, SQLITE_DBCONFIG_RESET_DATABASE, 1, 0);
 
 **Reference**: https://sqlite.org/c3ref/db_config.html
 
-## Runtime Limits
+## Runtime limits
 
 ### sqlite3_limit()
 
@@ -276,7 +276,7 @@ sqlite3_db_config(db, SQLITE_DBCONFIG_RESET_DATABASE, 1, 0);
 int sqlite3_limit(sqlite3*, int id, int newVal);
 ```
 
-**Description**: Set or query per-connection limits.
+Sets or queries per-connection limits.
 
 **Parameters**:
 
@@ -285,7 +285,7 @@ int sqlite3_limit(sqlite3*, int id, int newVal);
 
 **Returns**: Previous limit value
 
-### Limit Identifiers
+### Limit identifiers
 
 ```c
 // Maximum string/blob length (default: 1000000000)
@@ -327,11 +327,11 @@ sqlite3_limit(db, SQLITE_LIMIT_WORKER_THREADS, 4);
 
 **Reference**: https://sqlite.org/c3ref/limit.html
 
-## Compile-Time Options
+## Compile-time options
 
-Important compile-time options that affect API behavior:
+Compile-time options that affect API behavior:
 
-### Feature Toggles
+### Feature toggles
 
 ```c
 #define SQLITE_ENABLE_FTS5              // Full-text search v5
@@ -345,7 +345,7 @@ Important compile-time options that affect API behavior:
 #define SQLITE_ENABLE_UPDATE_DELETE_LIMIT // LIMIT on UPDATE/DELETE
 ```
 
-### Security Options
+### Security options
 
 ```c
 #define SQLITE_SECURE_DELETE            // Overwrite deleted content
@@ -353,7 +353,7 @@ Important compile-time options that affect API behavior:
 #define SQLITE_ENABLE_SEE               // SQLite Encryption Extension
 ```
 
-### Performance Options
+### Performance options
 
 ```c
 #define SQLITE_DEFAULT_CACHE_SIZE=-2000 // 2MB page cache
@@ -364,7 +364,7 @@ Important compile-time options that affect API behavior:
 #define SQLITE_MAX_WORKER_THREADS=8     // Worker thread limit
 ```
 
-### Memory Options
+### Memory options
 
 ```c
 #define SQLITE_DEFAULT_MEMSTATUS=0      // Disable memory tracking
@@ -374,9 +374,9 @@ Important compile-time options that affect API behavior:
 #define SQLITE_ZERO_MALLOC              // Omit memory allocator
 ```
 
-## Status and Statistics
+## Status and statistics
 
-### Global Status
+### Global status
 
 ```c
 int sqlite3_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
@@ -396,7 +396,7 @@ int sqlite3_status64(int op, sqlite3_int64 *pCurrent,
 - `SQLITE_STATUS_SCRATCH_SIZE` - Scratch allocation size
 - `SQLITE_STATUS_MALLOC_COUNT` - Number of mallocs
 
-### Database Status
+### Database status
 
 ```c
 int sqlite3_db_status(sqlite3*, int op, int *pCur, int *pHiwtr, int resetFlg);
@@ -404,7 +404,7 @@ int sqlite3_db_status(sqlite3*, int op, int *pCur, int *pHiwtr, int resetFlg);
 
 **Operations** (see Advanced Features document for full list)
 
-### Statement Status
+### Statement status
 
 ```c
 int sqlite3_stmt_status(sqlite3_stmt*, int op, int resetFlg);
@@ -420,19 +420,19 @@ int sqlite3_stmt_status(sqlite3_stmt*, int op, int resetFlg);
 - `SQLITE_STMTSTATUS_RUN` - Times statement has been run
 - `SQLITE_STMTSTATUS_MEMUSED` - Memory used by statement
 
-## Best Practices
+## Best practices
 
 1. **Configure early**: Call sqlite3_config() before any other SQLite functions
 2. **Set appropriate limits**: Use sqlite3_limit() to prevent resource exhaustion
 3. **Monitor memory**: Use status functions to track memory usage
-4. **Choose threading mode**: Select appropriate threading model at startup
+4. **Choose threading mode**: Select the appropriate threading model at startup
 5. **Enable only needed features**: Use compile-time options to reduce size
 6. **Test configuration**: Verify settings work correctly in your environment
-7. **Document settings**: Keep track of non-default configurations
+7. **Document settings**: Record non-default configurations
 
-## Common Configuration Patterns
+## Common configuration patterns
 
-### Low Memory Environment
+### Low memory environment
 
 ```c
 // Use static memory allocation
@@ -442,7 +442,7 @@ sqlite3_config(SQLITE_CONFIG_LOOKASIDE, 128, 32);
 sqlite3_config(SQLITE_CONFIG_PAGECACHE, pageCache, 1024, 100);
 ```
 
-### High Performance
+### High performance
 
 ```c
 // Increase cache sizes
@@ -452,7 +452,7 @@ sqlite3_exec(db, "PRAGMA temp_store=MEMORY", 0, 0, 0);
 sqlite3_limit(db, SQLITE_LIMIT_WORKER_THREADS, 4);
 ```
 
-### Maximum Safety
+### Maximum safety
 
 ```c
 // Enable all safety features
