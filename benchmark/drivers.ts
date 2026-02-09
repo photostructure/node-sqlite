@@ -1,11 +1,8 @@
-import { promisify } from "node:util";
 import { DatabaseSync } from "../src/index";
 
 // Optional dependencies - loaded lazily to allow running tests without them
 // Use any types to avoid TypeScript issues with optional deps
 let Database: any = null;
-let deasync: any = null;
-let sqlite3Module: any = null;
 
 // Try to load optional dependencies
 try {
@@ -14,33 +11,20 @@ try {
   // better-sqlite3 not available
 }
 
-try {
-  deasync = require("deasync");
-} catch {
-  // deasync not available
-}
-
-try {
-  sqlite3Module = require("sqlite3");
-} catch {
-  // sqlite3 not available
-}
-
 // Track if node:sqlite is available
 let nodeSqliteAvailable = false;
 let NodeSqliteDatabase: any = null;
 
-// Initialize node:sqlite availability asynchronously
-(async () => {
-  try {
-    // Try to import node:sqlite
-    const nodeSqlite = await import("node:sqlite");
-    NodeSqliteDatabase = nodeSqlite.DatabaseSync;
-    nodeSqliteAvailable = true;
-  } catch (e) {
-    // node:sqlite not available
-  }
-})();
+try {
+  // Use require() for synchronous loading so the driver is available
+  // when the `drivers` map is built at module-load time.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const nodeSqlite = require("node:sqlite");
+  NodeSqliteDatabase = nodeSqlite.DatabaseSync;
+  nodeSqliteAvailable = true;
+} catch {
+  // node:sqlite not available
+}
 
 // Types
 export interface Statement {
@@ -236,178 +220,6 @@ class NodeSqliteDriver extends BaseDriver {
   }
 }
 
-// sqlite3 driver (async, needs wrapper)
-class Sqlite3Driver extends BaseDriver {
-  declare protected db: any;
-  private stmtCache = new Map<string, any>();
-  private dbRun!: (sql: string, ...params: any[]) => Promise<void>;
-  private dbGet!: (sql: string, ...params: any[]) => Promise<any>;
-  private dbAll!: (sql: string, ...params: any[]) => Promise<any[]>;
-  private dbExec!: (sql: string) => Promise<void>;
-
-  constructor() {
-    super("sqlite3");
-  }
-
-  async initialize(filename: string): Promise<Driver> {
-    if (!sqlite3Module || !deasync) {
-      throw new Error(
-        "sqlite3 and deasync are not available - run 'npm install' in benchmark/",
-      );
-    }
-    const Database = sqlite3Module.verbose().Database;
-    this.db = new Database(filename);
-
-    // Promisify common methods
-    this.dbRun = promisify(this.db.run.bind(this.db));
-    this.dbGet = promisify(this.db.get.bind(this.db));
-    this.dbAll = promisify(this.db.all.bind(this.db));
-    this.dbExec = promisify(this.db.exec.bind(this.db));
-
-    return this;
-  }
-
-  async close(): Promise<void> {
-    if (this.db) {
-      // Clean up cached statements
-      for (const stmt of this.stmtCache.values()) {
-        await new Promise<void>((resolve) => stmt.finalize(() => resolve()));
-      }
-      this.stmtCache.clear();
-
-      await new Promise<void>((resolve, reject) => {
-        this.db.close((err: any) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-      this.db = null as any;
-    }
-  }
-
-  prepare(sql: string): Statement {
-    // For sqlite3, we'll create a wrapper that makes async operations look sync
-    // This is not ideal for performance but allows fair comparison
-
-    // Cache prepared statements
-    let stmt = this.stmtCache.get(sql);
-    if (!stmt) {
-      stmt = this.db.prepare(sql);
-      this.stmtCache.set(sql, stmt);
-    }
-
-    return {
-      get: (...params) => {
-        // Run synchronously using deasync
-        let result: any;
-        let error: Error | null = null;
-        let done = false;
-
-        stmt!.get(...params, (err: Error | null, row: any) => {
-          error = err;
-          result = row;
-          done = true;
-        });
-
-        // Busy wait using deasync
-        deasync!.loopWhile(() => !done);
-
-        if (error) throw error;
-        return result!;
-      },
-
-      all: (...params) => {
-        let result: any[];
-        let error: Error | null = null;
-        let done = false;
-
-        stmt!.all(...params, (err: Error | null, rows: any[]) => {
-          error = err;
-          result = rows;
-          done = true;
-        });
-
-        deasync!.loopWhile(() => !done);
-
-        if (error) throw error;
-        return result!;
-      },
-
-      run: (...params) => {
-        let result: any;
-        let error: Error | null = null;
-        let done = false;
-
-        stmt!.run(...params, function (this: any, err: Error | null) {
-          error = err;
-          result = { changes: this.changes, lastInsertRowid: this.lastID };
-          done = true;
-        });
-
-        deasync!.loopWhile(() => !done);
-
-        if (error) throw error;
-        return result!;
-      },
-
-      iterate: function* (...params) {
-        // sqlite3 doesn't have built-in iterator, simulate with all()
-        let rows: any[];
-        let error: Error | null = null;
-        let done = false;
-
-        stmt!.all(...params, (err: Error | null, allRows: any[]) => {
-          error = err;
-          rows = allRows;
-          done = true;
-        });
-
-        deasync!.loopWhile(() => !done);
-
-        if (error) throw error;
-
-        for (const row of rows!) {
-          yield row;
-        }
-      },
-
-      finalize: () => {
-        // Don't finalize cached statements
-      },
-    };
-  }
-
-  transaction<T>(fn: (...args: any[]) => T): (...args: any[]) => T {
-    // sqlite3 doesn't have built-in transaction support, simulate it
-    const self = this;
-    return (...args: any[]) => {
-      self.exec("BEGIN");
-      try {
-        const result = fn(...args);
-        self.exec("COMMIT");
-        return result;
-      } catch (err) {
-        self.exec("ROLLBACK");
-        throw err;
-      }
-    };
-  }
-
-  exec(sql: string): void {
-    let error: Error | null = null;
-    let done = false;
-
-    this.db.exec(sql, (err: any) => {
-      error = err;
-      done = true;
-    });
-
-    deasync!.loopWhile(() => !done);
-
-    if (error) throw error;
-  }
-}
-
 // Driver class map
 type DriverConstructor = new () => BaseDriver;
 
@@ -416,7 +228,6 @@ export const drivers: Record<string, DriverConstructor> = {
   "@photostructure/sqlite": PhotostructureDriver,
   ...(Database ? { "better-sqlite3": BetterSqlite3Driver } : {}),
   ...(nodeSqliteAvailable ? { "node:sqlite": NodeSqliteDriver } : {}),
-  ...(sqlite3Module && deasync ? { sqlite3: Sqlite3Driver } : {}),
 };
 
 // Helper to create driver instance

@@ -92,137 +92,175 @@ if (scenarios.length === 0) {
     memoryBaseline = process.memoryUsage();
   }
 
-  // Run benchmarks for each scenario
-  for (const [scenarioKey, scenario] of scenarios) {
-    console.log(chalk.bold.yellow(`\n📊 ${scenario.name}`));
-    console.log(chalk.gray(`   ${scenario.description}`));
+  // Run benchmarks twice: pass 0 = warmup (discarded), pass 1 = measured
+  for (let pass = 0; pass < 2; pass++) {
+    const isWarmup = pass === 0;
 
-    results[scenarioKey] = {};
+    if (isWarmup) {
+      console.log(chalk.gray("Warmup pass...\n"));
+    } else {
+      console.log(chalk.bold.cyan("\nMeasured pass:\n"));
+    }
 
-    // Skip Benchmark.js and run manual benchmark directly
-    console.log(chalk.yellow("   Running manual benchmark..."));
+    for (const [scenarioKey, scenario] of scenarios) {
+      if (isWarmup) {
+        process.stdout.write(chalk.gray(`\n  ${scenario.name}:`));
+      } else {
+        console.log(chalk.bold.yellow(`\n📊 ${scenario.name}`));
+        console.log(chalk.gray(`   ${scenario.description}`));
+      }
 
-    // First, determine optimal iterations by running the first available driver for 2 seconds
-    let optimalIterations = 100; // fallback
-    const calibrationDriver = driversToTest.find((d) =>
-      getAvailableDrivers().includes(d),
-    );
+      if (!isWarmup) {
+        results[scenarioKey] = {};
+      }
 
-    if (calibrationDriver) {
-      try {
-        console.log(
-          chalk.gray(`   Calibrating iterations with ${calibrationDriver}...`),
-        );
-        const tempDir = mkdtempSync(
-          join(tmpdir(), "sqlite-bench-calibration-"),
-        );
-        const dbPath = join(tempDir, "bench.db");
-        const driver = await createDriver(calibrationDriver, dbPath);
-        const currentScenario = scenarios.find(
-          ([key]) => key === scenarioKey,
-        )?.[1];
-        if (!currentScenario)
-          throw new Error(`Scenario ${scenarioKey} not found`);
-        const stmt = currentScenario.setup(driver);
+      // First, determine optimal iterations by running the first available driver for 2 seconds
+      let optimalIterations = 100; // fallback
+      const calibrationDriver = driversToTest.find((d) =>
+        getAvailableDrivers().includes(d),
+      );
 
-        // Run for 2 seconds to determine optimal iteration count
-        const targetDurationMs = 2000;
-        let iterations = 0;
-        const start = process.hrtime.bigint();
-        let end = start;
+      if (calibrationDriver) {
+        try {
+          if (!isWarmup) {
+            console.log(
+              chalk.gray(
+                `   Calibrating iterations with ${calibrationDriver}...`,
+              ),
+            );
+          }
+          const tempDir = mkdtempSync(
+            join(tmpdir(), "sqlite-bench-calibration-"),
+          );
+          const dbPath = join(tempDir, "bench.db");
+          const driver = await createDriver(calibrationDriver, dbPath);
+          const currentScenario = scenarios.find(
+            ([key]) => key === scenarioKey,
+          )?.[1];
+          if (!currentScenario)
+            throw new Error(`Scenario ${scenarioKey} not found`);
+          const stmt = currentScenario.setup(driver);
 
-        while (Number(end - start) / 1_000_000 < targetDurationMs) {
-          currentScenario.run(stmt, iterations);
-          iterations++;
-          end = process.hrtime.bigint();
+          // Run for 2 seconds to determine optimal iteration count
+          const targetDurationMs = 2000;
+          let iterations = 0;
+          const start = process.hrtime.bigint();
+          let end = start;
+
+          while (Number(end - start) / 1_000_000 < targetDurationMs) {
+            currentScenario.run(stmt, iterations);
+            iterations++;
+            end = process.hrtime.bigint();
+          }
+
+          optimalIterations = Math.max(10, Math.min(1000, iterations)); // Clamp between 10-1000
+          if (!isWarmup) {
+            console.log(
+              chalk.gray(
+                `   Using ${optimalIterations} iterations per driver`,
+              ),
+            );
+          }
+
+          // Cleanup calibration
+          if (currentScenario.cleanup) {
+            currentScenario.cleanup(stmt);
+          } else if (
+            stmt &&
+            typeof stmt === "object" &&
+            "finalize" in stmt &&
+            typeof stmt.finalize === "function"
+          ) {
+            stmt.finalize();
+          }
+          await driver.close();
+          rmSync(tempDir, { recursive: true, force: true });
+        } catch (err) {
+          if (!isWarmup) {
+            console.log(
+              chalk.yellow(
+                `   Calibration failed, using default ${optimalIterations} iterations`,
+              ),
+            );
+          }
         }
+      }
 
-        optimalIterations = Math.max(10, Math.min(1000, iterations)); // Clamp between 10-1000
-        console.log(
-          chalk.gray(`   Using ${optimalIterations} iterations per driver`),
-        );
+      // Manual benchmarking with optimal iterations
+      for (const driverName of driversToTest) {
+        if (!getAvailableDrivers().includes(driverName)) continue;
 
-        // Cleanup calibration
-        if (currentScenario.cleanup) {
-          currentScenario.cleanup(stmt);
-        } else if (
-          stmt &&
-          typeof stmt === "object" &&
-          "finalize" in stmt &&
-          typeof stmt.finalize === "function"
-        ) {
-          stmt.finalize();
+        try {
+          const tempDir = mkdtempSync(join(tmpdir(), "sqlite-bench-"));
+          const dbPath = join(tempDir, "bench.db");
+          const driver = await createDriver(driverName, dbPath);
+          const currentScenario = scenarios.find(
+            ([key]) => key === scenarioKey,
+          )?.[1];
+          if (!currentScenario)
+            throw new Error(`Scenario ${scenarioKey} not found`);
+          const stmt = currentScenario.setup(driver);
+
+          // Manual timing with calibrated iterations
+          const start = process.hrtime.bigint();
+
+          for (let i = 0; i < optimalIterations; i++) {
+            currentScenario.run(stmt, i);
+          }
+
+          const end = process.hrtime.bigint();
+          const durationMs = Number(end - start) / 1_000_000;
+          const opsPerSec = (optimalIterations / durationMs) * 1000;
+
+          if (isWarmup) {
+            process.stdout.write(
+              chalk.gray(
+                ` ${driverName}:${Math.round(opsPerSec).toLocaleString()}`,
+              ),
+            );
+          } else {
+            console.log(
+              chalk.green(
+                `   ${driverName}: ${Math.round(opsPerSec).toLocaleString()} ops/sec`,
+              ),
+            );
+
+            // Store results only on measured pass
+            results[scenarioKey][driverName] = {
+              hz: opsPerSec,
+              rme: 0,
+              runs: optimalIterations,
+              mean: durationMs / optimalIterations,
+              deviation: 0,
+            };
+          }
+
+          // Cleanup
+          if (currentScenario.cleanup) {
+            currentScenario.cleanup(stmt);
+          } else if (
+            stmt &&
+            typeof stmt === "object" &&
+            "finalize" in stmt &&
+            typeof stmt.finalize === "function"
+          ) {
+            stmt.finalize();
+          }
+          await driver.close();
+          rmSync(tempDir, { recursive: true, force: true });
+        } catch (err) {
+          const msg = `✗ Error in ${driverName}: ${(err as Error).message}`;
+          if (isWarmup) {
+            process.stdout.write(chalk.yellow(` [${msg}]`));
+          } else {
+            console.error(chalk.red(`   ${msg}`));
+          }
         }
-        await driver.close();
-        rmSync(tempDir, { recursive: true, force: true });
-      } catch (err) {
-        console.log(
-          chalk.yellow(
-            `   Calibration failed, using default ${optimalIterations} iterations`,
-          ),
-        );
       }
     }
 
-    // Manual benchmarking with optimal iterations
-    for (const driverName of driversToTest) {
-      if (!getAvailableDrivers().includes(driverName)) continue;
-
-      try {
-        const tempDir = mkdtempSync(join(tmpdir(), "sqlite-bench-"));
-        const dbPath = join(tempDir, "bench.db");
-        const driver = await createDriver(driverName, dbPath);
-        const currentScenario = scenarios.find(
-          ([key]) => key === scenarioKey,
-        )?.[1];
-        if (!currentScenario)
-          throw new Error(`Scenario ${scenarioKey} not found`);
-        const stmt = currentScenario.setup(driver);
-
-        // Manual timing with calibrated iterations
-        const start = process.hrtime.bigint();
-
-        for (let i = 0; i < optimalIterations; i++) {
-          currentScenario.run(stmt, i);
-        }
-
-        const end = process.hrtime.bigint();
-        const durationMs = Number(end - start) / 1_000_000;
-        const opsPerSec = (optimalIterations / durationMs) * 1000;
-
-        console.log(
-          chalk.green(
-            `   ${driverName}: ${Math.round(opsPerSec).toLocaleString()} ops/sec`,
-          ),
-        );
-
-        // Store results
-        results[scenarioKey][driverName] = {
-          hz: opsPerSec,
-          rme: 0,
-          runs: optimalIterations,
-          mean: durationMs / optimalIterations,
-          deviation: 0,
-        };
-
-        // Cleanup
-        if (currentScenario.cleanup) {
-          currentScenario.cleanup(stmt);
-        } else if (
-          stmt &&
-          typeof stmt === "object" &&
-          "finalize" in stmt &&
-          typeof stmt.finalize === "function"
-        ) {
-          stmt.finalize();
-        }
-        await driver.close();
-        rmSync(tempDir, { recursive: true, force: true });
-      } catch (err) {
-        console.error(
-          chalk.red(`   ✗ Error in ${driverName}: ${(err as Error).message}`),
-        );
-      }
+    if (isWarmup) {
+      console.log(); // newline after dots
     }
   }
 
