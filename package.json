@@ -132,13 +132,13 @@
     "node-gyp-build": "^4.8.4"
   },
   "devDependencies": {
-    "@mceachen/sqlite-vec": "^0.3.2",
+    "@mceachen/sqlite-vec": "^0.4.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.0.3",
     "better-sqlite3": "^12.6.2",
     "cross-env": "^10.1.0",
     "del-cli": "^7.0.0",
-    "eslint": "^9.39.2",
+    "eslint": "^10.0.0",
     "eslint-plugin-regexp": "^3.0.0",
     "eslint-plugin-security": "^3.0.1",
     "globals": "^17.0.0",
