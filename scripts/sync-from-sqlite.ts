@@ -241,13 +241,12 @@ async function main() {
   const zipPath = path.join(TEMP_DIR, "amalgamation.zip");
   console.log(`Downloading SQLite amalgamation...`);
 
-  let downloadSuccess = false;
   const currentYear = new Date().getFullYear();
 
   // Try current year
   let amalgamationUrl = `https://www.sqlite.org/${currentYear}/sqlite-amalgamation-${version}.zip`;
   console.log(`Trying ${currentYear}...`);
-  downloadSuccess = await tryDownloadFile(amalgamationUrl, zipPath);
+  let downloadSuccess = await tryDownloadFile(amalgamationUrl, zipPath);
 
   // If failed, try previous year
   if (!downloadSuccess) {
