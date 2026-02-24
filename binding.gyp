@@ -87,6 +87,7 @@
                   ],
                   "msvs_settings": {
                     "VCCLCompilerTool": {
+                      "WarningLevel": 4,
                       "AdditionalOptions": [
                         "/Qspectre",
                         "/guard:cf",
@@ -115,6 +116,7 @@
                   ],
                   "msvs_settings": {
                     "VCCLCompilerTool": {
+                      "WarningLevel": 4,
                       "AdditionalOptions": [
                         "/guard:cf",
                         "/ZH:SHA_256",
