@@ -4,6 +4,7 @@
 #include <napi.h>
 #include <sqlite3.h>
 
+#include <array>
 #include <atomic>
 #include <climits>
 #include <map>
