@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is @photostructure/sqlite - a standalone npm package that extracts the experimental SQLite implementation from Node.js core. The goal is to make Node.js's native SQLite functionality available to all Node.js versions, not just those with the experimental flag enabled.
+This is @photostructure/sqlite - a standalone npm package that extracts the Node.js SQLite implementation from Node.js core. The goal is to make Node.js's native SQLite functionality available to all Node.js versions (20+), not just those supporting the built-in `node:sqlite` module (22.5.0+).
+
+Note: `node:sqlite` was promoted to Release Candidate (Stability: 1.2) in Node.js v25.7.0. The `--experimental-sqlite` flag was required on 22.5.0–22.12.x; since 22.13.0 it works without a flag (but prints an ExperimentalWarning until v25.7.0).
 
 ### Key Features
 
@@ -240,7 +242,7 @@ This approach reduces test brittleness while ensuring error handling works corre
 
 ### Upstream Synchronization
 
-- Node.js SQLite is experimental and may change frequently
+- Node.js SQLite is Release Candidate (Stability: 1.2) since v25.7.0 — API is stable but minor changes remain possible
 - `sync-from-node.js` script maintains file synchronization
 - Changes should be reviewed for compatibility impact
 - Version tracking needed to correlate with Node.js releases
@@ -294,6 +296,7 @@ This approach reduces test brittleness while ensuring error handling works corre
 - **Run `npm run lint`** to check code quality
 - **Native rebuilds** use `npm run build:native:rebuild`
 - **Multi-platform prebuilds** are generated via GitHub Actions
+- **`package.json` version** is managed by the release GitHub Action — do not bump it manually
 
 ### Git Commit Messages
 

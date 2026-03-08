@@ -66,4 +66,23 @@ export interface DatabaseSyncOptions {
    * @default true
    */
   readonly open?: boolean;
+  /**
+   * An object specifying initial SQLite limits to set when opening the database.
+   * Each property corresponds to a SQLite limit constant. Only integer values are
+   * accepted (no Infinity). Omitted properties retain their default values.
+   * @see https://sqlite.org/c3ref/limit.html
+   */
+  readonly limits?: {
+    readonly length?: number;
+    readonly sqlLength?: number;
+    readonly column?: number;
+    readonly exprDepth?: number;
+    readonly compoundSelect?: number;
+    readonly vdbeOp?: number;
+    readonly functionArg?: number;
+    readonly attach?: number;
+    readonly likePatternLength?: number;
+    readonly variableNumber?: number;
+    readonly triggerDepth?: number;
+  };
 }

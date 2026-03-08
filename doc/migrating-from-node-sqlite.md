@@ -28,20 +28,24 @@ All your existing code will work exactly the same.
 
 ## Key differences
 
-### No experimental flag required
-
-```bash
-# Node.js built-in requires:
-node --experimental-sqlite app.js
-
-# @photostructure/sqlite works directly:
-node app.js
-```
-
 ### Broader Node.js version support
 
-- **node:sqlite**: Available in Node.js 22.5.0+ (experimental status)
-- **@photostructure/sqlite**: Works with Node.js 20.0.0 or higher
+- **node:sqlite**: Available in Node.js 22.5.0+. See version details below.
+- **@photostructure/sqlite**: Works with Node.js 20.0.0 or higher, no flag ever needed
+
+| Node.js version | `node:sqlite` status |
+| --- | --- |
+| 22.5.0–22.12.x | Requires `--experimental-sqlite` flag |
+| 22.13.0–25.6.x | Works without flag, prints ExperimentalWarning |
+| 25.7.0+ | Release Candidate (Stability: 1.2), no warning |
+
+```bash
+# node:sqlite on Node.js 22.5.0–22.12.x:
+node --experimental-sqlite app.js
+
+# node:sqlite on Node.js 22.13.0+ OR @photostructure/sqlite on any version:
+node app.js
+```
 
 ### Same API, same behavior
 
@@ -96,8 +100,7 @@ db.close();
 
 1. Install @photostructure/sqlite: `npm install @photostructure/sqlite`
 2. Change imports from `'node:sqlite'` to `'@photostructure/sqlite'`
-3. Remove `--experimental-sqlite` flag from your npm scripts
-4. Run your tests
+3. Run your tests
 
 ## Additional constants
 
@@ -118,8 +121,7 @@ If you use the permission model and need SQLite extension loading restrictions e
 You might want to stick with the built-in module if:
 
 - You're already on Node.js 22.5.0+ and don't need backward compatibility
-- You prefer zero dependencies and don't mind the experimental flag
-- You're building for an environment where the flag is already enabled
+- You prefer zero dependencies
 - You require Node.js permission model integration for extension loading restrictions
 
 ## When to use @photostructure/sqlite
@@ -127,18 +129,15 @@ You might want to stick with the built-in module if:
 Choose this package when:
 
 - You need to support Node.js versions before 22.5.0
-- You want to avoid experimental flags in production
 - You need the exact same API but with broader compatibility
 - You're distributing a library and want to support more Node.js versions
 
-## Future migration path
+## Migrating back to node:sqlite
 
-When `node:sqlite` becomes stable (removes the experimental flag), migrating back is trivial:
+`node:sqlite` reached Release Candidate status (Stability: 1.2) in Node.js v25.7.0, with no flag required. Migrating back when you're ready is trivial:
 
 ```javascript
 // Simply change the import back
 import { DatabaseSync } from "node:sqlite";
 // All your code continues to work unchanged
 ```
-
-This makes @photostructure/sqlite a useful bridge while waiting for the official module to stabilize.

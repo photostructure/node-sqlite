@@ -6,18 +6,18 @@ This guide compares @photostructure/sqlite with the alternatives to help you cho
 
 ### Choose **`@photostructure/sqlite`** when you want:
 
+- **Broad Node.js support** (v20+) — `node:sqlite` requires Node.js 22.5.0+
+- **Decoupled SQLite version** — upgrade SQLite independently of your Node.js version
 - **Future-proof code** that works with both this package AND `node:sqlite`
-- **Node.js API compatibility** without waiting for stable release
-- **Broad Node.js support** (v20+) without experimental flags
 - **Synchronous performance** with a clean, official API
-- **Node-API stability**: one build works across Node.js versions
-- **Zero migration path** when `node:sqlite` becomes stable
+- **Hassle-free installs** — prebuilds are bundled in the npm package (no postinstall downloads)
+- **Node-API stability** — one prebuild per platform works across Node.js versions
+- **Zero migration path** to `node:sqlite` when you're ready
 - **Session/changeset support** for replication and synchronization
 
 ### Choose **`better-sqlite3`** when you want:
 
-- The most mature synchronous SQLite library
-- Maximum performance above all else
+- A well-established synchronous SQLite library in maintenance mode
 - A specific API design that differs from Node.js
 
 ### ~~Choose **`sqlite3`**~~ (deprecated)
@@ -26,15 +26,26 @@ This guide compares @photostructure/sqlite with the alternatives to help you cho
 
 ### Choose **`node:sqlite`** when you're:
 
-- Experimenting with bleeding-edge Node.js features
-- Building proof-of-concepts for future migration
+- Already on Node.js 22.5.0+ and don't need support for older versions
 - Working in environments where you control the Node.js version
+- Willing to track a release-candidate API that may still have minor changes
 
 ## Detailed comparison
 
 ### [`node:sqlite`](https://nodejs.org/docs/latest/api/sqlite.html), Node.js built-in module
 
-_The official SQLite module included with Node.js 22.5.0+ (experimental)_
+_The official SQLite module included with Node.js 22.5.0+. Promoted to Release Candidate (Stability: 1.2) in Node.js v25.7.0._
+
+**`node:sqlite` availability by Node.js version:**
+
+| Node.js         | `node:sqlite` status                           |
+| --------------- | ---------------------------------------------- |
+| v20             | Not available                                  |
+| v22.5.0–22.12.x | Requires `--experimental-sqlite` flag          |
+| v22.13.0+       | Experimental (no flag needed, prints warning)  |
+| v24.0.0+        | Experimental (no flag needed, prints warning)  |
+| v25.0.0–25.6.x  | Experimental (no flag needed, prints warning)  |
+| v25.7.0+        | Release Candidate (Stability: 1.2, no warning) |
 
 **Pros:**
 
@@ -45,35 +56,35 @@ _The official SQLite module included with Node.js 22.5.0+ (experimental)_
 
 **Cons:**
 
-- **Experimental status**: not yet stable for production use (Stability: 1.1 - Active development)
+- **Release candidate**: API is stable but may still have minor changes before final stable designation
 - **Requires Node.js 22.5.0+**: won't work on older versions
-- **API may change**: breaking changes possible before stable release
-- **Limited real-world usage**: few production deployments to learn from
+- **Coupled SQLite version**: you get whatever SQLite version shipped with your Node.js release — upgrading SQLite means upgrading Node.js
 
-**Best for:** Experimental projects, early adopters, and preparing for the future when it becomes stable.
+**Best for:** Projects already on Node.js 22.5.0+ that want zero dependencies and are comfortable with a release-candidate API.
 
 ---
 
 ### [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3)
 
-_The most popular high-performance synchronous SQLite library_
+_A well-established synchronous SQLite library, now in maintenance mode (SQLite version updates and prebuild maintenance only)_
 
 **Pros:**
 
-- **Fast**: 2-15x faster than async alternatives
-- **Stable**: widely used in thousands of production apps
+- **Proven**: widely used in thousands of production apps
+- **Stable API**: no breaking changes in years
 - **Feature-rich**: user functions, aggregates, virtual tables, extensions
 - **Large community**: many resources and Stack Overflow answers
 
 **Cons:**
 
+- **Maintenance mode**: receives SQLite updates and prebuild refreshes, but no new feature development
 - **Different API**: not compatible with Node.js built-in SQLite
-- **V8-specific**: requires separate builds for each Node.js version
-- **Synchronous only**: no async operations (usually a feature, not a bug)
+- **Postinstall download**: prebuilds are fetched from GitHub at install time, which can fail behind firewalls or in air-gapped environments
+- **V8-specific**: requires separate prebuilds for each Node.js ABI version (no Node-API)
 - **Migration effort**: switching from other libraries requires code changes
 - **No session support**: doesn't expose SQLite's session/changeset functionality
 
-**Best for:** High-performance applications where you want maximum speed and control over the API.
+**Best for:** Existing users who are happy with the current API and don't need new features.
 
 ---
 
@@ -97,27 +108,29 @@ _The original asynchronous SQLite binding for Node.js, [unmaintained since Decem
 
 ## Feature matrix
 
-| Feature                  | @photostructure/sqlite | node:sqlite   | better-sqlite3   | sqlite3       |
-| ------------------------ | ---------------------- | ------------- | ---------------- | ------------- |
-| **API Compatibility**    | node:sqlite            | -             | Custom           | Custom        |
-| **Min Node.js Version**  | 20.0.0                 | 22.5.0        | 14.0.0           | 10.0.0        |
-| **Experimental Flag**    | ✅ Not needed          | ❌ needed!    | ✅ Not needed    | ✅ Not needed |
-| **Synchronous API**      | ✅                     | ✅            | ✅               | ❌            |
-| **Asynchronous API**     | ❌                     | ❌            | ❌               | ✅            |
-| **TypeScript Types**     | ✅ Built-in            | ✅ Built-in   | ✅ Via @types    | ✅ Via @types |
-| **Custom Functions**     | ✅                     | ✅            | ✅               | ✅            |
-| **Aggregate Functions**  | ✅                     | ✅            | ✅               | ❌            |
-| **Window Functions**     | ✅                     | ✅            | ✅               | ❌            |
-| **Sessions/Changesets**  | ✅                     | ✅            | ❌               | ❌            |
-| **Backup API**           | ✅                     | ✅            | ✅ Different API | ✅            |
-| **Extension Loading**    | ✅                     | ✅            | ✅               | ✅            |
-| **Worker Threads**       | ✅                     | ✅            | ✅               | ⚠️ Limited    |
-| **FTS5**                 | ✅                     | ✅            | ✅               | ✅            |
-| **JSON Functions**       | ✅                     | ✅            | ✅               | ✅            |
-| **R\*Tree**              | ✅                     | ✅            | ✅               | ✅            |
-| **Node-API**             | ✅                     | N/A           | ❌ V8-specific   | ✅            |
-| **Disposable Interface** | ✅ Native C++          | ✅ Native C++ | ❌               | ❌            |
-| **Build Size**           | ~2MB                   | 0 (built-in)  | ~2MB             | ~3MB          |
+| Feature                  | @photostructure/sqlite | node:sqlite                                       | better-sqlite3   | sqlite3       |
+| ------------------------ | ---------------------- | ------------------------------------------------- | ---------------- | ------------- |
+| **API Compatibility**    | node:sqlite            | -                                                 | Custom           | Custom        |
+| **SQLite Version**       | Independent            | Tied to Node.js release                           | Independent      | Independent   |
+| **Min Node.js Version**  | 20.0.0                 | 22.5.0                                            | 14.0.0           | 10.0.0        |
+| **Experimental Flag**    | ✅ Never needed        | ⚠️ Required on 22.5–22.12; not needed since 22.13 | ✅ Not needed    | ✅ Not needed |
+| **Synchronous API**      | ✅                     | ✅                                                | ✅               | ❌            |
+| **Asynchronous API**     | ❌                     | ❌                                                | ❌               | ✅            |
+| **TypeScript Types**     | ✅ Built-in            | ✅ Built-in                                       | ✅ Via @types    | ✅ Via @types |
+| **Custom Functions**     | ✅                     | ✅                                                | ✅               | ✅            |
+| **Aggregate Functions**  | ✅                     | ✅                                                | ✅               | ❌            |
+| **Window Functions**     | ✅                     | ✅                                                | ✅               | ❌            |
+| **Sessions/Changesets**  | ✅                     | ✅                                                | ❌               | ❌            |
+| **Backup API**           | ✅                     | ✅                                                | ✅ Different API | ✅            |
+| **Extension Loading**    | ✅                     | ✅                                                | ✅               | ✅            |
+| **Worker Threads**       | ✅                     | ✅                                                | ✅               | ⚠️ Limited    |
+| **FTS5**                 | ✅                     | ✅                                                | ✅               | ✅            |
+| **JSON Functions**       | ✅                     | ✅                                                | ✅               | ✅            |
+| **R\*Tree**              | ✅                     | ✅                                                | ✅               | ✅            |
+| **Prebuild Strategy**    | Bundled in npm         | N/A (built-in)                                    | Downloaded on install | Downloaded on install |
+| **Node-API**             | ✅                     | N/A                                               | ❌ V8-specific   | ✅            |
+| **Disposable Interface** | ✅ Native C++          | ✅ Native C++                                     | ❌               | ❌            |
+| **node_modules Size**    | ~28MB (all prebuilds)  | 0 (built-in)                                      | ~14MB (with deps)  | ~15MB (with deps)  |
 
 ## Performance comparison
 
@@ -198,23 +211,21 @@ try {
 
 - **@photostructure/sqlite**: Actively maintained, tracks Node.js upstream
 - **node:sqlite**: Part of Node.js core, follows Node.js release cycle
-- **better-sqlite3**: Very actively maintained, frequent updates
+- **better-sqlite3**: Maintenance mode — receives SQLite version updates and prebuild refreshes, but no recent feature development
 - **sqlite3**: [Deprecated and unmaintained](https://github.com/TryGhost/node-sqlite3/pull/1844) since December 2025
 
 ### Community and support
 
 - **better-sqlite3**: Largest community, most Stack Overflow answers
-- **sqlite3**: Large legacy community, but no longer maintained
 - **node:sqlite**: Growing community as adoption increases
-- **@photostructure/sqlite**: New but benefits from node:sqlite compatibility
+- **@photostructure/sqlite**: New but benefits from `node:sqlite` compatibility
+- **sqlite3**: Large legacy community, but no longer maintained
 
 ## Conclusion
 
 Choose based on your specific needs:
 
-1. **Need future compatibility?** → @photostructure/sqlite
-2. **Want maximum performance and features?** → better-sqlite3
+1. **Need Node.js v20+ support?** → @photostructure/sqlite
+2. **Already using better-sqlite3 and happy with it?** → No urgent reason to switch
 3. **Have async legacy code using sqlite3?** → Migrate to @photostructure/sqlite or better-sqlite3 (sqlite3 is deprecated)
-4. **Can use experimental features?** → node:sqlite
-
-For new projects targeting Node.js 20+, @photostructure/sqlite offers the best balance of compatibility, performance, and future-proofing.
+4. **Already on Node.js v22.13+/v24.0+/v25.7+ with a preference for zero dependencies?** → `node:sqlite`

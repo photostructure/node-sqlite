@@ -149,7 +149,7 @@ void QueueWork(std::function<void()> work) {
 
 1. **Complete Rewrite**: Would lose compatibility and require extensive testing
 2. **Fork Node.js**: Would require users to use custom Node.js build
-3. **Wait for Public API**: Node.js SQLite is still experimental
+3. **Wait for Public API**: Node.js SQLite was experimental at the time; it reached Release Candidate (Stability: 1.2) in v25.7.0
 
 ## Conclusion
 

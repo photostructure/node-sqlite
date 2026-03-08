@@ -68,7 +68,18 @@
       "WebFetch(domain:sqlite.org)",
       "WebFetch(domain:stackoverflow.com)",
       "WebFetch(domain:www.sqlite.org)",
-      "WebFetch(domain:docs.anthropic.com)"
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:eslint.org)",
+      "Bash(git -C /home/mrm/src/node log v25.6.1..HEAD --oneline -- lib/sqlite.js src/node_sqlite.cc src/node_sqlite.h deps/sqlite)",
+      "Bash(git -C /home/mrm/src/node log -1 --oneline)",
+      "Bash(git -C /home/mrm/src/node describe --tags --abbrev=0)",
+      "Bash(git -C /home/mrm/src/node log v25.6.1..HEAD --oneline -- test/parallel/test-sqlite*)",
+      "Bash(git -C /home/mrm/src/node log v25.6.1..HEAD -p -- lib/sqlite.js src/node_sqlite.cc src/node_sqlite.h)",
+      "Bash(git -C /home/mrm/src/node log v25.6.1..HEAD -p -- test/parallel/test-sqlite*)",
+      "Bash(git -C /home/mrm/src/node log v25.6.1..HEAD -p -- deps/sqlite)",
+      "WebFetch(domain:photostructure.com)",
+      "Bash(git -C /home/mrm/src/node log origin/v25.x-staging --oneline -20 -- src/node_sqlite.cc src/node_sqlite.h)",
+      "Bash(npm pack --dry-run)"
     ],
     "additionalDirectories": [
       "/home/mrm/src/node-addon-examples",

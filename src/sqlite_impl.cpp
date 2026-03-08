@@ -324,6 +324,8 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("createSession", &DatabaseSync::CreateSession),
        InstanceMethod("applyChangeset", &DatabaseSync::ApplyChangeset),
        InstanceMethod("setAuthorizer", &DatabaseSync::SetAuthorizer),
+       InstanceMethod("getLimit", &DatabaseSync::GetLimit),
+       InstanceMethod("setLimit", &DatabaseSync::SetLimit),
        InstanceMethod("backup", &DatabaseSync::Backup),
        InstanceMethod("location", &DatabaseSync::LocationMethod),
        InstanceAccessor("isOpen", &DatabaseSync::IsOpenGetter, nullptr),
@@ -560,6 +562,69 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
           return;
         }
         config.set_enable_defensive(defensive_val.As<Napi::Boolean>().Value());
+      }
+
+      // Validate and parse 'limits' option
+      Napi::Value limits_val = options.Get("limits");
+      if (!limits_val.IsUndefined()) {
+        if (!limits_val.IsObject() || limits_val.IsNull()) {
+          node::THROW_ERR_INVALID_ARG_TYPE(
+              info.Env(), "The \"options.limits\" argument must be an object.");
+          return;
+        }
+
+        Napi::Object limits_obj = limits_val.As<Napi::Object>();
+
+        // Limit name to SQLite limit ID mapping (matches upstream
+        // kLimitMapping)
+        static const struct {
+          const char *name;
+          int id;
+        } kLimitNames[] = {
+            {"length", SQLITE_LIMIT_LENGTH},
+            {"sqlLength", SQLITE_LIMIT_SQL_LENGTH},
+            {"column", SQLITE_LIMIT_COLUMN},
+            {"exprDepth", SQLITE_LIMIT_EXPR_DEPTH},
+            {"compoundSelect", SQLITE_LIMIT_COMPOUND_SELECT},
+            {"vdbeOp", SQLITE_LIMIT_VDBE_OP},
+            {"functionArg", SQLITE_LIMIT_FUNCTION_ARG},
+            {"attach", SQLITE_LIMIT_ATTACHED},
+            {"likePatternLength", SQLITE_LIMIT_LIKE_PATTERN_LENGTH},
+            {"variableNumber", SQLITE_LIMIT_VARIABLE_NUMBER},
+            {"triggerDepth", SQLITE_LIMIT_TRIGGER_DEPTH},
+        };
+
+        for (const auto &limit : kLimitNames) {
+          Napi::Value val = limits_obj.Get(limit.name);
+          if (!val.IsUndefined()) {
+            if (!val.IsNumber()) {
+              std::string msg = std::string("The \"options.limits.") +
+                                limit.name + "\" argument must be an integer.";
+              node::THROW_ERR_INVALID_ARG_TYPE(info.Env(), msg.c_str());
+              return;
+            }
+
+            double dval = val.As<Napi::Number>().DoubleValue();
+            if (dval != std::trunc(dval) || std::isinf(dval) ||
+                std::isnan(dval)) {
+              std::string msg = std::string("The \"options.limits.") +
+                                limit.name + "\" argument must be an integer.";
+              node::THROW_ERR_INVALID_ARG_TYPE(info.Env(), msg.c_str());
+              return;
+            }
+
+            int limit_val = static_cast<int>(dval);
+            if (limit_val < 0) {
+              std::string msg = std::string("The \"options.limits.") +
+                                limit.name +
+                                "\" argument must be non-negative.";
+              node::THROW_ERR_OUT_OF_RANGE(info.Env(), msg.c_str());
+              return;
+            }
+
+            config.set_initial_limit(limit.id, limit_val);
+          }
+        }
       }
     }
 
@@ -1005,6 +1070,14 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
       sqlite3_close(connection_);
       connection_ = nullptr;
       throw ex;
+    }
+  }
+
+  // Apply initial limits from constructor options
+  for (size_t i = 0; i < config_.initial_limits().size(); i++) {
+    if (config_.initial_limits()[i].has_value()) {
+      sqlite3_limit(connection_, static_cast<int>(i),
+                    *config_.initial_limits()[i]);
     }
   }
 }
@@ -1957,6 +2030,11 @@ StatementSync::~StatementSync() {
   // See: commit 4da0638, nodejs/node-addon-api#660
 }
 
+inline int StatementSync::ResetStatement() {
+  reset_generation_++;
+  return sqlite3_reset(statement_);
+}
+
 Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
@@ -1994,7 +2072,7 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
     // correct value. This fixes an issue where RETURNING queries would
     // report changes: 0 on the first call.
     // See: https://github.com/nodejs/node/issues/57344
-    int result = sqlite3_reset(statement_);
+    int result = ResetStatement();
 
     if (result != SQLITE_OK) {
       std::string error = sqlite3_errmsg(database_->connection());
@@ -2073,15 +2151,15 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
       Napi::Value value = CreateResult();
       // Reset statement after fetching result to release locks (like Node.js
       // OnScopeLeave)
-      sqlite3_reset(statement_);
+      ResetStatement();
       return value;
     } else if (result == SQLITE_DONE) {
       // Reset statement to release locks even when no rows returned
-      sqlite3_reset(statement_);
+      ResetStatement();
       return env.Undefined();
     } else {
       // Reset statement before throwing to release locks
-      sqlite3_reset(statement_);
+      ResetStatement();
       std::string error = sqlite3_errmsg(database_->connection());
       ThrowEnhancedSqliteErrorWithDB(env, database_, database_->connection(),
                                      result, error);
@@ -2089,7 +2167,7 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
     }
   } catch (const std::exception &e) {
     // Reset statement on exception to release locks
-    sqlite3_reset(statement_);
+    ResetStatement();
     ThrowErrSqliteErrorWithDb(env, database_, e.what());
     return env.Undefined();
   }
@@ -2132,11 +2210,11 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
         results.Set(index++, CreateResult());
       } else if (result == SQLITE_DONE) {
         // Reset statement to release locks (like Node.js OnScopeLeave)
-        sqlite3_reset(statement_);
+        ResetStatement();
         break;
       } else {
         // Reset statement before throwing to release locks
-        sqlite3_reset(statement_);
+        ResetStatement();
         std::string error = sqlite3_errmsg(database_->connection());
         node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
         return env.Undefined();
@@ -2146,7 +2224,7 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
     return results;
   } catch (const std::exception &e) {
     // Reset statement on exception to release locks
-    sqlite3_reset(statement_);
+    ResetStatement();
     node::THROW_ERR_SQLITE_ERROR(env, e.what());
     return env.Undefined();
   }
@@ -2170,7 +2248,7 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
   }
 
   // Reset the statement first
-  int r = sqlite3_reset(statement_);
+  int r = ResetStatement();
   if (r != SQLITE_OK) {
     node::THROW_ERR_SQLITE_ERROR(info.Env(),
                                  sqlite3_errmsg(database_->connection()));
@@ -2839,7 +2917,7 @@ void StatementSync::Reset() {
     return; // Silent return, error should have been caught earlier
   }
 
-  sqlite3_reset(statement_);
+  ResetStatement();
   sqlite3_clear_bindings(statement_);
 }
 
@@ -2912,6 +2990,7 @@ StatementSyncIterator::~StatementSyncIterator() {}
 void StatementSyncIterator::SetStatement(StatementSync *stmt) {
   stmt_ = stmt;
   done_ = false;
+  statement_reset_generation_ = stmt->reset_generation_;
 }
 
 Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
@@ -2924,6 +3003,11 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
 
   if (!stmt_->database_ || !stmt_->database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
+  if (statement_reset_generation_ != stmt_->reset_generation_) {
+    node::THROW_ERR_INVALID_STATE(env, "iterator was invalidated");
     return env.Undefined();
   }
 
@@ -3673,6 +3757,45 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     db->SetIgnoreNextSQLiteError(true);
     return SQLITE_DENY;
   }
+}
+
+Napi::Value DatabaseSync::GetLimit(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (info.Length() < 1 || !info[0].IsNumber()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env,
+                                     "The limit ID argument must be a number.");
+    return env.Undefined();
+  }
+
+  int limit_id = info[0].As<Napi::Number>().Int32Value();
+  int current_value = sqlite3_limit(connection_, limit_id, -1);
+  return Napi::Number::New(env, current_value);
+}
+
+Napi::Value DatabaseSync::SetLimit(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (info.Length() < 2 || !info[0].IsNumber() || !info[1].IsNumber()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The limit ID and value arguments must be numbers.");
+    return env.Undefined();
+  }
+
+  int limit_id = info[0].As<Napi::Number>().Int32Value();
+  int new_value = info[1].As<Napi::Number>().Int32Value();
+  int old_value = sqlite3_limit(connection_, limit_id, new_value);
+  return Napi::Number::New(env, old_value);
 }
 
 // Thread validation implementations

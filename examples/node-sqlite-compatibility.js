@@ -1,6 +1,8 @@
 // This example demonstrates drop-in compatibility with node:sqlite API
-// To run with Node.js built-in SQLite: node --experimental-sqlite this-file.js
-// To run with @photostructure/sqlite: node this-file.js
+// To run with Node.js built-in SQLite (Node.js 22.5.0+):
+//   Node.js 22.5.0–25.6.x: node --experimental-sqlite this-file.js
+//   Node.js 25.7.0+:        node this-file.js
+// To run with @photostructure/sqlite (Node.js 20+): node this-file.js
 
 // Try to use node:sqlite, fall back to @photostructure/sqlite
 let sqlite;

@@ -119,6 +119,14 @@ public:
   bool get_open_uri() const { return open_uri_; }
   void set_open_uri(bool flag) { open_uri_ = flag; }
 
+  static constexpr size_t kNumLimits = 11;
+  void set_initial_limit(int sqlite_limit_id, int value) {
+    initial_limits_.at(sqlite_limit_id) = value;
+  }
+  const std::array<std::optional<int>, kNumLimits> &initial_limits() const {
+    return initial_limits_;
+  }
+
 private:
   std::string location_;
   bool read_only_ = false;
@@ -131,6 +139,7 @@ private:
   bool allow_unknown_named_params_ = false;
   bool defensive_ = true; // Node.js v25+ defaults to true
   bool open_uri_ = false;
+  std::array<std::optional<int>, kNumLimits> initial_limits_{};
 };
 
 // Main database class
@@ -178,6 +187,10 @@ public:
 
   // Backup support
   Napi::Value Backup(const Napi::CallbackInfo &info);
+
+  // Limits API
+  Napi::Value GetLimit(const Napi::CallbackInfo &info);
+  Napi::Value SetLimit(const Napi::CallbackInfo &info);
 
   // Authorization API
   Napi::Value SetAuthorizer(const Napi::CallbackInfo &info);
@@ -311,6 +324,10 @@ private:
   // Bare named parameters mapping (bare name -> full name with prefix)
   std::optional<std::map<std::string, std::string>> bare_named_params_;
 
+  // Generation counter for iterator invalidation
+  uint64_t reset_generation_ = 0;
+  inline int ResetStatement();
+
   bool ValidateThread(Napi::Env env) const;
   friend class DatabaseSync;
   friend class StatementSyncIterator;
@@ -335,6 +352,7 @@ private:
 
   StatementSync *stmt_;
   bool done_;
+  uint64_t statement_reset_generation_ = 0;
 };
 
 // Session class for SQLite changesets

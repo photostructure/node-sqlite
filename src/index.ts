@@ -3,7 +3,10 @@ import nodeGypBuild from "node-gyp-build";
 import { join } from "node:path";
 import { _dirname } from "./dirname";
 import { SQLTagStore } from "./sql-tag-store";
-import { DatabaseSyncInstance } from "./types/database-sync-instance";
+import {
+  DatabaseSyncInstance,
+  DatabaseSyncLimits,
+} from "./types/database-sync-instance";
 import { DatabaseSyncOptions } from "./types/database-sync-options";
 import { SQLTagStoreInstance } from "./types/sql-tag-store-instance";
 import { SqliteAuthorizationActions } from "./types/sqlite-authorization-actions";
@@ -15,7 +18,10 @@ import { StatementSyncInstance } from "./types/statement-sync-instance";
 
 export type { AggregateOptions } from "./types/aggregate-options";
 export type { ChangesetApplyOptions } from "./types/changeset-apply-options";
-export type { DatabaseSyncInstance } from "./types/database-sync-instance";
+export type {
+  DatabaseSyncInstance,
+  DatabaseSyncLimits,
+} from "./types/database-sync-instance";
 export type { DatabaseSyncOptions } from "./types/database-sync-options";
 export type { PragmaOptions } from "./types/pragma-options";
 export type { SessionOptions } from "./types/session-options";
@@ -203,6 +209,82 @@ DatabaseSync.prototype = _DatabaseSync.prototype;
 ): SQLTagStoreInstance {
   return new SQLTagStore(this, capacity);
 };
+
+// Limit name to SQLite limit ID mapping (matches upstream kLimitMapping order)
+const LIMIT_MAPPING: ReadonlyArray<{
+  name: keyof DatabaseSyncLimits;
+  id: number;
+}> = [
+  { name: "length", id: 0 },
+  { name: "sqlLength", id: 1 },
+  { name: "column", id: 2 },
+  { name: "exprDepth", id: 3 },
+  { name: "compoundSelect", id: 4 },
+  { name: "vdbeOp", id: 5 },
+  { name: "functionArg", id: 6 },
+  { name: "attach", id: 7 },
+  { name: "likePatternLength", id: 8 },
+  { name: "variableNumber", id: 9 },
+  { name: "triggerDepth", id: 10 },
+];
+
+const INT_MAX = 2147483647;
+
+// WeakMap to cache limits objects per database instance
+const limitsCache = new WeakMap<DatabaseSyncInstance, DatabaseSyncLimits>();
+
+function validateLimitValue(value: unknown): number {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    throw new TypeError(
+      "Limit value must be a non-negative integer or Infinity.",
+    );
+  }
+  if (value === Infinity) {
+    return INT_MAX;
+  }
+  if (!Number.isFinite(value) || value !== Math.trunc(value)) {
+    throw new TypeError(
+      "Limit value must be a non-negative integer or Infinity.",
+    );
+  }
+  if (value < 0) {
+    throw new RangeError("Limit value must be non-negative.");
+  }
+  return value;
+}
+
+function createLimitsObject(db: DatabaseSyncInstance): DatabaseSyncLimits {
+  const obj = Object.create(null) as DatabaseSyncLimits;
+  for (const { name, id } of LIMIT_MAPPING) {
+    Object.defineProperty(obj, name, {
+      get() {
+        return db.getLimit(id);
+      },
+      set(value: unknown) {
+        const validated = validateLimitValue(value);
+        db.setLimit(id, validated);
+      },
+      enumerable: true,
+      configurable: false,
+    });
+  }
+  return obj;
+}
+
+if (!Object.getOwnPropertyDescriptor(DatabaseSync.prototype, "limits")) {
+  Object.defineProperty(DatabaseSync.prototype, "limits", {
+    get(this: DatabaseSyncInstance) {
+      let obj = limitsCache.get(this);
+      if (obj == null) {
+        obj = createLimitsObject(this);
+        limitsCache.set(this, obj);
+      }
+      return obj;
+    },
+    enumerable: true,
+    configurable: true,
+  });
+}
 
 // NOTE: .pragma() and .transaction() are NOT added to the prototype by default.
 // This keeps DatabaseSync 100% API-compatible with node:sqlite.

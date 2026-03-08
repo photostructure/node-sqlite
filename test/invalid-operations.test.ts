@@ -521,31 +521,25 @@ describe("Invalid Operations Tests", () => {
   describe("Iterator Invalid Operations", () => {
     // Note: finalize() is not part of node:sqlite API - statements are auto-finalized on GC
 
-    test("handles multiple iterators on same statement", () => {
+    test("creating second iterator invalidates first", () => {
       const db = new DatabaseSync(":memory:");
       db.exec("CREATE TABLE test (id INTEGER)");
       db.exec("INSERT INTO test VALUES (1), (2), (3)");
 
       const stmt = db.prepare("SELECT * FROM test");
 
-      // Create multiple iterators
+      // Create first iterator and advance it
       const iter1 = stmt.iterate();
+      expect(iter1.next().value.id).toBe(1);
+
+      // Creating a second iterator resets the statement, invalidating iter1
       const iter2 = stmt.iterate();
 
-      // Iterators might share state or be independent
-      const val1 = iter1.next().value.id;
-      const val2 = iter2.next().value.id;
+      // iter1 is now invalidated
+      expect(() => iter1.next()).toThrow(/iterator was invalidated/);
 
-      // They might be independent (both get 1) or share state (1 and 2)
-      if (val1 === 1 && val2 === 1) {
-        // Independent iterators
-        expect(iter1.next().value.id).toBe(2);
-        expect(iter2.next().value.id).toBe(2);
-      } else if (val1 === 1 && val2 === 2) {
-        // Shared state
-        expect(iter1.next().value.id).toBe(3);
-        expect(iter2.next().done).toBe(true);
-      }
+      // iter2 works normally
+      expect(iter2.next().value.id).toBe(1);
 
       db.close();
     });
@@ -798,29 +792,28 @@ describe("Invalid Operations Tests", () => {
       db.close();
     });
 
-    test("handles concurrent statement iterations", () => {
+    test("creating new iterator invalidates all previous iterators", () => {
       const db = new DatabaseSync(":memory:");
       db.exec("CREATE TABLE test (id INTEGER)");
       db.exec("INSERT INTO test VALUES (1), (2), (3), (4), (5)");
 
       const stmt = db.prepare("SELECT * FROM test ORDER BY id");
 
-      // Create multiple iterators from the same statement
-      const iterators = Array.from({ length: 5 }, () => stmt.iterate());
+      // Create multiple iterators — each invalidates the previous
+      const iter1 = stmt.iterate();
+      const iter2 = stmt.iterate();
+      const iter3 = stmt.iterate();
 
-      // Interleave iterator calls
+      // Only the last iterator is valid
+      expect(() => iter1.next()).toThrow(/iterator was invalidated/);
+      expect(() => iter2.next()).toThrow(/iterator was invalidated/);
+
+      // iter3 works
       const results: number[] = [];
-      for (let i = 0; i < 5; i++) {
-        for (const iterator of iterators) {
-          const result = iterator.next();
-          if (!result.done) {
-            results.push(result.value.id);
-          }
-        }
+      for (const row of iter3) {
+        results.push(row.id);
       }
-
-      // Results might be interleaved or sequential depending on implementation
-      expect(results.length).toBeGreaterThan(0);
+      expect(results).toEqual([1, 2, 3, 4, 5]);
 
       db.close();
     });

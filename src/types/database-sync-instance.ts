@@ -164,6 +164,49 @@ export interface DatabaseSyncInstance {
       | null,
   ): void;
 
+  /**
+   * An object with getters and setters for each SQLite limit.
+   * Setting a property changes the limit immediately.
+   * Setting a property to `Infinity` resets the limit to its compile-time maximum.
+   * @see https://sqlite.org/c3ref/limit.html
+   */
+  readonly limits: DatabaseSyncLimits;
+
+  /** @internal Native method to get a SQLite limit by ID. */
+  getLimit(limitId: number): number;
+  /** @internal Native method to set a SQLite limit by ID. Returns old value. */
+  setLimit(limitId: number, value: number): number;
+
   /** Dispose of the database resources using the explicit resource management protocol. */
   [Symbol.dispose](): void;
+}
+
+/**
+ * Represents the configurable SQLite limits for a database connection.
+ * Each property corresponds to a SQLite limit constant.
+ * @see https://sqlite.org/c3ref/limit.html
+ */
+export interface DatabaseSyncLimits {
+  /** Maximum length of any string or BLOB or table row, in bytes. */
+  length: number;
+  /** Maximum length of an SQL statement, in bytes. */
+  sqlLength: number;
+  /** Maximum number of columns in a table, result set, or index. */
+  column: number;
+  /** Maximum depth of the parse tree on any expression. */
+  exprDepth: number;
+  /** Maximum number of terms in a compound SELECT statement. */
+  compoundSelect: number;
+  /** Maximum number of instructions in a virtual machine program. */
+  vdbeOp: number;
+  /** Maximum number of arguments on a function. */
+  functionArg: number;
+  /** Maximum number of attached databases. */
+  attach: number;
+  /** Maximum length of the pattern argument to the LIKE or GLOB operators. */
+  likePatternLength: number;
+  /** Maximum index number of any parameter in an SQL statement. */
+  variableNumber: number;
+  /** Maximum depth of recursion for triggers. */
+  triggerDepth: number;
 }

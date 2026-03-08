@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] (2026-03-07)
+
+Promotion to v1.0.0 following API stabilization and 0.5.0 release.
+
+API compatible with `node:sqlite` from Node.js v25.8.1.
+
+### Added
+
+- **`db.limits` property**: Get and set SQLite limits (length, sqlLength, column, exprDepth, compoundSelect, vdbeOp, functionArg, attach, likePatternLength, variableNumber, triggerDepth) at runtime. Supports `Infinity` to reset to compile-time maximum. Also accepts `limits` option in `DatabaseSync` constructor.
+- **Statement iterator invalidation**: Calling `stmt.run()`, `stmt.get()`, `stmt.all()`, or `stmt.iterate()` now invalidates any active iterator on the same statement, throwing `ERR_INVALID_STATE`
+
+### Changed
+
+- **SQLite 3.52.0**: Updated from 3.51.2
+
 ## [0.5.0] (2026-02-06)
 
 ### Added
@@ -130,6 +145,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - macOS (x64, ARM64)
 - Linux (x64, ARM64), (glibc 2.28+, musl)
 
+[1.0.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.0.0
 [0.5.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.5.0
 [0.4.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.4.0
 [0.3.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.3.0

@@ -11,13 +11,13 @@ import { getTimingMultiplier } from "./test-timeout-config";
  * This test file compares our implementation with Node.js's built-in node:sqlite module.
  *
  * IMPORTANT:
- * - These tests require Node.js 24+ with the --experimental-sqlite flag
+ * - These tests require Node.js 24+
  * - The node:sqlite comparison tests only work in CommonJS mode (not ESM)
- * - Run with: NODE_OPTIONS="--experimental-sqlite" npm run test:cjs -- test/node-compatibility.test.ts
+ * - Run with: npm run test:cjs -- test/node-compatibility.test.ts
+ * - On Node.js 24.x, pass --experimental-sqlite if node:sqlite is not yet enabled by default
  *
  * The tests will automatically skip node:sqlite comparisons if:
  * - Running on Node.js < 24
- * - The --experimental-sqlite flag is not set
  * - Running in ESM mode
  */
 
@@ -49,7 +49,7 @@ if (hasNodeSqlite) {
     }
   } catch {
     console.log(
-      "Node.js built-in SQLite not available - needs --experimental-sqlite flag",
+      "Node.js built-in SQLite not available (try --experimental-sqlite on Node.js < 25.7.0)",
     );
     nodeAvailable = false;
   }
