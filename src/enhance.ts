@@ -195,9 +195,10 @@ function expandRowFromArray(
 ): Record<string, Record<string, unknown>> {
   const result: Record<string, Record<string, unknown>> = {};
   for (let i = 0; i < columnMap.length && i < row.length; i++) {
-    const { table, column } = columnMap[i]!;
+    const { table, column } = columnMap[i]!; // eslint-disable-line security/detect-object-injection
+    // eslint-disable-next-line security/detect-object-injection -- table/column from our own columnMap
     result[table] ??= {};
-    result[table]![column] = row[i];
+    result[table]![column] = row[i]; // eslint-disable-line security/detect-object-injection
   }
   return result;
 }
@@ -214,9 +215,10 @@ function expandRowFromObject(
   const result: Record<string, Record<string, unknown>> = {};
   const keys = Object.keys(row);
   for (let i = 0; i < keys.length && i < columnMap.length; i++) {
-    const { table, column } = columnMap[i]!;
+    const { table, column } = columnMap[i]!; // eslint-disable-line security/detect-object-injection
+    // eslint-disable-next-line security/detect-object-injection -- table/column from our own columnMap
     result[table] ??= {};
-    result[table]![column] = row[keys[i]!];
+    result[table]![column] = row[keys[i]!]; // eslint-disable-line security/detect-object-injection
   }
   return result;
 }
@@ -498,6 +500,7 @@ export function enhance<T extends EnhanceableDatabaseSync>(
   }
 
   // Wrap prepare() to add pluck() to returned statements
+  // eslint-disable-next-line security/detect-object-injection -- ENHANCED_PREPARE is a Symbol
   if (!(db as any)[ENHANCED_PREPARE]) {
     const originalPrepare: any = db.prepare.bind(db);
 

@@ -21,7 +21,7 @@ export const tmpdir = {
     } catch {
       // Ignore errors if directory doesn't exist
     }
-    fs.mkdirSync(testDir, { recursive: true });
+    fs.mkdirSync(testDir, { recursive: true }); // eslint-disable-line security/detect-non-literal-fs-filename
   },
 };
 

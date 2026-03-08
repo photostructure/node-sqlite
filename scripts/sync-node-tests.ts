@@ -207,6 +207,7 @@ function adaptTest(content: string, fileName: string): string {
     // Match test('name', ...) or suite('name', ...) with any quote style
     // and transform to test.skip('name', /* reason */ ...) or suite.skip(...)
     adapted = adapted.replace(
+      // eslint-disable-next-line security/detect-non-literal-regexp -- `escaped` is sanitized above
       new RegExp(`(test|suite)\\((['"\`])${escaped}\\2`, "g"),
       `$1.skip($2${name}$2 /* ${reason} */`,
     );
