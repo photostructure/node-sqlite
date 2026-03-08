@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 Promotion to v1.0.0 following API stabilization and 0.5.0 release.
 
-API compatible with `node:sqlite` from Node.js v25.8.1.
+API compatible with `node:sqlite` from Node.js v25.8.0.
 
 ### Added
 

@@ -157,7 +157,7 @@
     "typescript-eslint": "^8.56.1"
   },
   "versions": {
-    "nodejs": "v25.8.1@f91cf7f",
+    "nodejs": "v25.8.0@f91cf7f",
     "sqlite": "3.52.0"
   }
 }
