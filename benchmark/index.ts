@@ -156,9 +156,7 @@ if (scenarios.length === 0) {
           optimalIterations = Math.max(10, Math.min(1000, iterations)); // Clamp between 10-1000
           if (!isWarmup) {
             console.log(
-              chalk.gray(
-                `   Using ${optimalIterations} iterations per driver`,
-              ),
+              chalk.gray(`   Using ${optimalIterations} iterations per driver`),
             );
           }
 
