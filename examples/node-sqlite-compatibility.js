@@ -14,7 +14,7 @@ try {
   console.log("Using @photostructure/sqlite");
 }
 
-const { DatabaseSync, constants } = sqlite;
+const { DatabaseSync } = sqlite;
 
 // Create database - API is identical
 const db = new DatabaseSync(":memory:", {
