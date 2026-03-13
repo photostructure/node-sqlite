@@ -346,24 +346,34 @@ async function main() {
       nodeCommitSha = commitData.sha; // Full SHA for file fetching
     }
 
-    // Get Node.js version from src/node_version.h using the commit SHA for consistency
-    const versionRef = nodeCommitSha || args.branch;
-    const versionUrl = `https://raw.githubusercontent.com/${args.repo}/${versionRef}/src/node_version.h`;
-    const versionResponse = await fetch(versionUrl);
-    if (versionResponse.ok) {
-      const versionContent = await versionResponse.text();
-      const majorMatch = versionContent.match(
-        /#define NODE_MAJOR_VERSION (\d+)/,
-      );
-      const minorMatch = versionContent.match(
-        /#define NODE_MINOR_VERSION (\d+)/,
-      );
-      const patchMatch = versionContent.match(
-        /#define NODE_PATCH_VERSION (\d+)/,
-      );
+    // Only parse node_version.h for release tags (e.g., v25.8.1), not staging
+    // branches — staging branches have version numbers bumped ahead of the
+    // actual release, so the parsed version would be misleading.
+    const isReleaseTag = /^v\d+\.\d+\.\d+$/.test(args.branch);
 
-      if (majorMatch && minorMatch && patchMatch) {
-        nodeVersion = `v${majorMatch[1]}.${minorMatch[1]}.${patchMatch[1]}`;
+    if (isReleaseTag) {
+      nodeVersion = args.branch;
+    } else {
+      const versionRef = nodeCommitSha || args.branch;
+      const versionUrl = `https://raw.githubusercontent.com/${args.repo}/${versionRef}/src/node_version.h`;
+      const versionResponse = await fetch(versionUrl);
+      if (versionResponse.ok) {
+        const versionContent = await versionResponse.text();
+        const majorMatch = versionContent.match(
+          /#define NODE_MAJOR_VERSION (\d+)/,
+        );
+        const minorMatch = versionContent.match(
+          /#define NODE_MINOR_VERSION (\d+)/,
+        );
+        const patchMatch = versionContent.match(
+          /#define NODE_PATCH_VERSION (\d+)/,
+        );
+
+        if (majorMatch && minorMatch && patchMatch) {
+          // Use the branch name, not the (potentially unreleased) version
+          // from the header. The commit SHA suffix provides traceability.
+          nodeVersion = args.branch;
+        }
       }
     }
   } catch (err: any) {
@@ -439,8 +449,10 @@ async function main() {
 
     // Note: SQLite version update removed since we sync SQLite files from SQLite.org, not Node.js
 
-    // Update README.md with the Node.js version
-    if (nodeVersion) {
+    // Update README.md with the Node.js version (only for release tags,
+    // not staging branches where the version would be misleading)
+    const isReleaseTag = /^v\d+\.\d+\.\d+$/.test(nodeVersion || "");
+    if (nodeVersion && isReleaseTag) {
       try {
         const readmePath = path.join(packageRoot, "README.md");
         let readme = fs.readFileSync(readmePath, "utf8");
@@ -459,6 +471,10 @@ async function main() {
       } catch (err: any) {
         console.error("Failed to update README.md:", err.message);
       }
+    } else if (nodeVersion) {
+      console.log(
+        `Skipping README.md version update (synced from ${nodeVersion}, not a release tag)`,
+      );
     }
 
     // Update sync cache with the current SHA
