@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0]
+
+### Changed
+
+- **SQLite 3.51.3**: Reverted from 3.52.0 (retracted by the SQLite team)
+
 ## [1.0.0] (2026-03-07)
 
 Promotion to v1.0.0 following API stabilization and 0.5.0 release.
