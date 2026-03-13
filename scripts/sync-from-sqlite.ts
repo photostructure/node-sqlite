@@ -168,11 +168,12 @@ Usage:
   node scripts/fetch-sqlite-amalgamation.mjs [options]
 
 Options:
-  --help        Show this help message
-  --force       Force download even if current version is newer
+  --help              Show this help message
+  --force             Force download even if current version is newer
+  --version X.Y.Z     Download a specific SQLite version instead of latest
 
 This script:
-1. Fetches the latest SQLite version from GitHub
+1. Fetches the latest SQLite version from GitHub (or uses --version)
 2. Downloads the amalgamation ZIP from sqlite.org
 3. Extracts sqlite3.c, sqlite3.h, and sqlite3ext.h
 4. Warns if the current version is newer than the download
@@ -189,18 +190,39 @@ async function main() {
     process.exit(0);
   }
 
-  // Get the latest release version from GitHub tags
-  const latestRelease = await getLatestReleaseVersion();
-  if (!latestRelease) {
-    throw new Error(
-      "Could not determine latest SQLite release version from GitHub tags",
-    );
+  // Check for --version flag
+  const versionFlagIndex = process.argv.indexOf("--version");
+  let targetSemver: string | null = null;
+  if (versionFlagIndex !== -1 && process.argv[versionFlagIndex + 1]) {
+    targetSemver = process.argv[versionFlagIndex + 1];
+    // Validate format
+    if (!/^\d+\.\d+\.\d+$/.test(targetSemver)) {
+      throw new Error(
+        `Invalid version format: ${targetSemver} (expected X.Y.Z)`,
+      );
+    }
   }
 
-  console.log(`Latest SQLite release: ${latestRelease.semver}`);
+  let version: string;
+  let versionInfo: ReturnType<typeof parseVersion>;
 
-  const version = latestRelease.version;
-  const versionInfo = parseVersion(version);
+  if (targetSemver) {
+    console.log(`Target SQLite version: ${targetSemver}`);
+    version = getSqliteVersionNumber(targetSemver);
+    versionInfo = parseVersion(version);
+  } else {
+    // Get the latest release version from GitHub tags
+    const latestRelease = await getLatestReleaseVersion();
+    if (!latestRelease) {
+      throw new Error(
+        "Could not determine latest SQLite release version from GitHub tags",
+      );
+    }
+
+    console.log(`Latest SQLite release: ${latestRelease.semver}`);
+    version = latestRelease.version;
+    versionInfo = parseVersion(version);
+  }
 
   console.log(`Amalgamation version: ${versionInfo.formatted}`);
 
