@@ -117,7 +117,7 @@ jobs:
       #   only loses cached C++ state, not the underlying JS value reference.
       #   See: https://github.com/nodejs/node-addon-api/blob/main/doc/value.md
       - name: Filter upstream code from SARIF
-        uses: advanced-security/filter-sarif@f3b8118a9349d88f7b1c0c488476411145b6270d # v1.0.1
+        uses: advanced-security/filter-sarif@2da736ff05ef065cb2894ac6892e47b5eac2c3c0 # v1.1
         with:
           patterns: |
             -**/src/upstream/**
@@ -153,7 +153,7 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@c3e599b7163e8198a55467f3133db0e7b2a492cb # v3.93.7
+        uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d # v3.93.8
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
