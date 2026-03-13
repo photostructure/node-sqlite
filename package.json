@@ -141,7 +141,7 @@
     "eslint": "^9.39.2",
     "eslint-plugin-regexp": "^3.0.0",
     "eslint-plugin-security": "^4.0.0",
-    "globals": "^17.3.0",
+    "globals": "^17.4.0",
     "jest": "^30.2.0",
     "node-gyp": "^12.2.0",
     "npm-check-updates": "^19.6.3",
