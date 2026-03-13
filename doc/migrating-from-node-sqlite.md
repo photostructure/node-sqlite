@@ -33,11 +33,11 @@ All your existing code will work exactly the same.
 - **node:sqlite**: Available in Node.js 22.5.0+. See version details below.
 - **@photostructure/sqlite**: Works with Node.js 20.0.0 or higher, no flag ever needed
 
-| Node.js version | `node:sqlite` status |
-| --- | --- |
-| 22.5.0–22.12.x | Requires `--experimental-sqlite` flag |
-| 22.13.0–25.6.x | Works without flag, prints ExperimentalWarning |
-| 25.7.0+ | Release Candidate (Stability: 1.2), no warning |
+| Node.js version | `node:sqlite` status                           |
+| --------------- | ---------------------------------------------- |
+| 22.5.0–22.12.x  | Requires `--experimental-sqlite` flag          |
+| 22.13.0–25.6.x  | Works without flag, prints ExperimentalWarning |
+| 25.7.0+         | Release Candidate (Stability: 1.2), no warning |
 
 ```bash
 # node:sqlite on Node.js 22.5.0–22.12.x:
