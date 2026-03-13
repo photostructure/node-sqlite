@@ -133,16 +133,21 @@ function run({
     optional: isWin || isMacOS,
   });
   run({
-    cmd: "npm-check-updates --upgrade --errorLevel 2 || npx snyk test --dev",
-    desc: "Updating dependencies (security check if updates found)",
+    cmd: "npm-check-updates --upgrade",
+    desc: "Checking for dependency updates",
   });
   run({
     cmd: "npm install --ignore-scripts=false",
-    desc: "Installing dependencies",
+    desc: "Installing dependencies (sync lockfile after updates)",
   });
   run({
     cmd: "npm audit fix || true",
     desc: "Fixing vulnerabilities",
+  });
+  run({
+    cmd: "npx snyk test --dev",
+    desc: "Running Snyk security check",
+    optional: true,
   });
   run({ cmd: "npm run clean", desc: "Start fresh" });
   run({
