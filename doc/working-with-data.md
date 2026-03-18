@@ -58,8 +58,6 @@ for (const user of iter) {
 
 ## Parameter Binding
 
-> **Note**: DataView parameter binding is not currently supported. Use Buffer instead for binary data.
-
 ### Positional Parameters (?)
 
 ```javascript
@@ -103,13 +101,21 @@ SQLite supports several data types, and this library handles JavaScript type con
 
 ### Type Mapping
 
-| SQLite Type | JavaScript Type  | Notes                                           |
-| ----------- | ---------------- | ----------------------------------------------- |
-| NULL        | null             |                                                 |
-| INTEGER     | number or bigint | BigInt for values outside safe integer range    |
-| REAL        | number           |                                                 |
-| TEXT        | string           |                                                 |
-| BLOB        | Buffer           | Node.js Buffer objects (DataView not supported) |
+| Storage Class | JavaScript → SQLite          | SQLite → JavaScript                   |
+| ------------- | ---------------------------- | ------------------------------------- |
+| `NULL`        | `null`                       | `null`                                |
+| `INTEGER`     | `number` or `bigint`         | `number` or `bigint` _(configurable)_ |
+| `REAL`        | `number`                     | `number`                              |
+| `TEXT`        | `string`                     | `string`                              |
+| `BLOB`        | `TypedArray` or `DataView`   | `Uint8Array`                          |
+
+APIs that read values from SQLite have a configuration option that determines
+whether `INTEGER` values are converted to `number` or `bigint` in JavaScript,
+such as the `readBigInts` option for statements and the `useBigIntArguments`
+option for user-defined functions. If an `INTEGER` value read from SQLite is
+outside the JavaScript [safe integer range](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/isSafeInteger),
+and the option to read BigInts is not enabled, then an `ERR_OUT_OF_RANGE`
+error will be thrown.
 
 ### Working with Different Types
 
@@ -147,18 +153,24 @@ const row = db.prepare("SELECT * FROM data_types WHERE id = ?").get(1);
 console.log(typeof row.count); // 'number'
 console.log(typeof row.price); // 'number'
 console.log(typeof row.name); // 'string'
-console.log(row.data); // <Buffer ...>
+console.log(row.data); // Uint8Array(11) [ ... ]
 ```
 
 ### BigInt Support
 
+By default, INTEGER values outside the safe integer range throw an
+`ERR_OUT_OF_RANGE` error. Enable `readBigInts` to return all integers as BigInt:
+
 ```javascript
-// Large integers automatically returned as BigInt
+// Without readBigInts, large integers throw ERR_OUT_OF_RANGE
 db.exec("CREATE TABLE big_numbers (value INTEGER)");
 const bigInsert = db.prepare("INSERT INTO big_numbers VALUES (?)");
 bigInsert.run(9007199254740993n); // Using BigInt literal
 
-const result = db.prepare("SELECT value FROM big_numbers").get();
+// Enable readBigInts to read them back
+const stmt = db.prepare("SELECT value FROM big_numbers");
+stmt.setReadBigInts(true);
+const result = stmt.get();
 console.log(result.value); // 9007199254740993n
 console.log(typeof result.value); // 'bigint'
 ```

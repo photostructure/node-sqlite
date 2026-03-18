@@ -120,12 +120,11 @@ This package includes SQLite 3.51.3 with extensive compile-time options enabled.
 
 ### Data type support
 
-- INTEGER (number and BigInt)
+- INTEGER (number and BigInt, configurable via `readBigInts`)
 - REAL (number)
 - TEXT (string)
-- BLOB (Buffer)
+- BLOB (TypedArray/DataView input, Uint8Array output)
 - NULL (null)
-- Automatic BigInt for large integers
 
 ### Resource management
 

@@ -49,8 +49,6 @@ db.close();
 
 \*API-compatible with Node.js SQLite, but this library adopts SQLite-recommended features and security-enhancing build flags. See [build configuration details](./doc/build-flags.md).
 
-- DataView parameter binding is not currently supported. Use Buffer instead for binary data.
-
 ## Documentation
 
 **Getting Started**
