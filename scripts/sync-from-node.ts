@@ -2,7 +2,7 @@
  * Sync Node.js SQLite implementation files from GitHub into this package.
  *
  * Usage:
- *   node scripts/sync-from-node.mjs [options]
+ *   npx tsx scripts/sync-from-node.ts [options]
  *
  * Options:
  *   --help, -h        Show this help message
@@ -14,10 +14,10 @@
  *   --dry-run         Show what files would be downloaded without actually downloading
  *
  * Examples:
- *   node scripts/sync-from-node.mjs
- *   node scripts/sync-from-node.mjs --branch main
- *   node scripts/sync-from-node.mjs --branch v22.12.0
- *   node scripts/sync-from-node.mjs --dry-run
+ *   npx tsx scripts/sync-from-node.ts
+ *   npx tsx scripts/sync-from-node.ts --branch main
+ *   npx tsx scripts/sync-from-node.ts --branch v22.12.0
+ *   npx tsx scripts/sync-from-node.ts --dry-run
  */
 
 import { exec } from "node:child_process";
