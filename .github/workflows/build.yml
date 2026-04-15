@@ -47,7 +47,7 @@ jobs:
           cache: "npm"
       - run: npm ci --ignore-scripts
       - run: npm run build:native
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prebuilds-mac-x64
           path: prebuilds/
@@ -62,7 +62,7 @@ jobs:
           cache: "npm"
       - run: npm ci --ignore-scripts
       - run: npm run build:native
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prebuilds-mac-arm64
           path: prebuilds/
@@ -77,7 +77,7 @@ jobs:
           cache: "npm"
       - run: npm ci --ignore-scripts
       - run: npm run build:native
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prebuilds-win-x64
           path: prebuilds/
@@ -92,7 +92,7 @@ jobs:
           cache: "npm"
       - run: npm ci --ignore-scripts
       - run: npm run build:native
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prebuilds-win-arm64
           path: prebuilds/
@@ -111,7 +111,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - run: npm ci --ignore-scripts
       - run: TARGET_ARCH=${{ matrix.arch }} npm run build:native:linux
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prebuilds-linux-${{ matrix.arch }}-glibc
           path: prebuilds/
@@ -139,11 +139,11 @@ jobs:
           docker cp "$CONTAINER_NAME:/tmp/project/build" . 2>/dev/null || true
           docker cp "$CONTAINER_NAME:/tmp/project/test/fixtures/test-extension/test_extension.so" test/fixtures/test-extension/ 2>/dev/null || true
           docker rm -f "$CONTAINER_NAME" >/dev/null
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prebuilds-linux-${{ matrix.arch }}-musl
           path: prebuilds/
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: test-extension-linux-${{ matrix.arch }}-musl
           path: test/fixtures/test-extension/test_extension.so
