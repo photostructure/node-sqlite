@@ -6,7 +6,10 @@
  *
  * Options:
  *   --help, -h        Show this help message
- *   --branch, -b      Specify branch/tag to sync from (default: v24.x-staging)
+ *   --branch, -b      Specify branch/tag to sync from. When omitted, resolves
+ *                     the highest vNN.x-staging branch on nodejs/node via the
+ *                     GitHub API (falls back to FALLBACK_STAGING_BRANCH below
+ *                     on API failure).
  *   --repo, -r        Specify GitHub repository (default: nodejs/node)
  *   --dry-run         Show what files would be downloaded without actually downloading
  *
@@ -25,6 +28,13 @@ import { promisify } from "node:util";
 import { githubFetch } from "./github-api";
 
 const execAsync = promisify(exec);
+
+// Last-resort default when the GitHub API is unreachable (rate limit, offline,
+// etc.). Bump this when a new Node.js major's staging branch becomes the
+// supported compatibility target. We sync from `vNN.x-staging` rather than
+// `main` so we stay aligned with the stabilized view of the current release
+// line; `main` includes the next major's in-flight work.
+const FALLBACK_STAGING_BRANCH = "v25.x-staging";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -67,9 +77,15 @@ const filesToSync: SyncedFile[] = [
 
 // Parse command line arguments
 function parseArgs() {
-  const args = {
+  const args: {
+    help: boolean;
+    branch: string | null;
+    repo: string;
+    dryRun: boolean;
+    force: boolean;
+  } = {
     help: false,
-    branch: "v25.x-staging",
+    branch: null,
     repo: "nodejs/node",
     dryRun: false,
     force: false,
@@ -121,6 +137,45 @@ function parseArgs() {
   return args;
 }
 
+/**
+ * Resolve the `vNN.x-staging` branch corresponding to the latest RELEASED
+ * Node.js major. We deliberately don't pick the highest existing staging
+ * branch: Node.js creates `vNN.x-staging` well before `vNN.0.0` actually
+ * ships, so a naive "highest branch" pick would drag us into in-flight
+ * next-major work. Our compat promise is against released Node.js, so we
+ * follow the staging branch for the current stable line.
+ *
+ * Returns FALLBACK_STAGING_BRANCH if the API call fails (rate limit,
+ * network, unexpected response shape).
+ */
+async function resolveLatestStagingBranch(repo: string): Promise<string> {
+  try {
+    // /releases/latest returns the newest non-prerelease, non-draft release
+    // across all release lines. For nodejs/node that's effectively the
+    // latest "current" release (not LTS), which is what our compat target
+    // tracks.
+    const url = `https://api.github.com/repos/${repo}/releases/latest`;
+    const res = await githubFetch(url, { logRateLimit: false });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const release = (await res.json()) as { tag_name?: string };
+    const match = release.tag_name?.match(/^v(\d+)\./);
+    if (!match) {
+      throw new Error(
+        `Unexpected latest-release tag shape: ${release.tag_name}`,
+      );
+    }
+    return `v${match[1]}.x-staging`;
+  } catch (err: any) {
+    console.log(
+      `Warning: Could not resolve latest staging branch (${err.message}); ` +
+        `falling back to ${FALLBACK_STAGING_BRANCH}`,
+    );
+    return FALLBACK_STAGING_BRANCH;
+  }
+}
+
 function showHelp() {
   const help = `
 Sync Node.js SQLite implementation files from GitHub into this package.
@@ -130,7 +185,9 @@ Usage:
 
 Options:
   --help, -h        Show this help message
-  --branch, -b      Specify branch/tag to sync from (default: v24.x-staging)
+  --branch, -b      Specify branch/tag to sync from. When omitted, resolves
+                    the highest vNN.x-staging branch on nodejs/node via the
+                    GitHub API (fallback: ${FALLBACK_STAGING_BRANCH}).
   --repo, -r        Specify GitHub repository (default: nodejs/node)
   --dry-run         Show what files would be downloaded without actually downloading
   --force, -f       Force sync even if current version is newer
@@ -319,9 +376,14 @@ async function main() {
     return;
   }
 
+  const branch = args.branch ?? (await resolveLatestStagingBranch(args.repo));
+  if (!args.branch) {
+    console.log(`Resolved default branch: ${branch}`);
+  }
+
   console.log(`Syncing Node.js SQLite files from GitHub`);
   console.log(`Repository: ${args.repo}`);
-  console.log(`Branch/Tag: ${args.branch}`);
+  console.log(`Branch/Tag: ${branch}`);
   console.log(`Package root: ${packageRoot}`);
 
   if (args.dryRun) {
@@ -338,7 +400,7 @@ async function main() {
   // Fetch Node.js version and commit info
   try {
     // Get commit SHA using authenticated fetch
-    const commitUrl = `https://api.github.com/repos/${args.repo}/commits/${args.branch}`;
+    const commitUrl = `https://api.github.com/repos/${args.repo}/commits/${branch}`;
     const commitResponse = await githubFetch(commitUrl);
 
     if (commitResponse.ok) {
@@ -349,12 +411,12 @@ async function main() {
     // Only parse node_version.h for release tags (e.g., v25.8.1), not staging
     // branches — staging branches have version numbers bumped ahead of the
     // actual release, so the parsed version would be misleading.
-    const isReleaseTag = /^v\d+\.\d+\.\d+$/.test(args.branch);
+    const isReleaseTag = /^v\d+\.\d+\.\d+$/.test(branch);
 
     if (isReleaseTag) {
-      nodeVersion = args.branch;
+      nodeVersion = branch;
     } else {
-      const versionRef = nodeCommitSha || args.branch;
+      const versionRef = nodeCommitSha || branch;
       const versionUrl = `https://raw.githubusercontent.com/${args.repo}/${versionRef}/src/node_version.h`;
       const versionResponse = await fetch(versionUrl);
       if (versionResponse.ok) {
@@ -372,7 +434,7 @@ async function main() {
         if (majorMatch && minorMatch && patchMatch) {
           // Use the branch name, not the (potentially unreleased) version
           // from the header. The commit SHA suffix provides traceability.
-          nodeVersion = args.branch;
+          nodeVersion = branch;
         }
       }
     }
@@ -383,13 +445,13 @@ async function main() {
   }
 
   console.log(
-    `Node.js version: ${nodeVersion || "unknown"} (${nodeCommitSha?.substring(0, 7) || args.branch})`,
+    `Node.js version: ${nodeVersion || "unknown"} (${nodeCommitSha?.substring(0, 7) || branch})`,
   );
 
   // Check if we should skip the entire sync based on SHA
   if (
     nodeCommitSha &&
-    shouldSkipSync(args.repo, args.branch, nodeCommitSha, args.force)
+    shouldSkipSync(args.repo, branch, nodeCommitSha, args.force)
   ) {
     console.log("✅ No sync needed - files are already up to date");
     return;
@@ -399,7 +461,7 @@ async function main() {
 
   for (const file of filesToSync) {
     // Use commit SHA for consistency, fallback to branch if SHA not available
-    const ref = nodeCommitSha || args.branch;
+    const ref = nodeCommitSha || branch;
     const url = `https://raw.githubusercontent.com/${args.repo}/${ref}/${file.src}`;
     const destPath = path.join(packageRoot, file.dest);
 
@@ -434,7 +496,7 @@ async function main() {
       // Always update Node.js version if we have it
       try {
         const nodeVersionString =
-          (nodeVersion || args.branch) +
+          (nodeVersion || branch) +
           (nodeCommitSha ? `@${nodeCommitSha.substring(0, 7)}` : "");
         await execAsync(`npm pkg set versions.nodejs="${nodeVersionString}"`, {
           cwd: packageRoot,
@@ -479,7 +541,7 @@ async function main() {
 
     // Update sync cache with the current SHA
     if (nodeCommitSha) {
-      updateSyncCache(args.repo, args.branch, nodeCommitSha);
+      updateSyncCache(args.repo, branch, nodeCommitSha);
     }
 
     console.log("\n✅ Sync complete!");
