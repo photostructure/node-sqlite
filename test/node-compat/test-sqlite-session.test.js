@@ -649,11 +649,11 @@ test("session.close() - closing twice", (t) => {
   );
 });
 
-test("session supports ERM", (t) => {
+test.skip("session supports ERM" /* Uses `using` declaration syntax which requires Node.js 24+ in CJS */, (t) => {
   const database = new DatabaseSync(":memory:");
   let afterDisposeSession;
   {
-    using session = database.createSession();
+    const session = database.createSession();
     afterDisposeSession = session;
     const changeset = session.changeset();
     t.assert.ok(changeset instanceof Uint8Array);

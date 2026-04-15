@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **SQLite 3.53.0**: Updated from 3.51.3
+- **Upstream sync**: Synced `node_sqlite.{h,cc}` and `sqlite.js` from Node.js `v25.x-staging` (ffa9b8f)
+- **Dependencies**: Updated dev dependencies (`jest`, `ts-jest`, `node-addon-api`, `eslint-plugin-regexp`)
+
 ## [1.1.0]
 
 ### Changed

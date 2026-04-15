@@ -31,6 +31,11 @@ const skipFiles = new Set([
 
   // Tests webstorage behavior when sqlite is unavailable - not relevant for us
   "test-webstorage-without-sqlite.js",
+
+  // Tests DatabaseSync.prototype.serialize() / deserialize(), which are
+  // Node.js-internal SQLite APIs we have not yet ported. Remove this entry
+  // once the APIs are implemented.
+  "test-sqlite-serialize.js",
 ]);
 
 // Individual tests within files that cannot pass in our standalone package.
@@ -57,6 +62,11 @@ const skipTests: Record<string, Array<{ name: string; reason: string }>> = {
     {
       name: "concurrent applyChangeset with workers",
       reason: "Worker thread changeset serialization issue",
+    },
+    {
+      name: "session supports ERM",
+      reason:
+        "Uses `using` declaration syntax which requires Node.js 24+ in CJS",
     },
   ],
   "test-sqlite-template-tag.js": [
@@ -198,6 +208,11 @@ function adaptTest(content: string, fileName: string): string {
 
   // Note: We no longer strip __proto__: null since our implementation now
   // correctly returns row objects with null prototype (matching Node.js)
+
+  // Rewrite ERM `using` declarations so the file parses in Node.js < 24 CJS.
+  // The affected tests are transformed to test.skip() below, so the
+  // substituted `const` body never actually runs.
+  adapted = adapted.replace(/\busing\s+(\w+)\s*=/g, "const $1 =");
 
   // Skip known-failing tests for this file by transforming test()/suite() to test.skip()/suite.skip()
   const testsToSkip = skipTests[fileName] ?? [];

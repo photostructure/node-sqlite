@@ -101,13 +101,13 @@ SQLite supports several data types, and this library handles JavaScript type con
 
 ### Type Mapping
 
-| Storage Class | JavaScript → SQLite          | SQLite → JavaScript                   |
-| ------------- | ---------------------------- | ------------------------------------- |
-| `NULL`        | `null`                       | `null`                                |
-| `INTEGER`     | `number` or `bigint`         | `number` or `bigint` _(configurable)_ |
-| `REAL`        | `number`                     | `number`                              |
-| `TEXT`        | `string`                     | `string`                              |
-| `BLOB`        | `TypedArray` or `DataView`   | `Uint8Array`                          |
+| Storage Class | JavaScript → SQLite        | SQLite → JavaScript                   |
+| ------------- | -------------------------- | ------------------------------------- |
+| `NULL`        | `null`                     | `null`                                |
+| `INTEGER`     | `number` or `bigint`       | `number` or `bigint` _(configurable)_ |
+| `REAL`        | `number`                   | `number`                              |
+| `TEXT`        | `string`                   | `string`                              |
+| `BLOB`        | `TypedArray` or `DataView` | `Uint8Array`                          |
 
 APIs that read values from SQLite have a configuration option that determines
 whether `INTEGER` values are converted to `number` or `bigint` in JavaScript,
