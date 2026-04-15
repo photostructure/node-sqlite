@@ -6,5 +6,6 @@ module.exports = {
   reject: [
     "@eslint/js", // eslint 10 not yet supported by typescript-eslint
     "eslint", // eslint 10 not yet supported by typescript-eslint
+    "typescript", // typescript 6 not yet supported by typedoc
   ],
 };
