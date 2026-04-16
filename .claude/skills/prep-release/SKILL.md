@@ -108,7 +108,9 @@ Classify each upstream commit:
 
 For non-trivial upstream code deltas, also check whether `src/sqlite_impl.cpp` — our port of `node_sqlite.cc` — needs the same change. Node.js fixes that touch callback lifetimes, error propagation, or memory management usually DO need a port. Pure stylistic refactors usually don't.
 
-**SQLite**: Compare `versions.sqlite` before/after. SQLite's own release notes (https://www.sqlite.org/changes.html) classify changes. SQLite patch releases (3.52.0 → 3.52.1) are always PATCH. Minor bumps (3.51 → 3.52) are usually PATCH for us too unless they add a feature we newly expose.
+**SQLite**: Compare `versions.sqlite` before/after. SQLite's own release notes (https://www.sqlite.org/changes.html) classify changes.
+- SQLite patch releases (e.g. `3.52.0 → 3.52.1`) are PATCH for us.
+- **SQLite minor releases (e.g. `3.52 → 3.53`) are always at least MINOR for us** — even when we don't expose a specific new feature, a SQLite minor brings new SQL functions, new PRAGMAs, new C APIs, and behavior changes (FP precision, etc.) that users can reach through `db.exec()` / `db.prepare()`. Treating these as PATCH has caused users to miss meaningful upstream changes. Bump to MAJOR only if the SQLite release carries a documented breaking change we pass through.
 
 **Our local commits**: `git log <last-tag>..HEAD --oneline` — categorize feat/fix/chore/breaking per Conventional Commits.
 
@@ -152,8 +154,8 @@ After adding a transform, re-run with `--force` (the SHA cache will otherwise sk
 Pick ONE of `patch | minor | major` based on the highest-severity change from step 3:
 
 - **major** if ANY: breaking API change, removed/renamed exports, default behavior flipped, minimum Node version bumped, TypeScript signature change that breaks callers.
-- **minor** if ANY: new exported API, new option/method, new SQLite feature exposed. No breaking changes.
-- **patch** otherwise: bug fixes, dep updates, SQLite patch-level bumps, internal refactors, doc updates.
+- **minor** if ANY: new exported API, new option/method, **SQLite minor-version bump** (3.X → 3.X+1 — always minor regardless of which specific features we expose), new SQLite feature exposed. No breaking changes.
+- **patch** otherwise: bug fixes, dep updates, SQLite patch-level bumps (3.X.Y → 3.X.Y+1), internal refactors, doc updates.
 
 Compute the next version by applying the bump to `package.json`'s current version. **Do not write it back to `package.json`** — just use it for the CHANGELOG heading.
 
