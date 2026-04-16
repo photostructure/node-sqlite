@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0]
+
+API compatible with `node:sqlite` from Node.js v25.9.0.
+
+### Changed
+
+- **SQLite 3.53.0**: Updated from 3.52.0. Adds `json_array_insert()` / `jsonb_array_insert()` SQL functions, `ALTER TABLE` support for adding/removing `NOT NULL` and `CHECK` constraints, `REINDEX EXPRESSIONS` to rebuild expression indexes, `VACUUM INTO` `reserve=N` URI parameter, and new C APIs (`sqlite3_str_truncate`, `sqlite3_str_free`, `sqlite3_carray_bind_v2`, `SQLITE_PREPARE_FROM_DDL`, `SQLITE_DBCONFIG_FP_DIGITS`). Floating-point text conversion default changed from 15 to 17 significant digits. [Full release notes](https://www.sqlite.org/releaselog/3_53_0.html).
+- **Upstream sync**: Node.js `v25.x-staging@ca2d6ea` → `ffa9b8f` (includes content through Node.js v25.9.0). Upstream made a cosmetic lambda-capture fix in `ApplyChangeset`'s filter callback; our port already used equivalent by-value captures.
+
+### Fixed
+
+- **Docs**: corrected stale "DataView parameter binding is not currently supported" note; `BLOB` binding accepts `TypedArray` or `DataView` input and returns `Uint8Array`.
+
+### Internal
+
+- **Test sync**: skip `test-sqlite-serialize.js` — Node.js `DatabaseSync.prototype.serialize()` / `deserialize()` APIs are not yet ported.
+
 ## [1.1.0]
 
 ### Changed
