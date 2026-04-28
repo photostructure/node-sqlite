@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2]
+
+### Fixed
+
+- **Backup teardown stability**: Made in-flight `backup()` operations safe when a Node environment is shutting down. Backup jobs now avoid resolving/rejecting promises or routing expected SQLite failures through node-addon-api's async worker error path after teardown begins.
+
 ## [1.2.1]
 
 ### Fixed
