@@ -53,7 +53,7 @@ beforeAll(async () => {
   process.env["NODE_ENV"] = "test";
 
   // Set stable timezone for consistent test results
-  process.env.TZ = "UTC";
+  process.env["TZ"] = "UTC";
 
   // Configure memory tests flag if not set
   if (!process.env["TEST_MEMORY"]) {
