@@ -3324,9 +3324,8 @@ BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
       source_connection_(source->connection()),
       destination_path_(std::move(destination_path)),
       source_db_(std::move(source_db)), dest_db_(std::move(dest_db)),
-      pages_(pages),
-      has_progress_callback_(!progress_func.IsEmpty() &&
-                             !progress_func.IsUndefined()),
+      pages_(pages), has_progress_callback_(!progress_func.IsEmpty() &&
+                                            !progress_func.IsUndefined()),
       deferred_(deferred), env_(env) {
   if (has_progress_callback_) {
     progress_func_ = Napi::Reference<Napi::Function>::New(progress_func);
