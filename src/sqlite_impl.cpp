@@ -3368,8 +3368,9 @@ void BackupJob::Execute(const ExecutionProgress &progress) {
       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, nullptr);
 
   if (backup_status_ != SQLITE_OK) {
-    // Use SQLite's actual error message
-    SetError(sqlite3_errmsg(dest_));
+    // Let OnOK reject after its shutdown guard. SetError() would route through
+    // node-addon-api's Error::New(env, ...) path before BackupJob sees
+    // teardown.
     return;
   }
 
@@ -3379,9 +3380,8 @@ void BackupJob::Execute(const ExecutionProgress &progress) {
                                 source_db_.c_str());
 
   if (!backup_) {
-    // Use SQLite's actual error message from destination db
-    // (sqlite3_backup_init errors are stored in the dest db handle)
-    SetError(sqlite3_errmsg(dest_));
+    // Let OnOK reject after its shutdown guard. sqlite3_backup_init errors are
+    // stored on dest_ and will be read before Cleanup().
     return;
   }
 
@@ -3440,11 +3440,8 @@ void BackupJob::Execute(const ExecutionProgress &progress) {
     }
   }
 
-  // Store final status for use in OnOK/OnError
-  if (backup_status_ != SQLITE_DONE) {
-    // Use SQLite's actual error message (matches Node.js behavior)
-    SetError(sqlite3_errmsg(dest_));
-  }
+  // OnOK handles SQLITE_DONE and expected SQLite failures. Avoid SetError() for
+  // expected failures so teardown cannot reach node-addon-api's OnError path.
 }
 
 void BackupJob::OnProgress(const BackupProgress *data, size_t count) {
@@ -3473,6 +3470,24 @@ void BackupJob::OnOK() {
   // This runs on the main thread after Execute completes successfully
   Napi::HandleScope scope(Env());
 
+  // Save error info BEFORE cleanup nulls the pointers. Normal SQLite backup
+  // failures are handled here instead of via AsyncWorker::SetError() so the
+  // shutdown guard below runs before any JS Error construction.
+  int saved_status = backup_status_;
+  std::string saved_errmsg;
+  if (dest_) {
+    saved_errmsg = sqlite3_errmsg(dest_);
+    int dest_err = sqlite3_errcode(dest_);
+    if (dest_err != SQLITE_OK && saved_status == SQLITE_OK) {
+      saved_status = dest_err;
+    }
+  }
+  const bool backup_failed = backup_status_ != SQLITE_DONE;
+  if (backup_failed &&
+      (saved_status == SQLITE_OK || saved_status == SQLITE_DONE)) {
+    saved_status = SQLITE_ERROR;
+  }
+
   // Cleanup SQLite resources
   Cleanup();
 
@@ -3488,6 +3503,26 @@ void BackupJob::OnOK() {
     Napi::Error error = Napi::Error::New(Env(), *progress_error_);
     try {
       deferred_.Reject(error.Value());
+    } catch (...) {
+    }
+    return;
+  }
+
+  if (backup_failed) {
+    std::string err_message;
+    if (!saved_errmsg.empty() && saved_errmsg != "not an error") {
+      err_message = saved_errmsg;
+    } else {
+      err_message = sqlite3_errstr(saved_status);
+    }
+
+    Napi::Error detailed_error = Napi::Error::New(Env(), err_message);
+    detailed_error.Set("code", Napi::String::New(Env(), "ERR_SQLITE_ERROR"));
+    detailed_error.Set("errcode", Napi::Number::New(Env(), saved_status));
+    detailed_error.Set("errstr",
+                       Napi::String::New(Env(), sqlite3_errstr(saved_status)));
+    try {
+      deferred_.Reject(detailed_error.Value());
     } catch (...) {
     }
     return;
