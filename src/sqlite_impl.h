@@ -439,6 +439,11 @@ private:
   static void CleanupHook(void *arg);
   napi_env env_;
 
+  // Set from CleanupHook on the main thread; observed from Execute() on the
+  // worker thread to break out of the backup loop, and from OnOK/OnError to
+  // avoid touching deferred_ once the env is going away.
+  std::atomic<bool> shutting_down_{false};
+
   static std::atomic<int> active_jobs_;
   static std::mutex active_jobs_mutex_;
   static std::set<BackupJob *> active_job_instances_;

@@ -3298,6 +3298,11 @@ std::set<BackupJob *> BackupJob::active_job_instances_;
 void BackupJob::CleanupHook(void *arg) {
   // Called before environment teardown - safe to Reset() references here
   auto *self = static_cast<BackupJob *>(arg);
+  // Signal Execute() on the worker thread to break out of sqlite3_backup_step
+  // so we don't drag teardown out, and so OnOK/OnError can short-circuit
+  // touching the deferred (which can throw a C++ exception if the env is
+  // already torn down).
+  self->shutting_down_.store(true, std::memory_order_release);
   if (!self->progress_func_.IsEmpty()) {
     self->progress_func_.Reset();
   }
@@ -3383,6 +3388,11 @@ void BackupJob::Execute(const ExecutionProgress &progress) {
   bool is_first_step = true;
 
   while (backup_status_ == SQLITE_OK) {
+    if (shutting_down_.load(std::memory_order_acquire)) {
+      // Env is tearing down; abandon the backup so FreeEnvironment can finish.
+      SetError("node-sqlite: shutdown in progress");
+      return;
+    }
     // If pages_ is negative, use -1 to copy all remaining pages
     int pages_to_copy = pages_ < 0 ? -1 : pages_;
     backup_status_ = sqlite3_backup_step(backup_, pages_to_copy);
@@ -3454,15 +3464,28 @@ void BackupJob::OnOK() {
   // Cleanup SQLite resources
   Cleanup();
 
+  if (shutting_down_.load(std::memory_order_acquire)) {
+    // Env teardown already started; deferred_ rejection can throw a C++
+    // Napi::Error out of this libuv cleanup-hook frame. The JS-side promise
+    // is going away with the env anyway.
+    return;
+  }
+
   // If progress callback threw an error, reject with that error
   if (progress_error_.has_value()) {
     Napi::Error error = Napi::Error::New(Env(), *progress_error_);
-    deferred_.Reject(error.Value());
+    try {
+      deferred_.Reject(error.Value());
+    } catch (...) {
+    }
     return;
   }
 
   // Resolve the promise with the total number of pages
-  deferred_.Resolve(Napi::Number::New(Env(), total_pages_));
+  try {
+    deferred_.Resolve(Napi::Number::New(Env(), total_pages_));
+  } catch (...) {
+  }
 }
 
 void BackupJob::OnError(const Napi::Error &error) {
@@ -3484,6 +3507,10 @@ void BackupJob::OnError(const Napi::Error &error) {
   // Now safe to cleanup
   Cleanup();
 
+  if (shutting_down_.load(std::memory_order_acquire)) {
+    return;
+  }
+
   // Use saved values for error details (matching node:sqlite property names)
   if (saved_status != SQLITE_OK && saved_status != SQLITE_DONE) {
     // Prefer the detailed error message from sqlite3_errmsg(dest_) if it's
@@ -3502,9 +3529,15 @@ void BackupJob::OnError(const Napi::Error &error) {
     detailed_error.Set("errcode", Napi::Number::New(Env(), saved_status));
     detailed_error.Set("errstr",
                        Napi::String::New(Env(), sqlite3_errstr(saved_status)));
-    deferred_.Reject(detailed_error.Value());
+    try {
+      deferred_.Reject(detailed_error.Value());
+    } catch (...) {
+    }
   } else {
-    deferred_.Reject(error.Value());
+    try {
+      deferred_.Reject(error.Value());
+    } catch (...) {
+    }
   }
 }
 
