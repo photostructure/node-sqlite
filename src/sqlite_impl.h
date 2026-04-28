@@ -430,6 +430,12 @@ private:
   int total_pages_ = 0;
 
   Napi::FunctionReference progress_func_;
+  // Snapshot of "is there a progress callback?" captured at construction.
+  // Read on the worker thread to decide whether to call progress.Send(),
+  // avoiding a data race with CleanupHook's progress_func_.Reset() on the
+  // main thread. progress_func_ itself must only be touched on the main
+  // thread.
+  const bool has_progress_callback_;
   Napi::Promise::Deferred deferred_;
 
   // Error from progress callback (set on main thread, checked in OnOK)

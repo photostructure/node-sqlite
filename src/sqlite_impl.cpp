@@ -3324,8 +3324,11 @@ BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
       source_connection_(source->connection()),
       destination_path_(std::move(destination_path)),
       source_db_(std::move(source_db)), dest_db_(std::move(dest_db)),
-      pages_(pages), deferred_(deferred), env_(env) {
-  if (!progress_func.IsEmpty() && !progress_func.IsUndefined()) {
+      pages_(pages),
+      has_progress_callback_(!progress_func.IsEmpty() &&
+                             !progress_func.IsUndefined()),
+      deferred_(deferred), env_(env) {
+  if (has_progress_callback_) {
     progress_func_ = Napi::Reference<Napi::Function>::New(progress_func);
   }
 
@@ -3390,12 +3393,20 @@ void BackupJob::Execute(const ExecutionProgress &progress) {
   while (backup_status_ == SQLITE_OK) {
     if (shutting_down_.load(std::memory_order_acquire)) {
       // Env is tearing down; abandon the backup so FreeEnvironment can finish.
-      SetError("node-sqlite: shutdown in progress");
+      // Don't SetError - that would route through the parent's OnWorkComplete
+      // -> Error::New(env, ...) -> WrapCallback path, which still touches the
+      // env. Returning with empty _error sends us through OnOK, where our
+      // shutting_down_ guard skips deferred_ before it can throw.
       return;
     }
     // If pages_ is negative, use -1 to copy all remaining pages
     int pages_to_copy = pages_ < 0 ? -1 : pages_;
     backup_status_ = sqlite3_backup_step(backup_, pages_to_copy);
+    // Re-check after the long-running step; CleanupHook may have flipped the
+    // flag and called progress_func_.Reset() while we were inside SQLite.
+    if (shutting_down_.load(std::memory_order_acquire)) {
+      return;
+    }
 
     // Update total pages after first step (when SQLite knows the actual count)
     if (is_first_step) {
@@ -3409,9 +3420,11 @@ void BackupJob::Execute(const ExecutionProgress &progress) {
       int current_page = total_pages_ - remaining_pages;
 
       // Send progress update to main thread
-      // Node.js only calls progress when there are still pages remaining
-      if (!progress_func_.IsEmpty() && total_pages_ > 0 &&
-          remaining_pages > 0) {
+      // Node.js only calls progress when there are still pages remaining.
+      // Use the plain bool snapshot (not progress_func_.IsEmpty()) - the
+      // FunctionReference is owned by the main thread and may be Reset() by
+      // CleanupHook concurrently.
+      if (has_progress_callback_ && total_pages_ > 0 && remaining_pages > 0) {
         BackupProgress prog = {current_page, total_pages_};
         progress.Send(&prog, 1);
       }
