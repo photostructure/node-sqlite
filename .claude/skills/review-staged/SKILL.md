@@ -74,6 +74,23 @@ If you find zero real issues after thorough research, say "No issues found" — 
 - JSDoc comments that have drifted from the implementation, or that merely restate the function name without adding value (suggest removing these)
 - Dead code — suggest deleting it
 
+**ESM vs CJS dual-build hazards** (always check)
+
+- New exports are reachable from BOTH `import` and `require` consumers — verify in `dist/cjs/` and `dist/esm/` (or `npm run test:all`)
+- No top-level `await` in code that ships to CJS
+- No `import.meta.url` or `__dirname` assumptions that break in the other module system — use the existing dual-safe helpers
+- Dynamic `require()` of project files; prefer static imports so both bundles resolve correctly
+- `.cjs` / `.mjs` extension mixing in test files is intentional — flag accidental changes
+- `package.json` `exports` map still routes `import` and `require` correctly for any new entry points
+
+**Worker thread safety** (always check)
+
+- No shared mutable C++ state across worker threads without explicit synchronization (mutex, atomic)
+- Every JS callback invoked from a non-main thread goes through a `Napi::ThreadSafeFunction` (TSFN); the TSFN is acquired/released correctly and not leaked
+- Native handles (DatabaseSync, StatementSync) are not assumed to be transferable across workers — each worker owns its own
+- No assumption that `napi_env` from one thread is valid on another
+- See @doc/internal/threading.md and @doc/internal/worker-implementation.md for the canonical patterns
+
 **Cross-platform considerations**
 
 - Windows file-locking: directory cleanup must use `fsp.rm()` with `maxRetries`/`retryDelay` (or `useTempDir`/`useTempDirSuite` test utilities)
@@ -90,6 +107,12 @@ If you find zero real issues after thorough research, say "No issues found" — 
 - Multi-process tests use explicit synchronization (e.g., `READY` signaling) instead of timing assumptions
 - Memory tests use the `testMemoryBenchmark` harness rather than naked timing assertions
 - Adapted Node.js tests in `test/node-compat/` still run with `--test-concurrency=1`
+
+**`test/node-compat/` coverage gaps** (always check)
+
+- Any new or changed public API surface must have a corresponding adapted test in `test/node-compat/`
+- If the upstream Node.js test exists in `test/upstream/` (reference-only) but is not yet ported to `test/node-compat/`, flag it — that's missing coverage
+- New error messages or codes must be exercised by a node-compat test that also runs against the real `node:sqlite` for parity
 
 **Correctness (general)**
 
