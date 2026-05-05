@@ -2,11 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.2]
+## [1.3.0]
+
+API compatible with `node:sqlite` from Node.js v26.0.0.
+
+### Added
+
+- **`DatabaseSync.prototype.serialize([dbName])`** and **`DatabaseSync.prototype.deserialize(buffer, [options])`**: Serialize a database to a `Uint8Array` and load one back, matching the `node:sqlite` APIs added in Node.js [PR #59967](https://github.com/nodejs/node/pull/59967). Wraps `sqlite3_serialize` / `sqlite3_deserialize` and finalizes any open prepared statements before replacing database content.
+
+### Changed
+
+- **SQLite 3.53.1**: Patch release with bug fixes ([release notes](https://www.sqlite.org/releaselog/3_53_1.html)).
+- **Upstream sync**: Node.js `v25.x-staging@ffa9b8f` → `v26.x-staging@ca3c309`. Beyond `serialize()`/`deserialize()`, upstream added a column-name caching path and a `simdutf` fast path for ASCII column text in `StatementSync` — both V8/internal-only optimizations that have no N-API equivalent and so were not ported.
+- **Statement finalization on `db.close()`**: Live `StatementSync` instances are now eagerly detached when their database closes, so further method calls throw `ERR_INVALID_STATE` with `"statement has been finalized"` (matching `node:sqlite`) instead of `"Database connection is closed"`. Statement error messages were also normalized to lowercase `"statement has been finalized"` throughout.
 
 ### Fixed
 
-- **Backup teardown stability**: Made in-flight `backup()` operations safe when a Node environment is shutting down. Backup jobs now avoid resolving/rejecting promises or routing expected SQLite failures through node-addon-api's async worker error path after teardown begins.
+- **Backup teardown stability**: In-flight `backup()` operations are now safe when a Node environment is shutting down. Backup jobs avoid resolving/rejecting promises or routing expected SQLite failures through node-addon-api's async worker error path after teardown begins.
 
 ## [1.2.1]
 
@@ -180,6 +192,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - macOS (x64, ARM64)
 - Linux (x64, ARM64), (glibc 2.28+, musl)
 
+[1.3.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.3.0
 [1.0.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.0.0
 [0.5.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.5.0
 [0.4.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.4.0

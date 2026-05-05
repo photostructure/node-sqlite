@@ -591,6 +591,38 @@ sql.run`INSERT INTO users VALUES (${id}, ${name})`;
 const user = sql.get`SELECT * FROM users WHERE id = ${id}`;
 ```
 
+#### serialize()
+
+```typescript
+serialize(dbName?: string): Uint8Array
+```
+
+Serializes a database to a `Uint8Array`. The serialization is a byte-for-byte copy of the database file as it would exist on disk. `dbName` defaults to `"main"`; pass an attached schema name to serialize that database instead.
+
+```javascript
+const buf = db.serialize();
+// buf is a Uint8Array containing the SQLite file image
+fs.writeFileSync("snapshot.db", buf);
+```
+
+See SQLite [`sqlite3_serialize()`](https://sqlite.org/c3ref/serialize.html).
+
+#### deserialize()
+
+```typescript
+deserialize(buffer: Uint8Array, options?: { dbName?: string }): void
+```
+
+Loads a database from a `Uint8Array`. The current contents of the connection's main database (or `options.dbName`) are replaced. Any open prepared statements are finalized — calling methods on them after `deserialize()` throws `ERR_INVALID_STATE`.
+
+```javascript
+const buf = fs.readFileSync("snapshot.db");
+db.deserialize(buf);
+const rows = db.prepare("SELECT * FROM users").all();
+```
+
+See SQLite [`sqlite3_deserialize()`](https://sqlite.org/c3ref/deserialize.html).
+
 ### Properties
 
 #### isOpen
