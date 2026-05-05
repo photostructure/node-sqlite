@@ -31,11 +31,6 @@ const skipFiles = new Set([
 
   // Tests webstorage behavior when sqlite is unavailable - not relevant for us
   "test-webstorage-without-sqlite.js",
-
-  // Tests DatabaseSync.prototype.serialize() / deserialize(), which are
-  // Node.js node:sqlite APIs we have not yet ported. Remove this entry once
-  // the APIs are implemented in src/sqlite_impl.cpp.
-  "test-sqlite-serialize.js",
 ]);
 
 // Individual tests within files that cannot pass in our standalone package.

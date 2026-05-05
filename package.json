@@ -143,7 +143,7 @@
     "eslint-plugin-security": "^4.0.0",
     "globals": "^17.5.0",
     "jest": "^30.3.0",
-    "node-gyp": "^12.2.0",
+    "node-gyp": "^12.3.0",
     "npm-check-updates": "^19.6.3",
     "npm-run-all2": "8.0.4",
     "prebuildify": "^6.0.1",
@@ -157,7 +157,7 @@
     "typescript-eslint": "^8.56.1"
   },
   "versions": {
-    "nodejs": "v25.x-staging@ffa9b8f",
-    "sqlite": "3.53.0"
+    "nodejs": "v26.x-staging@ca3c309",
+    "sqlite": "3.53.1"
   }
 }
