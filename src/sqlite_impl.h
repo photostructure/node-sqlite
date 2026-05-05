@@ -189,6 +189,10 @@ public:
   // Backup support
   Napi::Value Backup(const Napi::CallbackInfo &info);
 
+  // Serialization
+  Napi::Value Serialize(const Napi::CallbackInfo &info);
+  Napi::Value Deserialize(const Napi::CallbackInfo &info);
+
   // Limits API
   Napi::Value GetLimit(const Napi::CallbackInfo &info);
   Napi::Value SetLimit(const Napi::CallbackInfo &info);
@@ -211,6 +215,16 @@ public:
   void AddBackup(BackupJob *backup);
   void RemoveBackup(BackupJob *backup);
   void FinalizeBackups();
+
+  // Statement tracking - lets us finalize all live StatementSync instances
+  // before operations like deserialize() that must run on a connection with
+  // no open statements. The set holds raw pointers; statements remove
+  // themselves on destruction (when database_ is still non-null) and
+  // FinalizeStatements() nulls each tracked statement's database_ pointer
+  // before clearing the set, so destructors run safely after teardown.
+  void TrackStatement(StatementSync *stmt);
+  void UntrackStatement(StatementSync *stmt);
+  void FinalizeStatements();
 
   // Error handling for user functions
   void SetIgnoreNextSQLiteError(bool ignore) {
@@ -241,11 +255,12 @@ private:
   bool read_only_ = false;
   bool allow_load_extension_ = false;
   bool enable_load_extension_ = false;
-  std::map<std::string, std::unique_ptr<StatementSync>> prepared_statements_;
-  std::set<Session *> sessions_;      // Track all active sessions
-  mutable std::mutex sessions_mutex_; // Protect sessions_ for thread safety
-  std::set<BackupJob *> backups_;     // Track all active backup jobs
-  mutable std::mutex backups_mutex_;  // Protect backups_ for thread safety
+  std::set<Session *> sessions_;       // Track all active sessions
+  mutable std::mutex sessions_mutex_;  // Protect sessions_ for thread safety
+  std::set<BackupJob *> backups_;      // Track all active backup jobs
+  mutable std::mutex backups_mutex_;   // Protect backups_ for thread safety
+  std::set<StatementSync *> statements_;  // Track all live prepared statements
+  mutable std::mutex statements_mutex_;
   std::thread::id creation_thread_;
   napi_env env_;                          // Store for cleanup purposes
   bool ignore_next_sqlite_error_ = false; // For user function error handling
@@ -281,6 +296,21 @@ public:
 
   // Internal constructor for DatabaseSync to use
   void InitStatement(DatabaseSync *database, const std::string &sql);
+
+  // Called by DatabaseSync::FinalizeStatements() to finalize the underlying
+  // sqlite3_stmt and detach from the database before the database is torn
+  // down or its content replaced (e.g., by deserialize()). After this call
+  // any further methods on the StatementSync throw "statement has been
+  // finalized".
+  void FinalizeFromDatabase();
+
+  // Called by DatabaseSync::InternalClose() to detach this statement from
+  // its (now-closing) database. Marks the statement finalized for the
+  // purposes of further JS method calls but does NOT call sqlite3_finalize
+  // — that's deferred to ~StatementSync. This avoids finalizing a statement
+  // whose sqlite3_step is on the call stack (a user function callback may
+  // have re-entered close() during evaluation), which is unsafe.
+  void DetachFromDatabase();
 
   // Statement operations
   Napi::Value Run(const Napi::CallbackInfo &info);

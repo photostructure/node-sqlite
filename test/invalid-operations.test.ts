@@ -30,15 +30,15 @@ describe("Invalid Operations Tests", () => {
       // Statement operations should fail
       expect(() => {
         stmt.run();
-      }).toThrow(/closed|invalid/i);
+      }).toThrow(/closed|invalid|finalized/i);
 
       expect(() => {
         stmt.get();
-      }).toThrow(/closed|invalid/i);
+      }).toThrow(/closed|invalid|finalized/i);
 
       expect(() => {
         stmt.all();
-      }).toThrow(/closed|invalid/i);
+      }).toThrow(/closed|invalid|finalized/i);
     });
 
     test("handles invalid SQL in prepare", () => {
@@ -434,14 +434,14 @@ describe("Invalid Operations Tests", () => {
       db.close();
 
       // All statement operations should fail
-      expect(() => stmt1.all()).toThrow(/closed|invalid/i);
-      expect(() => stmt2.run(1, "test")).toThrow(/closed|invalid/i);
-      expect(() => stmt3.run("updated", 1)).toThrow(/closed|invalid/i);
+      expect(() => stmt1.all()).toThrow(/closed|invalid|finalized/i);
+      expect(() => stmt2.run(1, "test")).toThrow(/closed|invalid|finalized/i);
+      expect(() => stmt3.run("updated", 1)).toThrow(/closed|invalid|finalized/i);
 
       // Iterator should also fail
       expect(() => {
         iterator.next();
-      }).toThrow(/closed|invalid/i);
+      }).toThrow(/closed|invalid|finalized/i);
     });
 
     test("handles very long SQL statements", () => {
@@ -717,7 +717,7 @@ describe("Invalid Operations Tests", () => {
       // Statement should still fail gracefully
       expect(() => {
         stmt.run(1);
-      }).toThrow(/closed/i);
+      }).toThrow(/closed|finalized/i);
 
       db2.close();
     });
@@ -861,7 +861,7 @@ describe("Invalid Operations Tests", () => {
       // Statement should fail
       expect(() => {
         stmt.get();
-      }).toThrow(/closed/i);
+      }).toThrow(/closed|finalized/i);
     });
 
     test("handles circular references in aggregates", () => {
@@ -1101,7 +1101,7 @@ describe("Invalid Operations Tests", () => {
         // Old statement should fail gracefully
         expect(() => {
           stmt.run(1, "test");
-        }).toThrow(/closed/i);
+        }).toThrow(/closed|finalized/i);
 
         db2.close();
       } finally {
@@ -1125,9 +1125,9 @@ describe("Invalid Operations Tests", () => {
       db.close();
 
       // Now statement operations should fail
-      expect(() => stmt.run()).toThrow(/closed/i);
-      expect(() => stmt.get()).toThrow(/closed/i);
-      expect(() => stmt.all()).toThrow(/closed/i);
+      expect(() => stmt.run()).toThrow(/closed|finalized/i);
+      expect(() => stmt.get()).toThrow(/closed|finalized/i);
+      expect(() => stmt.all()).toThrow(/closed|finalized/i);
     });
 
     test("handles rapid database open/close with pending operations", () => {
@@ -1152,7 +1152,7 @@ describe("Invalid Operations Tests", () => {
 
         // All further operations should fail gracefully
         for (const stmt of stmts) {
-          expect(() => stmt.run(1, 2)).toThrow(/closed/i);
+          expect(() => stmt.run(1, 2)).toThrow(/closed|finalized/i);
         }
       }
     });

@@ -177,6 +177,27 @@ export interface DatabaseSyncInstance {
   /** @internal Native method to set a SQLite limit by ID. Returns old value. */
   setLimit(limitId: number, value: number): number;
 
+  /**
+   * Serializes a database into a `Uint8Array`. The serialization is a byte-for-byte
+   * copy of the database file as it would exist on disk.
+   *
+   * @param dbName Name of the schema to serialize. Defaults to `"main"`.
+   * @returns A `Uint8Array` containing the serialized database.
+   * @see https://sqlite.org/c3ref/serialize.html
+   */
+  serialize(dbName?: string): Uint8Array;
+
+  /**
+   * Deserializes a database from a `Uint8Array`. The current contents of the
+   * connection's main database (or the schema named in `options.dbName`) are
+   * replaced. Any open prepared statements are finalized.
+   *
+   * @param buffer The serialized database content.
+   * @param options Optional. `dbName` chooses the schema (default `"main"`).
+   * @see https://sqlite.org/c3ref/deserialize.html
+   */
+  deserialize(buffer: Uint8Array, options?: { dbName?: string }): void;
+
   /** Dispose of the database resources using the explicit resource management protocol. */
   [Symbol.dispose](): void;
 }

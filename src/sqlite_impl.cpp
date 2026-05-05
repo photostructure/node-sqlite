@@ -327,6 +327,8 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("getLimit", &DatabaseSync::GetLimit),
        InstanceMethod("setLimit", &DatabaseSync::SetLimit),
        InstanceMethod("backup", &DatabaseSync::Backup),
+       InstanceMethod("serialize", &DatabaseSync::Serialize),
+       InstanceMethod("deserialize", &DatabaseSync::Deserialize),
        InstanceMethod("location", &DatabaseSync::LocationMethod),
        InstanceAccessor("isOpen", &DatabaseSync::IsOpenGetter, nullptr),
        InstanceAccessor("isTransaction", &DatabaseSync::IsTransactionGetter,
@@ -964,6 +966,117 @@ Napi::Value DatabaseSync::LocationMethod(const Napi::CallbackInfo &info) {
   return Napi::String::New(env, filename);
 }
 
+Napi::Value DatabaseSync::Serialize(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  std::string db_name = "main";
+  if (info.Length() > 0 && !info[0].IsUndefined()) {
+    if (!info[0].IsString()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"dbName\" argument must be a string.");
+      return env.Undefined();
+    }
+    db_name = info[0].As<Napi::String>().Utf8Value();
+  }
+
+  sqlite3_int64 size = 0;
+  unsigned char *data =
+      sqlite3_serialize(connection_, db_name.c_str(), &size, 0);
+
+  if (data == nullptr) {
+    if (size == 0) {
+      auto ab = Napi::ArrayBuffer::New(env, 0);
+      return Napi::Uint8Array::New(env, 0, ab, 0);
+    }
+    node::THROW_ERR_SQLITE_ERROR(env, sqlite3_errmsg(connection_));
+    return env.Undefined();
+  }
+
+  // ArrayBuffer takes ownership of the sqlite3_malloc'd buffer; the finalizer
+  // calls sqlite3_free when V8 GCs the backing store.
+  auto ab = Napi::ArrayBuffer::New(
+      env, data, static_cast<size_t>(size),
+      [](Napi::Env /*env*/, void *ptr) { sqlite3_free(ptr); });
+
+  return Napi::Uint8Array::New(env, static_cast<size_t>(size), ab, 0);
+}
+
+Napi::Value DatabaseSync::Deserialize(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (info.Length() < 1 || !info[0].IsTypedArray() ||
+      info[0].As<Napi::TypedArray>().TypedArrayType() != napi_uint8_array) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The \"buffer\" argument must be a Uint8Array.");
+    return env.Undefined();
+  }
+
+  Napi::Uint8Array input = info[0].As<Napi::Uint8Array>();
+  size_t byte_length = input.ByteLength();
+
+  if (byte_length == 0) {
+    node::THROW_ERR_INVALID_ARG_VALUE(
+        env, "The \"buffer\" argument must not be empty.");
+    return env.Undefined();
+  }
+
+  std::string db_name = "main";
+  if (info.Length() > 1 && !info[1].IsUndefined()) {
+    if (!info[1].IsObject()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"options\" argument must be an object.");
+      return env.Undefined();
+    }
+    Napi::Object options = info[1].As<Napi::Object>();
+    Napi::Value db_name_value = options.Get("dbName");
+    if (!db_name_value.IsUndefined()) {
+      if (!db_name_value.IsString()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.dbName\" argument must be a string.");
+        return env.Undefined();
+      }
+      db_name = db_name_value.As<Napi::String>().Utf8Value();
+    }
+  }
+
+  // SQLITE_DESERIALIZE_FREEONCLOSE transfers buffer ownership to SQLite, which
+  // calls sqlite3_free() on close (or on this call's failure). The buffer must
+  // therefore come from sqlite3_malloc, not new/malloc.
+  unsigned char *buf =
+      static_cast<unsigned char *>(sqlite3_malloc64(byte_length));
+  if (buf == nullptr) {
+    Napi::Error::New(env, "Memory allocation failed")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  memcpy(buf, input.Data(), byte_length);
+
+  // Finalize all open prepared statements; sqlite3_deserialize requires no
+  // active statements on the connection. After this call, any user-held
+  // StatementSync instances will throw on use.
+  FinalizeStatements();
+
+  int r = sqlite3_deserialize(
+      connection_, db_name.c_str(), buf, byte_length, byte_length,
+      SQLITE_DESERIALIZE_FREEONCLOSE | SQLITE_DESERIALIZE_RESIZEABLE);
+  if (r != SQLITE_OK) {
+    node::THROW_ERR_SQLITE_ERROR(env, sqlite3_errmsg(connection_));
+    return env.Undefined();
+  }
+
+  return env.Undefined();
+}
+
 Napi::Value DatabaseSync::IsOpenGetter(const Napi::CallbackInfo &info) {
   return Napi::Boolean::New(info.Env(), IsOpen());
 }
@@ -1088,8 +1201,23 @@ void DatabaseSync::InternalClose() {
     // This prevents use-after-free if backup is running on worker thread
     FinalizeBackups();
 
-    // Finalize all prepared statements
-    prepared_statements_.clear();
+    // Detach all live StatementSync instances from this database. We do NOT
+    // call sqlite3_finalize on their handles here: a user function callback
+    // can re-enter close() while sqlite3_step is on the call stack, and
+    // finalizing a statement mid-step is unsafe. sqlite3_close_v2 below
+    // tolerates outstanding statements by deferring the actual close until
+    // their handles are finalized (via ~StatementSync on GC).
+    {
+      std::set<StatementSync *> statements_copy;
+      {
+        std::lock_guard<std::mutex> lock(statements_mutex_);
+        statements_copy = statements_;
+        statements_.clear();
+      }
+      for (auto *stmt : statements_copy) {
+        stmt->DetachFromDatabase();
+      }
+    }
 
     // Delete all sessions before closing the database
     // This is required by SQLite to avoid undefined behavior
@@ -1649,6 +1777,31 @@ void DatabaseSync::FinalizeBackups() {
   }
 }
 
+void DatabaseSync::TrackStatement(StatementSync *stmt) {
+  std::lock_guard<std::mutex> lock(statements_mutex_);
+  statements_.insert(stmt);
+}
+
+void DatabaseSync::UntrackStatement(StatementSync *stmt) {
+  std::lock_guard<std::mutex> lock(statements_mutex_);
+  statements_.erase(stmt);
+}
+
+void DatabaseSync::FinalizeStatements() {
+  // Copy the set under lock then drain it; FinalizeFromDatabase nulls each
+  // statement's database_ so its destructor will not call UntrackStatement.
+  std::set<StatementSync *> statements_copy;
+  {
+    std::lock_guard<std::mutex> lock(statements_mutex_);
+    statements_copy = statements_;
+    statements_.clear();
+  }
+
+  for (auto *stmt : statements_copy) {
+    stmt->FinalizeFromDatabase();
+  }
+}
+
 // Context structure for changeset callbacks to avoid global state
 struct ChangesetCallbacks {
   std::function<int(int)> conflictCallback;
@@ -1978,6 +2131,7 @@ void StatementSync::InitStatement(DatabaseSync *database,
   }
 
   database_ = database;
+  database->TrackStatement(this);
   source_sql_ = sql;
 
   // Apply database-level defaults
@@ -2021,13 +2175,41 @@ void StatementSync::InitStatement(DatabaseSync *database,
 }
 
 StatementSync::~StatementSync() {
+  // If database_ is non-null, the database is still alive and tracking us;
+  // remove ourselves from its set. When the database is torn down it nulls
+  // database_ via FinalizeFromDatabase() before destruction, so we never
+  // call back into a freed DatabaseSync. This pattern avoids N-API Reset()
+  // calls during GC, which caused JIT corruption on Alpine/musl.
+  // See: commit 4da0638, nodejs/node-addon-api#660
+  if (database_) {
+    database_->UntrackStatement(this);
+  }
   if (statement_ && !finalized_) {
     sqlite3_finalize(statement_);
   }
-  // Raw pointer to database is managed by DatabaseSync::FinalizeStatements()
-  // which is called before DatabaseSync destructor. This avoids N-API
-  // Reset() calls during GC which cause JIT corruption on Alpine/musl.
-  // See: commit 4da0638, nodejs/node-addon-api#660
+}
+
+void StatementSync::FinalizeFromDatabase() {
+  if (statement_ && !finalized_) {
+    sqlite3_finalize(statement_);
+  }
+  statement_ = nullptr;
+  finalized_ = true;
+  // Detach from database so ~StatementSync will not call UntrackStatement
+  // back into a database that is being torn down or has already cleared
+  // its tracking set.
+  database_ = nullptr;
+}
+
+void StatementSync::DetachFromDatabase() {
+  // Mark finalized at the JS-visible level so further method calls throw
+  // "statement has been finalized", but do NOT call sqlite3_finalize on the
+  // underlying handle — that's deferred to ~StatementSync. This is safe to
+  // call even when sqlite3_step is mid-execution on this statement
+  // (a user callback may have re-entered close()), because we only mutate
+  // our own bookkeeping flags here.
+  finalized_ = true;
+  database_ = nullptr;
 }
 
 inline int StatementSync::ResetStatement() {
@@ -2043,7 +2225,7 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
   }
 
   if (finalized_) {
-    node::THROW_ERR_INVALID_STATE(env, "Statement has been finalized");
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
     return env.Undefined();
   }
 
@@ -2122,7 +2304,7 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
   }
 
   if (finalized_) {
-    node::THROW_ERR_INVALID_STATE(env, "Statement has been finalized");
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
     return env.Undefined();
   }
 
@@ -2177,7 +2359,7 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (finalized_) {
-    node::THROW_ERR_INVALID_STATE(env, "Statement has been finalized");
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
     return env.Undefined();
   }
 
@@ -2299,7 +2481,7 @@ Napi::Value StatementSync::SourceSQLGetter(const Napi::CallbackInfo &info) {
 
 Napi::Value StatementSync::ExpandedSQLGetter(const Napi::CallbackInfo &info) {
   if (finalized_) {
-    node::THROW_ERR_INVALID_STATE(info.Env(), "Statement has been finalized");
+    node::THROW_ERR_INVALID_STATE(info.Env(), "statement has been finalized");
     return info.Env().Undefined();
   }
 
@@ -2327,7 +2509,7 @@ Napi::Value StatementSync::SetReadBigInts(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (finalized_) {
-    node::THROW_ERR_INVALID_STATE(env, "The statement has been finalized");
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
     return env.Undefined();
   }
 
@@ -2350,7 +2532,7 @@ Napi::Value StatementSync::SetReturnArrays(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (finalized_) {
-    node::THROW_ERR_INVALID_STATE(env, "The statement has been finalized");
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
     return env.Undefined();
   }
 
@@ -2374,7 +2556,7 @@ StatementSync::SetAllowBareNamedParameters(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (finalized_) {
-    node::THROW_ERR_INVALID_STATE(env, "The statement has been finalized");
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
     return env.Undefined();
   }
 
@@ -2398,7 +2580,7 @@ StatementSync::SetAllowUnknownNamedParameters(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (finalized_) {
-    node::THROW_ERR_INVALID_STATE(env, "The statement has been finalized");
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
     return env.Undefined();
   }
 
@@ -2489,7 +2671,7 @@ void StatementSync::BindParameters(const Napi::CallbackInfo &info,
 
   // Safety checks
   if (finalized_) {
-    node::THROW_ERR_INVALID_STATE(env, "Statement has been finalized");
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
     return;
   }
 
@@ -2753,7 +2935,7 @@ Napi::Value StatementSync::CreateResult() {
 
   // Safety checks
   if (!statement_ || finalized_) {
-    node::THROW_ERR_INVALID_STATE(env, "Statement has been finalized");
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
     return env.Undefined();
   }
 
