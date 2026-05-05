@@ -128,7 +128,7 @@ function run({
   // Always run these
   run({ cmd: "npm install", desc: "Installing dependencies" });
   run({
-    cmd: "npm run update:actions",
+    cmd: "npm run update:pinact",
     desc: "Updating GitHub Actions",
     optional: isWin || isMacOS,
   });
