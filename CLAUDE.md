@@ -306,7 +306,7 @@ Follow Conventional Commits format with these guidelines:
 
 - **First line**: Include the file or module being changed, with a summary under 50 characters
 - **Type**: Use conventional commit types (feat, fix, chore, docs, test, refactor, build, ci, perf, style)
-- **Scope**: The primary file, module, or component being changed (e.g., `gyp`, `test`, `precommit`, `ci`)
+- **Scope**: The primary file, module, or component being changed (e.g., `gyp`, `test`, `all`, `ci`)
 - **Summary**: Imperative mood, lowercase, no period at end
 
 **Additional lines** (if needed):

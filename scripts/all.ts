@@ -67,7 +67,7 @@ async function checkRootOwnedFiles(): Promise<void> {
     if (answer.toLowerCase() === "y" || answer.toLowerCase() === "yes") {
       console.log(`\nPlease run the following command:`);
       console.log(`  ${fixCommand}`);
-      console.log(`\nThen re-run the precommit script.`);
+      console.log(`\nThen re-run the all script.`);
       process.exit(1);
     } else {
       console.log("Continuing with root-owned files (may cause errors)...");
@@ -212,5 +212,5 @@ function run({
     desc: "Comprehensive memory tests",
   });
 
-  console.log("\n✅ All precommit checks passed!");
+  console.log("\n✅ All checks passed!");
 })();

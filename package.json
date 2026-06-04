@@ -92,7 +92,7 @@
     "//docs": "documentation",
     "docs": "typedoc",
     "//ci": "CI and release commands",
-    "precommit": "npx --yes tsx scripts/precommit.ts",
+    "all": "npx --yes tsx scripts/all.ts",
     "release:prepare": "npm run build:dist",
     "install:osv-scanner": "go install github.com/google/osv-scanner/cmd/osv-scanner@latest",
     "update:pinact": "pinact run -u",
