@@ -128,13 +128,13 @@
     "performance"
   ],
   "dependencies": {
-    "node-addon-api": "^8.7.0",
+    "node-addon-api": "^8.8.0",
     "node-gyp-build": "^4.8.4"
   },
   "devDependencies": {
     "@photostructure/sqlite-vec": "^1.1.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.9.1",
     "better-sqlite3": "^12.10.0",
     "cross-env": "^10.1.0",
     "del-cli": "^7.0.0",
@@ -144,20 +144,20 @@
     "globals": "^17.6.0",
     "jest": "^30.4.2",
     "node-gyp": "^12.3.0",
-    "npm-check-updates": "^22.2.0",
-    "npm-run-all2": "8.0.4",
+    "npm-check-updates": "^22.2.1",
+    "npm-run-all2": "9.0.1",
     "prebuildify": "^6.0.1",
     "prettier": "^3.8.3",
     "prettier-plugin-organize-imports": "^4.3.0",
-    "ts-jest": "^29.4.9",
+    "ts-jest": "^29.4.11",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
+    "tsx": "^4.22.3",
     "typedoc": "^0.28.19",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1"
+    "typescript-eslint": "^8.60.0"
   },
   "versions": {
-    "nodejs": "v26.x-staging@ca3c309",
-    "sqlite": "3.53.1"
+    "nodejs": "v26.x-staging@619b38e",
+    "sqlite": "3.53.2"
   }
 }
