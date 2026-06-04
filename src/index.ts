@@ -187,6 +187,10 @@ export interface SqliteModule {
 const _DatabaseSync = binding.DatabaseSync;
 // Wrapper around the native constructor to enforce usage of `new` with the correct error code.
 // We use a function wrapper instead of a Proxy for better performance and explicit prototype handling.
+// The function expression is named so that DatabaseSync.name === "DatabaseSync"
+// at runtime (TypeScript compiles this to `exports.DatabaseSync = ...`, an
+// assignment to a member expression, which does NOT infer a name otherwise).
+// eslint-disable-next-line @typescript-eslint/no-shadow -- intentional: the named function expression shares its binding's name
 export const DatabaseSync = function DatabaseSync(this: any, ...args: any[]) {
   if (!new.target) {
     const err = new TypeError("Cannot call constructor without `new`");
@@ -309,7 +313,10 @@ if (!Object.getOwnPropertyDescriptor(DatabaseSync.prototype, "limits")) {
 // Store the native binding's StatementSync for internal use
 const _StatementSync = binding.StatementSync;
 // Export a wrapper that throws ERR_ILLEGAL_CONSTRUCTOR when called directly
-// but preserves instanceof checks and prototype chain
+// but preserves instanceof checks and prototype chain.
+// Named function expression so StatementSync.name === "StatementSync" at
+// runtime (see the DatabaseSync wrapper above for why this is required).
+// eslint-disable-next-line @typescript-eslint/no-shadow -- intentional: the named function expression shares its binding's name
 export const StatementSync = function StatementSync() {
   const err = new TypeError("Illegal constructor");
   (err as NodeJS.ErrnoException).code = "ERR_ILLEGAL_CONSTRUCTOR";
