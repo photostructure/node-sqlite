@@ -2262,8 +2262,7 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
   }
 
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(
-        env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
     return env.Undefined();
   }
 
@@ -2350,8 +2349,7 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
   }
 
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(
-        env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
     return env.Undefined();
   }
 
@@ -2415,8 +2413,7 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
   }
 
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(
-        env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
     return env.Undefined();
   }
 
@@ -2480,8 +2477,8 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
   }
 
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(
-        info.Env(), "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(info.Env(),
+                                  "statement is currently being executed");
     return info.Env().Undefined();
   }
 
@@ -3250,8 +3247,7 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
   }
 
   if (stmt_->stepping_) {
-    node::THROW_ERR_INVALID_STATE(
-        env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
     return env.Undefined();
   }
 
@@ -3308,8 +3304,7 @@ Napi::Value StatementSyncIterator::Return(const Napi::CallbackInfo &info) {
   }
 
   if (stmt_->stepping_) {
-    node::THROW_ERR_INVALID_STATE(
-        env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
     return env.Undefined();
   }
 
@@ -3337,8 +3332,7 @@ Napi::Value StatementSyncIterator::ToArray(const Napi::CallbackInfo &info) {
   }
 
   if (stmt_->stepping_) {
-    node::THROW_ERR_INVALID_STATE(
-        env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
     return env.Undefined();
   }
 
