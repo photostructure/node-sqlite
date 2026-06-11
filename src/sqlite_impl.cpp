@@ -3567,12 +3567,17 @@ void BackupJob::CleanupHook(void *arg) {
   if (!self->progress_func_.IsEmpty()) {
     self->progress_func_.Reset();
   }
+  // Release the strong reference to the source database now; during teardown
+  // the implicit ~ObjectReference in ~BackupJob would be unsafe.
+  if (!self->source_ref_.IsEmpty()) {
+    self->source_ref_.Reset();
+  }
 }
 
 // BackupJob Implementation
 BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
-                     std::string destination_path, std::string source_db,
-                     std::string dest_db, int pages,
+                     Napi::Object source_object, std::string destination_path,
+                     std::string source_db, std::string dest_db, int pages,
                      Napi::Function progress_func,
                      Napi::Promise::Deferred deferred)
     : Napi::AsyncProgressWorker<BackupProgress>(
@@ -3580,6 +3585,10 @@ BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
               ? progress_func
               : Napi::Function::New(env, [](const Napi::CallbackInfo &) {})),
       source_(source),
+      // Strong reference keeps the source database (and thus its connection,
+      // captured below) alive for the whole backup, even if the caller drops
+      // its last JS reference and the GC runs mid-backup.
+      source_ref_(Napi::Persistent(source_object)),
       // Capture connection pointer now while we know it's valid
       // This prevents use-after-free if database is closed during backup
       source_connection_(source->connection()),
@@ -3957,9 +3966,12 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
   // Create promise for async backup operation
   Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
 
-  // Create and schedule backup job
+  // Create and schedule backup job. Pass the database's JS object so the job
+  // can hold a strong reference and keep the source alive for the whole
+  // backup (see BackupJob::source_ref_).
   BackupJob *job =
-      new BackupJob(env, this, std::move(*dest_path), std::move(source_db),
+      new BackupJob(env, this, info.This().As<Napi::Object>(),
+                    std::move(*dest_path), std::move(source_db),
                     std::move(target_db), rate, progress_func, deferred);
 
   // Queue the async work - AsyncWorker will delete itself when complete

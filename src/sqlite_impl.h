@@ -472,9 +472,10 @@ struct BackupProgress {
 // Backup job for asynchronous database backup
 class BackupJob : public Napi::AsyncProgressWorker<BackupProgress> {
 public:
-  BackupJob(Napi::Env env, DatabaseSync *source, std::string destination_path,
-            std::string source_db, std::string dest_db, int pages,
-            Napi::Function progress_func, Napi::Promise::Deferred deferred);
+  BackupJob(Napi::Env env, DatabaseSync *source, Napi::Object source_object,
+            std::string destination_path, std::string source_db,
+            std::string dest_db, int pages, Napi::Function progress_func,
+            Napi::Promise::Deferred deferred);
   ~BackupJob();
 
   void Execute(const ExecutionProgress &progress) override;
@@ -492,6 +493,14 @@ public:
 
 private:
   DatabaseSync *source_;
+  // Strong reference to the source DatabaseSync's JS object, held for the
+  // lifetime of the job so the source cannot be garbage-collected (and its
+  // connection closed) while the backup is still reading from it on the
+  // worker thread. Released by ~BackupJob on normal completion and by
+  // CleanupHook during environment teardown. Without this, a caller that
+  // drops its last reference to the source mid-backup would see the backup
+  // fail (the source connection is torn down underneath it) or crash.
+  Napi::ObjectReference source_ref_;
   sqlite3 *source_connection_; // Captured at construction to avoid race
   std::string destination_path_;
   std::string source_db_;
