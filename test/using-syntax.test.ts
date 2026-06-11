@@ -13,7 +13,7 @@ describe("Using Syntax (Explicit Resource Management)", () => {
   jest.setTimeout(getTestTimeout());
 
   test("using statement with DatabaseSync automatically closes database", () => {
-    let dbRef: DatabaseSyncInstance | null = null;
+    let dbRef: DatabaseSyncInstance | undefined;
 
     // Use a block to ensure the using scope is clearly defined
     {
@@ -41,7 +41,7 @@ describe("Using Syntax (Explicit Resource Management)", () => {
   });
 
   test("nested using with database and manual statement cleanup", () => {
-    let dbRef: DatabaseSyncInstance | null = null;
+    let dbRef: DatabaseSyncInstance | undefined;
     let stmtRef: any = null;
 
     {
@@ -76,7 +76,7 @@ describe("Using Syntax (Explicit Resource Management)", () => {
   });
 
   test("using statement handles exceptions properly", () => {
-    let dbRef: DatabaseSyncInstance | null = null;
+    let dbRef: DatabaseSyncInstance | undefined;
 
     expect(() => {
       using db = new DatabaseSync(":memory:");
@@ -94,7 +94,7 @@ describe("Using Syntax (Explicit Resource Management)", () => {
   });
 
   test("using statement with database and multiple statements", () => {
-    let dbRef: DatabaseSyncInstance | null = null;
+    let dbRef: DatabaseSyncInstance | undefined;
     let insertRef: any = null;
     let selectRef: any = null;
 
@@ -130,7 +130,7 @@ describe("Using Syntax (Explicit Resource Management)", () => {
   });
 
   test("using statement with async operations", async () => {
-    let dbRef: DatabaseSyncInstance | null = null;
+    let dbRef: DatabaseSyncInstance | undefined;
 
     {
       using db = new DatabaseSync(":memory:");

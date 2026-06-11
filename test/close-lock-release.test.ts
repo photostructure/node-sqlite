@@ -37,7 +37,9 @@ describe("db.close() releases SQLite locks held by detached statements", () => {
 
     db1.close();
 
-    // Drop the iterator/statement reference so GC can collect it.
+    // Drop the iterator/statement reference so GC can collect it. The null is
+    // never read again, but the write itself is what releases the reference.
+    // eslint-disable-next-line no-useless-assignment
     iter = null;
     global.gc!();
     global.gc!();

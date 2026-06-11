@@ -83,6 +83,7 @@ export async function retryWithBackoff<T>(
       if (attempt === maxRetries) {
         throw new Error(
           `Failed ${description} after ${maxRetries + 1} attempts: ${error}`,
+          { cause: error },
         );
       }
 

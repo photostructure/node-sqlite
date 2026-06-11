@@ -336,6 +336,7 @@ describe("Concurrent Access Patterns Tests", () => {
           } catch (error: any) {
             throw new Error(
               `Query failed on reader ${index}, round ${round}: ${error.message}`,
+              { cause: error },
             );
           }
         });

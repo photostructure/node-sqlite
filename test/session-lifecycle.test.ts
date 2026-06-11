@@ -350,7 +350,7 @@ describe("Session Lifecycle Management (RAII)", () => {
     });
 
     it("should verify weak_ptr behavior", () => {
-      let weakRefWorked = false;
+      let weakRefWorked: boolean;
 
       {
         const db = new DatabaseSync(":memory:");
