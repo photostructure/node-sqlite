@@ -697,6 +697,17 @@ Napi::Value DatabaseSync::Close(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  // SQLite forbids closing a connection while a statement is executing on it.
+  // The only way close() is reachable in that state is from inside a user
+  // callback invoked by sqlite3_step()/sqlite3_exec(); reject it rather than
+  // finalize a statement whose VM is still on the stack (undefined behavior).
+  if (IsExecutingStatement()) {
+    node::THROW_ERR_INVALID_STATE(
+        env,
+        "database cannot be closed inside a user-defined function callback");
+    return env.Undefined();
+  }
+
   try {
     InternalClose();
   } catch (const std::exception &e) {
@@ -710,6 +721,14 @@ Napi::Value DatabaseSync::Dispose(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
+
+  // Symbol.dispose is a no-op while a statement is executing on this
+  // connection (i.e. inside a user-defined function callback). Disposal
+  // deliberately swallows errors, and closing here would finalize a
+  // statement whose sqlite3_step is still on the stack (undefined behavior).
+  if (IsExecutingStatement()) {
     return env.Undefined();
   }
 
@@ -910,8 +929,15 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
   SetIgnoreNextSQLiteError(false);
 
   char *error_msg = nullptr;
+  // Raise the user-callback depth for the duration of sqlite3_exec so that a
+  // close()/deserialize() re-entered from a user function it invokes throws
+  // ERR_INVALID_STATE. sqlite3_exec is a plain C call and never propagates a
+  // C++ exception (JS callback errors are deferred), so manual balancing here
+  // is safe.
+  EnterStatementStep();
   int result =
       sqlite3_exec(connection(), sql.c_str(), nullptr, nullptr, &error_msg);
+  LeaveStatementStep();
 
   if (result != SQLITE_OK) {
     // Check for deferred authorizer exception first
@@ -1011,6 +1037,17 @@ Napi::Value DatabaseSync::Deserialize(const Napi::CallbackInfo &info) {
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  // deserialize() finalizes every open statement and replaces the database
+  // contents; doing so while a statement is executing (i.e. from inside a
+  // user-defined function callback) would pull the rug from under the running
+  // VM. Reject it the same way SQLite would.
+  if (IsExecutingStatement()) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "database operation is not allowed inside a user-defined "
+             "function callback");
     return env.Undefined();
   }
 
@@ -1201,23 +1238,14 @@ void DatabaseSync::InternalClose() {
     // This prevents use-after-free if backup is running on worker thread
     FinalizeBackups();
 
-    // Detach all live StatementSync instances from this database. We do NOT
-    // call sqlite3_finalize on their handles here: a user function callback
-    // can re-enter close() while sqlite3_step is on the call stack, and
-    // finalizing a statement mid-step is unsafe. sqlite3_close_v2 below
-    // tolerates outstanding statements by deferring the actual close until
-    // their handles are finalized (via ~StatementSync on GC).
-    {
-      std::set<StatementSync *> statements_copy;
-      {
-        std::lock_guard<std::mutex> lock(statements_mutex_);
-        statements_copy = statements_;
-        statements_.clear();
-      }
-      for (auto *stmt : statements_copy) {
-        stmt->DetachFromDatabase();
-      }
-    }
+    // Finalize every live StatementSync's sqlite3_stmt now. This is safe
+    // because close() and Dispose() reject when IsExecutingStatement() is
+    // true, so InternalClose() can never run while a sqlite3_step is on the
+    // stack. Finalizing here (rather than deferring to ~StatementSync on GC)
+    // releases the SHARED/read locks any suspended statement holds, so the
+    // following sqlite3_close() succeeds immediately instead of leaving a
+    // zombie connection whose locks outlive the close() call.
+    FinalizeStatements();
 
     // Delete all sessions before closing the database
     // This is required by SQLite to avoid undefined behavior
@@ -2143,8 +2171,13 @@ void StatementSync::InitStatement(DatabaseSync *database,
 
   // Prepare the statement
   const char *tail = nullptr;
-  int result = sqlite3_prepare_v2(database->connection(), sql.c_str(), -1,
-                                  &statement_, &tail);
+  int result;
+  {
+    database->EnterStatementStep();
+    result = sqlite3_prepare_v2(database->connection(), sql.c_str(), -1,
+                                &statement_, &tail);
+    database->LeaveStatementStep();
+  }
 
   if (result != SQLITE_OK) {
     // Handle deferred authorizer exceptions:
@@ -2201,17 +2234,6 @@ void StatementSync::FinalizeFromDatabase() {
   database_ = nullptr;
 }
 
-void StatementSync::DetachFromDatabase() {
-  // Mark finalized at the JS-visible level so further method calls throw
-  // "statement has been finalized", but do NOT call sqlite3_finalize on the
-  // underlying handle — that's deferred to ~StatementSync. This is safe to
-  // call even when sqlite3_step is mid-execution on this statement
-  // (a user callback may have re-entered close()), because we only mutate
-  // our own bookkeeping flags here.
-  finalized_ = true;
-  database_ = nullptr;
-}
-
 inline int StatementSync::ResetStatement() {
   reset_generation_++;
   return sqlite3_reset(statement_);
@@ -2239,6 +2261,12 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (stepping_) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "statement is currently being executed");
+    return env.Undefined();
+  }
+
   try {
     Reset();
     BindParameters(info);
@@ -2249,7 +2277,10 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
     }
 
     // Execute the statement
-    sqlite3_step(statement_);
+    {
+      StepGuard guard(this);
+      sqlite3_step(statement_);
+    }
     // Reset immediately after step to ensure sqlite3_changes() returns
     // correct value. This fixes an issue where RETURNING queries would
     // report changes: 0 on the first call.
@@ -2318,6 +2349,12 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (stepping_) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "statement is currently being executed");
+    return env.Undefined();
+  }
+
   try {
     Reset();
     BindParameters(info);
@@ -2327,7 +2364,11 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
       return env.Undefined();
     }
 
-    int result = sqlite3_step(statement_);
+    int result;
+    {
+      StepGuard guard(this);
+      result = sqlite3_step(statement_);
+    }
 
     if (result == SQLITE_ROW) {
       Napi::Value value = CreateResult();
@@ -2373,6 +2414,12 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (stepping_) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "statement is currently being executed");
+    return env.Undefined();
+  }
+
   try {
     Reset();
     BindParameters(info);
@@ -2385,6 +2432,9 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
     Napi::Array results = Napi::Array::New(env);
     uint32_t index = 0;
 
+    // Held across the whole row loop: a user function invoked by any step
+    // must not be able to re-enter this statement until the loop unwinds.
+    StepGuard guard(this);
     while (true) {
       int result = sqlite3_step(statement_);
 
@@ -2426,6 +2476,12 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
   if (!statement_) {
     node::THROW_ERR_INVALID_STATE(info.Env(),
                                   "Statement is not properly initialized");
+    return info.Env().Undefined();
+  }
+
+  if (stepping_) {
+    node::THROW_ERR_INVALID_STATE(
+        info.Env(), "statement is currently being executed");
     return info.Env().Undefined();
   }
 
@@ -3193,6 +3249,12 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (stmt_->stepping_) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "statement is currently being executed");
+    return env.Undefined();
+  }
+
   if (done_) {
     Napi::Object result = CreateObjectWithNullPrototype(env);
     result.Set("done", true);
@@ -3200,7 +3262,11 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
     return result;
   }
 
-  int r = sqlite3_step(stmt_->statement_);
+  int r;
+  {
+    StatementSync::StepGuard guard(stmt_);
+    r = sqlite3_step(stmt_->statement_);
+  }
 
   if (r != SQLITE_ROW) {
     if (r != SQLITE_DONE) {
@@ -3241,6 +3307,12 @@ Napi::Value StatementSyncIterator::Return(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (stmt_->stepping_) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "statement is currently being executed");
+    return env.Undefined();
+  }
+
   // Reset the statement and mark as done
   sqlite3_reset(stmt_->statement_);
   done_ = true;
@@ -3264,9 +3336,16 @@ Napi::Value StatementSyncIterator::ToArray(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (stmt_->stepping_) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "statement is currently being executed");
+    return env.Undefined();
+  }
+
   Napi::Array arr = Napi::Array::New(env);
   uint32_t idx = 0;
 
+  StatementSync::StepGuard guard(stmt_);
   while (!done_) {
     int r = sqlite3_step(stmt_->statement_);
 

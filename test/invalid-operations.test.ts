@@ -436,7 +436,9 @@ describe("Invalid Operations Tests", () => {
       // All statement operations should fail
       expect(() => stmt1.all()).toThrow(/closed|invalid|finalized/i);
       expect(() => stmt2.run(1, "test")).toThrow(/closed|invalid|finalized/i);
-      expect(() => stmt3.run("updated", 1)).toThrow(/closed|invalid|finalized/i);
+      expect(() => stmt3.run("updated", 1)).toThrow(
+        /closed|invalid|finalized/i,
+      );
 
       // Iterator should also fail
       expect(() => {
@@ -1060,27 +1062,37 @@ describe("Invalid Operations Tests", () => {
       db.exec("INSERT INTO test VALUES (1), (2), (3), (4), (5)");
 
       let stepCount = 0;
+      let closeError: unknown;
       db.aggregate("close_during_agg", {
         start: 0,
         step: (acc: number, val: number) => {
           stepCount++;
           if (stepCount === 3) {
-            // This is very risky - closing DB during aggregate
-            // Should be handled gracefully
+            // SQLite forbids closing the connection while a statement is
+            // executing. The guard rejects this with ERR_INVALID_STATE
+            // instead of tearing down the running aggregate.
             try {
               db.close();
-            } catch {
-              // Expected to fail
+            } catch (e) {
+              closeError = e;
             }
           }
           return acc + val;
         },
       });
 
-      // Try to run the aggregate
-      expect(() => {
-        db.prepare("SELECT close_during_agg(value) FROM test").get();
-      }).toThrow();
+      // The aggregate runs to completion: db.close() inside the step throws
+      // synchronously and is caught above, so the SELECT is unaffected.
+      const row = db
+        .prepare("SELECT close_during_agg(value) AS total FROM test")
+        .get() as { total: number };
+      expect(row.total).toBe(15);
+      expect(closeError).toEqual(
+        expect.objectContaining({ code: "ERR_INVALID_STATE" }),
+      );
+
+      // Connection is still open after the query unwinds; closing now works.
+      expect(() => db.close()).not.toThrow();
     });
 
     test("handles statement use across database re-open", async () => {

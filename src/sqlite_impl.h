@@ -169,6 +169,18 @@ public:
   sqlite3 *connection() const { return connection_; }
   bool IsOpen() const { return connection_ != nullptr; }
 
+  // User-callback reentrancy tracking. While a sqlite3_prepare_v2(),
+  // sqlite3_step(), or sqlite3_exec() call is on the stack, any JavaScript user
+  // callback it invokes (a user-defined function, aggregate, or authorizer)
+  // runs with this depth raised. Operations that SQLite forbids from inside
+  // such a callback — close() and deserialize() — check IsExecutingStatement()
+  // and throw ERR_INVALID_STATE instead of corrupting connection state.
+  // Single-threaded by construction (statements only run on their creation
+  // thread), so no synchronization is needed.
+  void EnterStatementStep() { ++statements_in_progress_; }
+  void LeaveStatementStep() { --statements_in_progress_; }
+  bool IsExecutingStatement() const { return statements_in_progress_ > 0; }
+
   // User-defined functions
   Napi::Value CustomFunction(const Napi::CallbackInfo &info);
 
@@ -255,15 +267,20 @@ private:
   bool read_only_ = false;
   bool allow_load_extension_ = false;
   bool enable_load_extension_ = false;
-  std::set<Session *> sessions_;       // Track all active sessions
-  mutable std::mutex sessions_mutex_;  // Protect sessions_ for thread safety
-  std::set<BackupJob *> backups_;      // Track all active backup jobs
-  mutable std::mutex backups_mutex_;   // Protect backups_ for thread safety
-  std::set<StatementSync *> statements_;  // Track all live prepared statements
+  std::set<Session *> sessions_;         // Track all active sessions
+  mutable std::mutex sessions_mutex_;    // Protect sessions_ for thread safety
+  std::set<BackupJob *> backups_;        // Track all active backup jobs
+  mutable std::mutex backups_mutex_;     // Protect backups_ for thread safety
+  std::set<StatementSync *> statements_; // Track all live prepared statements
   mutable std::mutex statements_mutex_;
   std::thread::id creation_thread_;
   napi_env env_;                          // Store for cleanup purposes
   bool ignore_next_sqlite_error_ = false; // For user function error handling
+
+  // Depth of nested sqlite3_step()/sqlite3_exec() calls currently on the
+  // stack for this connection. Raised by StatementSync::StepGuard and around
+  // Exec()'s sqlite3_exec(); see EnterStatementStep()/IsExecutingStatement().
+  int statements_in_progress_ = 0;
 
   // Deferred exception from authorizer callback - stored when exception occurs
   // in callback context, thrown after SQLite operation completes
@@ -304,14 +321,6 @@ public:
   // finalized".
   void FinalizeFromDatabase();
 
-  // Called by DatabaseSync::InternalClose() to detach this statement from
-  // its (now-closing) database. Marks the statement finalized for the
-  // purposes of further JS method calls but does NOT call sqlite3_finalize
-  // — that's deferred to ~StatementSync. This avoids finalizing a statement
-  // whose sqlite3_step is on the call stack (a user function callback may
-  // have re-entered close() during evaluation), which is unsafe.
-  void DetachFromDatabase();
-
   // Statement operations
   Napi::Value Run(const Napi::CallbackInfo &info);
   Napi::Value Get(const Napi::CallbackInfo &info);
@@ -345,6 +354,42 @@ private:
   std::string source_sql_;
   bool finalized_ = false;
   std::thread::id creation_thread_;
+
+  // True while a sqlite3_step() on this statement is on the stack. Checked by
+  // Run/Get/All/Iterate and the iterator's next() so that re-entering the
+  // *currently executing* statement from a user-defined function callback
+  // throws ERR_INVALID_STATE rather than resetting/re-stepping the live VM
+  // (which loops forever) or finalizing memory the outer step still reads.
+  bool stepping_ = false;
+
+  // RAII guard held across the sqlite3_step() call(s) of a single
+  // Run/Get/All/iterate operation. Sets stepping_ for this statement and
+  // raises the owning database's user-callback depth for the duration, so
+  // both per-statement reentry and connection-level close()/deserialize()
+  // are guarded. The database pointer is captured at construction to keep
+  // Enter/Leave balanced even if database_ changes.
+  class StepGuard {
+  public:
+    explicit StepGuard(StatementSync *stmt)
+        : stmt_(stmt), database_(stmt->database_) {
+      stmt_->stepping_ = true;
+      if (database_) {
+        database_->EnterStatementStep();
+      }
+    }
+    ~StepGuard() {
+      stmt_->stepping_ = false;
+      if (database_) {
+        database_->LeaveStatementStep();
+      }
+    }
+    StepGuard(const StepGuard &) = delete;
+    StepGuard &operator=(const StepGuard &) = delete;
+
+  private:
+    StatementSync *stmt_;
+    DatabaseSync *database_;
+  };
 
   // Configuration options
   bool use_big_ints_ = false;
