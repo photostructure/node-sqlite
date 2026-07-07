@@ -1,5 +1,5 @@
 /**
- * Integration tests for @mceachen/sqlite-vec extension
+ * Integration tests for @photostructure/sqlite-vec extension
  *
  * These tests validate that sqlite-vec can be loaded as an extension
  * and that vec0 virtual tables and vector functions work correctly.
@@ -12,10 +12,10 @@ let sqliteVecPath: string | undefined;
 let sqliteVecLoadError: string | undefined;
 
 try {
-  const sqliteVec = require("@mceachen/sqlite-vec");
+  const sqliteVec = require("@photostructure/sqlite-vec");
   sqliteVecPath = sqliteVec.getLoadablePath();
 } catch (error: any) {
-  sqliteVecLoadError = `Failed to load @mceachen/sqlite-vec: ${error.message}`;
+  sqliteVecLoadError = `Failed to load @photostructure/sqlite-vec: ${error.message}`;
 }
 
 // Log status at module load time
