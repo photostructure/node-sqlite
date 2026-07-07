@@ -546,7 +546,10 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
       const dbPath = getDbPath("vec-optimize.db");
       db = createChurnTable(dbPath);
 
-      insertRows(db, Array.from({ length: 40 }, (_, i) => i + 1));
+      insertRows(
+        db,
+        Array.from({ length: 40 }, (_, i) => i + 1),
+      );
 
       // Scattered deletes (~40%) fragment the chunks so optimize compacts.
       const del = db.prepare("DELETE FROM t WHERE rowid = ?");
