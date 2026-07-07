@@ -1,0 +1,11 @@
+# OSV Scanner Configuration
+# https://google.github.io/osv-scanner/configuration/
+
+[[IgnoredVulns]]
+# GHSA-g7r4-m6w7-qqqr: path traversal in esbuild's dev server (--servedir) on
+# Windows, affecting esbuild <0.28.1. esbuild is a dev-only transitive dependency
+# (via tsup) used solely as a bundler; its dev server is never invoked, so this is
+# not exploitable here. Resolves naturally once tsup bumps its esbuild range past
+# the affected versions.
+id = "GHSA-g7r4-m6w7-qqqr"
+reason = "esbuild dev-server path traversal (Windows --servedir only); dev-only transitive dep via tsup, used only as a bundler — dev server never invoked."
