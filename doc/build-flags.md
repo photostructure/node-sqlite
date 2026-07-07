@@ -160,6 +160,7 @@ These SQLite features are available but not enabled in our build:
 1. **Binary Size**: Additional features increase library size by ~200KB
 2. **Memory Usage**: More features mean higher base memory consumption
 3. **Compilation Time**: More features extend build time
+4. **API Armor**: `SQLITE_ENABLE_API_ARMOR` adds argument-validation checks at the C-API boundary. Benchmarking it on vs. off across `SELECT`/`INSERT`/`BLOB` workloads (30 trials each) showed all differences within run-to-run noise (~1–2%, with no consistent direction) — i.e. **no measurable runtime cost**, since the checks are never-taken branches on well-formed calls.
 
 ## Customizing build flags
 
