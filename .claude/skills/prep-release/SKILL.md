@@ -11,7 +11,9 @@ Prepare @photostructure/sqlite for a new release. This skill does NOT publish �
 
 - **NEVER bump the `version` field in `package.json`** — the release GitHub Action (`.github/workflows/build.yml`) handles `npm version` based on the workflow_dispatch input (`patch` | `minor` | `major`). Manual bumps break the workflow.
 - **NEVER modify files under `src/upstream/`** — they are overwritten by sync scripts.
-- **Work on the designated branch** the session was started with (e.g. `claude/release-prep-automation-*`), NOT on `main`.
+- **Branch depends on where the session runs** (check `echo $USER`):
+  - **Local hardware** (`$USER` is `mrm`): committing on `main` is fine — that's how the maintainer drives releases. No feature branch required.
+  - **Anthropic-owned cloud VM** (`$USER` is anything else — a generated/bot user): work on the branch the session was started with (e.g. `claude/release-prep-automation-*`), NOT on `main`.
 - **Do NOT create a git tag, run `npm publish`, or create a GitHub release.** Those steps are the release workflow's job.
 
 ## Workflow
@@ -20,7 +22,7 @@ Create a todo list with TodoWrite for the steps below and work through them sequ
 
 ### 1. Preflight
 
-- Confirm current branch (`git branch --show-current`) matches the development branch specified for this session.
+- Determine the environment with `echo $USER` (see Critical constraints). On local hardware (`$USER` is `mrm`), `main` is the expected branch — no action needed. On an Anthropic cloud VM, confirm the current branch (`git branch --show-current`) matches the `claude/*` development branch the session was started on.
 - `git status` must be clean (or have only intentional in-progress work). Stash/commit anything unexpected before proceeding.
 - `git fetch --tags origin` so the latest release tag is visible.
 - Identify the last release:
@@ -224,16 +226,15 @@ git commit -m "..."
 git push -u origin <branch>    # retry up to 4x with 2s/4s/8s/16s backoff on network errors
 ```
 
-**Do NOT push to `main` directly.** Push to the session's development branch.
+Where and how you land the commit depends on the environment (`echo $USER`, per Critical constraints):
 
-**Open a PR when the branch is a `claude/*` branch** (the usual convention for web-session branches). Use `mcp__github__create_pull_request` with `base: main` and the branch name as `head`. Include in the PR body:
-- Version bump chosen + one-line justification
-- Upstream sync deltas (Node SHA old → new, SQLite old → new)
-- Dep bumps
-- Test results summary
-- Any pre-existing test failures you confirmed are NOT regressions (for reviewer context)
-
-For non-`claude/*` branches where the user owns the workflow, just push and let them open the PR.
+- **Local hardware** (`$USER` is `mrm`): commit on `main` and push `origin main` — that's the maintainer's normal flow. Always ask before committing/pushing (see CLAUDE.md). Do NOT open a PR.
+- **Anthropic cloud VM** (`$USER` is anything else): **do NOT push to `main` directly.** Push to the session's `claude/*` development branch, then open a PR with `mcp__github__create_pull_request` (`base: main`, the branch as `head`). Include in the PR body:
+  - Version bump chosen + one-line justification
+  - Upstream sync deltas (Node SHA old → new, SQLite old → new)
+  - Dep bumps
+  - Test results summary
+  - Any pre-existing test failures you confirmed are NOT regressions (for reviewer context)
 
 ### 9. Hand off to user
 
