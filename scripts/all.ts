@@ -136,6 +136,13 @@ function run({
     cmd: "npm-check-updates --upgrade",
     desc: "Checking for dependency updates",
   });
+  // The benchmark/ workspace has its own package.json that drifts otherwise.
+  // Run from the repo root so the root .ncurc policy (cooldown, removeRange)
+  // applies to it too. Its lockfile re-syncs on the next `npm run bench`.
+  run({
+    cmd: "npm-check-updates --upgrade --packageFile benchmark/package.json",
+    desc: "Checking for benchmark dependency updates",
+  });
   run({
     cmd: "npm install --ignore-scripts=false",
     desc: "Installing dependencies (sync lockfile after updates)",
