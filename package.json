@@ -62,7 +62,7 @@
     "lint": "run-p lint:ts lint:eslint",
     "lint:ts": "tsc --noEmit",
     "lint:ts:build": "tsc -p tsconfig.build.json --noEmit",
-    "lint:ts:scripts": "tsc --noEmit --module esnext --target es2022 --moduleResolution node --project scripts/tsconfig.json",
+    "lint:ts:scripts": "tsc --noEmit --module esnext --target es2022 --moduleResolution bundler --project scripts/tsconfig.json",
     "lint:ts:bench": "cd benchmark && npm install && tsc --noEmit",
     "lint:eslint": "eslint src/ test/ scripts/",
     "lint:native": "tsx scripts/clang-tidy.ts",
