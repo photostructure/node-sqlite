@@ -3,6 +3,7 @@
     "module": "esnext",
     "target": "es2022",
     "moduleResolution": "node",
+    "types": ["node"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
