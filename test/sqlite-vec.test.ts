@@ -483,4 +483,130 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
       }).toThrow();
     });
   });
+
+  // Regression: the fork-only `optimize` command hard-crashed the host process
+  // (native SIGTRAP) while compacting chunks on a vec0 table with metadata
+  // columns. Mirrors a PhotoStructure reporter's schema: a bit[] vector plus
+  // INTEGER and long-TEXT (>12 bytes, spills to the _metadatatextNN shadow
+  // table) metadata, spanning multiple chunks with scattered deletes so
+  // `optimize` has real work. Fixed in @photostructure/sqlite-vec v1.2.0 by
+  // hardening the metadata-copy path to fail as a catchable SQLITE_ERROR
+  // instead of corrupting the heap. A crash here takes down the whole process,
+  // so `.not.toThrow()` doubles as "did not abort".
+  describe("optimize compaction (metadata columns)", () => {
+    let db: InstanceType<typeof DatabaseSync> | undefined;
+
+    afterEach(() => {
+      closeDatabases(db);
+      db = undefined;
+    });
+
+    // Deterministic, distinct 24-byte (bit[192]) pattern per rowid.
+    function bitVec(rowid: number): Uint8Array {
+      const v = new Uint8Array(24);
+      for (let j = 0; j < 24; j++) v[j] = (rowid * 31 + j * 7) & 0xff;
+      return v;
+    }
+    // TEXT value guaranteed > 12 bytes so it uses the long-value shadow table.
+    const longName = (rowid: number) =>
+      `photo_${String(rowid).padStart(8, "0")}_long_filename.jpeg`;
+
+    function createChurnTable(dbPath: string) {
+      const d = new DatabaseSync(dbPath, { allowExtension: true });
+      d.enableLoadExtension(true);
+      d.loadExtension(sqliteVecPath!);
+      d.enableLoadExtension(false);
+      // Small chunk_size forces many chunks (and mid-optimize chunk rollovers)
+      // with few rows. 40 rows at chunk_size=8 => 5 full chunks.
+      d.exec(
+        "CREATE VIRTUAL TABLE t USING vec0(" +
+          "  assetFileId INTEGER," +
+          "  lHash bit[192]," +
+          "  capturedAt INTEGER," +
+          "  bname TEXT," +
+          "  chunk_size=8)",
+      );
+      return d;
+    }
+
+    function insertRows(
+      d: InstanceType<typeof DatabaseSync>,
+      rowids: number[],
+    ) {
+      const ins = d.prepare(
+        "INSERT INTO t(rowid, assetFileId, lHash, capturedAt, bname) " +
+          "VALUES (?, ?, vec_bit(?), ?, ?)",
+      );
+      for (const r of rowids) {
+        ins.run(r, r * 7, bitVec(r), 1_700_000_000 + r, longName(r));
+      }
+    }
+
+    test("optimize over metadata columns does not crash and stays consistent", () => {
+      const dbPath = getDbPath("vec-optimize.db");
+      db = createChurnTable(dbPath);
+
+      insertRows(db, Array.from({ length: 40 }, (_, i) => i + 1));
+
+      // Scattered deletes (~40%) fragment the chunks so optimize compacts.
+      const del = db.prepare("DELETE FROM t WHERE rowid = ?");
+      for (let r = 1; r <= 40; r++) if (r % 5 < 2) del.run(r);
+
+      // The operation that used to abort the process.
+      expect(() => {
+        db!.exec("INSERT INTO t(t) VALUES('optimize')");
+      }).not.toThrow();
+
+      // Shadow tables must remain consistent after compaction.
+      const integrity = db.prepare("PRAGMA integrity_check").get() as {
+        integrity_check: string;
+      };
+      expect(integrity.integrity_check).toBe("ok");
+
+      // Surviving rows are still queryable, including their long-TEXT metadata.
+      const rows = db
+        .prepare(
+          "SELECT rowid, bname, distance FROM t " +
+            "WHERE lHash MATCH vec_bit(?) AND k = 5",
+        )
+        .all(bitVec(3)) as Array<{
+        rowid: bigint | number;
+        bname: string;
+        distance: number;
+      }>;
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row.bname).toBe(longName(Number(row.rowid)));
+      }
+    });
+
+    test("repeated optimize under churn does not crash", () => {
+      const dbPath = getDbPath("vec-optimize-churn.db");
+      db = createChurnTable(dbPath);
+
+      let next = 1;
+      insertRows(
+        db,
+        Array.from({ length: 40 }, () => next++),
+      );
+
+      const del = db.prepare("DELETE FROM t WHERE rowid = ?");
+      for (let round = 0; round < 5; round++) {
+        // Delete a scattered subset, then grow with fresh rowids.
+        for (let r = 1; r < next; r++) if ((r + round) % 3 === 0) del.run(r);
+        insertRows(
+          db,
+          Array.from({ length: 12 }, () => next++),
+        );
+        expect(() => {
+          db!.exec("INSERT INTO t(t) VALUES('optimize')");
+        }).not.toThrow();
+      }
+
+      const integrity = db.prepare("PRAGMA integrity_check").get() as {
+        integrity_check: string;
+      };
+      expect(integrity.integrity_check).toBe("ok");
+    });
+  });
 });
