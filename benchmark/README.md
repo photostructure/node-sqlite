@@ -4,14 +4,17 @@ Performance and memory benchmarks comparing `@photostructure/sqlite` against oth
 
 ## Summary
 
-The performance of @photostructure/sqlite is quite similar to node:sqlite and better-sqlite3, while significantly faster than async sqlite3.
+The performance of @photostructure/sqlite is broadly comparable to node:sqlite and better-sqlite3. Each scenario reports a median over multiple trials plus a 95% margin of error, so run-to-run noise is visible rather than hidden.
 
 ## Libraries Tested
 
 - **@photostructure/sqlite** - This package
 - **better-sqlite3** - Popular synchronous SQLite3 binding
-- **sqlite3** - Classic asynchronous SQLite3 binding ([deprecated](https://github.com/TryGhost/node-sqlite3/pull/1844))
 - **node:sqlite** - Node.js built-in SQLite (when available)
+
+Not benchmarked:
+
+- **sqlite3** - The classic asynchronous binding ([`node-sqlite3`](https://github.com/TryGhost/node-sqlite3)) is [deprecated / effectively unmaintained](https://github.com/TryGhost/node-sqlite3/pull/1844) and its async, callback-based API isn't a meaningful apples-to-apples comparison with these synchronous drivers, so it is excluded.
 
 ## Installation
 
@@ -19,6 +22,12 @@ The performance of @photostructure/sqlite is quite similar to node:sqlite and be
 cd benchmark
 npm install
 ```
+
+> **Note:** better-sqlite3 ships prebuilt binaries via the (deprecated) `prebuild-install`, which may lag the newest Node.js releases. If the benchmark prints `Error in better-sqlite3: Could not locate the bindings file`, build it from source:
+>
+> ```bash
+> npm rebuild better-sqlite3 --build-from-source
+> ```
 
 ## Running Benchmarks
 
@@ -95,15 +104,17 @@ tsx --expose-gc memory-benchmark.ts --scenarios blob-handling
 
 ### Performance Scenarios
 
-1. **select-by-id** - Single row retrieval by primary key (143k+ ops/sec)
-2. **select-range** - Fetch up to 1k rows with WHERE clause and index (13k+ ops/sec)
-3. **select-iterate** - Iterator performance over 1k rows (700+ ops/sec)
-4. **insert-simple** - Single row inserts (700+ ops/sec)
-5. **insert-transaction** - Bulk inserts (1k rows) in transaction (300+ ops/sec)
-6. **select-join** - Complex JOIN with aggregation (1.8k+ ops/sec)
-7. **insert-blob** - Binary data handling (10KB blobs) (600+ ops/sec)
-8. **update-indexed** - UPDATE operations using indexed columns (700+ ops/sec)
-9. **delete-bulk** - Bulk DELETE in transactions (80+ ops/sec)
+1. **select-by-id** - Single row retrieval by primary key
+2. **select-range** - Fetch up to 1k rows with WHERE clause and index
+3. **select-iterate** - Iterator performance over 1k rows
+4. **insert-simple** - Single row inserts
+5. **insert-transaction** - Bulk inserts (1k rows) in transaction
+6. **select-join** - Complex JOIN with aggregation
+7. **insert-blob** - Binary data handling (10KB blobs)
+8. **update-indexed** - UPDATE operations using indexed columns
+9. **delete-bulk** - Bulk DELETE in transactions
+
+(See the [example results](#summary) below for approximate throughput; absolute numbers vary by hardware and Node.js version.)
 
 ### Memory Scenarios
 
@@ -117,34 +128,33 @@ tsx --expose-gc memory-benchmark.ts --scenarios blob-handling
 
 ### Performance Results
 
-The benchmark outputs clean markdown tables that can be directly copied into documentation:
+The benchmark outputs clean markdown tables that can be directly copied into documentation. Absolute numbers depend on hardware and Node.js version — the example below is one run (Linux x64, Node 24) and is only meant to show the format and rough relationships. Each cell is a median with a 95% margin of error.
 
 ### Summary
 
-| Scenario              | @photostructure/sqlite | better-sqlite3 |   node:sqlite |      sqlite3 |
-| --------------------- | ---------------------: | -------------: | ------------: | -----------: |
-| SELECT by Primary Key |          150,000 ops/s |  150,000 ops/s | 140,000 ops/s | 24,000 ops/s |
-| SELECT Range          |           13,000 ops/s |   14,000 ops/s |  13,000 ops/s |  5,600 ops/s |
-| SELECT with Iterator  |              710 ops/s |      860 ops/s |     750 ops/s |    610 ops/s |
-| INSERT Single Row     |              720 ops/s |      720 ops/s |     740 ops/s |    710 ops/s |
-| INSERT in Transaction |              340 ops/s |      350 ops/s |     350 ops/s |     38 ops/s |
-| SELECT with JOIN      |            1,800 ops/s |    2,000 ops/s |   1,800 ops/s |  1,600 ops/s |
-| INSERT with BLOB      |              640 ops/s |      660 ops/s |     650 ops/s |    590 ops/s |
-| UPDATE with Index     |              750 ops/s |      720 ops/s |     740 ops/s |    720 ops/s |
-| DELETE Bulk           |               89 ops/s |       90 ops/s |      83 ops/s |     25 ops/s |
+| Scenario              | @photostructure/sqlite |      better-sqlite3 |         node:sqlite |
+| --------------------- | ---------------------: | ------------------: | ------------------: |
+| SELECT by Primary Key |    110,000 ops/s ±1.6% | 130,000 ops/s ±1.8% | 120,000 ops/s ±2.5% |
+| SELECT Range          |      8,300 ops/s ±1.7% |  25,000 ops/s ±2.4% |  12,000 ops/s ±2.5% |
+| SELECT with Iterator  |        680 ops/s ±3.4% |   1,300 ops/s ±3.8% |   1,200 ops/s ±1.9% |
+| INSERT Single Row     |        400 ops/s ±0.7% |     400 ops/s ±1.5% |     390 ops/s ±1.0% |
+| INSERT in Transaction |        250 ops/s ±1.7% |     280 ops/s ±2.6% |     300 ops/s ±2.2% |
+| SELECT with JOIN      |      1,800 ops/s ±0.5% |   2,100 ops/s ±0.4% |   1,800 ops/s ±0.8% |
+| INSERT with BLOB      |        380 ops/s ±1.8% |     380 ops/s ±0.6% |     380 ops/s ±1.1% |
+| UPDATE with Index     |        400 ops/s ±1.6% |     390 ops/s ±1.7% |     400 ops/s ±3.0% |
+| DELETE Bulk           |        180 ops/s ±1.2% |     200 ops/s ±1.2% |     210 ops/s ±1.9% |
 
 ### Overall performance ranking
 
 | Rank | Driver                 | Score |
 | ---: | ---------------------- | ----: |
-|    1 | better-sqlite3         |   99% |
-|    2 | @photostructure/sqlite |   94% |
-|    3 | node:sqlite            |   94% |
-|    4 | sqlite3                |   58% |
+|    1 | better-sqlite3         |   98% |
+|    2 | node:sqlite            |   91% |
+|    3 | @photostructure/sqlite |   81% |
 
 Key features:
 
-- **Adaptive iteration counts**: Automatically calibrates to run each scenario for ~2 seconds
+- **Adaptive iteration counts**: calibrates each scenario to ~50 ms per trial, then runs many trials for a median + margin of error
 - **Markdown-ready output**: Tables can be directly copied into documentation
 - **Comma-formatted numbers**: Easy to read large operation counts
 - **Overall performance ranking**: Weighted average across all scenarios
@@ -165,11 +175,11 @@ Testing @photostructure/sqlite
 
 Summary
 
-| Scenario                   | @photostructure/sqlite | better-sqlite3 | node:sqlite | sqlite3 |
-| -------------------------- | ---------------------- | -------------- | ----------- | ------- |
-| Statement Prepare/Finalize | OK                     | OK             | OK          | OK      |
-| Large Result Sets          | OK                     | OK             | OK          | OK      |
-| BLOB Memory Management     | OK                     | OK             | OK          | OK      |
+| Scenario                   | @photostructure/sqlite | better-sqlite3 | node:sqlite |
+| -------------------------- | ---------------------- | -------------- | ----------- |
+| Statement Prepare/Finalize | OK                     | OK             | OK          |
+| Large Result Sets          | OK                     | OK             | OK          |
+| BLOB Memory Management     | OK                     | OK             | OK          |
 ```
 
 Memory table generated above - copy/paste ready for documentation!

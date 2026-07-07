@@ -22,6 +22,34 @@ function sigFigs(value: number, digits = 2): number {
   return parseFloat(value.toPrecision(digits));
 }
 
+// Each measured data point is one trial of `itersPerTrial` operations. We run
+// many trials and report the median so a single slow trial (GC, scheduler)
+// doesn't skew the result, plus a 95% relative margin of error so noisy
+// scenarios are visibly noisy instead of silently reported as `rme: 0`.
+const MEASURED_TRIALS = 15;
+const WARMUP_TRIALS = 3;
+// Size each trial so it runs long enough that timer granularity and per-call
+// overhead are negligible. The old code capped iterations at 1000, which for
+// fast ops (~1M ops/sec) meant timing ~1ms of work — mostly noise.
+const TRIAL_TARGET_MS = 50;
+
+function median(values: number[]): number {
+  const s = [...values].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/** 95% relative margin of error (percent), matching benchmark.js's `rme`. */
+function relativeMarginOfError(values: number[]): number {
+  const n = values.length;
+  if (n < 2) return 0;
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  if (mean === 0) return 0;
+  const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1);
+  const stdErr = Math.sqrt(variance) / Math.sqrt(n);
+  return ((stdErr * 1.96) / mean) * 100;
+}
+
 // Parse command line arguments
 const args = process.argv.slice(2);
 const options = {
@@ -153,10 +181,18 @@ if (scenarios.length === 0) {
             end = process.hrtime.bigint();
           }
 
-          optimalIterations = Math.max(10, Math.min(1000, iterations)); // Clamp between 10-1000
+          // Convert the calibration count (iters that fit in targetDurationMs)
+          // into a per-trial count sized to ~TRIAL_TARGET_MS. No upper cap:
+          // fast ops need many iters so timing isn't dominated by noise.
+          optimalIterations = Math.max(
+            10,
+            Math.round((iterations * TRIAL_TARGET_MS) / targetDurationMs),
+          );
           if (!isWarmup) {
             console.log(
-              chalk.gray(`   Using ${optimalIterations} iterations per driver`),
+              chalk.gray(
+                `   Using ${optimalIterations.toLocaleString()} iterations × ${MEASURED_TRIALS} trials per driver`,
+              ),
             );
           }
 
@@ -184,31 +220,52 @@ if (scenarios.length === 0) {
         }
       }
 
-      // Manual benchmarking with optimal iterations
+      // Benchmark each driver over repeated trials for a median + margin of
+      // error. Each trial gets a fresh db + setup so mutating scenarios
+      // (INSERT/DELETE) start from an identical state and don't accumulate
+      // across trials; setup/teardown is outside the timed region.
+      const currentScenario = scenarios.find(
+        ([key]) => key === scenarioKey,
+      )?.[1];
+      if (!currentScenario) continue;
+
       for (const driverName of driversToTest) {
         if (!getAvailableDrivers().includes(driverName)) continue;
 
+        const trials = isWarmup ? WARMUP_TRIALS : MEASURED_TRIALS;
+        const samples: number[] = [];
+
         try {
-          const tempDir = mkdtempSync(join(tmpdir(), "sqlite-bench-"));
-          const dbPath = join(tempDir, "bench.db");
-          const driver = await createDriver(driverName, dbPath);
-          const currentScenario = scenarios.find(
-            ([key]) => key === scenarioKey,
-          )?.[1];
-          if (!currentScenario)
-            throw new Error(`Scenario ${scenarioKey} not found`);
-          const stmt = currentScenario.setup(driver);
+          for (let t = 0; t < trials; t++) {
+            const tempDir = mkdtempSync(join(tmpdir(), "sqlite-bench-"));
+            const dbPath = join(tempDir, "bench.db");
+            const driver = await createDriver(driverName, dbPath);
+            const stmt = currentScenario.setup(driver);
 
-          // Manual timing with calibrated iterations
-          const start = process.hrtime.bigint();
+            const start = process.hrtime.bigint();
+            for (let i = 0; i < optimalIterations; i++) {
+              currentScenario.run(stmt, i);
+            }
+            const durationMs =
+              Number(process.hrtime.bigint() - start) / 1_000_000;
+            samples.push((optimalIterations / durationMs) * 1000);
 
-          for (let i = 0; i < optimalIterations; i++) {
-            currentScenario.run(stmt, i);
+            if (currentScenario.cleanup) {
+              currentScenario.cleanup(stmt);
+            } else if (
+              stmt &&
+              typeof stmt === "object" &&
+              "finalize" in stmt &&
+              typeof stmt.finalize === "function"
+            ) {
+              stmt.finalize();
+            }
+            await driver.close();
+            rmSync(tempDir, { recursive: true, force: true });
           }
 
-          const end = process.hrtime.bigint();
-          const durationMs = Number(end - start) / 1_000_000;
-          const opsPerSec = (optimalIterations / durationMs) * 1000;
+          const opsPerSec = median(samples);
+          const rme = relativeMarginOfError(samples);
 
           if (isWarmup) {
             process.stdout.write(
@@ -219,33 +276,19 @@ if (scenarios.length === 0) {
           } else {
             console.log(
               chalk.green(
-                `   ${driverName}: ${Math.round(opsPerSec).toLocaleString()} ops/sec`,
+                `   ${driverName}: ${Math.round(opsPerSec).toLocaleString()} ops/sec ±${rme.toFixed(1)}% (${trials} trials)`,
               ),
             );
 
             // Store results only on measured pass
             results[scenarioKey][driverName] = {
               hz: opsPerSec,
-              rme: 0,
-              runs: optimalIterations,
-              mean: durationMs / optimalIterations,
+              rme,
+              runs: optimalIterations * trials,
+              mean: 1000 / opsPerSec,
               deviation: 0,
             };
           }
-
-          // Cleanup
-          if (currentScenario.cleanup) {
-            currentScenario.cleanup(stmt);
-          } else if (
-            stmt &&
-            typeof stmt === "object" &&
-            "finalize" in stmt &&
-            typeof stmt.finalize === "function"
-          ) {
-            stmt.finalize();
-          }
-          await driver.close();
-          rmSync(tempDir, { recursive: true, force: true });
         } catch (err) {
           const msg = `✗ Error in ${driverName}: ${(err as Error).message}`;
           if (isWarmup) {
@@ -280,10 +323,11 @@ if (scenarios.length === 0) {
     for (const driver of availableDrivers) {
       const result = results[scenarioKey]?.[driver];
       if (result) {
-        // Format with commas
+        // Format with commas, plus the 95% margin of error so noisy scenarios
+        // are visibly noisy rather than looking precise.
         const hz = sigFigs(result.hz);
-        const formatted = `${hz.toLocaleString()} ops/s`;
-        row.push(formatted);
+        const rme = result.rme ? ` ±${result.rme.toFixed(1)}%` : "";
+        row.push(`${hz.toLocaleString()} ops/s${rme}`);
       } else {
         row.push("N/A");
       }
