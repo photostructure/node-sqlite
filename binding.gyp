@@ -29,6 +29,11 @@
         "SQLITE_DEFAULT_MEMSTATUS=0", # See https://www.sqlite.org/forum/forumpost/c1cc8b057a
         "SQLITE_DEFAULT_WAL_SYNCHRONOUS=1",
         "SQLITE_DQS=0",
+        # Validate C-API arguments and return SQLITE_MISUSE instead of risking
+        # undefined behavior when a caller (e.g. a loaded extension like
+        # sqlite-vec) misuses the blob/payload API. Negligible runtime cost;
+        # defense-in-depth for a library that hosts third-party extensions.
+        "SQLITE_ENABLE_API_ARMOR",
         "SQLITE_ENABLE_COLUMN_METADATA",
         "SQLITE_ENABLE_DBSTAT_VTAB",
         "SQLITE_ENABLE_FTS3_PARENTHESIS",
