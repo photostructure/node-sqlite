@@ -369,11 +369,19 @@ function enhanceStatement<S extends { all(): unknown[] }>(
 
   if (originalIterate != null) {
     Object.defineProperty(stmt, "iterate", {
-      value: function* (...params: any[]) {
+      value: function (...params: any[]) {
         const iter = originalIterate(...params);
-        for (const row of iter) {
-          yield transformRow(row, mode, columnMap);
+        // In flat/raw mode transformRow is a pass-through (raw is handled
+        // natively by setReturnArrays), so hand back the native iterator
+        // directly and skip a per-row generator + transform on the hot path.
+        if (mode === "flat" || mode === "raw") {
+          return iter;
         }
+        return (function* () {
+          for (const row of iter) {
+            yield transformRow(row, mode, columnMap);
+          }
+        })();
       },
       writable: true,
       configurable: true,
