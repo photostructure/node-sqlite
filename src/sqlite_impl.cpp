@@ -2571,6 +2571,15 @@ Napi::Value StatementSync::SetReadBigInts(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  // Mutating result-shaping config while the statement is mid-step would
+  // desync the in-flight all()/toArray() loop from its cached column keys
+  // (an object-mode BuildRow would index a key vector that was never built),
+  // so reject re-entrant mutation exactly like the stepping operations do.
+  if (stepping_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    return env.Undefined();
+  }
+
   if (info.Length() < 1 || !info[0].IsBoolean()) {
     node::THROW_ERR_INVALID_ARG_TYPE(
         env, "The \"readBigInts\" argument must be a boolean.");
@@ -2591,6 +2600,16 @@ Napi::Value StatementSync::SetReturnArrays(const Napi::CallbackInfo &info) {
 
   if (!database_ || !database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
+  // A returnArrays flip mid-step is the memory-safety case: All()/ToArray()
+  // build the object-mode column-key vector once, lazily, and only when
+  // return_arrays_ was false at that point. Flipping to object mode afterward
+  // makes BuildRow index an empty vector (OOB read). Reject it like the other
+  // re-entrant statement mutations.
+  if (stepping_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
     return env.Undefined();
   }
 
@@ -2618,6 +2637,13 @@ StatementSync::SetAllowBareNamedParameters(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  // No statement mutation is allowed while a step is on the stack (see the
+  // matching guard in SetReturnArrays); keep all config setters consistent.
+  if (stepping_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    return env.Undefined();
+  }
+
   if (info.Length() < 1 || !info[0].IsBoolean()) {
     node::THROW_ERR_INVALID_ARG_TYPE(
         env, "The \"allowBareNamedParameters\" argument must be a boolean.");
@@ -2639,6 +2665,13 @@ StatementSync::SetAllowUnknownNamedParameters(const Napi::CallbackInfo &info) {
 
   if (!database_ || !database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
+  // No statement mutation is allowed while a step is on the stack (see the
+  // matching guard in SetReturnArrays); keep all config setters consistent.
+  if (stepping_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
     return env.Undefined();
   }
 

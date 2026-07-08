@@ -142,6 +142,53 @@ describe("operations forbidden inside a user-defined function callback", () => {
     db.close();
   });
 
+  test("setReturnArrays() on the in-flight statement throws; no crash", () => {
+    // Regression: All()/ToArray() cache the object-mode column-key handles
+    // once, lazily, on the first row — and only when returnArrays is false at
+    // that point. If a UDF flips the stepping statement to object mode on a
+    // *later* row, BuildRow takes the object branch and indexes the
+    // never-populated key vector (OOB read -> SIGSEGV). Like every other
+    // re-entrant statement mutation, this must throw ERR_INVALID_STATE.
+    const db = new DatabaseSync(":memory:");
+    db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+    const ins = db.prepare("INSERT INTO t VALUES (?)");
+    for (let i = 1; i <= 5; i++) ins.run(i);
+
+    let stmt: ReturnType<typeof db.prepare> | null = null;
+    let flipError: unknown;
+    db.function("flip_mode", (x: unknown) => {
+      // Flip only on row 2+, after meta-init has cached the (empty) key vector
+      // on row 1. Flipping on row 1 would let meta-init see the new mode and
+      // build keys, hiding the bug.
+      if ((x as number) >= 2) {
+        try {
+          stmt!.setReturnArrays(false);
+        } catch (e) {
+          flipError = e;
+        }
+      }
+      return x;
+    });
+
+    stmt = db.prepare("SELECT flip_mode(id) AS v FROM t");
+    // Start in array mode so the key cache is intentionally left empty.
+    stmt.setReturnArrays(true);
+
+    // Must not crash. The UDF swallows the throw, so the SELECT completes and
+    // stays in array mode (the flip was rejected).
+    const rows = stmt.all();
+    expect(rows).toHaveLength(5);
+    expect(Array.isArray(rows[0])).toBe(true);
+    expect(flipError).toEqual(
+      expect.objectContaining({
+        code: "ERR_INVALID_STATE",
+        message: expect.stringContaining("currently being executed"),
+      }),
+    );
+
+    db.close();
+  });
+
   test("cross-statement use inside a UDF (the lookup pattern) works", () => {
     // From upstream c02e2c093f8: SQLite only forbids reentry into the
     // *currently running* statement. Operating on a different statement
