@@ -134,23 +134,23 @@ The benchmark outputs clean markdown tables that can be directly copied into doc
 
 | Scenario              | @photostructure/sqlite |      better-sqlite3 |         node:sqlite |
 | --------------------- | ---------------------: | ------------------: | ------------------: |
-| SELECT by Primary Key |    110,000 ops/s ±1.6% | 130,000 ops/s ±1.8% | 120,000 ops/s ±2.5% |
-| SELECT Range          |      8,300 ops/s ±1.7% |  25,000 ops/s ±2.4% |  12,000 ops/s ±2.5% |
-| SELECT with Iterator  |        680 ops/s ±3.4% |   1,300 ops/s ±3.8% |   1,200 ops/s ±1.9% |
-| INSERT Single Row     |        400 ops/s ±0.7% |     400 ops/s ±1.5% |     390 ops/s ±1.0% |
-| INSERT in Transaction |        250 ops/s ±1.7% |     280 ops/s ±2.6% |     300 ops/s ±2.2% |
-| SELECT with JOIN      |      1,800 ops/s ±0.5% |   2,100 ops/s ±0.4% |   1,800 ops/s ±0.8% |
-| INSERT with BLOB      |        380 ops/s ±1.8% |     380 ops/s ±0.6% |     380 ops/s ±1.1% |
-| UPDATE with Index     |        400 ops/s ±1.6% |     390 ops/s ±1.7% |     400 ops/s ±3.0% |
-| DELETE Bulk           |        180 ops/s ±1.2% |     200 ops/s ±1.2% |     210 ops/s ±1.9% |
+| SELECT by Primary Key |    110,000 ops/s ±1.0% | 130,000 ops/s ±2.0% | 120,000 ops/s ±3.1% |
+| SELECT Range          |      8,800 ops/s ±1.9% |  22,000 ops/s ±3.9% |  12,000 ops/s ±2.2% |
+| SELECT with Iterator  |        670 ops/s ±1.6% |   1,200 ops/s ±3.3% |   1,100 ops/s ±3.1% |
+| INSERT Single Row     |        400 ops/s ±1.8% |     390 ops/s ±5.0% |     400 ops/s ±0.8% |
+| INSERT in Transaction |        250 ops/s ±2.7% |     280 ops/s ±3.3% |     300 ops/s ±2.3% |
+| SELECT with JOIN      |      1,800 ops/s ±1.0% |   2,100 ops/s ±1.3% |   1,900 ops/s ±3.3% |
+| INSERT with BLOB      |        380 ops/s ±0.9% |     370 ops/s ±2.1% |     380 ops/s ±2.0% |
+| UPDATE with Index     |        380 ops/s ±1.4% |     380 ops/s ±1.1% |     390 ops/s ±1.8% |
+| DELETE Bulk           |        170 ops/s ±1.6% |     190 ops/s ±2.6% |     190 ops/s ±2.1% |
 
 ### Overall performance ranking
 
 | Rank | Driver                 | Score |
 | ---: | ---------------------- | ----: |
 |    1 | better-sqlite3         |   98% |
-|    2 | node:sqlite            |   91% |
-|    3 | @photostructure/sqlite |   81% |
+|    2 | node:sqlite            |   92% |
+|    3 | @photostructure/sqlite |   82% |
 
 Key features:
 

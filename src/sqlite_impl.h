@@ -16,6 +16,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 // Include our shims
 #include "shims/base_object.h"
@@ -347,6 +348,27 @@ private:
   void BindParameters(const Napi::CallbackInfo &info, size_t start_index = 0);
   void BindSingleParameter(int param_index, Napi::Value param);
   Napi::Value CreateResult();
+  // Builds one JS row (object or array, per return_arrays_) from the current
+  // step. `keys` (nullable) holds reused per-column property-key handles for
+  // the multi-row paths; pass nullptr on single-row paths to set properties
+  // straight from column names. May set a pending exception (e.g. integer out
+  // of safe range); callers must check env.IsExceptionPending() afterward.
+  Napi::Value BuildRow(Napi::Env env, int column_count,
+                       const std::vector<napi_value> *keys);
+  // Converts the current row's column `i` (already known to be `column_type`)
+  // into a JS value. May set a pending exception (e.g. integer out of safe
+  // range); callers must check env.IsExceptionPending() afterward.
+  Napi::Value GetColumnValue(Napi::Env env, int i, int column_type);
+  // Builds the per-column property-key strings for object-mode results into
+  // `out_keys` (local handles). Callers build these once per operation and
+  // reuse them for every row so we don't recreate a V8 string per column per
+  // row. Returns false with a pending exception if a column name could not be
+  // read. NOTE: deliberately does NOT persist the keys in a Napi::Reference:
+  // an ObjectWrap member reference would call napi_delete_reference during GC
+  // finalization, which corrupts V8's JIT pages on Alpine/musl (see commit
+  // 4da0638 and nodejs/node-addon-api#660).
+  bool BuildColumnKeys(Napi::Env env, int column_count,
+                       std::vector<napi_value> *out_keys);
   void Reset();
 
   DatabaseSync *database_ = nullptr;

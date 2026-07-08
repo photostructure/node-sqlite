@@ -2429,6 +2429,14 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
     Napi::Array results = Napi::Array::New(env);
     uint32_t index = 0;
 
+    // Column metadata (count + object-mode keys) is resolved once, lazily, on
+    // the first row. Doing it after the first successful step means the values
+    // reflect any auto-reprepare, and the key strings are built once and reused
+    // for every row rather than recreated per column per row.
+    int column_count = 0;
+    std::vector<napi_value> keys;
+    bool row_meta_ready = false;
+
     // Held across the whole row loop: a user function invoked by any step
     // must not be able to re-enter this statement until the loop unwinds.
     StepGuard guard(this);
@@ -2436,7 +2444,22 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
       int result = sqlite3_step(statement_);
 
       if (result == SQLITE_ROW) {
-        results.Set(index++, CreateResult());
+        if (!row_meta_ready) {
+          column_count = sqlite3_column_count(statement_);
+          if (!return_arrays_ && !BuildColumnKeys(env, column_count, &keys)) {
+            ResetStatement();
+            return env.Undefined();
+          }
+          row_meta_ready = true;
+        }
+        Napi::Value row = BuildRow(env, column_count, &keys);
+        // BuildRow can set a pending exception (e.g. an integer outside the
+        // safe range); stop stepping and let it propagate.
+        if (env.IsExceptionPending()) {
+          ResetStatement();
+          return env.Undefined();
+        }
+        results.Set(index++, row);
       } else if (result == SQLITE_DONE) {
         // Reset statement to release locks (like Node.js OnScopeLeave)
         ResetStatement();
@@ -3016,6 +3039,124 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
   }
 }
 
+// Converts one column of the current row into a JS value. Shared by both the
+// array and object result paths. On the integer-out-of-range case it sets a
+// pending ERR_OUT_OF_RANGE exception and returns undefined; callers must check
+// env.IsExceptionPending().
+Napi::Value StatementSync::GetColumnValue(Napi::Env env, int i,
+                                          int column_type) {
+  switch (column_type) {
+  case SQLITE_NULL:
+    return env.Null();
+  case SQLITE_INTEGER: {
+    sqlite3_int64 int_val = sqlite3_column_int64(statement_, i);
+    if (use_big_ints_) {
+      // Always return BigInt when readBigInts is true
+      return Napi::BigInt::New(env, static_cast<int64_t>(int_val));
+    } else if (int_val > JS_MAX_SAFE_INTEGER || int_val < JS_MIN_SAFE_INTEGER) {
+      // Throw ERR_OUT_OF_RANGE for values outside safe integer range
+      // (matches Node.js behavior)
+      char error_msg[128];
+      snprintf(error_msg, sizeof(error_msg),
+               "Value is too large to be represented as a JavaScript "
+               "number: %" PRId64,
+               static_cast<int64_t>(int_val));
+      node::THROW_ERR_OUT_OF_RANGE(env, error_msg);
+      return env.Undefined();
+    }
+    return Napi::Number::New(env, static_cast<double>(int_val));
+  }
+  case SQLITE_FLOAT:
+    return Napi::Number::New(env, sqlite3_column_double(statement_, i));
+  case SQLITE_TEXT: {
+    const unsigned char *text = sqlite3_column_text(statement_, i);
+    // sqlite3_column_text() can return NULL on OOM or encoding errors
+    if (!text) {
+      return Napi::String::New(env, "");
+    }
+    // Pass the byte length (valid to read after column_text) so N-API skips a
+    // strlen over the value.
+    int byte_len = sqlite3_column_bytes(statement_, i);
+    return Napi::String::New(env, reinterpret_cast<const char *>(text),
+                             static_cast<size_t>(byte_len));
+  }
+  case SQLITE_BLOB: {
+    const void *blob_data = sqlite3_column_blob(statement_, i);
+    int blob_size = sqlite3_column_bytes(statement_, i);
+    // sqlite3_column_blob() can return NULL for zero-length BLOBs or on OOM.
+    // Return Uint8Array to match Node.js node:sqlite behavior.
+    if (!blob_data || blob_size == 0) {
+      auto array_buffer = Napi::ArrayBuffer::New(env, 0);
+      return Napi::Uint8Array::New(env, 0, array_buffer, 0);
+    }
+    auto array_buffer = Napi::ArrayBuffer::New(env, blob_size);
+    memcpy(array_buffer.Data(), blob_data, blob_size);
+    return Napi::Uint8Array::New(env, blob_size, array_buffer, 0);
+  }
+  default:
+    return env.Null();
+  }
+}
+
+// Builds the object-mode property-key strings for the current column set into
+// `out_keys`. Callers invoke this once per operation (after the first
+// successful step, so the names reflect any auto-reprepare) and reuse the
+// resulting handles for every row, avoiding a fresh V8 string per column per
+// row. The handles are plain locals scoped to the current call; we
+// intentionally do not persist them in a Napi::Reference member (see the
+// header note about napi_delete_reference / Alpine-musl JIT corruption).
+bool StatementSync::BuildColumnKeys(Napi::Env env, int column_count,
+                                    std::vector<napi_value> *out_keys) {
+  out_keys->resize(column_count);
+  for (int i = 0; i < column_count; i++) {
+    const char *column_name = sqlite3_column_name(statement_, i);
+    if (column_name == nullptr) {
+      node::THROW_ERR_INVALID_STATE(env, "Cannot get name of column");
+      return false;
+    }
+    (*out_keys)[i] = Napi::String::New(env, column_name);
+  }
+  return true;
+}
+
+// Builds one JS row from the current step. `keys` may be null: when provided
+// (the multi-row all()/toArray() paths) object-mode properties are set with the
+// caller's reused key handles, avoiding a fresh V8 string per column per row;
+// when null (the single-row get()/next() paths) each property is set straight
+// from sqlite3_column_name, which is leaner when there is nothing to amortize.
+// `keys` is ignored in array mode.
+Napi::Value StatementSync::BuildRow(Napi::Env env, int column_count,
+                                    const std::vector<napi_value> *keys) {
+  if (return_arrays_) {
+    Napi::Array result = Napi::Array::New(env, column_count);
+    for (int i = 0; i < column_count; i++) {
+      int column_type = sqlite3_column_type(statement_, i);
+      Napi::Value value = GetColumnValue(env, i, column_type);
+      if (env.IsExceptionPending()) {
+        return env.Undefined();
+      }
+      result.Set(static_cast<uint32_t>(i), value);
+    }
+    return result;
+  }
+
+  // Return result as object with null prototype (matches Node.js behavior).
+  Napi::Object result = CreateObjectWithNullPrototype(env);
+  for (int i = 0; i < column_count; i++) {
+    int column_type = sqlite3_column_type(statement_, i);
+    Napi::Value value = GetColumnValue(env, i, column_type);
+    if (env.IsExceptionPending()) {
+      return env.Undefined();
+    }
+    if (keys != nullptr) {
+      result.Set((*keys)[i], value);
+    } else {
+      result.Set(sqlite3_column_name(statement_, i), value);
+    }
+  }
+  return result;
+}
+
 Napi::Value StatementSync::CreateResult() {
   Napi::Env env = Env();
 
@@ -3030,153 +3171,10 @@ Napi::Value StatementSync::CreateResult() {
     return env.Undefined();
   }
 
-  int column_count = sqlite3_column_count(statement_);
-
-  if (return_arrays_) {
-    // Return result as array when returnArrays is true
-    Napi::Array result = Napi::Array::New(env, column_count);
-
-    for (int i = 0; i < column_count; i++) {
-      int column_type = sqlite3_column_type(statement_, i);
-      Napi::Value value;
-
-      switch (column_type) {
-      case SQLITE_NULL:
-        value = env.Null();
-        break;
-      case SQLITE_INTEGER: {
-        sqlite3_int64 int_val = sqlite3_column_int64(statement_, i);
-        if (use_big_ints_) {
-          // Always return BigInt when readBigInts is true
-          value = Napi::BigInt::New(env, static_cast<int64_t>(int_val));
-        } else if (int_val > JS_MAX_SAFE_INTEGER ||
-                   int_val < JS_MIN_SAFE_INTEGER) {
-          // Throw ERR_OUT_OF_RANGE for values outside safe integer range
-          // (matches Node.js behavior)
-          char error_msg[128];
-          snprintf(error_msg, sizeof(error_msg),
-                   "Value is too large to be represented as a JavaScript "
-                   "number: %" PRId64,
-                   static_cast<int64_t>(int_val));
-          node::THROW_ERR_OUT_OF_RANGE(env, error_msg);
-          return env.Undefined();
-        } else {
-          value = Napi::Number::New(env, static_cast<double>(int_val));
-        }
-        break;
-      }
-      case SQLITE_FLOAT:
-        value = Napi::Number::New(env, sqlite3_column_double(statement_, i));
-        break;
-      case SQLITE_TEXT: {
-        const unsigned char *text = sqlite3_column_text(statement_, i);
-        // sqlite3_column_text() can return NULL on OOM or encoding errors
-        if (!text) {
-          value = Napi::String::New(env, "");
-        } else {
-          value = Napi::String::New(env, reinterpret_cast<const char *>(text));
-        }
-        break;
-      }
-      case SQLITE_BLOB: {
-        const void *blob_data = sqlite3_column_blob(statement_, i);
-        int blob_size = sqlite3_column_bytes(statement_, i);
-        // sqlite3_column_blob() can return NULL for zero-length BLOBs or on OOM
-        // Return Uint8Array to match Node.js node:sqlite behavior
-        if (!blob_data || blob_size == 0) {
-          // Handle empty/NULL blob - create empty Uint8Array
-          auto array_buffer = Napi::ArrayBuffer::New(env, 0);
-          value = Napi::Uint8Array::New(env, 0, array_buffer, 0);
-        } else {
-          auto array_buffer = Napi::ArrayBuffer::New(env, blob_size);
-          memcpy(array_buffer.Data(), blob_data, blob_size);
-          value = Napi::Uint8Array::New(env, blob_size, array_buffer, 0);
-        }
-        break;
-      }
-      default:
-        value = env.Null();
-        break;
-      }
-
-      result.Set(i, value);
-    }
-
-    return result;
-  } else {
-    // Return result as object with null prototype (matches Node.js behavior)
-    Napi::Object result = CreateObjectWithNullPrototype(env);
-
-    for (int i = 0; i < column_count; i++) {
-      const char *column_name = sqlite3_column_name(statement_, i);
-      int column_type = sqlite3_column_type(statement_, i);
-
-      Napi::Value value;
-
-      switch (column_type) {
-      case SQLITE_NULL:
-        value = env.Null();
-        break;
-      case SQLITE_INTEGER: {
-        sqlite3_int64 int_val = sqlite3_column_int64(statement_, i);
-        if (use_big_ints_) {
-          // Always return BigInt when readBigInts is true
-          value = Napi::BigInt::New(env, static_cast<int64_t>(int_val));
-        } else if (int_val > JS_MAX_SAFE_INTEGER ||
-                   int_val < JS_MIN_SAFE_INTEGER) {
-          // Throw ERR_OUT_OF_RANGE for values outside safe integer range
-          // (matches Node.js behavior)
-          char error_msg[128];
-          snprintf(error_msg, sizeof(error_msg),
-                   "Value is too large to be represented as a JavaScript "
-                   "number: %" PRId64,
-                   static_cast<int64_t>(int_val));
-          node::THROW_ERR_OUT_OF_RANGE(env, error_msg);
-          return env.Undefined();
-        } else {
-          value = Napi::Number::New(env, static_cast<double>(int_val));
-        }
-        break;
-      }
-      case SQLITE_FLOAT:
-        value = Napi::Number::New(env, sqlite3_column_double(statement_, i));
-        break;
-      case SQLITE_TEXT: {
-        const unsigned char *text = sqlite3_column_text(statement_, i);
-        // sqlite3_column_text() can return NULL on OOM or encoding errors
-        if (!text) {
-          value = Napi::String::New(env, "");
-        } else {
-          value = Napi::String::New(env, reinterpret_cast<const char *>(text));
-        }
-        break;
-      }
-      case SQLITE_BLOB: {
-        const void *blob_data = sqlite3_column_blob(statement_, i);
-        int blob_size = sqlite3_column_bytes(statement_, i);
-        // sqlite3_column_blob() can return NULL for zero-length BLOBs or on OOM
-        // Return Uint8Array to match Node.js node:sqlite behavior
-        if (!blob_data || blob_size == 0) {
-          // Handle empty/NULL blob - create empty Uint8Array
-          auto array_buffer = Napi::ArrayBuffer::New(env, 0);
-          value = Napi::Uint8Array::New(env, 0, array_buffer, 0);
-        } else {
-          auto array_buffer = Napi::ArrayBuffer::New(env, blob_size);
-          memcpy(array_buffer.Data(), blob_data, blob_size);
-          value = Napi::Uint8Array::New(env, blob_size, array_buffer, 0);
-        }
-        break;
-      }
-      default:
-        value = env.Null();
-        break;
-      }
-
-      result.Set(column_name, value);
-    }
-
-    return result;
-  }
+  // Single-row path (get()/iterator next()): build the row directly from column
+  // names. There is only one row, so caching key handles would add overhead
+  // without any reuse to amortize it.
+  return BuildRow(env, sqlite3_column_count(statement_), nullptr);
 }
 
 void StatementSync::Reset() {
@@ -3316,6 +3314,11 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
 
   // Create row object using existing CreateResult method
   Napi::Value row_value = stmt_->CreateResult();
+  // CreateResult can set a pending exception (e.g. an integer outside the safe
+  // range); surface it instead of wrapping an undefined value.
+  if (env.IsExceptionPending()) {
+    return env.Undefined();
+  }
 
   Napi::Object result = CreateObjectWithNullPrototype(env);
   result.Set("done", false);
@@ -3372,6 +3375,12 @@ Napi::Value StatementSyncIterator::ToArray(const Napi::CallbackInfo &info) {
   Napi::Array arr = Napi::Array::New(env);
   uint32_t idx = 0;
 
+  // Column metadata is resolved once, lazily, on the first row so the keys are
+  // built a single time and reused for every row (see StatementSync::All).
+  int column_count = 0;
+  std::vector<napi_value> keys;
+  bool row_meta_ready = false;
+
   StatementSync::StepGuard guard(stmt_);
   while (!done_) {
     int r = sqlite3_step(stmt_->statement_);
@@ -3389,10 +3398,21 @@ Napi::Value StatementSyncIterator::ToArray(const Napi::CallbackInfo &info) {
       break;
     }
 
-    // Create row object using existing CreateResult method
-    Napi::Value row_value = stmt_->CreateResult();
+    if (!row_meta_ready) {
+      column_count = sqlite3_column_count(stmt_->statement_);
+      if (!stmt_->return_arrays_ &&
+          !stmt_->BuildColumnKeys(env, column_count, &keys)) {
+        // Release the read lock before surfacing the (OOM) error, matching
+        // StatementSync::All's error paths.
+        sqlite3_reset(stmt_->statement_);
+        return env.Undefined();
+      }
+      row_meta_ready = true;
+    }
 
-    // Check if CreateResult threw an error
+    Napi::Value row_value = stmt_->BuildRow(env, column_count, &keys);
+
+    // Check if BuildRow threw an error
     if (env.IsExceptionPending()) {
       return env.Undefined();
     }
