@@ -3039,46 +3039,54 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
   }
 }
 
-// Converts one column of the current row into a JS value. Shared by both the
-// array and object result paths. On the integer-out-of-range case it sets a
-// pending ERR_OUT_OF_RANGE exception and returns undefined; callers must check
-// env.IsExceptionPending().
-Napi::Value StatementSync::GetColumnValue(Napi::Env env, int i,
-                                          int column_type) {
+// Converts one column of the current row into a JS value written to *out.
+// Shared by both the array and object result paths. Returns false with a
+// pending ERR_OUT_OF_RANGE exception ONLY for the integer-out-of-safe-range
+// case; every other branch writes *out and returns true. Returning a bool lets
+// BuildRow drop a per-column env.IsExceptionPending() N-API call.
+bool StatementSync::GetColumnValue(Napi::Env env, int i, int column_type,
+                                   napi_value *out) {
   switch (column_type) {
   case SQLITE_NULL:
-    return env.Null();
+    *out = env.Null();
+    return true;
   case SQLITE_INTEGER: {
     sqlite3_int64 int_val = sqlite3_column_int64(statement_, i);
     if (use_big_ints_) {
       // Always return BigInt when readBigInts is true
-      return Napi::BigInt::New(env, static_cast<int64_t>(int_val));
-    } else if (int_val > JS_MAX_SAFE_INTEGER || int_val < JS_MIN_SAFE_INTEGER) {
+      *out = Napi::BigInt::New(env, static_cast<int64_t>(int_val));
+      return true;
+    }
+    if (int_val > JS_MAX_SAFE_INTEGER || int_val < JS_MIN_SAFE_INTEGER) {
       // Throw ERR_OUT_OF_RANGE for values outside safe integer range
-      // (matches Node.js behavior)
+      // (matches Node.js behavior). This is the sole false-returning branch.
       char error_msg[128];
       snprintf(error_msg, sizeof(error_msg),
                "Value is too large to be represented as a JavaScript "
                "number: %" PRId64,
                static_cast<int64_t>(int_val));
       node::THROW_ERR_OUT_OF_RANGE(env, error_msg);
-      return env.Undefined();
+      return false;
     }
-    return Napi::Number::New(env, static_cast<double>(int_val));
+    *out = Napi::Number::New(env, static_cast<double>(int_val));
+    return true;
   }
   case SQLITE_FLOAT:
-    return Napi::Number::New(env, sqlite3_column_double(statement_, i));
+    *out = Napi::Number::New(env, sqlite3_column_double(statement_, i));
+    return true;
   case SQLITE_TEXT: {
     const unsigned char *text = sqlite3_column_text(statement_, i);
     // sqlite3_column_text() can return NULL on OOM or encoding errors
     if (!text) {
-      return Napi::String::New(env, "");
+      *out = Napi::String::New(env, "");
+      return true;
     }
     // Pass the byte length (valid to read after column_text) so N-API skips a
     // strlen over the value.
     int byte_len = sqlite3_column_bytes(statement_, i);
-    return Napi::String::New(env, reinterpret_cast<const char *>(text),
+    *out = Napi::String::New(env, reinterpret_cast<const char *>(text),
                              static_cast<size_t>(byte_len));
+    return true;
   }
   case SQLITE_BLOB: {
     const void *blob_data = sqlite3_column_blob(statement_, i);
@@ -3087,14 +3095,17 @@ Napi::Value StatementSync::GetColumnValue(Napi::Env env, int i,
     // Return Uint8Array to match Node.js node:sqlite behavior.
     if (!blob_data || blob_size == 0) {
       auto array_buffer = Napi::ArrayBuffer::New(env, 0);
-      return Napi::Uint8Array::New(env, 0, array_buffer, 0);
+      *out = Napi::Uint8Array::New(env, 0, array_buffer, 0);
+      return true;
     }
     auto array_buffer = Napi::ArrayBuffer::New(env, blob_size);
     memcpy(array_buffer.Data(), blob_data, blob_size);
-    return Napi::Uint8Array::New(env, blob_size, array_buffer, 0);
+    *out = Napi::Uint8Array::New(env, blob_size, array_buffer, 0);
+    return true;
   }
   default:
-    return env.Null();
+    *out = env.Null();
+    return true;
   }
 }
 
@@ -3131,8 +3142,11 @@ Napi::Value StatementSync::BuildRow(Napi::Env env, int column_count,
     Napi::Array result = Napi::Array::New(env, column_count);
     for (int i = 0; i < column_count; i++) {
       int column_type = sqlite3_column_type(statement_, i);
-      Napi::Value value = GetColumnValue(env, i, column_type);
-      if (env.IsExceptionPending()) {
+      napi_value value;
+      // GetColumnValue returns false only after setting a pending exception;
+      // stop immediately and let the caller (which checks IsExceptionPending)
+      // propagate it. Issuing another N-API call here would throw C++.
+      if (!GetColumnValue(env, i, column_type, &value)) {
         return env.Undefined();
       }
       result.Set(static_cast<uint32_t>(i), value);
@@ -3144,8 +3158,8 @@ Napi::Value StatementSync::BuildRow(Napi::Env env, int column_count,
   Napi::Object result = CreateObjectWithNullPrototype(env);
   for (int i = 0; i < column_count; i++) {
     int column_type = sqlite3_column_type(statement_, i);
-    Napi::Value value = GetColumnValue(env, i, column_type);
-    if (env.IsExceptionPending()) {
+    napi_value value;
+    if (!GetColumnValue(env, i, column_type, &value)) {
       return env.Undefined();
     }
     if (keys != nullptr) {

@@ -355,10 +355,14 @@ private:
   // of safe range); callers must check env.IsExceptionPending() afterward.
   Napi::Value BuildRow(Napi::Env env, int column_count,
                        const std::vector<napi_value> *keys);
-  // Converts the current row's column `i` (already known to be `column_type`)
-  // into a JS value. May set a pending exception (e.g. integer out of safe
-  // range); callers must check env.IsExceptionPending() afterward.
-  Napi::Value GetColumnValue(Napi::Env env, int i, int column_type);
+  // Writes the current row's column `i` (already known to be `column_type`) as
+  // a JS value into `*out`. Returns false with a pending exception set ONLY for
+  // the integer-out-of-safe-range case; every other branch writes `*out` and
+  // returns true. Lets BuildRow skip a per-column env.IsExceptionPending() call.
+  // Callers must stop building the row the instant this returns false and issue
+  // no further N-API calls: with NAPI_CPP_EXCEPTIONS a pending exception turns
+  // the next N-API call into a thrown C++ Napi::Error.
+  bool GetColumnValue(Napi::Env env, int i, int column_type, napi_value *out);
   // Builds the per-column property-key strings for object-mode results into
   // `out_keys` (local handles). Callers build these once per operation and
   // reuse them for every row so we don't recreate a V8 string per column per
