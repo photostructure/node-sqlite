@@ -2782,6 +2782,15 @@ Napi::Value StatementSync::SetReturnArrays(const Napi::CallbackInfo &info) {
   // return_arrays_ was false at that point. Flipping to object mode afterward
   // makes BuildRow index an empty vector (OOB read). Reject it like the other
   // re-entrant statement mutations.
+  //
+  // NOTE: this is an INTENTIONAL divergence from node:sqlite, whose setters
+  // (setReturnArrays/setReadBigInts/setAllow*) permit mutation from callbacks
+  // invoked while the statement is stepping. Upstream snapshots result-shaping
+  // modes for all()/get()/run(), so a mutation there affects later operations;
+  // iterator rows read the live modes after each step. We freeze all config
+  // setters instead, both to prevent the cached-key OOB above and to provide
+  // one consistent contract. The remaining setters guard for consistency, not
+  // memory safety.
   if (stepping_) {
     node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
     return env.Undefined();
