@@ -44,6 +44,17 @@ export interface Driver {
   exec(sql: string): void;
 }
 
+// Pin the durability-relevant pragmas to SQLite's defaults (rollback journal,
+// synchronous=FULL) so every driver is measured under identical write-durability
+// behavior. Without this, the "single-op writes tie across drivers" result in
+// the README would silently depend on each driver happening to ship the same
+// defaults — a driver that shipped e.g. WAL or synchronous=NORMAL would look
+// faster on writes for reasons unrelated to its own code.
+function pinDurabilityPragmas(db: { exec(sql: string): void }): void {
+  db.exec("PRAGMA journal_mode = DELETE");
+  db.exec("PRAGMA synchronous = FULL");
+}
+
 // Base driver interface
 abstract class BaseDriver implements Driver {
   public name: string;
@@ -70,6 +81,7 @@ class PhotostructureDriver extends BaseDriver {
 
   async initialize(filename: string): Promise<Driver> {
     this.db = new DatabaseSync(filename);
+    pinDurabilityPragmas(this.db);
     return this;
   }
 
@@ -130,6 +142,7 @@ class BetterSqlite3Driver extends BaseDriver {
       );
     }
     this.db = new Database(filename);
+    pinDurabilityPragmas(this.db);
     return this;
   }
 
@@ -176,6 +189,7 @@ class NodeSqliteDriver extends BaseDriver {
       throw new Error("node:sqlite is not available");
     }
     this.db = new NodeSqliteDatabase(filename);
+    pinDurabilityPragmas(this.db);
     return this;
   }
 
