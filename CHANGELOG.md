@@ -17,10 +17,26 @@ API compatible with `node:sqlite` from Node.js v26.4.0.
 - **Upstream sync**: Node.js `v25.x-staging@ffa9b8f` → `v26.x-staging@c96c838`. Beyond `serialize()`/`deserialize()`, upstream added a column-name caching path and a `simdutf` fast path for ASCII column text in `StatementSync` — both V8/internal-only optimizations with no N-API equivalent, so not ported. Subsequent `node:sqlite` bug fixes — closing the connection after a failed `open()`, changeset `xFilter`/callback-lifetime hardening, and reading the column count after the first `step()` in `all()` — are already covered by our port's structure and needed no change.
 - **Statement finalization on `db.close()`**: Live `StatementSync` instances are now eagerly detached when their database closes, so further method calls throw `ERR_INVALID_STATE` with `"statement has been finalized"` (matching `node:sqlite`) instead of `"Database connection is closed"`. Statement error messages were also normalized to lowercase `"statement has been finalized"` throughout.
 - **Build hardening (`SQLITE_ENABLE_API_ARMOR`)**: The bundled SQLite is now compiled with [API armor](https://sqlite.org/compile.html#enable_api_armor), so misuse of the C API — for example by a loaded extension such as [sqlite-vec](https://github.com/asg017/sqlite-vec) — returns `SQLITE_MISUSE` instead of risking undefined behavior or a process abort the caller cannot catch. Negligible runtime cost; the public JavaScript API is unaffected.
+- **Callback reentrancy hardening**: operations SQLite forbids from inside its own callbacks (notably `close`/`deserialize`, plus `prepare`/`exec`/`step`/`serialize`/`setAuthorizer` from an authorizer) now throw `ERR_INVALID_STATE` instead of corrupting connection state. Intentional divergence from `node:sqlite` ([nodejs/node#63207](https://github.com/nodejs/node/issues/63207)).
+- **Config setters frozen mid-step**: `setReadBigInts`, `setReturnArrays`, and the `setAllow*` parameter setters throw `ERR_INVALID_STATE` if called while the statement is executing.
 
 ### Fixed
 
 - **Backup teardown stability**: In-flight `backup()` operations are now safe when a Node environment is shutting down. Backup jobs avoid resolving/rejecting promises or routing expected SQLite failures through node-addon-api's async worker error path after teardown begins.
+- **Authorizer error identity**: the exact value thrown by an authorizer callback (subclass, `code`, message, thrown primitives) now propagates unchanged through prepare/exec/step/serialize/deserialize/changeset/extension load, instead of being replaced by a generic error.
+- **TEXT with embedded NUL bytes**: returned in full via byte-length conversion instead of being truncated at the first NUL.
+
+### Performance
+
+- Faster multi-row reads: per-statement column-key caching, byte-length string conversion, per-column exception checks removed from the row builder, and a native iterator fast path for flat/raw modes.
+- `-fno-plt` on Linux removes PLT indirection from Node-API calls in the hot path.
+
+### Internal
+
+- Docs: bulk-read performance tradeoff documented honestly; Node 22 requirement propagated across docs and examples.
+- Benchmark suite reworked for fair, reproducible driver comparison (deterministic workloads, median confidence intervals, per-scenario ratios, SVG charts) plus correlation-gated memory-leak detection.
+- Dependencies: node-addon-api 8.9.0, TypeScript 6, ESLint 10, prettier 3.8.5, `@types/node` 26.
+- CI: pinned-action updates (CodeQL, TruffleHog, OSV-Scanner, actions/checkout).
 
 ## [1.2.1]
 
