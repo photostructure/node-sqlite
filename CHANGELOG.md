@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.0]
+## [2.0.0]
 
 API compatible with `node:sqlite` from Node.js v26.4.0.
 
@@ -12,6 +12,7 @@ API compatible with `node:sqlite` from Node.js v26.4.0.
 
 ### Changed
 
+- **BREAKING**: Dropped support for Node.js 20 (end-of-life April 2026); `@photostructure/sqlite` now requires Node.js 22 or newer (`package.json` `engines` is `>=22`). This is why this release is 2.0.0 rather than a 1.x minor.
 - **SQLite 3.53.3**: Updated from 3.53.0. Three patch releases (3.53.1–3.53.3), bug fixes only, no API impact ([release notes](https://www.sqlite.org/releaselog/3_53_3.html)).
 - **Upstream sync**: Node.js `v25.x-staging@ffa9b8f` → `v26.x-staging@c96c838`. Beyond `serialize()`/`deserialize()`, upstream added a column-name caching path and a `simdutf` fast path for ASCII column text in `StatementSync` — both V8/internal-only optimizations with no N-API equivalent, so not ported. Subsequent `node:sqlite` bug fixes — closing the connection after a failed `open()`, changeset `xFilter`/callback-lifetime hardening, and reading the column count after the first `step()` in `all()` — are already covered by our port's structure and needed no change.
 - **Statement finalization on `db.close()`**: Live `StatementSync` instances are now eagerly detached when their database closes, so further method calls throw `ERR_INVALID_STATE` with `"statement has been finalized"` (matching `node:sqlite`) instead of `"Database connection is closed"`. Statement error messages were also normalized to lowercase `"statement has been finalized"` throughout.
