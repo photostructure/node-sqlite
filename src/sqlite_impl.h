@@ -170,12 +170,11 @@ public:
   sqlite3 *connection() const { return connection_; }
   bool IsOpen() const { return connection_ != nullptr; }
 
-  // User-callback reentrancy tracking. While a sqlite3_prepare_v2(),
-  // sqlite3_step(), or sqlite3_exec() call is on the stack, any JavaScript user
-  // callback it invokes (a user-defined function, aggregate, or authorizer)
-  // runs with this depth raised. Operations that SQLite forbids from inside
-  // such a callback — close() and deserialize() — check IsExecutingStatement()
-  // and throw ERR_INVALID_STATE instead of corrupting connection state.
+  // Native statement-call reentrancy tracking. While sqlite3_prepare_v2(),
+  // sqlite3_step(), or sqlite3_exec() is on the stack, callbacks run with this
+  // depth raised. close() and deserialize() use it to protect the running VM
+  // from user-function reentry. Authorizers have a stricter, connection-wide
+  // contract and use AuthorizerGuard below.
   // Single-threaded by construction (statements only run on their creation
   // thread), so no synchronization is needed.
   void EnterStatementStep() { ++statements_in_progress_; }
@@ -245,9 +244,40 @@ public:
   }
   bool ShouldIgnoreSQLiteError() const { return ignore_next_sqlite_error_; }
 
+  // SQLite forbids an authorizer callback from modifying the connection that
+  // invoked it; prepare and step explicitly count as modification. Track the
+  // callback itself (rather than whichever SQLite entry point happened to
+  // invoke it) so every SQLite-backed operation on that connection can enforce
+  // the contract. A depth counter keeps the RAII scopes balanced if callback
+  // entry is ever nested.
+  class AuthorizerGuard {
+  public:
+    explicit AuthorizerGuard(DatabaseSync *database) noexcept
+        : database_(database) {
+      ++database_->in_authorizer_callback_depth_;
+    }
+    ~AuthorizerGuard() noexcept { --database_->in_authorizer_callback_depth_; }
+    AuthorizerGuard(const AuthorizerGuard &) = delete;
+    AuthorizerGuard &operator=(const AuthorizerGuard &) = delete;
+
+  private:
+    DatabaseSync *database_;
+  };
+
+  AuthorizerGuard EnterAuthorizerCallback() { return AuthorizerGuard(this); }
+  bool IsInAuthorizerCallback() const {
+    return in_authorizer_callback_depth_ > 0;
+  }
+  bool ThrowIfInAuthorizerCallback(Napi::Env env, const char *action) const;
+
   // Deferred exception handling for authorizer callbacks
-  void SetDeferredAuthorizerException(const std::string &message) {
-    deferred_authorizer_exception_ = message;
+  void SetDeferredAuthorizerException(const Napi::Error &error) {
+    // Reconstruct rather than assign: Napi::Error's copy assignment unwraps a
+    // primitive throw before creating its reference, which fails on Node-API.
+    // emplace() uses the safe copy constructor and retains Node's observable
+    // last-authorizer-exception-wins behavior when SQLite invokes the callback
+    // more than once during a single outer call.
+    deferred_authorizer_exception_.emplace(error);
   }
   void ClearDeferredAuthorizerException() {
     deferred_authorizer_exception_.reset();
@@ -255,9 +285,10 @@ public:
   bool HasDeferredAuthorizerException() const {
     return deferred_authorizer_exception_.has_value();
   }
-  const std::string &GetDeferredAuthorizerException() const {
+  const Napi::Error &GetDeferredAuthorizerException() const {
     return *deferred_authorizer_exception_;
   }
+  void RethrowDeferredAuthorizerException();
 
 private:
   void InternalOpen(DatabaseOpenConfiguration config);
@@ -283,9 +314,26 @@ private:
   // Exec()'s sqlite3_exec(); see EnterStatementStep()/IsExecutingStatement().
   int statements_in_progress_ = 0;
 
-  // Deferred exception from authorizer callback - stored when exception occurs
-  // in callback context, thrown after SQLite operation completes
-  std::optional<std::string> deferred_authorizer_exception_;
+  // Depth of authorizer callbacks currently on this connection's stack. This
+  // is separate from statements_in_progress_: authorizers forbid all
+  // same-connection prepare/step work, while user functions may use a
+  // different statement on the same connection.
+  int in_authorizer_callback_depth_ = 0;
+
+  // The exact JavaScript value thrown by an authorizer callback, held as
+  // Napi::Error's persistent reference until the surrounding SQLite call
+  // returns. This preserves identity, subclass, code, stack, custom fields,
+  // and node-addon-api's wrapper for thrown primitive values.
+  //
+  // LOAD-BEARING INVARIANT: this MUST be empty whenever a native method returns
+  // to JavaScript. It holds a Napi::Reference, and destroying a live reference
+  // during GC finalization of this ObjectWrap corrupts V8's JIT pages on
+  // Alpine/musl (the crash that removed database_ref_ in commits 0691ae5 /
+  // 4da0638). Every authorizer-invoking operation must therefore clear it
+  // before returning — via RethrowDeferredAuthorizerException(), or an explicit
+  // post-call check for SQLite entry points that swallow the error
+  // (serialize/deserialize/changeset). CleanupHook covers environment teardown.
+  std::optional<Napi::Error> deferred_authorizer_exception_;
 
   // Authorization callback storage
   std::unique_ptr<Napi::FunctionReference> authorizer_callback_;

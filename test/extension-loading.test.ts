@@ -309,6 +309,41 @@ describe("Extension Loading Tests", () => {
       db.close();
     });
 
+    test("preserves an authorizer exception thrown during extension init", () => {
+      const db = new DatabaseSync(":memory:", { allowExtension: true });
+      db.enableLoadExtension(true);
+      const boom = Object.assign(new TypeError("EXTENSION_AUTHORIZER_BOOM"), {
+        code: "ERR_EXTENSION_AUTHORIZER_BOOM",
+      });
+      db.setAuthorizer(() => {
+        throw boom;
+      });
+
+      let caught: unknown;
+      try {
+        db.loadExtension(
+          testExtensionPath!,
+          "sqlite3_testextension_query_init",
+        );
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBe(boom);
+
+      db.setAuthorizer(null);
+      let laterError: unknown;
+      try {
+        db.exec("SELECT definitely_invalid_sql");
+      } catch (error) {
+        laterError = error;
+      }
+      expect(laterError).not.toBe(boom);
+      expect(laterError).toEqual(
+        expect.objectContaining({ code: "ERR_SQLITE_ERROR" }),
+      );
+      db.close();
+    });
+
     test("extension functions persist after disabling extension loading", () => {
       const db = new DatabaseSync(":memory:", { allowExtension: true });
       db.enableLoadExtension(true);

@@ -15,10 +15,25 @@ if (process.platform === "win32") {
   targetFile = path.join(targetDir, "test_extension.so");
 }
 
-// Check if extension already exists (skip rebuild unless --force is passed)
+// Rebuild when the compiled extension is missing, stale (older than the C
+// source), or --force is passed. The mtime check matters because a new entry
+// point added to test_extension.c would otherwise be ignored in favor of a
+// cached .so, so tests that load the new symbol fail with a misleading
+// "no entry point" error. The .so is gitignored, so CI always builds fresh;
+// this only guards a developer's pre-existing stale build.
+const sourcePath = path.join(__dirname, "test_extension.c");
 const forceRebuild = process.argv.includes("--force");
-if (!forceRebuild && fs.existsSync(targetFile)) {
-  console.log(`Test extension already exists: ${targetFile}`);
+let extensionIsCurrent = false;
+if (fs.existsSync(targetFile)) {
+  try {
+    extensionIsCurrent =
+      fs.statSync(targetFile).mtimeMs >= fs.statSync(sourcePath).mtimeMs;
+  } catch {
+    extensionIsCurrent = false;
+  }
+}
+if (!forceRebuild && extensionIsCurrent) {
+  console.log(`Test extension is up to date: ${targetFile}`);
   console.log("Use --force to rebuild");
   process.exit(0);
 }

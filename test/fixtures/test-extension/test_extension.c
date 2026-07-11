@@ -109,6 +109,23 @@ int sqlite3_testextension_init(sqlite3 *db, char **pzErrMsg,
   return rc;
 }
 
+/* Test-only entry point that invokes the connection's authorizer, deliberately
+ * ignores the SQL result, and reports successful extension initialization. It
+ * exercises wrappers that must surface a deferred authorizer exception even
+ * when sqlite3_load_extension() itself returns SQLITE_OK. */
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
+int sqlite3_testextension_query_init(sqlite3 *db, char **pzErrMsg,
+                                     const sqlite3_api_routines *pApi) {
+  char *sqlErrMsg = 0;
+  (void)pzErrMsg;
+  SQLITE_EXTENSION_INIT2(pApi);
+  (void)sqlite3_exec(db, "SELECT 1", 0, 0, &sqlErrMsg);
+  sqlite3_free(sqlErrMsg);
+  return SQLITE_OK;
+}
+
 /* Alternative entry point with standard name */
 #ifdef _WIN32
 __declspec(dllexport)

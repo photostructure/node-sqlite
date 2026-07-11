@@ -331,6 +331,72 @@ describe("operations forbidden inside a user-defined function callback", () => {
     expect(() => db.close()).not.toThrow();
   });
 
+  // serialize()/deserialize() run their own internal SQL — deserialize()
+  // prepares "ATTACH x AS <name>" and ordinary serialize() prepares
+  // "PRAGMA page_count" — which fire the authorizer at prepare time. The
+  // authorizer-specific callback guard must reject same-connection reentry or
+  // close()/deserialize() can tear the connection down mid-call (UAF/SIGSEGV).
+  function makeBlob(): Uint8Array {
+    const tmp = new DatabaseSync(":memory:");
+    tmp.exec("CREATE TABLE u (id INTEGER)");
+    const blob = tmp.serialize();
+    tmp.close();
+    return blob;
+  }
+
+  test("db.close() inside an authorizer during deserialize() throws", () => {
+    const db = new DatabaseSync(":memory:");
+    const blob = makeBlob();
+
+    let closeError: unknown;
+    db.setAuthorizer(() => {
+      // Fires during deserialize's internal ATTACH prepare.
+      try {
+        db.close();
+      } catch (e) {
+        closeError = e;
+      }
+      return constants.SQLITE_OK;
+    });
+
+    // Must not crash: the reentrant close() is rejected, so deserialize()
+    // completes and installs the blob's schema.
+    expect(() => db.deserialize(blob)).not.toThrow();
+    expect(closeError).toEqual(
+      expect.objectContaining({ code: "ERR_INVALID_STATE" }),
+    );
+
+    // Connection is still open; the deserialized "u" table is present.
+    db.setAuthorizer(null);
+    expect(db.prepare("SELECT count(*) AS n FROM u").get()).toEqual({ n: 0 });
+    db.close();
+  });
+
+  test("a throwing authorizer during deserialize() surfaces its own error", () => {
+    const db = new DatabaseSync(":memory:");
+    const blob = makeBlob();
+    const boom = Object.assign(new TypeError("AUTHORIZER_BOOM"), {
+      code: "ERR_AUTHORIZER_BOOM",
+    });
+
+    db.setAuthorizer(() => {
+      throw boom;
+    });
+
+    // The original callback error object must propagate, not a reconstructed
+    // generic Error or SQLite's "not authorized" error.
+    let caught: unknown;
+    try {
+      db.deserialize(blob);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(boom);
+
+    db.setAuthorizer(null);
+    db.close();
+  });
+
   test("a fresh connection works after the reentrant scenario", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
@@ -350,5 +416,133 @@ describe("operations forbidden inside a user-defined function callback", () => {
     const db2 = new DatabaseSync(":memory:");
     expect(() => db2.exec("CREATE TABLE u (id INTEGER)")).not.toThrow();
     db2.close();
+  });
+});
+
+// Ordinary in-memory and file-backed databases both use SQLite's internal
+// PRAGMA page_count serialization path. Only a database installed by
+// deserialize() uses SQLite's direct memdb-copy fast path.
+describe("serialize() authorizer reentry", () => {
+  test("db.close() inside an authorizer during serialize() throws", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+    db.prepare("INSERT INTO t VALUES (1)").run();
+
+    let closeError: unknown;
+    db.setAuthorizer(() => {
+      try {
+        db.close();
+      } catch (e) {
+        closeError = e;
+      }
+      return constants.SQLITE_OK;
+    });
+
+    // Must not crash: the reentrant close() is rejected, so serialize()
+    // completes and returns a valid snapshot.
+    let blob: Uint8Array | undefined;
+    expect(() => {
+      blob = db.serialize();
+    }).not.toThrow();
+    expect(blob!.length).toBeGreaterThan(0);
+    expect(closeError).toEqual(
+      expect.objectContaining({ code: "ERR_INVALID_STATE" }),
+    );
+
+    db.setAuthorizer(null);
+    db.close();
+  });
+
+  test("a throwing authorizer during serialize() preserves its error", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+    db.prepare("INSERT INTO t VALUES (1)").run();
+    const boom = Object.assign(new TypeError("AUTHORIZER_BOOM"), {
+      code: "ERR_AUTHORIZER_BOOM",
+    });
+
+    db.setAuthorizer(() => {
+      throw boom;
+    });
+
+    let caught: unknown;
+    try {
+      db.serialize();
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(boom);
+
+    db.setAuthorizer(null);
+    db.close();
+  });
+
+  test.each(["BEGIN", "COMMIT"])(
+    "surfaces an authorizer error from empty-db %s",
+    (transactionAction) => {
+      const db = new DatabaseSync(":memory:");
+      const boom = new Error(`${transactionAction}_BOOM`);
+
+      // A zero-page database makes sqlite3_serialize() run an internal
+      // BEGIN IMMEDIATE; COMMIT; then re-check page_count. SQLite ignores the
+      // internal exec result, so the wrapper must check deferred callback
+      // state even when serialize returns a zero-sized or non-null buffer.
+      db.setAuthorizer((actionCode, arg1) => {
+        if (
+          actionCode === constants.SQLITE_TRANSACTION &&
+          arg1 === transactionAction
+        ) {
+          throw boom;
+        }
+        return constants.SQLITE_OK;
+      });
+
+      let caught: unknown;
+      try {
+        db.serialize();
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBe(boom);
+
+      db.setAuthorizer(null);
+      // A denied internal COMMIT leaves SQLite's internal transaction open.
+      // That side effect is SQLite behavior and is not the error-propagation
+      // concern under test; clean it up before closing the fixture.
+      if (db.isTransaction) {
+        db.exec("ROLLBACK");
+      }
+      db.close();
+    },
+  );
+
+  test("preserves the last primitive thrown across multiple callbacks", () => {
+    const db = new DatabaseSync(":memory:");
+    let beginFailed = false;
+
+    db.setAuthorizer((actionCode, arg1) => {
+      if (actionCode === constants.SQLITE_TRANSACTION && arg1 === "BEGIN") {
+        beginFailed = true;
+        throw 111;
+      }
+      if (beginFailed && actionCode === constants.SQLITE_PRAGMA) {
+        throw 222;
+      }
+      return constants.SQLITE_OK;
+    });
+
+    let caught: unknown;
+    try {
+      db.serialize();
+    } catch (error) {
+      caught = error;
+    }
+
+    db.setAuthorizer(null);
+    if (db.isTransaction) {
+      db.exec("ROLLBACK");
+    }
+    db.close();
+    expect(caught).toBe(222);
   });
 });

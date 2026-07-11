@@ -21,10 +21,7 @@ inline void ThrowErrSqliteErrorWithDb(Napi::Env env,
     db->SetIgnoreNextSQLiteError(false);
     // Check for deferred authorizer exception and throw it instead
     if (db->HasDeferredAuthorizerException()) {
-      std::string deferred_msg = db->GetDeferredAuthorizerException();
-      db->ClearDeferredAuthorizerException();
-      // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
-      Napi::Error::New(env, deferred_msg.c_str()).ThrowAsJavaScriptException();
+      db->RethrowDeferredAuthorizerException();
     }
     return; // Don't throw SQLite error, JavaScript exception takes precedence
   }
@@ -42,10 +39,7 @@ inline void ThrowEnhancedSqliteErrorWithDB(
     db_sync->SetIgnoreNextSQLiteError(false);
     // Check for deferred authorizer exception and throw it instead
     if (db_sync->HasDeferredAuthorizerException()) {
-      std::string deferred_msg = db_sync->GetDeferredAuthorizerException();
-      db_sync->ClearDeferredAuthorizerException();
-      // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
-      Napi::Error::New(env, deferred_msg.c_str()).ThrowAsJavaScriptException();
+      db_sync->RethrowDeferredAuthorizerException();
     }
     return; // Don't throw SQLite error, JavaScript exception takes precedence
   }
@@ -664,6 +658,36 @@ void DatabaseSync::CleanupHook(void *arg) {
   if (self->authorizer_callback_) {
     self->authorizer_callback_->Reset();
   }
+  self->ClearDeferredAuthorizerException();
+}
+
+// SQLite forbids modifying a connection from inside its own authorizer
+// callback and explicitly counts prepare/step as modification. The result of
+// violating that contract is unspecified, so reject SQLite-backed operations
+// on the invoking connection with a clear ERR_INVALID_STATE instead.
+//
+// This is an INTENTIONAL divergence from node:sqlite, which has no such guard:
+// upstream currently passes these calls through to SQLite. We also deliberately
+// guard SQLite-backed read-only getters (columns/expandedSQL/location/getLimit/
+// isTransaction) for one consistent callback contract.
+bool DatabaseSync::ThrowIfInAuthorizerCallback(Napi::Env env,
+                                               const char *action) const {
+  if (!IsInAuthorizerCallback()) {
+    return false;
+  }
+
+  std::string message = "Cannot ";
+  message += action;
+  message += " while an authorizer callback is on the stack";
+  node::THROW_ERR_INVALID_STATE(env, message.c_str());
+  return true;
+}
+
+void DatabaseSync::RethrowDeferredAuthorizerException() {
+  Napi::Error error = GetDeferredAuthorizerException();
+  ClearDeferredAuthorizerException();
+  SetIgnoreNextSQLiteError(false);
+  error.ThrowAsJavaScriptException();
 }
 
 Napi::Value DatabaseSync::Open(const Napi::CallbackInfo &info) {
@@ -697,6 +721,10 @@ Napi::Value DatabaseSync::Close(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (ThrowIfInAuthorizerCallback(env, "close database")) {
+    return env.Undefined();
+  }
+
   // SQLite forbids closing a connection while a statement is executing on it.
   // The only way close() is reachable in that state is from inside a user
   // callback invoked by sqlite3_step()/sqlite3_exec(); reject it rather than
@@ -721,6 +749,10 @@ Napi::Value DatabaseSync::Dispose(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
+
+  if (IsOpen() && ThrowIfInAuthorizerCallback(env, "close database")) {
     return env.Undefined();
   }
 
@@ -754,6 +786,10 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (ThrowIfInAuthorizerCallback(env, "prepare statement")) {
     return env.Undefined();
   }
 
@@ -867,11 +903,7 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
     // SqliteException stores message in std::string, avoiding Windows ARM ABI
     // issues where std::exception::what() can return corrupted strings
     if (HasDeferredAuthorizerException()) {
-      std::string deferred_msg = GetDeferredAuthorizerException();
-      ClearDeferredAuthorizerException();
-      SetIgnoreNextSQLiteError(false);
-      // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
-      Napi::Error::New(env, deferred_msg.c_str()).ThrowAsJavaScriptException();
+      RethrowDeferredAuthorizerException();
       return env.Undefined();
     }
     node::ThrowFromSqliteException(env, e);
@@ -885,18 +917,13 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
     // 1. On Windows (MSVC), std::exception::what() can sometimes return an
     //    empty string, causing message loss.
     //
-    // 2. By storing the message in the DatabaseSync instance, we can retrieve
-    //    it here and throw a proper JavaScript exception with the original
-    //    text.
+    // 2. DatabaseSync holds Napi::Error's persistent reference until this
+    //    SQLite call unwinds, preserving the exact thrown JavaScript value.
     //
     // See also: StatementSync::InitStatement for the other half of this
     // pattern.
     if (HasDeferredAuthorizerException()) {
-      std::string deferred_msg = GetDeferredAuthorizerException();
-      ClearDeferredAuthorizerException();
-      SetIgnoreNextSQLiteError(false);
-      // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
-      Napi::Error::New(env, deferred_msg.c_str()).ThrowAsJavaScriptException();
+      RethrowDeferredAuthorizerException();
       return env.Undefined();
     }
     node::THROW_ERR_SQLITE_ERROR(env, e.what());
@@ -913,6 +940,10 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (ThrowIfInAuthorizerCallback(env, "exec")) {
     return env.Undefined();
   }
 
@@ -944,11 +975,7 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
     if (HasDeferredAuthorizerException()) {
       if (error_msg)
         sqlite3_free(error_msg);
-      std::string deferred_msg = GetDeferredAuthorizerException();
-      ClearDeferredAuthorizerException();
-      SetIgnoreNextSQLiteError(false);
-      // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
-      Napi::Error::New(env, deferred_msg.c_str()).ThrowAsJavaScriptException();
+      RethrowDeferredAuthorizerException();
       return env.Undefined();
     }
     std::string error = error_msg ? error_msg : "Unknown SQLite error";
@@ -966,6 +993,10 @@ Napi::Value DatabaseSync::LocationMethod(const Napi::CallbackInfo &info) {
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (ThrowIfInAuthorizerCallback(env, "read database location")) {
     return env.Undefined();
   }
 
@@ -1000,6 +1031,10 @@ Napi::Value DatabaseSync::Serialize(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (ThrowIfInAuthorizerCallback(env, "serialize database")) {
+    return env.Undefined();
+  }
+
   std::string db_name = "main";
   if (info.Length() > 0 && !info[0].IsUndefined()) {
     if (!info[0].IsString()) {
@@ -1010,9 +1045,28 @@ Napi::Value DatabaseSync::Serialize(const Napi::CallbackInfo &info) {
     db_name = info[0].As<Napi::String>().Utf8Value();
   }
 
+  // Clear any stale deferred exception from a previous operation.
+  ClearDeferredAuthorizerException();
+  SetIgnoreNextSQLiteError(false);
+
+  // Ordinary in-memory and file-backed databases use an internal
+  // PRAGMA page_count path that can invoke the authorizer. The callback's
+  // AuthorizerGuard rejects same-connection reentry while it is on the stack.
   sqlite3_int64 size = 0;
   unsigned char *data =
       sqlite3_serialize(connection_, db_name.c_str(), &size, 0);
+
+  // sqlite3_serialize ignores errors from its empty-database
+  // "BEGIN IMMEDIATE; COMMIT;" and can return either a zero-sized result or a
+  // non-null buffer after the authorizer throws. Deferred callback state must
+  // therefore take precedence over every data/size outcome.
+  if (HasDeferredAuthorizerException()) {
+    if (data != nullptr) {
+      sqlite3_free(data);
+    }
+    RethrowDeferredAuthorizerException();
+    return env.Undefined();
+  }
 
   if (data == nullptr) {
     if (size == 0) {
@@ -1037,6 +1091,10 @@ Napi::Value DatabaseSync::Deserialize(const Napi::CallbackInfo &info) {
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (ThrowIfInAuthorizerCallback(env, "deserialize database")) {
     return env.Undefined();
   }
 
@@ -1103,9 +1161,22 @@ Napi::Value DatabaseSync::Deserialize(const Napi::CallbackInfo &info) {
   // StatementSync instances will throw on use.
   FinalizeStatements();
 
+  // Clear any stale deferred exception from a previous operation.
+  ClearDeferredAuthorizerException();
+  SetIgnoreNextSQLiteError(false);
+
+  // sqlite3_deserialize prepares an internal ATTACH statement that can invoke
+  // the authorizer. The callback's AuthorizerGuard rejects same-connection
+  // reentry while it is on the stack.
   int r = sqlite3_deserialize(
       connection_, db_name.c_str(), buf, byte_length, byte_length,
       SQLITE_DESERIALIZE_FREEONCLOSE | SQLITE_DESERIALIZE_RESIZEABLE);
+
+  if (HasDeferredAuthorizerException()) {
+    RethrowDeferredAuthorizerException();
+    return env.Undefined();
+  }
+
   if (r != SQLITE_OK) {
     node::THROW_ERR_SQLITE_ERROR(env, sqlite3_errmsg(connection_));
     return env.Undefined();
@@ -1123,6 +1194,10 @@ Napi::Value DatabaseSync::IsTransactionGetter(const Napi::CallbackInfo &info) {
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (ThrowIfInAuthorizerCallback(env, "read transaction state")) {
     return env.Undefined();
   }
 
@@ -1271,6 +1346,10 @@ Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (ThrowIfInAuthorizerCallback(env, "create function")) {
+    return env.Undefined();
+  }
+
   if (!info[0].IsString()) {
     node::THROW_ERR_INVALID_ARG_TYPE(env,
                                      "The \"name\" argument must be a string.");
@@ -1391,6 +1470,10 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo &info) {
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (ThrowIfInAuthorizerCallback(env, "create aggregate")) {
     return env.Undefined();
   }
 
@@ -1557,6 +1640,10 @@ Napi::Value DatabaseSync::EnableLoadExtension(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (ThrowIfInAuthorizerCallback(env, "configure extension loading")) {
+    return env.Undefined();
+  }
+
   if (info.Length() < 1 || !info[0].IsBoolean()) {
     node::THROW_ERR_INVALID_ARG_TYPE(
         env, "The \"allow\" argument must be a boolean.");
@@ -1597,6 +1684,10 @@ Napi::Value DatabaseSync::LoadExtension(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (ThrowIfInAuthorizerCallback(env, "load extension")) {
+    return env.Undefined();
+  }
+
   if (!allow_load_extension_) {
     node::THROW_ERR_INVALID_STATE(env, "Extension loading is not allowed");
     return env.Undefined();
@@ -1624,9 +1715,22 @@ Napi::Value DatabaseSync::LoadExtension(const Napi::CallbackInfo &info) {
   }
 
   // Load the extension
+  // Extension entry points receive this connection and may execute SQL that
+  // invokes its authorizer. Start a fresh deferred-error scope and consume it
+  // even when the extension ignores the SQL error and reports successful init.
+  ClearDeferredAuthorizerException();
+  SetIgnoreNextSQLiteError(false);
   char *errmsg = nullptr;
   int result =
       sqlite3_load_extension(connection(), path.c_str(), entry_point, &errmsg);
+
+  if (HasDeferredAuthorizerException()) {
+    if (errmsg != nullptr) {
+      sqlite3_free(errmsg);
+    }
+    RethrowDeferredAuthorizerException();
+    return env.Undefined();
+  }
 
   if (result != SQLITE_OK) {
     std::string error = "Failed to load extension '";
@@ -1657,6 +1761,10 @@ Napi::Value DatabaseSync::EnableDefensive(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (ThrowIfInAuthorizerCallback(env, "configure defensive mode")) {
+    return env.Undefined();
+  }
+
   if (info.Length() < 1 || !info[0].IsBoolean()) {
     node::THROW_ERR_INVALID_ARG_TYPE(
         env, "The \"active\" argument must be a boolean.");
@@ -1680,6 +1788,10 @@ Napi::Value DatabaseSync::CreateSession(const Napi::CallbackInfo &info) {
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (ThrowIfInAuthorizerCallback(env, "create session")) {
     return env.Undefined();
   }
 
@@ -1918,6 +2030,10 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (ThrowIfInAuthorizerCallback(env, "apply changeset")) {
+    return env.Undefined();
+  }
+
   if (info.Length() < 1 || !info[0].IsTypedArray()) {
     node::THROW_ERR_INVALID_ARG_TYPE(
         env, "The \"changeset\" argument must be a Uint8Array.");
@@ -2090,12 +2206,26 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
   size_t byte_length = typed_array.ByteLength();
   uint8_t *data = static_cast<uint8_t *>(array_buffer.Data()) + byte_offset;
 
+  // sqlite3changeset_apply runs internal SQL that can invoke the authorizer.
+  // Start a fresh deferred-error scope for this outer SQLite call.
+  ClearDeferredAuthorizerException();
+  SetIgnoreNextSQLiteError(false);
+
   // Apply the changeset with context instead of global state
   int r = sqlite3changeset_apply(connection(), static_cast<int>(byte_length),
                                  data, xFilter, xConflict, &callbacks);
 
+  // SQLite cleanup SQL runs after filter/conflict callbacks. Match Node's
+  // last-exception-wins behavior by surfacing a later authorizer exception
+  // before an earlier callback exception.
+  if (HasDeferredAuthorizerException()) {
+    RethrowDeferredAuthorizerException();
+    return env.Undefined();
+  }
+
   // Check for pending exception from callbacks - re-throw it
   if (callbacks.hasPendingException) {
+    SetIgnoreNextSQLiteError(false);
     Napi::Error::New(env, callbacks.pendingExceptionMessage)
         .ThrowAsJavaScriptException();
     return env.Undefined();
@@ -2188,15 +2318,14 @@ void StatementSync::InitStatement(DatabaseSync *database,
     // 1. On Windows (MSVC), std::exception::what() can sometimes return an
     //    empty string, causing message loss.
     //
-    // 2. By storing the message in the DatabaseSync instance, the caller can
-    //    retrieve it and throw a proper JavaScript exception with the original
-    //    text.
+    // 2. DatabaseSync holds Napi::Error's persistent reference until this
+    //    SQLite call unwinds, preserving the exact thrown JavaScript value.
     //
     // 3. This matches Node.js's behavior where JavaScript exceptions from
     //    authorizer callbacks propagate correctly to the caller.
     if (database->HasDeferredAuthorizerException()) {
-      // Throw a marker exception - the actual message is stored in the database
-      // object and will be retrieved by the caller.
+      // Throw a marker exception; the exact JavaScript error is retained by
+      // DatabaseSync and rethrown by Prepare().
       throw std::runtime_error("");
     }
     // Use sqlite3_errmsg directly without prefix - matches Node.js error format
@@ -2253,6 +2382,10 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
 
   if (!database_ || !database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "Database connection is closed");
+    return env.Undefined();
+  }
+
+  if (database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
     return env.Undefined();
   }
 
@@ -2343,6 +2476,10 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
+    return env.Undefined();
+  }
+
   if (!statement_) {
     node::THROW_ERR_INVALID_STATE(env, "Statement is not properly initialized");
     return env.Undefined();
@@ -2407,6 +2544,10 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
+    return env.Undefined();
+  }
+
   if (!statement_) {
     node::THROW_ERR_INVALID_STATE(env, "Statement is not properly initialized");
     return env.Undefined();
@@ -2468,7 +2609,8 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
         // Reset statement before throwing to release locks
         ResetStatement();
         std::string error = sqlite3_errmsg(database_->connection());
-        node::THROW_ERR_SQLITE_ERROR(env, error.c_str());
+        ThrowEnhancedSqliteErrorWithDB(env, database_, database_->connection(),
+                                       result, error);
         return env.Undefined();
       }
     }
@@ -2477,7 +2619,7 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
   } catch (const std::exception &e) {
     // Reset statement on exception to release locks
     ResetStatement();
-    node::THROW_ERR_SQLITE_ERROR(env, e.what());
+    ThrowErrSqliteErrorWithDb(env, database_, e.what());
     return env.Undefined();
   }
 }
@@ -2490,6 +2632,10 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
 
   if (!database_ || !database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(info.Env(), "Database connection is closed");
+    return info.Env().Undefined();
+  }
+
+  if (database_->ThrowIfInAuthorizerCallback(info.Env(), "step statement")) {
     return info.Env().Undefined();
   }
 
@@ -2563,6 +2709,11 @@ Napi::Value StatementSync::ExpandedSQLGetter(const Napi::CallbackInfo &info) {
 
   if (!database_ || !database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(info.Env(), "Database connection is closed");
+    return info.Env().Undefined();
+  }
+
+  if (database_->ThrowIfInAuthorizerCallback(info.Env(),
+                                             "expand statement SQL")) {
     return info.Env().Undefined();
   }
 
@@ -2714,6 +2865,10 @@ Napi::Value StatementSync::Columns(const Napi::CallbackInfo &info) {
   // When database is closed, statement is implicitly finalized by SQLite
   if (finalized_ || !database_ || !database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
+    return env.Undefined();
+  }
+
+  if (database_->ThrowIfInAuthorizerCallback(env, "read statement columns")) {
     return env.Undefined();
   }
 
@@ -3286,6 +3441,10 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (stmt_->database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
+    return env.Undefined();
+  }
+
   if (statement_reset_generation_ != stmt_->reset_generation_) {
     node::THROW_ERR_INVALID_STATE(env, "iterator was invalidated");
     return env.Undefined();
@@ -3311,8 +3470,9 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
 
   if (r != SQLITE_ROW) {
     if (r != SQLITE_DONE) {
-      node::THROW_ERR_SQLITE_ERROR(
-          env, sqlite3_errmsg(stmt_->database_->connection()));
+      std::string error = sqlite3_errmsg(stmt_->database_->connection());
+      ThrowEnhancedSqliteErrorWithDB(env, stmt_->database_,
+                                     stmt_->database_->connection(), r, error);
       return env.Undefined();
     }
 
@@ -3353,6 +3513,10 @@ Napi::Value StatementSyncIterator::Return(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (stmt_->database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
+    return env.Undefined();
+  }
+
   if (stmt_->stepping_) {
     node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
     return env.Undefined();
@@ -3381,6 +3545,10 @@ Napi::Value StatementSyncIterator::ToArray(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (stmt_->database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
+    return env.Undefined();
+  }
+
   if (stmt_->stepping_) {
     node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
     return env.Undefined();
@@ -3401,8 +3569,9 @@ Napi::Value StatementSyncIterator::ToArray(const Napi::CallbackInfo &info) {
 
     if (r != SQLITE_ROW) {
       if (r != SQLITE_DONE) {
-        node::THROW_ERR_SQLITE_ERROR(
-            env, sqlite3_errmsg(stmt_->database_->connection()));
+        std::string error = sqlite3_errmsg(stmt_->database_->connection());
+        ThrowEnhancedSqliteErrorWithDB(
+            env, stmt_->database_, stmt_->database_->connection(), r, error);
         return env.Undefined();
       }
 
@@ -3541,9 +3710,29 @@ Napi::Value Session::GenericChangeset(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  int nChangeset;
-  void *pChangeset;
+  if (database_->ThrowIfInAuthorizerCallback(env, "create changeset")) {
+    return env.Undefined();
+  }
+
+  int nChangeset = 0;
+  void *pChangeset = nullptr;
+
+  // Session changeset generation runs internal SAVEPOINT and SELECT SQL that
+  // can invoke the authorizer. Start a fresh deferred-error scope for it.
+  database_->ClearDeferredAuthorizerException();
+  database_->SetIgnoreNextSQLiteError(false);
+
   int r = sqliteChangesetFunc(session_, &nChangeset, &pChangeset);
+
+  if (database_->HasDeferredAuthorizerException()) {
+    // A RELEASE failure can be ignored by SQLite after it has already produced
+    // an allocation, so ownership must be discharged before rethrowing.
+    if (pChangeset != nullptr) {
+      sqlite3_free(pChangeset);
+    }
+    database_->RethrowDeferredAuthorizerException();
+    return env.Undefined();
+  }
 
   if (r != SQLITE_OK) {
     // Use sqlite3_errstr(r) to get a description of the error code,
@@ -3595,11 +3784,20 @@ Napi::Value Session::Close(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (database_->ThrowIfInAuthorizerCallback(env, "close session")) {
+    return env.Undefined();
+  }
+
   Delete();
   return env.Undefined();
 }
 
 Napi::Value Session::Dispose(const Napi::CallbackInfo &info) {
+  if (database_ && database_->IsOpen() && session_ != nullptr &&
+      database_->ThrowIfInAuthorizerCallback(info.Env(), "close session")) {
+    return info.Env().Undefined();
+  }
+
   // Try to close, but ignore errors during disposal (matches Node.js v25
   // behavior)
   try {
@@ -3946,6 +4144,10 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (ThrowIfInAuthorizerCallback(env, "backup database")) {
+    return env.Undefined();
+  }
+
   // ValidateDatabasePath throws synchronously with ERR_INVALID_ARG_TYPE
   // Use "path" as argument name to match Node.js
   std::optional<std::string> dest_path =
@@ -4058,6 +4260,10 @@ Napi::Value DatabaseSync::SetAuthorizer(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  if (ThrowIfInAuthorizerCallback(env, "set authorizer")) {
+    return env.Undefined();
+  }
+
   // Handle null to clear the authorizer
   if (info.Length() > 0 && info[0].IsNull()) {
     sqlite3_set_authorizer(connection_, nullptr, nullptr);
@@ -4103,6 +4309,7 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
 
   Napi::Env env(db->env_);
   Napi::HandleScope scope(env);
+  auto authorizer_guard = db->EnterAuthorizerCallback();
 
   try {
     // Convert SQLite authorizer parameters to JavaScript values
@@ -4119,15 +4326,25 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     // Handle JavaScript exceptions - must clear before returning to SQLite
     if (env.IsExceptionPending()) {
       Napi::Error error = env.GetAndClearPendingException();
-      db->SetDeferredAuthorizerException(error.Message());
+      db->SetDeferredAuthorizerException(error);
       db->SetIgnoreNextSQLiteError(true);
       return SQLITE_DENY;
     }
 
-    // Check if result is an integer - don't throw in callback context
-    if (!result.IsNumber()) {
-      db->SetDeferredAuthorizerException(
-          "Authorizer callback must return an integer authorization code");
+    // Match V8's IsInt32() check in node:sqlite. Node-API's Int32Value()
+    // coerces NaN, negative zero, fractions, and wrapping values such as 2^32
+    // to zero, which would otherwise turn a malformed result into SQLITE_OK.
+    bool is_int32 = false;
+    if (result.IsNumber()) {
+      const double value = result.As<Napi::Number>().DoubleValue();
+      is_int32 = std::isfinite(value) && !(value == 0 && std::signbit(value)) &&
+                 std::trunc(value) == value && value >= INT32_MIN &&
+                 value <= INT32_MAX;
+    }
+    if (!is_int32) {
+      Napi::TypeError error = Napi::TypeError::New(
+          env, "Authorizer callback must return an integer authorization code");
+      db->SetDeferredAuthorizerException(error);
       db->SetIgnoreNextSQLiteError(true);
       return SQLITE_DENY;
     }
@@ -4137,8 +4354,9 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     // Validate the return code - don't throw in callback context
     if (int_result != SQLITE_OK && int_result != SQLITE_DENY &&
         int_result != SQLITE_IGNORE) {
-      db->SetDeferredAuthorizerException(
-          "Authorizer callback returned a invalid authorization code");
+      Napi::RangeError error = Napi::RangeError::New(
+          env, "Authorizer callback returned a invalid authorization code");
+      db->SetDeferredAuthorizerException(error);
       db->SetIgnoreNextSQLiteError(true);
       return SQLITE_DENY;
     }
@@ -4148,26 +4366,35 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     // JavaScript exception occurred - clear any pending exception and store
     if (env.IsExceptionPending()) {
       Napi::Error error = env.GetAndClearPendingException();
-      db->SetDeferredAuthorizerException(error.Message());
+      db->SetDeferredAuthorizerException(error);
     } else {
-      db->SetDeferredAuthorizerException(e.Message());
+      db->SetDeferredAuthorizerException(e);
     }
     db->SetIgnoreNextSQLiteError(true);
     return SQLITE_DENY;
   } catch (const std::exception &e) {
-    // C++ exception - clear any pending JS exception and store message
+    // C++ exception - clear any pending JS exception and preserve it. If the
+    // exception did not originate in JavaScript, create an Error now and defer
+    // that exact object until the surrounding SQLite call returns.
     if (env.IsExceptionPending()) {
-      env.GetAndClearPendingException();
+      Napi::Error error = env.GetAndClearPendingException();
+      db->SetDeferredAuthorizerException(error);
+    } else {
+      Napi::Error error = Napi::Error::New(env, e.what());
+      db->SetDeferredAuthorizerException(error);
     }
-    db->SetDeferredAuthorizerException(e.what());
     db->SetIgnoreNextSQLiteError(true);
     return SQLITE_DENY;
   } catch (...) {
     // Unknown error - clear any pending JS exception and deny
     if (env.IsExceptionPending()) {
-      env.GetAndClearPendingException();
+      Napi::Error error = env.GetAndClearPendingException();
+      db->SetDeferredAuthorizerException(error);
+    } else {
+      Napi::Error error =
+          Napi::Error::New(env, "Unknown error in authorizer callback");
+      db->SetDeferredAuthorizerException(error);
     }
-    db->SetDeferredAuthorizerException("Unknown error in authorizer callback");
     db->SetIgnoreNextSQLiteError(true);
     return SQLITE_DENY;
   }
@@ -4178,6 +4405,10 @@ Napi::Value DatabaseSync::GetLimit(const Napi::CallbackInfo &info) {
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (ThrowIfInAuthorizerCallback(env, "read database limits")) {
     return env.Undefined();
   }
 
@@ -4197,6 +4428,10 @@ Napi::Value DatabaseSync::SetLimit(const Napi::CallbackInfo &info) {
 
   if (!IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (ThrowIfInAuthorizerCallback(env, "set database limits")) {
     return env.Undefined();
   }
 

@@ -215,6 +215,84 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
       db.close();
     });
 
+    it("preserves a primitive thrown by the authorizer", () => {
+      const db = new DatabaseSync(":memory:");
+      const thrown = 12345;
+      db.setAuthorizer(() => {
+        throw thrown;
+      });
+
+      let caught: unknown;
+      try {
+        db.exec("SELECT 1");
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBe(thrown);
+
+      db.setAuthorizer(null);
+      db.close();
+    });
+
+    it("preserves a thrown Error subclass with custom properties", () => {
+      // The deferred exception is held as a Napi::Error reference, so the exact
+      // thrown value (subclass, code, custom fields, message) must survive the
+      // authorizer -> SQLite -> caller round trip.
+      const db = new DatabaseSync(":memory:");
+      class AuthzError extends Error {
+        code = "MY_AUTHZ";
+        detail = { attempts: 3 };
+      }
+      db.setAuthorizer(() => {
+        throw new AuthzError("denied");
+      });
+
+      let caught: any;
+      try {
+        db.exec("SELECT 1");
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(AuthzError);
+      expect(caught.code).toBe("MY_AUTHZ");
+      expect(caught.detail).toEqual({ attempts: 3 });
+      expect(caught.message).toBe("denied");
+
+      db.setAuthorizer(null);
+      db.close();
+    });
+
+    it("stays GC-safe after an authorizer throws (deferred reference lifetime)", () => {
+      if (typeof global.gc !== "function") {
+        throw new Error(
+          "this test must run under --expose-gc (jest is configured to)",
+        );
+      }
+
+      // DatabaseSync owns a deferred Napi::Error, which holds a persistent
+      // reference to the thrown JavaScript value. If that reference survived to
+      // ObjectWrap finalization it would recreate the Alpine/musl crash that
+      // removed database_ref_ in commits 0691ae5 / 4da0638. Every operation must
+      // clear it before returning to JS, so forcing GC over many
+      // throw-and-abandon databases must not crash.
+      for (let i = 0; i < 100; i++) {
+        const db = new DatabaseSync(":memory:");
+        db.setAuthorizer(() => {
+          throw new Error(`denied ${i}`);
+        });
+        expect(() => db.prepare(`SELECT ${i}`)).toThrow(`denied ${i}`);
+        // Abandon roughly half without close() so the finalizer runs on a
+        // database that has exercised the deferred-exception path.
+        if (i % 2 === 0) db.close();
+      }
+      global.gc();
+      global.gc();
+      // The addon must still be functional after those finalizers ran.
+      const db = new DatabaseSync(":memory:");
+      expect(db.prepare("SELECT 42 AS v").get()).toEqual({ v: 42 });
+      db.close();
+    });
+
     it("throws error when authorizer returns nothing", () => {
       const db = new DatabaseSync(":memory:");
       db.setAuthorizer((() => {
@@ -229,19 +307,28 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
       db.close();
     });
 
-    it("throws error when authorizer returns NaN (string)", () => {
-      const db = new DatabaseSync(":memory:");
-      db.setAuthorizer(() => {
-        return "1" as any;
-      });
+    it.each([NaN, -0, 0.5, 4294967296])(
+      "throws TypeError when authorizer returns non-Int32 number %s",
+      (value) => {
+        const db = new DatabaseSync(":memory:");
+        db.setAuthorizer(() => value);
 
-      expect(() => {
-        db.exec("SELECT 1");
-      }).toThrow(
-        "Authorizer callback must return an integer authorization code",
-      );
-      db.close();
-    });
+        let caught: unknown;
+        try {
+          db.exec("SELECT 1");
+        } catch (error) {
+          caught = error;
+        }
+        expect(caught).toEqual(
+          expect.objectContaining({
+            name: "TypeError",
+            message:
+              "Authorizer callback must return an integer authorization code",
+          }),
+        );
+        db.close();
+      },
+    );
 
     it("throws error when authorizer returns an invalid code", () => {
       const db = new DatabaseSync(":memory:");
@@ -249,9 +336,25 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
         return 3; // Invalid - only SQLITE_OK (0), SQLITE_DENY (1), SQLITE_IGNORE (2) are valid
       });
 
-      expect(() => {
+      let caught: unknown;
+      try {
         db.exec("SELECT 1");
-      }).toThrow(/Authorizer callback returned a.* invalid authorization code/);
+      } catch (error) {
+        caught = error;
+      }
+
+      // Node v26.5 uses RangeError for an integer outside OK/DENY/IGNORE;
+      // non-integer callback results use TypeError instead.
+      expect(caught).toEqual(
+        expect.objectContaining({
+          // Native exceptions cross Jest's VM realm, so constructor identity
+          // is not stable even though the observable error subclass is.
+          name: "RangeError",
+          message: expect.stringMatching(
+            /Authorizer callback returned a.* invalid authorization code/,
+          ),
+        }),
+      );
       db.close();
     });
 
@@ -306,6 +409,247 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
       db.exec("INSERT INTO t1 VALUES (1)");
 
       db.close();
+    });
+
+    it.each([
+      ["all()", (statement: any) => statement.all()],
+      ["iterator.next()", (statement: any) => statement.iterate().next()],
+      [
+        "iterator.toArray()",
+        (statement: any) =>
+          (
+            statement.iterate() as IterableIterator<unknown> & {
+              toArray(): unknown[];
+            }
+          ).toArray(),
+      ],
+    ])(
+      "preserves an authorizer exception during %s auto-reprepare",
+      (_name, execute) => {
+        const db = new DatabaseSync(":memory:");
+        db.exec(
+          "CREATE TABLE source (value); " +
+            "CREATE TABLE target (value UNIQUE); " +
+            "INSERT INTO source VALUES (1); " +
+            "INSERT INTO target VALUES (1)",
+        );
+
+        // Installing an authorizer expires both statements. Their next step
+        // auto-reprepares and invokes the callback from sqlite3_step().
+        const query = db.prepare("SELECT value FROM source");
+        const duplicate = db.prepare("INSERT INTO target VALUES (1)");
+        const boom = Object.assign(new TypeError("REPREPARE_BOOM"), {
+          code: "ERR_REPREPARE_BOOM",
+        });
+
+        db.setAuthorizer(() => {
+          throw boom;
+        });
+
+        let caught: unknown;
+        try {
+          execute(query);
+        } catch (error) {
+          caught = error;
+        }
+
+        // A missed deferred-error handoff also poisons the next SQLite error.
+        db.setAuthorizer(null);
+        let laterError: unknown;
+        try {
+          duplicate.run();
+        } catch (error) {
+          laterError = error;
+        }
+        db.close();
+
+        expect(caught).toBe(boom);
+        expect(laterError).not.toBe(boom);
+        expect(laterError).toEqual(
+          expect.objectContaining({
+            code: "ERR_SQLITE_ERROR",
+            message: expect.stringMatching(/constraint|unique/i),
+          }),
+        );
+      },
+    );
+
+    it.each(["changeset", "patchset"] as const)(
+      "preserves an authorizer exception during session.%s()",
+      (method) => {
+        const db = new DatabaseSync(":memory:");
+        db.exec("CREATE TABLE data (id PRIMARY KEY)");
+        const session = db.createSession({ table: "data" });
+        db.exec("INSERT INTO data VALUES (1)");
+        const boom = Object.assign(new TypeError("SESSION_BOOM"), {
+          code: "ERR_SESSION_BOOM",
+        });
+
+        db.setAuthorizer(() => {
+          throw boom;
+        });
+
+        let caught: unknown;
+        try {
+          session[method]();
+        } catch (error) {
+          caught = error;
+        }
+
+        db.setAuthorizer(null);
+        session.close();
+        db.close();
+        expect(caught).toBe(boom);
+      },
+    );
+
+    it("preserves an authorizer exception during applyChangeset()", () => {
+      const source = new DatabaseSync(":memory:");
+      source.exec("CREATE TABLE data (id PRIMARY KEY)");
+      const session = source.createSession({ table: "data" });
+      source.exec("INSERT INTO data VALUES (1)");
+      const changeset = session.changeset();
+      session.close();
+      source.close();
+
+      const target = new DatabaseSync(":memory:");
+      target.exec("CREATE TABLE data (id PRIMARY KEY)");
+      const boom = Object.assign(new TypeError("APPLY_CHANGESET_BOOM"), {
+        code: "ERR_APPLY_CHANGESET_BOOM",
+      });
+      target.setAuthorizer(() => {
+        throw boom;
+      });
+
+      let caught: unknown;
+      try {
+        target.applyChangeset(changeset);
+      } catch (error) {
+        caught = error;
+      }
+
+      target.setAuthorizer(null);
+      target.close();
+      expect(caught).toBe(boom);
+    });
+
+    it("uses a later cleanup authorizer error over a conflict error", () => {
+      const source = new DatabaseSync(":memory:");
+      source.exec("CREATE TABLE data (id PRIMARY KEY)");
+      const session = source.createSession({ table: "data" });
+      source.exec("INSERT INTO data VALUES (1)");
+      const changeset = session.changeset();
+      session.close();
+      source.close();
+
+      const target = new DatabaseSync(":memory:");
+      target.exec(
+        "CREATE TABLE data (id PRIMARY KEY); INSERT INTO data VALUES (1)",
+      );
+      const conflictBoom = new RangeError("CONFLICT_BOOM");
+      const authorizerBoom = new TypeError("CLEANUP_AUTHORIZER_BOOM");
+      let conflictSeen = false;
+
+      target.setAuthorizer((actionCode, arg1) => {
+        if (
+          conflictSeen &&
+          actionCode === constants.SQLITE_SAVEPOINT &&
+          arg1 === "RELEASE"
+        ) {
+          throw authorizerBoom;
+        }
+        return constants.SQLITE_OK;
+      });
+
+      let caught: unknown;
+      try {
+        target.applyChangeset(changeset, {
+          onConflict: () => {
+            conflictSeen = true;
+            throw conflictBoom;
+          },
+        });
+      } catch (error) {
+        caught = error;
+      }
+
+      target.setAuthorizer(null);
+      target.close();
+
+      // Node v26.5 surfaces the later exception from SQLite's cleanup SQL.
+      expect(caught).toBe(authorizerBoom);
+    });
+  });
+
+  describe("same-connection reentry", () => {
+    it("rejects operations that modify the invoking connection", () => {
+      const db = new DatabaseSync(":memory:");
+      const stmt = db.prepare("SELECT 42 AS value");
+      const errors = new Map<string, unknown>();
+      let checked = false;
+
+      const capture = (name: string, operation: () => unknown) => {
+        try {
+          operation();
+        } catch (error) {
+          errors.set(name, error);
+        }
+      };
+
+      db.setAuthorizer(() => {
+        // Nested prepare/exec/serialize invoke the authorizer again on the
+        // broken implementation. Run the checks only in the outer callback.
+        if (!checked) {
+          checked = true;
+          capture("prepare", () => db.prepare("SELECT 2"));
+          capture("exec", () => db.exec("SELECT 3"));
+          capture("step", () => stmt.get());
+          capture("serialize", () => db.serialize());
+          // Keep this last: without a guard it removes the callback currently
+          // being dispatched through.
+          capture("setAuthorizer", () => db.setAuthorizer(null));
+        }
+        return constants.SQLITE_OK;
+      });
+
+      db.prepare("SELECT 1");
+
+      for (const name of [
+        "prepare",
+        "exec",
+        "step",
+        "serialize",
+        "setAuthorizer",
+      ]) {
+        expect(errors.get(name)).toEqual(
+          expect.objectContaining({
+            code: "ERR_INVALID_STATE",
+            message: expect.stringContaining("authorizer callback"),
+          }),
+        );
+      }
+
+      db.setAuthorizer(null);
+      db.close();
+    });
+
+    it("allows operations on a different connection", () => {
+      const outer = new DatabaseSync(":memory:");
+      const inner = new DatabaseSync(":memory:");
+      const innerStmt = inner.prepare("SELECT 42 AS value");
+      let observed: unknown;
+
+      outer.setAuthorizer(() => {
+        observed = innerStmt.get();
+        return constants.SQLITE_OK;
+      });
+
+      outer.prepare("SELECT 1");
+      expect(observed).toEqual({ value: 42 });
+
+      outer.setAuthorizer(null);
+      outer.close();
+      inner.close();
     });
   });
 
