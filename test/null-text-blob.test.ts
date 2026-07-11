@@ -76,6 +76,44 @@ describe("NULL and Zero-Length TEXT/BLOB Handling", () => {
     });
   });
 
+  describe("TEXT with embedded NUL bytes", () => {
+    // Regression guard for the row-materialization refactor: TEXT is now
+    // converted with an explicit byte length (sqlite3_column_bytes), matching
+    // node:sqlite's string_view(text, len). A NUL-terminated conversion would
+    // truncate a value like "a\0b" to "a". CAST a blob literal so this fixture
+    // does not depend on SQLite's undefined handling of NULs in text expressions
+    // or on this addon's separate parameter-binding path.
+    const withNul = "SELECT CAST(X'610062' AS TEXT) AS value";
+
+    test("preserves embedded NUL in object mode (get)", () => {
+      const row = db.prepare(withNul).get();
+      expect(row.value).toBe("a\0b");
+      expect(row.value.length).toBe(3);
+    });
+
+    test("preserves embedded NUL in object mode (all)", () => {
+      const rows = db.prepare(withNul).all();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].value).toBe("a\0b");
+      expect(rows[0].value.length).toBe(3);
+    });
+
+    test("preserves embedded NUL in returnArrays mode", () => {
+      const stmt = db.prepare(withNul);
+      stmt.setReturnArrays(true);
+      const rows = stmt.all() as unknown as string[][];
+      expect(rows).toEqual([["a\0b"]]);
+    });
+
+    test("preserves embedded NUL in iterator mode", () => {
+      const values: string[] = [];
+      for (const row of db.prepare(withNul).iterate()) {
+        values.push((row as { value: string }).value);
+      }
+      expect(values).toEqual(["a\0b"]);
+    });
+  });
+
   describe("BLOB column NULL handling", () => {
     test("handles NULL BLOB in object mode", () => {
       db.exec("CREATE TABLE test (id INTEGER, data BLOB)");

@@ -87,6 +87,50 @@ describe("JavaScript Safe Integer Limits", () => {
       });
     });
 
+    test("throws ERR_OUT_OF_RANGE from all() and iterate(), not just get()", () => {
+      // Regression guard for the row-materialization refactor: multi-row and
+      // iterator consumption paths, in object and array mode, must surface
+      // ERR_OUT_OF_RANGE exactly like get(). Before the refactor, all() let the
+      // pending exception reach results.Set(), where the catch block replaced it
+      // with ERR_SQLITE_ERROR.
+      db.prepare("INSERT INTO test (value) VALUES (?)").run(9007199254740993n);
+
+      const expectOutOfRange = (fn: () => unknown) => {
+        let error: unknown;
+        try {
+          fn();
+        } catch (e) {
+          error = e;
+        }
+        expect(error).toEqual(
+          expect.objectContaining({
+            name: "RangeError",
+            code: "ERR_OUT_OF_RANGE",
+            message: expect.stringContaining("too large"),
+          }),
+        );
+      };
+
+      expectOutOfRange(() => db.prepare("SELECT value FROM test").all());
+      expectOutOfRange(() => {
+        for (const _row of db.prepare("SELECT value FROM test").iterate()) {
+          // consume until it throws
+        }
+      });
+      expectOutOfRange(() =>
+        db.prepare("SELECT value FROM test").iterate().toArray(),
+      );
+
+      const arrayStatement = () => {
+        const stmt = db.prepare("SELECT value FROM test");
+        stmt.setReturnArrays(true);
+        return stmt;
+      };
+      expectOutOfRange(() => arrayStatement().all());
+      expectOutOfRange(() => arrayStatement().iterate().next());
+      expectOutOfRange(() => arrayStatement().iterate().toArray());
+    });
+
     test("lastInsertRowid throws RangeError for large values without setReadBigInts", () => {
       // Create a table with explicit rowid
       db.exec("CREATE TABLE rowid_test (data TEXT);");
