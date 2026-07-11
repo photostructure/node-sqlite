@@ -80,6 +80,17 @@
       },
       "conditions": [
         [
+          "OS=='linux'",
+          {
+            # Avoid the ELF procedure linkage table for the many Node-API calls
+            # made while materializing result rows. This keeps the stable
+            # Node-API ABI while removing one indirection from each call.
+            "cflags_cc": [
+              "-fno-plt"
+            ]
+          }
+        ],
+        [
           "OS=='win'",
           {
             "conditions": [
