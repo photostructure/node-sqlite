@@ -43,9 +43,11 @@ _The official SQLite module included with Node.js 22.5.0+. Promoted to Release C
 | v20             | Not available                                  |
 | v22.5.0–22.12.x | Requires `--experimental-sqlite` flag          |
 | v22.13.0+       | Experimental (no flag needed, prints warning)  |
-| v24.0.0+        | Experimental (no flag needed, prints warning)  |
+| v24.0.0–24.14.x | Experimental (no flag needed, prints warning)  |
+| v24.15.0+       | Release Candidate (Stability: 1.2, no warning) |
 | v25.0.0–25.6.x  | Experimental (no flag needed, prints warning)  |
 | v25.7.0+        | Release Candidate (Stability: 1.2, no warning) |
+| v26.0.0+        | Release Candidate (Stability: 1.2, no warning) |
 
 **Pros:**
 
@@ -134,21 +136,17 @@ _The original asynchronous SQLite binding for Node.js, [unmaintained since Decem
 
 ## Performance comparison
 
-All synchronous libraries (@photostructure/sqlite, node:sqlite, better-sqlite3) offer similar performance:
+All three synchronous drivers are fast enough for most applications, but they
+are not equal on every workload. Durable single-row writes tie because storage
+sync time dominates, and indexed single-row reads are within roughly 20% of the
+fastest driver in our benchmark. `@photostructure/sqlite` is slower when one
+call materializes roughly 1,000 rows.
 
-- **2-15x faster** than async sqlite3 for most operations
-- **Direct C API access** with minimal JavaScript overhead
-- **No async/await overhead** or promise creation costs
-- **Efficient batch operations** with prepared statements
-
-The async sqlite3 library was slower due to:
-
-- Thread pool overhead
-- Callback/promise creation costs
-- Mutex contention under load
-- Additional memory allocations
-
-> **Note:** sqlite3 is [deprecated and unmaintained](https://github.com/TryGhost/node-sqlite3/pull/1844) as of December 2025.
+That bulk-read gap comes from the stable Node-API boundary. This package
+converts each returned value through Node-API so its prebuilds work across
+supported Node.js releases. `node:sqlite` is built into Node.js and can use
+V8-only bulk constructors. See the [full benchmark results and
+methodology](../benchmark/README.md).
 
 ### SQLTagStore performance
 
@@ -228,4 +226,4 @@ Choose based on your specific needs:
 1. **Need Node.js v20+ support?** → @photostructure/sqlite
 2. **Already using better-sqlite3 and happy with it?** → No urgent reason to switch
 3. **Have async legacy code using sqlite3?** → Migrate to @photostructure/sqlite or better-sqlite3 (sqlite3 is deprecated)
-4. **Already on Node.js v22.13+/v24.0+/v25.7+ with a preference for zero dependencies?** → `node:sqlite`
+4. **Already on Node.js v22.13+, v24+, v25.7+, or v26+ with a preference for zero dependencies?** → `node:sqlite`

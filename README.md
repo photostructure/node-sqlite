@@ -29,10 +29,10 @@ db.close();
 
 ## Features
 
-- 100% compatible with Node.js v26.4.0 built-in `node:sqlite` module\*
+- API-compatible with Node.js v26.4.0 built-in `node:sqlite` module\*
 - Zero dependencies - native SQLite implementation
 - Synchronous API - no async overhead
-- Performance comparable to better-sqlite3
+- Native SQLite performance ([benchmarks and tradeoffs](./benchmark/README.md))
 - Full SQLite feature set ([details](./doc/features.md))
 - TypeScript support with complete type definitions
 - Cross-platform prebuilt binaries (Windows/macOS/Linux, x64/ARM64)
@@ -44,6 +44,19 @@ db.close();
 - URI filename support for advanced configuration
 - Worker thread safe
 - [Compare with other libraries →](./doc/library-comparison.md)
+
+## Performance
+
+For most applications, `@photostructure/sqlite` is fast enough that SQLite or
+storage will be the bottleneck. Durable single-row writes match `node:sqlite`
+and `better-sqlite3`, and indexed single-row reads are within roughly 20% of the
+fastest driver in our benchmarks.
+
+The exception is materializing large result sets. This package uses the stable
+Node-API ABI for compatibility across Node.js releases, so each returned value
+crosses that boundary. `node:sqlite` can use internal V8 bulk constructors that
+addons cannot use through stable Node-API. If thousand-row reads are a hot path
+in your application, [review the results and run the benchmark](./benchmark/README.md).
 
 ## Note
 

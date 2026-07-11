@@ -1,231 +1,198 @@
-# SQLite Driver Benchmarks
+# SQLite driver benchmarks
 
-Performance and memory benchmarks comparing `@photostructure/sqlite` against other popular SQLite libraries for Node.js.
+## Is it fast enough?
 
-## Summary
+**For most applications, yes.**
 
-The performance of @photostructure/sqlite is broadly comparable to node:sqlite and better-sqlite3. Each scenario reports a median over multiple trials plus a 95% margin of error, so run-to-run noise is visible rather than hidden.
+In our pinned benchmark run:
 
-## Libraries Tested
+- Indexed single-row reads reach about 110,000 queries per second, within
+  roughly 20% of the fastest driver.
+- Durable single-row writes match `node:sqlite` and `better-sqlite3`. At roughly
+  360–390 commits per second, storage sync time dominates driver overhead.
+- Joins and batched writes are in the same general range, though not always at
+  parity.
+- Large result sets are the known gap. Fetching or iterating roughly 1,000 rows
+  at a time is 1.4x to 2.2x faster in `node:sqlite`, and `better-sqlite3` is
+  faster still on the range query.
 
-- **@photostructure/sqlite** - This package
-- **better-sqlite3** - Popular synchronous SQLite3 binding
-- **node:sqlite** - Node.js built-in SQLite (when available)
+Even the slowest read cases here materialize roughly half a million rows per
+second. Most applications will not notice the difference. If large result sets
+sit in a hot loop, benchmark your own workload before choosing a driver.
 
-Not benchmarked:
+![Throughput relative to node:sqlite](charts/overview-ratio.svg)
 
-- **sqlite3** - The classic asynchronous binding ([`node-sqlite3`](https://github.com/TryGhost/node-sqlite3)) is [deprecated / effectively unmaintained](https://github.com/TryGhost/node-sqlite3/pull/1844) and its async, callback-based API isn't a meaningful apples-to-apples comparison with these synchronous drivers, so it is excluded.
+## Why bulk reads trail
 
-## Installation
+The gap is in converting SQLite rows into JavaScript values, not in SQLite
+query execution. `@photostructure/sqlite` uses stable Node-API so its prebuilt
+addon remains compatible across supported Node.js releases. Each returned
+value crosses that API boundary. The built-in `node:sqlite` module can instead
+use V8-only bulk constructors inside Node.js.
+
+We keep the stable path because compatibility and predictable behavior matter
+more than a benchmark-only win. The cost grows with the number of rows and
+columns returned, which is why single-row queries stay close while 1,000-row
+queries show the largest difference.
+
+<details>
+<summary>Full performance results</summary>
+
+These results come from Linux x64 on an AMD Ryzen 9 5950X with Node.js 26.5.
+The process was pinned to one core with `taskset -c 2` and run with
+`BENCH_TRIALS=30 BENCH_WARMUP=5`. Absolute throughput varies by machine; the
+relationships between drivers are the useful part.
+
+| Scenario                | @photostructure/sqlite |      better-sqlite3 |         node:sqlite | vs node:sqlite |
+| ----------------------- | ---------------------: | ------------------: | ------------------: | -------------: |
+| SELECT by Primary Key   |    110,000 ops/s ±0.3% | 130,000 ops/s ±0.5% | 120,000 ops/s ±0.6% |          0.89x |
+| SELECT Range            |        490 ops/s ±6.2% |   1,700 ops/s ±9.1% |     670 ops/s ±4.6% |          0.74x |
+| SELECT with Iterator    |        590 ops/s ±0.9% |   1,200 ops/s ±0.7% |   1,300 ops/s ±1.9% |          0.47x |
+| INSERT Single Row †     |        360 ops/s ±3.3% |     360 ops/s ±3.0% |     370 ops/s ±5.4% |          0.97x |
+| INSERT in Transaction ‡ |        240 ops/s ±3.1% |     270 ops/s ±2.8% |     290 ops/s ±2.0% |          0.83x |
+| SELECT with JOIN        |      1,700 ops/s ±0.6% |   1,700 ops/s ±0.8% |   1,900 ops/s ±0.7% |          0.86x |
+| INSERT with BLOB †      |        390 ops/s ±0.6% |     390 ops/s ±0.5% |     390 ops/s ±0.7% |          0.99x |
+| UPDATE with Index †     |        390 ops/s ±0.8% |     390 ops/s ±0.7% |     390 ops/s ±1.4% |          1.00x |
+| DELETE Bulk ‡           |        230 ops/s ±0.9% |     270 ops/s ±0.5% |     280 ops/s ±1.3% |          0.84x |
+
+† Single-operation writes commit once per operation. With rollback journaling
+and `synchronous=FULL`, durable storage sync dominates and the drivers tie.
+
+‡ Batched writes amortize one durable commit over roughly 1,000 rows, so driver
+overhead remains visible. SQLite may issue multiple sync calls for a commit;
+the exact sequence depends on the VFS and journaling details.
+
+`ops/s` counts complete operations, not rows. `SELECT Range` and `SELECT with
+Iterator` each materialize roughly 1,000 rows per operation. `INSERT in
+Transaction` and `DELETE Bulk` each write roughly 1,000 rows per operation.
+
+</details>
+
+## Run the benchmarks
 
 ```bash
 cd benchmark
 npm install
-```
 
-> **Note:** better-sqlite3 ships prebuilt binaries via the (deprecated) `prebuild-install`, which may lag the newest Node.js releases. If the benchmark prints `Error in better-sqlite3: Could not locate the bindings file`, build it from source:
->
-> ```bash
-> npm rebuild better-sqlite3 --build-from-source
-> ```
-
-## Running Benchmarks
-
-### Performance Benchmarks
-
-```bash
-# Run all benchmarks
+# Full performance suite
 npm run bench
 
-# Run specific scenario types
-npm run bench select      # Only SELECT query benchmarks
-npm run bench insert      # Only INSERT operation benchmarks
-npm run bench transaction # Only transaction benchmarks
-
-# Advanced options
-tsx index.ts --drivers @photostructure/sqlite,better-sqlite3
-tsx index.ts select --drivers @photostructure/sqlite,node:sqlite
-tsx index.ts --verbose
-tsx index.ts --memory     # Include memory usage tracking
-```
-
-### Memory Benchmarks
-
-```bash
-# Run memory leak detection (requires --expose-gc)
-npm run bench:memory
-
-# Or run directly with tsx
-tsx --expose-gc memory-benchmark.ts
-
-# Test specific drivers
-tsx --expose-gc memory-benchmark.ts --drivers @photostructure/sqlite,better-sqlite3
-
-# Test specific scenarios
-tsx --expose-gc memory-benchmark.ts --scenarios prepare-finalize,large-select
-
-# Adjust iterations for leak detection
-tsx --expose-gc memory-benchmark.ts --iterations 100
-```
-
-### Command Line Options
-
-#### Performance Benchmarks (`index.ts`)
-
-- `--drivers <list>` - Comma-separated list of drivers to test
-- `--verbose` - Show detailed output during benchmarking
-- `--memory` - Track memory usage during performance tests
-- `--help` - Show usage information
-
-#### Memory Benchmarks (`memory-benchmark.ts`)
-
-- `--drivers <list>` - Comma-separated list of drivers to test
-- `--scenarios <list>` - Comma-separated list of memory scenarios to run
-- `--iterations <n>` - Number of iterations for leak detection (default: 50)
-- `--help` - Show usage information
-
-### Example Commands
-
-```bash
-# Compare just the sync drivers
-npm run bench -- --drivers @photostructure/sqlite,better-sqlite3,node:sqlite
-
-# Test only SELECT performance
+# Read scenarios only
 npm run bench select
 
-# Run memory tests with more iterations for accuracy
-tsx --expose-gc memory-benchmark.ts --iterations 100
+# Regenerate SVG charts
+npm run bench:charts
 
-# Test specific memory scenario
-tsx --expose-gc memory-benchmark.ts --scenarios blob-handling
+# Memory leak checks
+npm run bench:memory
 ```
 
-## Benchmark Scenarios
+Compare selected drivers or scenarios by passing arguments through to the
+benchmark:
 
-### Performance Scenarios
-
-1. **select-by-id** - Single row retrieval by primary key
-2. **select-range** - Fetch up to 1k rows with WHERE clause and index
-3. **select-iterate** - Iterator performance over 1k rows
-4. **insert-simple** - Single row inserts
-5. **insert-transaction** - Bulk inserts (1k rows) in transaction
-6. **select-join** - Complex JOIN with aggregation
-7. **insert-blob** - Binary data handling (10KB blobs)
-8. **update-indexed** - UPDATE operations using indexed columns
-9. **delete-bulk** - Bulk DELETE in transactions
-
-(See the [example results](#summary) below for approximate throughput; absolute numbers vary by hardware and Node.js version.)
-
-### Memory Scenarios
-
-1. **prepare-finalize** - Statement lifecycle memory management
-2. **large-select** - Memory handling with large result sets
-3. **blob-handling** - Binary data memory management
-4. **transaction-stress** - Memory usage in large transactions
-5. **prepare-cache** - Statement cache stress testing
-
-## Output Format
-
-### Performance Results
-
-The benchmark outputs clean markdown tables that can be directly copied into documentation. Absolute numbers depend on hardware and Node.js version — the example below is one run (Linux x64, Node 24) and is only meant to show the format and rough relationships. Each cell is a median with a 95% margin of error.
-
-### Summary
-
-| Scenario              | @photostructure/sqlite |      better-sqlite3 |         node:sqlite |
-| --------------------- | ---------------------: | ------------------: | ------------------: |
-| SELECT by Primary Key |    110,000 ops/s ±1.0% | 130,000 ops/s ±2.0% | 120,000 ops/s ±3.1% |
-| SELECT Range          |      8,800 ops/s ±1.9% |  22,000 ops/s ±3.9% |  12,000 ops/s ±2.2% |
-| SELECT with Iterator  |        670 ops/s ±1.6% |   1,200 ops/s ±3.3% |   1,100 ops/s ±3.1% |
-| INSERT Single Row     |        400 ops/s ±1.8% |     390 ops/s ±5.0% |     400 ops/s ±0.8% |
-| INSERT in Transaction |        250 ops/s ±2.7% |     280 ops/s ±3.3% |     300 ops/s ±2.3% |
-| SELECT with JOIN      |      1,800 ops/s ±1.0% |   2,100 ops/s ±1.3% |   1,900 ops/s ±3.3% |
-| INSERT with BLOB      |        380 ops/s ±0.9% |     370 ops/s ±2.1% |     380 ops/s ±2.0% |
-| UPDATE with Index     |        380 ops/s ±1.4% |     380 ops/s ±1.1% |     390 ops/s ±1.8% |
-| DELETE Bulk           |        170 ops/s ±1.6% |     190 ops/s ±2.6% |     190 ops/s ±2.1% |
-
-### Overall performance ranking
-
-| Rank | Driver                 | Score |
-| ---: | ---------------------- | ----: |
-|    1 | better-sqlite3         |   98% |
-|    2 | node:sqlite            |   92% |
-|    3 | @photostructure/sqlite |   82% |
-
-Key features:
-
-- **Adaptive iteration counts**: calibrates each scenario to ~50 ms per trial, then runs many trials for a median + margin of error
-- **Markdown-ready output**: Tables can be directly copied into documentation
-- **Comma-formatted numbers**: Easy to read large operation counts
-- **Overall performance ranking**: Weighted average across all scenarios
-
-### Memory Results
-
-Memory benchmarks also output markdown-ready tables:
-
-```
-SQLite Driver Memory Benchmark
-
-Testing @photostructure/sqlite
-
-  Statement Prepare/Finalize: Tests for memory leaks in statement lifecycle
-    OK - No memory leak detected
-    Heap growth: 0.12 KB/iteration (R²=0.045)
-    External growth: 0.00 KB/iteration (R²=0.001)
-
-Summary
-
-| Scenario                   | @photostructure/sqlite | better-sqlite3 | node:sqlite |
-| -------------------------- | ---------------------- | -------------- | ----------- |
-| Statement Prepare/Finalize | OK                     | OK             | OK          |
-| Large Result Sets          | OK                     | OK             | OK          |
-| BLOB Memory Management     | OK                     | OK             | OK          |
+```bash
+npm run bench -- select --drivers @photostructure/sqlite,node:sqlite
+npm run bench -- --drivers @photostructure/sqlite,better-sqlite3,node:sqlite
 ```
 
-Memory table generated above - copy/paste ready for documentation!
+<details>
+<summary>Options, scenarios, and methodology</summary>
 
-Features:
+### Drivers
 
-- **Leak detection**: Automatically identifies potential memory leaks (>1KB/iteration growth)
-- **Statistical analysis**: R² correlation values show trend strength
-- **Multiple scenarios**: Tests various memory usage patterns
-- **Markdown output**: Ready for documentation
+- `@photostructure/sqlite`: this package
+- `better-sqlite3`: synchronous SQLite binding with its own API
+- `node:sqlite`: the built-in Node.js module, when available
 
-## Interpreting Results
+The asynchronous `sqlite3` package is not included. Its callback-based API is
+not an apples-to-apples comparison with these synchronous drivers, and the
+package is [effectively unmaintained](https://github.com/TryGhost/node-sqlite3/pull/1844).
 
-### Performance Metrics
+If `better-sqlite3` has no prebuilt binary for your Node.js release, rebuild it
+locally:
 
-- **Ops/sec**: Operations per second (higher is better)
-- **Relative**: Performance relative to fastest driver
-- **Margin**: Error margin (lower is more consistent)
-- **Runs**: Number of benchmark samples collected
+```bash
+npm rebuild better-sqlite3 --build-from-source
+```
 
-### Memory Metrics
+### Performance options
 
-- **Heap growth**: Memory growth rate per iteration
-- **External growth**: Native memory growth rate
-- **R²**: Correlation coefficient (closer to 1 = stronger trend)
-- **Leak detection**: Flags potential memory leaks (>1KB/iteration)
+- `--drivers <list>` selects a comma-separated driver list.
+- `--iterations <n>` fixes the per-trial iteration count instead of calibrating.
+- `--verbose` prints detailed progress.
+- `--memory` tracks memory during the performance run.
+- `--help` prints all options.
 
-## Advanced Features
+Environment variables `BENCH_TRIALS` and `BENCH_WARMUP` control the number of
+measured and warmup trials. Measured trials are clamped to a minimum of six,
+which is required for the distribution-free 95% median interval.
 
-The benchmark system automatically calibrates iteration counts and scales results based on operation complexity to ensure fair comparisons across all drivers.
+### Performance scenarios
 
-## Notes
+- `select-by-id`: one row by primary key
+- `select-range`: roughly 1,000 rows by indexed key
+- `select-iterate`: iterate over 1,000 rows
+- `select-join`: join with aggregation
+- `insert-simple`: one durable insert
+- `insert-transaction`: 1,000 inserts in one transaction
+- `insert-blob`: one durable insert with a 10 KB blob
+- `update-indexed`: one durable indexed update
+- `delete-bulk`: delete roughly 1,000 rows in one transaction
 
-- **sqlite3 Performance**: The sqlite3 driver shows lower performance in synchronous-style benchmarks because it's inherently asynchronous. Note: sqlite3 is [deprecated and unmaintained](https://github.com/TryGhost/node-sqlite3/pull/1844) since December 2025.
-- **Memory Testing**: Always run memory benchmarks with `--expose-gc` for accurate garbage collection control.
-- **Real-world Performance**: These benchmarks test specific patterns. Real application performance depends on your specific use case.
+### Measurement method
 
-## Contributing
+The runner calibrates every driver for a scenario, then uses the largest result
+as one shared iteration count. This gives every driver at least about 50 ms of
+timed work and makes randomized scenarios execute the same access sequence.
+Trials are interleaved across drivers. Results report the median and the
+conservative relative half-width of an exact, distribution-free 95% confidence
+interval for that median. All drivers use rollback journal mode and
+`synchronous=FULL` so write durability is comparable.
 
-To add new benchmark scenarios:
+The `vs node:sqlite` column reports this package's throughput divided by
+`node:sqlite` throughput for that scenario. We do not publish a blended score;
+an average would let storage-bound write ties hide the read-path differences.
 
-1. Add scenario to `scenarios.js` for performance tests
-2. Add scenario to `memory-benchmark.js` for memory tests
-3. Follow the existing pattern for setup/run/cleanup
-4. Ensure scenarios are fair across all drivers
+</details>
+
+## Memory checks
+
+The memory suite covers statement lifecycle, large selects, blobs,
+transactions, and prepare-cache churn. It flags a leak only when growth exceeds
+500 bytes per iteration and has an R² of at least 0.5, which helps reject noisy
+runs.
+
+```bash
+npm run bench:memory
+
+# Select drivers, scenarios, or a fixed iteration count
+tsx --expose-gc memory-benchmark.ts \
+  --drivers @photostructure/sqlite,better-sqlite3 \
+  --scenarios prepare-finalize,large-select \
+  --iterations 100
+```
+
+<details>
+<summary>Memory benchmark options</summary>
+
+- `--drivers <list>` selects drivers.
+- `--scenarios <list>` selects memory scenarios.
+- `--iterations <n>` sets the iteration count. Automatic calibration uses
+  20-200 iterations.
+- `--help` prints all options.
+
+Run memory checks with `--expose-gc` so the harness can control garbage
+collection.
+
+</details>
+
+## Adding a scenario
+
+1. Add performance scenarios to `scenarios.ts`.
+2. Add memory scenarios to `memory-benchmark.ts`.
+3. Use the existing setup, run, and cleanup pattern.
+4. Keep SQL and durability settings equivalent across drivers.
 
 ## License
 
-Same as parent project
+Same as the parent project.
