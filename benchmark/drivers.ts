@@ -106,16 +106,16 @@ class PhotostructureDriver extends BaseDriver {
   }
 
   transaction<T>(fn: (...args: any[]) => T): (...args: any[]) => T {
-    // @photostructure/sqlite doesn't have built-in transaction support, simulate it
-    const self = this;
+    // @photostructure/sqlite has no built-in transaction support; simulate it.
+    // Arrow fn captures `this` lexically, so no `const self = this` alias needed.
     return (...args: any[]) => {
-      self.exec("BEGIN");
+      this.exec("BEGIN");
       try {
         const result = fn(...args);
-        self.exec("COMMIT");
+        this.exec("COMMIT");
         return result;
       } catch (err) {
-        self.exec("ROLLBACK");
+        this.exec("ROLLBACK");
         throw err;
       }
     };
@@ -213,16 +213,16 @@ class NodeSqliteDriver extends BaseDriver {
   }
 
   transaction<T>(fn: (...args: any[]) => T): (...args: any[]) => T {
-    // node:sqlite doesn't have built-in transaction support, simulate it
-    const self = this;
+    // node:sqlite has no built-in transaction support; simulate it.
+    // Arrow fn captures `this` lexically, so no `const self = this` alias needed.
     return (...args: any[]) => {
-      self.exec("BEGIN");
+      this.exec("BEGIN");
       try {
         const result = fn(...args);
-        self.exec("COMMIT");
+        this.exec("COMMIT");
         return result;
       } catch (err) {
-        self.exec("ROLLBACK");
+        this.exec("ROLLBACK");
         throw err;
       }
     };
