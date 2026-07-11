@@ -122,7 +122,7 @@ For non-trivial upstream code deltas, also check whether `src/sqlite_impl.cpp` �
 
 `npm run sync:tests` copies every `test-sqlite-*.{js,mjs}` file from Node.js and lightly adapts them. Upstream Node.js moves fast; expect at least one failure class per major sync. Diagnose before skipping:
 
-**A. SyntaxError at parse time** (e.g. `Unexpected identifier 'session'` pointing at a `using` declaration): Node.js has started using ERM (`using`/`await using`) and other newish syntax in tests. Our CI runs on Node 20+, which can't parse these in CJS. The fix is a **post-sync text transform** in `scripts/sync-node-tests.ts`, not a skip — adding to `skipTests` only renames `test()` → `test.skip()`; the body is still parsed and still fails.
+**A. SyntaxError at parse time** (e.g. `Unexpected identifier 'session'` pointing at a `using` declaration): Node.js has started using ERM (`using`/`await using`) and other newish syntax in tests. Our CI runs on Node 22+, which can't parse these in CJS. The fix is a **post-sync text transform** in `scripts/sync-node-tests.ts`, not a skip — adding to `skipTests` only renames `test()` → `test.skip()`; the body is still parsed and still fails.
 
 Pattern to follow (already present in the script for `using` → `const`):
 

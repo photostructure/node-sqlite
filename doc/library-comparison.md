@@ -6,7 +6,7 @@ This guide compares @photostructure/sqlite with the alternatives to help you cho
 
 ### Choose **`@photostructure/sqlite`** when you want:
 
-- **Broad Node.js support** (v20+) — `node:sqlite` requires Node.js 22.5.0+
+- **Broad Node.js support** (v22+) — `node:sqlite` requires Node.js 22.5.0+
 - **Decoupled SQLite version** — upgrade SQLite independently of your Node.js version
 - **Future-proof code** that works with both this package AND `node:sqlite`
 - **Synchronous performance** with a clean, official API
@@ -114,7 +114,7 @@ _The original asynchronous SQLite binding for Node.js, [unmaintained since Decem
 | ------------------------ | ---------------------- | ------------------------------------------------- | --------------------- | --------------------- |
 | **API Compatibility**    | node:sqlite            | -                                                 | Custom                | Custom                |
 | **SQLite Version**       | Independent            | Tied to Node.js release                           | Independent           | Independent           |
-| **Min Node.js Version**  | 20.0.0                 | 22.5.0                                            | 14.0.0                | 10.0.0                |
+| **Min Node.js Version**  | 22.0.0                 | 22.5.0                                            | 14.0.0                | 10.0.0                |
 | **Experimental Flag**    | ✅ Never needed        | ⚠️ Required on 22.5–22.12; not needed since 22.13 | ✅ Not needed         | ✅ Not needed         |
 | **Synchronous API**      | ✅                     | ✅                                                | ✅                    | ❌                    |
 | **Asynchronous API**     | ❌                     | ❌                                                | ❌                    | ✅                    |
@@ -223,7 +223,7 @@ try {
 
 Choose based on your specific needs:
 
-1. **Need Node.js v20+ support?** → @photostructure/sqlite
+1. **Need support for all Node.js v22 releases?** → @photostructure/sqlite
 2. **Already using better-sqlite3 and happy with it?** → No urgent reason to switch
 3. **Have async legacy code using sqlite3?** → Migrate to @photostructure/sqlite or better-sqlite3 (sqlite3 is deprecated)
 4. **Already on Node.js v22.13+, v24+, v25.7+, or v26+ with a preference for zero dependencies?** → `node:sqlite`

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is @photostructure/sqlite - a standalone npm package that extracts the Node.js SQLite implementation from Node.js core. The goal is to make Node.js's native SQLite functionality available to all Node.js versions (20+), not just those supporting the built-in `node:sqlite` module (22.5.0+).
+This is @photostructure/sqlite - a standalone npm package that extracts the Node.js SQLite implementation from Node.js core. The goal is to make Node.js's native SQLite functionality available to all Node.js versions (22+), not just those supporting the built-in `node:sqlite` module (22.5.0+).
 
 Note: `node:sqlite` was promoted to Release Candidate (Stability: 1.2) in Node.js v25.7.0. The `--experimental-sqlite` flag was required on 22.5.0–22.12.x; since 22.13.0 it works without a flag (but prints an ExperimentalWarning until v25.7.0).
 

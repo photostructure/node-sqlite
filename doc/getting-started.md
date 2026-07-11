@@ -16,7 +16,7 @@ yarn add @photostructure/sqlite
 
 ## Platform requirements
 
-- **Node.js**: v20 or higher
+- **Node.js**: v22 or higher
 - **Operating Systems**: Windows 10+, macOS 10.15+, Linux (GLIBC 2.31+)
 - **Architectures**: x64 and ARM64
 
@@ -38,7 +38,7 @@ yarn add @photostructure/sqlite
 - CentOS 7 - GLIBC 2.17
 - Amazon Linux 2 - GLIBC 2.26
 
-> **Note**: While Node.js 20 itself supports these older distributions, our prebuilt binaries require GLIBC 2.31+ due to toolchain requirements. Users on older distributions can still compile from source if they have a compatible compiler (GCC 10+ with C++20 support).
+> **Note**: While Node.js 22 itself supports these older distributions, our prebuilt binaries require GLIBC 2.31+ due to toolchain requirements. Users on older distributions can still compile from source if they have a compatible compiler (GCC 10+ with C++20 support).
 
 ## Development requirements
 
@@ -146,7 +146,7 @@ try {
 
 ### Automatic resource management with `using`
 
-For Node.js 20+ with `--experimental-explicit-resource-management` flag, or TypeScript 5.2+ with disposable support, you can use the `using` statement for automatic cleanup:
+For Node.js 22+ with `--experimental-explicit-resource-management` flag, or TypeScript 5.2+ with disposable support, you can use the `using` statement for automatic cleanup:
 
 ```javascript
 // Database is automatically closed when leaving scope

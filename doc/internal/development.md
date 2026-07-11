@@ -36,7 +36,7 @@ All code was reviewed by a human and validated by automated tests before merging
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - Python 3.8+
 - C++ compiler:
   - **Linux**: GCC 10+ or Clang 10+

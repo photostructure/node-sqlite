@@ -8,7 +8,7 @@ Features and capabilities in @photostructure/sqlite.
 - **Synchronous Operations** - Fast, blocking database operations
 - **Zero Dependencies** - Pure native implementation
 - **Cross-Platform** - Windows, macOS, Linux (x64 and ARM64)
-- **Node.js 20+** - No experimental flags required
+- **Node.js 22+** - No experimental flags required
 - **TypeScript Support** - Complete type definitions included
 - **Performance** - Matches leading SQLite libraries in benchmarks
 
@@ -152,7 +152,7 @@ This package includes SQLite 3.53.3 with extensive compile-time options enabled.
 
 ### Node.js versions
 
-- Node.js 20.0.0 and later
+- Node.js 22.0.0 and later
 - Full worker thread support
 - ESM and CommonJS compatibility
 

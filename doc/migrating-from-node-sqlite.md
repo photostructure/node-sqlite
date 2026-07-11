@@ -10,7 +10,7 @@ Simply change your import statement:
 // Before: Using Node.js built-in SQLite (available in Node.js 22.5.0+)
 const { DatabaseSync } = require("node:sqlite");
 
-// After: Using @photostructure/sqlite (works on Node.js 20+ without any flags)
+// After: Using @photostructure/sqlite (works on Node.js 22+ without any flags)
 const { DatabaseSync } = require("@photostructure/sqlite");
 ```
 
@@ -31,7 +31,7 @@ All your existing code will work exactly the same.
 ### Broader Node.js version support
 
 - **node:sqlite**: Available in Node.js 22.5.0+. See version details below.
-- **@photostructure/sqlite**: Works with Node.js 20.0.0 or higher, no flag ever needed
+- **@photostructure/sqlite**: Works with Node.js 22.0.0 or higher, no flag ever needed
 
 | Node.js version | `node:sqlite` status                           |
 | --------------- | ---------------------------------------------- |
