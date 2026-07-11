@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 
 import { createDriver, getAvailableDrivers, type Driver } from "./drivers.js";
-import { MemoryTracker } from "./memory-tracker.js";
+import { LEAK_MIN_R2, MemoryTracker } from "./memory-tracker.js";
 // import Table from 'cli-table3'; // Removed - using markdown tables instead
 import chalk from "chalk";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -291,10 +291,14 @@ Available scenarios: ${Object.keys(memoryScenarios).join(", ")}
           options.warmup,
         );
 
-        // Override leak detection with custom threshold
+        // Override leak detection with custom threshold. Require the trend to
+        // be well-correlated (R² ≥ LEAK_MIN_R2) as well as steep, so a noisy run
+        // isn't reported as a leak on slope alone.
         leakTest.likelyLeak =
-          leakTest.heapTrend.slope > options.leakThreshold ||
-          leakTest.externalTrend.slope > options.leakThreshold;
+          (leakTest.heapTrend.slope > options.leakThreshold &&
+            leakTest.heapTrend.r2 >= LEAK_MIN_R2) ||
+          (leakTest.externalTrend.slope > options.leakThreshold &&
+            leakTest.externalTrend.r2 >= LEAK_MIN_R2);
 
         results[driverName][scenarioKey] = leakTest;
 
@@ -334,7 +338,7 @@ Available scenarios: ${Object.keys(memoryScenarios).join(", ")}
         // Clean up
         try {
           rmSync(tempDir, { recursive: true, force: true });
-        } catch (e) {
+        } catch {
           // Ignore cleanup errors
         }
       }

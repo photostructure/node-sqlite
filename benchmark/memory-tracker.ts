@@ -1,5 +1,10 @@
 // Memory tracking utilities for benchmarks
 
+// A positive regression slope only means a leak if the trend is actually
+// linear. Require this minimum R² before flagging, so a noisy run (a few GC
+// stragglers producing a steep but uncorrelated slope) isn't reported as a leak.
+export const LEAK_MIN_R2 = 0.5;
+
 interface MemorySample {
   label: string;
   timestamp: number;
@@ -189,7 +194,11 @@ export class MemoryTracker {
       samples,
       heapTrend,
       externalTrend,
-      likelyLeak: heapTrend.slope > 1000 || externalTrend.slope > 1000, // 1KB per iteration threshold (logical OR is correct here)
+      // Flag a leak only when growth is both fast (>1KB/iteration) AND
+      // well-correlated (R² ≥ LEAK_MIN_R2); a steep but noisy slope isn't a leak.
+      likelyLeak:
+        (heapTrend.slope > 1000 && heapTrend.r2 >= LEAK_MIN_R2) ||
+        (externalTrend.slope > 1000 && externalTrend.r2 >= LEAK_MIN_R2),
       summary: {
         heapGrowth: `${(heapTrend.slope / 1024).toFixed(2)} KB/iteration`,
         externalGrowth: `${(externalTrend.slope / 1024).toFixed(2)} KB/iteration`,
