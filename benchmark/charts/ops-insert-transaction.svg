@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 196" role="img" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <title>INSERT in Transaction</title>
+  <rect width="680" height="196" fill="#fff" rx="6" />
+  <text x="340" y="20" text-anchor="middle" font-size="15" font-weight="600" fill="#222">INSERT in Transaction</text>
+  <text x="340" y="36" text-anchor="middle" font-size="11" fill="#888">Insert 1k rows in a single transaction (one durable commit per 1k rows) · higher is better</text>
+  <line x1="168" y1="60" x2="168" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="238.33" y1="60" x2="238.33" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="308.65" y1="60" x2="308.65" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="378.98" y1="60" x2="378.98" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="449.3" y1="60" x2="449.3" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="519.63" y1="60" x2="519.63" y2="170" stroke="#ececec" stroke-width="1" />
+  <text x="160" y="81" text-anchor="end" font-size="12" fill="#444">@photostructure/sqlite</text>
+  <rect x="168" y="64" width="340.21" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
+  <text x="514.21" y="81" font-size="11" fill="#555">240 ops/s</text>
+  <text x="160" y="119" text-anchor="end" font-size="12" fill="#444">better-sqlite3</text>
+  <rect x="168" y="102" width="384.75" height="26" fill="#B8860B" rx="3" opacity="0.9" />
+  <text x="558.75" y="119" font-size="11" fill="#555">270 ops/s</text>
+  <text x="160" y="157" text-anchor="end" font-size="12" fill="#444">node:sqlite</text>
+  <rect x="168" y="140" width="408" height="26" fill="#43853D" rx="3" opacity="0.9" />
+  <text x="582" y="157" font-size="11" fill="#555">290 ops/s</text>
+  <text x="168" y="184" text-anchor="middle" font-size="10" fill="#999">0</text>
+  <text x="238.33" y="184" text-anchor="middle" font-size="10" fill="#999">50</text>
+  <text x="308.65" y="184" text-anchor="middle" font-size="10" fill="#999">100</text>
+  <text x="378.98" y="184" text-anchor="middle" font-size="10" fill="#999">150</text>
+  <text x="449.3" y="184" text-anchor="middle" font-size="10" fill="#999">200</text>
+  <text x="519.63" y="184" text-anchor="middle" font-size="10" fill="#999">250</text>
+</svg>

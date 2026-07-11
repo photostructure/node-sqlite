@@ -7,6 +7,7 @@
   "scripts": {
     "prebench": "tsc --noEmit",
     "bench": "tsx index.ts",
+    "bench:charts": "tsx index.ts --charts",
     "bench:select": "tsx index.ts select",
     "bench:insert": "tsx index.ts insert",
     "bench:transaction": "tsx index.ts transaction",

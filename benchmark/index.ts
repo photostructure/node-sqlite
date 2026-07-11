@@ -5,22 +5,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDriver, getAvailableDrivers } from "./drivers.js";
+import { sigFigs } from "./format.js";
 import { getScenarios, type Scenario } from "./scenarios.js";
-/**
- * Round a number to the specified number of significant figures.
- *
- * @param value   The number to round.
- * @param digits  How many significant figures to keep (must be ≥ 1).
- * @returns       The rounded number, or 0 for non-finite inputs or zero.
- */
-function sigFigs(value: number, digits = 2): number {
-  if (!isFinite(value) || value === 0 || digits < 1) {
-    return 0;
-  }
-  // toPrecision gives a string with the correct sig-figs,
-  // parseFloat turns it back into a number.
-  return parseFloat(value.toPrecision(digits));
-}
+import { buildBenchmarkCharts, writeCharts } from "./svg-chart.js";
 
 // Read a positive-integer override from the environment, else use the default.
 // (`||` would misfire on NaN and `??` can't catch NaN either, so validate.)
@@ -100,6 +87,8 @@ const options = {
   memory: args.includes("--memory"),
   verbose: args.includes("--verbose"),
   iterations: null as number | null,
+  // Write SVG charts to benchmark/charts/ after the run.
+  charts: args.includes("--charts") ? "charts" : (null as string | null),
 };
 
 // Parse arguments
@@ -129,6 +118,7 @@ Options:
   --drivers <list>     Comma-separated list of drivers to test
                        Available: ${getAvailableDrivers().join(", ")}
   --iterations <n>     Fixed per-trial iteration count (skips calibration)
+  --charts             Write SVG charts to benchmark/charts/
   --memory             Track memory usage
   --verbose            Show detailed output
   --help, -h           Show this help
@@ -138,6 +128,7 @@ Examples:
   tsx benchmark/index.ts select              # Run only select benchmarks
   tsx benchmark/index.ts --drivers @photostructure/sqlite,better-sqlite3
   tsx benchmark/index.ts insert --iterations 5000
+  tsx benchmark/index.ts --charts            # Run all benchmarks + emit SVG charts
 `);
   process.exit(0);
 }
@@ -483,6 +474,24 @@ async function runTrial(
   // "vs node:sqlite" ratio (above) is what better-sqlite3's and other SQLite
   // driver benchmarks report, and it can't be distorted by which scenarios you
   // choose to average or how the fsync-bound writes tie.
+
+  // Optional SVG charts (headline ratio-vs-node:sqlite + per-scenario ops/sec).
+  if (options.charts) {
+    const outDir = join(import.meta.dirname, options.charts);
+    const scenarioMeta = scenarios.map(
+      ([key, s]) =>
+        [
+          key,
+          { name: s.name, description: s.description, category: s.category },
+        ] as [string, { name: string; description: string; category: string }],
+    );
+    const charts = buildBenchmarkCharts(results, scenarioMeta, driverList);
+    writeCharts(charts, outDir);
+    console.log(
+      chalk.bold.cyan(`\n\n### 📊 Charts\n`) +
+        chalk.gray(`Wrote ${charts.size} SVG chart(s) to ${outDir}`),
+    );
+  }
 
   console.log("\n✨ Benchmark complete!\n");
 })();
