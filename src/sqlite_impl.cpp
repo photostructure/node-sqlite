@@ -3755,8 +3755,21 @@ Napi::Value Session::GenericChangeset(const Napi::CallbackInfo &info) {
   }
 
   // Create a Uint8Array from the changeset data (matches node:sqlite API)
+  //
+  // A session with no recorded changes returns SQLITE_OK with nChangeset == 0
+  // and pChangeset == NULL, and Napi::ArrayBuffer::New(env, 0) hands back a
+  // NULL Data() pointer. memcpy() declares both of its pointer parameters
+  // __attribute__((nonnull)), so passing NULL is undefined behavior *even when
+  // the length is zero* -- and the optimizer is entitled to use that nonnull
+  // promise to delete subsequent null checks. Skip the copy for the empty case.
+  //
+  // Caught by UndefinedBehaviorSanitizer (scripts/sanitizers-test.sh):
+  //   sqlite_impl.cpp: runtime error: null pointer passed as argument 1,
+  //   which is declared to never be null
   Napi::ArrayBuffer arrayBuffer = Napi::ArrayBuffer::New(env, nChangeset);
-  std::memcpy(arrayBuffer.Data(), pChangeset, nChangeset);
+  if (nChangeset > 0 && pChangeset != nullptr) {
+    std::memcpy(arrayBuffer.Data(), pChangeset, nChangeset);
+  }
 
   // Free the changeset allocated by SQLite
   sqlite3_free(pChangeset);
