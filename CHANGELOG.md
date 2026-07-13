@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.1]
+
+No API changes. Build hardening, supply-chain verification, and one undefined-behavior fix.
+
+### Changed
+
+- **Compiler and linker hardening**: POSIX builds now follow the [OpenSSF hardening baseline](https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html) — stack protector, `_FORTIFY_SOURCE=2`, format-string hardening, full RELRO, non-executable stack, and arch-gated control-flow integrity (Intel CET on x64, PAC/BTI on arm64). Windows ARM64 gains `/Qspectre` and `/guard:signret`, the backward-edge protection it previously lacked.
+- **Vendored SQLite integrity**: the amalgamation sync now verifies the download against a SHA3-256 pinned in-tree and refuses to vendor a mismatch, instead of compiling whatever it fetched.
+
+### Fixed
+
+- **Empty changeset undefined behavior**: `session.changeset()` / `.patchset()` on a session with no recorded changes called `memcpy(NULL, NULL, 0)`, which is undefined behavior even at zero length. Results are unchanged (still a zero-length `Uint8Array`); the UB is gone. Surfaced by the new UndefinedBehaviorSanitizer pass in CI.
+
 ## [2.0.0]
 
 API compatible with `node:sqlite` from Node.js v26.4.0.
