@@ -1,0 +1,16 @@
+{
+  "//": [
+    "SHA3-256 hashes of the official SQLite amalgamation ZIPs, as published in the",
+    "PRODUCT csv on https://sqlite.org/download.html (the final column).",
+    "",
+    "scripts/sync-from-sqlite.ts REFUSES to vendor an amalgamation whose hash is not",
+    "listed here, and hard-fails on a mismatch. The vendored sqlite3.c is compiled",
+    "directly into the addon, so an unverified download is arbitrary C in our binary.",
+    "",
+    "Adding an entry is a deliberate, reviewable act: verify the hash against",
+    "sqlite.org yourself, then commit it in the same PR as the amalgamation bump.",
+    "`npm run sync:sqlite -- --accept-new-checksum` records it for you, but you are",
+    "still the one attesting to it in review."
+  ],
+  "3.53.3": "d45c688a8cb23f68611a894a756a12d7eb6ab6e9e2468ca70adbeab3808b5ab9"
+}

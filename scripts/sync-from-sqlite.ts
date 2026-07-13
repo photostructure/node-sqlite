@@ -1,4 +1,5 @@
 import { exec } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createWriteStream, promises as fs } from "node:fs";
 import * as https from "node:https";
 import * as path from "node:path";
@@ -19,6 +20,72 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SQLITE_TAGS_URL = "https://api.github.com/repos/sqlite/sqlite/tags";
 const UPSTREAM_DIR = path.join(__dirname, "../src/upstream");
 const TEMP_DIR = path.join(__dirname, "../.temp-sqlite-download");
+const CHECKSUMS_PATH = path.join(__dirname, "sqlite-checksums.json");
+
+/**
+ * Verify the downloaded amalgamation against a SHA3-256 pinned in-tree.
+ *
+ * sqlite3.c is compiled straight into the addon, so an unverified download is
+ * arbitrary C in our binary. We deliberately compare against a hash committed to
+ * this repo rather than one fetched alongside the download: a value served by
+ * the same host an attacker would have to compromise proves nothing.
+ *
+ * SQLite publishes SHA3-256 (not SHA-256) in the PRODUCT csv on
+ * https://sqlite.org/download.html.
+ */
+async function verifyAmalgamationChecksum(
+  zipPath: string,
+  semver: string,
+): Promise<void> {
+  const actual = createHash("sha3-256")
+    .update(await fs.readFile(zipPath))
+    .digest("hex");
+
+  const checksums: Record<string, unknown> = JSON.parse(
+    await fs.readFile(CHECKSUMS_PATH, "utf8"),
+  );
+  const expected = checksums[semver];
+
+  if (typeof expected !== "string") {
+    if (!process.argv.includes("--accept-new-checksum")) {
+      throw new Error(
+        `No pinned SHA3-256 for SQLite ${semver} in scripts/sqlite-checksums.json.\n` +
+          `  computed: ${actual}\n\n` +
+          `Verify that hash against the PRODUCT line for ` +
+          `sqlite-amalgamation-*.zip on https://sqlite.org/download.html, then\n` +
+          `add it to scripts/sqlite-checksums.json (or re-run with ` +
+          `--accept-new-checksum to record it).`,
+      );
+    }
+    checksums[semver] = actual;
+    // Keep the "//" doc block first, then versions in ascending order.
+    const { "//": doc, ...versions } = checksums as Record<string, unknown>;
+    const sorted = Object.fromEntries(
+      Object.entries(versions).sort(([a], [b]) => compareSqliteVersions(a, b)),
+    );
+    await fs.writeFile(
+      CHECKSUMS_PATH,
+      JSON.stringify({ "//": doc, ...sorted }, null, 2) + "\n",
+    );
+    console.log(`Recorded SHA3-256 for SQLite ${semver}: ${actual}`);
+    console.log(
+      "⚠️  Confirm this hash against sqlite.org before committing it.",
+    );
+    return;
+  }
+
+  if (actual !== expected) {
+    throw new Error(
+      `SQLite amalgamation SHA3-256 MISMATCH for ${semver} -- refusing to vendor it.\n` +
+        `  expected: ${expected}\n` +
+        `  actual:   ${actual}\n\n` +
+        `This is either a corrupted transfer or a compromised artifact. Do not ` +
+        `"fix" this by updating the pinned hash without establishing why it changed.`,
+    );
+  }
+
+  console.log(`✅ SHA3-256 verified against pinned hash for SQLite ${semver}`);
+}
 
 /**
  * Get the latest release version from GitHub tags
@@ -283,6 +350,10 @@ async function main() {
       "Could not download SQLite amalgamation from current or previous year directories",
     );
   }
+
+  // Verify BEFORE extracting: never unpack or compile bytes we have not
+  // authenticated against a hash pinned in this repo.
+  await verifyAmalgamationChecksum(zipPath, versionInfo.formatted);
 
   // Extract ZIP
   console.log("Extracting amalgamation...");
