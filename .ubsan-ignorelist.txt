@@ -1,0 +1,17 @@
+# UndefinedBehaviorSanitizer ignorelist for node-sqlite.
+#
+# Excludes the vendored SQLite amalgamation from *UB* instrumentation only.
+# AddressSanitizer still instruments it fully -- we very much want to know about
+# memory errors reachable through SQLite from our bindings.
+#
+# Rationale: sqlite3.c is upstream code we do not own and do not patch (it is
+# auto-synced by scripts/sync-from-sqlite.ts). SQLite's own test suite runs it
+# under sanitizers; UB findings inside the amalgamation are not actionable here
+# and would abort the run before reaching our code, since we build the addon
+# with -fno-sanitize-recover=undefined so that *our* UB fails loudly.
+#
+# Everything under src/ that we actually author stays fully instrumented.
+
+[undefined]
+src:*/src/upstream/sqlite3.c
+src:*/src/upstream/sqlite3.h

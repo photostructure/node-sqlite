@@ -130,7 +130,7 @@
    fun:_ZN4node6loader*
 }
 
-# SQLite internal allocations (if any are intentionally leaked)
+# SQLite one-time global init (intentionally not freed without sqlite3_shutdown)
 {
    SQLite_Global_Init
    Memcheck:Leak
@@ -139,11 +139,10 @@
    fun:sqlite3_initialize
 }
 
-# N-API reference counting
-{
-   NAPI_Reference
-   Memcheck:Leak
-   match-leak-kinds: reachable
-   ...
-   fun:napi_create_reference
-}
+# DELIBERATELY ABSENT: a `fun:napi_create_reference` suppression.
+# Every persistent handle this addon creates is allocated through
+# napi_create_reference, so suppressing that frame would hide a leaked
+# Napi::Reference -- one of the most likely real defects in an addon of this
+# shape. If Node's own internals prove noisy here, suppress the specific
+# node:: frame, never the napi_ entry point.
+# See the matching note in .lsan-suppressions.txt.

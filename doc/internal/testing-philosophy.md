@@ -80,6 +80,66 @@ The node-compat tests share a temp directory and must run with `--test-concurren
 - `test/upstream/` - Original unmodified Node.js tests (reference only)
 - `test/common/` - Shared test utilities
 
+## Memory, UB, and race detection
+
+`npm run memory:check` (run in CI by `.github/workflows/memory-tests.yml`) layers
+three detectors on Linux:
+
+| Tool                       | Script                       | Finds                                                     |
+| -------------------------- | ---------------------------- | --------------------------------------------------------- |
+| AddressSanitizer + LeakSan | `scripts/sanitizers-test.sh` | Heap/stack overflow, use-after-free, double free, leaks   |
+| UndefinedBehaviorSanitizer | `scripts/sanitizers-test.sh` | Signed overflow, bad casts/shifts, null passed as nonnull |
+| Valgrind Memcheck          | `scripts/valgrind-test.sh`   | Uninitialized reads, leaks (a different, overlapping set) |
+
+**How this gates a release.** Memory Tests is a _separate workflow_, and GitHub
+Actions `needs:` only works within a single workflow, so `publish` in `build.yml`
+does not depend on it mechanically. This is intentional: the release gate is
+**procedural** — we do not cut a release while any workflow is red for that
+commit. Releases are `workflow_dispatch`-triggered by a human who checks CI
+first, so a machine-enforced dependency would buy little and couple the release
+path to a slow (ASan + Valgrind) job. Don't "fix" this by wiring
+`workflow_call` into `publish` without discussing it.
+
+Two rules keep these honest:
+
+1. **Never wildcard first-party frames in a suppression file.** `.lsan-suppressions.txt`
+   and `.valgrind.supp` deliberately do **not** suppress `napi_*` / `Napi::*` /
+   `node_modules/`. Essentially every allocation this addon makes passes through
+   an N-API frame, so those patterns would silence exactly the reference and
+   handle leaks the job exists to catch. Audit which rules actually fire with
+   `VERBOSE=1 npm run memory:asan` (`print_suppressions=1`).
+2. **`_FORTIFY_SOURCE` is off under ASan.** Its libc interceptors collide with
+   ASan's. The release build sets `-D_FORTIFY_SOURCE=2` in `binding.gyp`; the
+   sanitizer script undefines it.
+
+UBSan is worth its keep: it is what caught the empty-changeset
+`memcpy(NULL, NULL, 0)` in `Session::Changeset` — undefined behavior that every
+functional test passed straight through, because a zero-length copy "works" right
+up until the optimizer uses the `nonnull` promise to delete a null check.
+
+### Race detection: why there is no ThreadSanitizer job
+
+`BackupJob` (a `Napi::AsyncProgressWorker`) runs `sqlite3_backup_step` on a libuv
+worker thread while the main thread can set `shutting_down_`, so a race detector
+is genuinely applicable. We nonetheless do **not** ship a TSan job, and this is a
+considered tradeoff rather than an oversight:
+
+- TSan requires the **whole process** to be instrumented. Node is not. Preloading
+  `libclang_rt.tsan` into stock `node` does load, but TSan then cannot see the
+  synchronization performed inside uninstrumented Node/V8/libuv and immediately
+  reports races in Node's own allocator. Both false positives (our correctly
+  libuv-synchronized handoffs look unsynchronized) and false negatives follow.
+- Suppressing all of Node to quiet it would suppress essentially everything —
+  a green job that proves nothing, which is worse than no job.
+- Doing this properly means building Node itself with TSan and running the suite
+  against that. That is the correct fix if race coverage becomes critical.
+
+What we rely on instead: shared state is `std::atomic` or mutex-guarded (see
+`doc/internal/threading.md`), ASan catches the use-after-free that a lost race
+usually manifests as, and `test/concurrent-access.test.ts`,
+`test/worker-threads-*.test.ts` and `test/backup.test.ts` exercise the
+concurrent paths.
+
 ## Contributing
 
 When implementing or fixing features:

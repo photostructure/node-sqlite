@@ -1,6 +1,25 @@
 #!/bin/bash
-# AddressSanitizer and LeakSanitizer test runner for @photostructure/sqlite
-# Runs comprehensive memory safety checks on native code
+# AddressSanitizer + LeakSanitizer + UndefinedBehaviorSanitizer test runner for
+# @photostructure/sqlite. Runs comprehensive memory- and UB-safety checks on the
+# native code.
+#
+# ASan/LSan/UBSan legally share one binary. ThreadSanitizer cannot join them
+# (it is mutually exclusive with ASan) and is not currently wired up -- see
+# "Race detection" in doc/internal/testing-philosophy.md for why, and what we
+# rely on instead.
+#
+# Two things here are load-bearing and easy to break:
+#
+#   1. _FORTIFY_SOURCE MUST be OFF under AddressSanitizer (OpenSSF guidance):
+#      FORTIFY's libc interceptors collide with ASan's and yield false
+#      positives/negatives. The release build sets -D_FORTIFY_SOURCE=2 in
+#      binding.gyp, so we undefine it here. This works because gyp's make rule
+#      is "$(GYP_CFLAGS) ... $(CFLAGS)" -- our env CFLAGS land LAST and win.
+#
+#   2. UBSan is recoverable by default (prints and exits 0). We build with
+#      -fno-sanitize-recover=undefined so undefined behavior in OUR code aborts
+#      hard. The vendored SQLite amalgamation is excluded from UB instrumentation
+#      via .ubsan-ignorelist.txt (it is still fully ASan-instrumented).
 
 set -euo pipefail
 
@@ -38,16 +57,36 @@ if [[ "$CLEAN_BUILD" == "1" ]]; then
 fi
 rm -f "$OUTPUT_FILE"
 
-# Set up build environment
+# Set up build environment.
+#
+# -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 cancels binding.gyp's release FORTIFY
+# (see header). These env flags are appended after GYP_CFLAGS, so they win.
+SANITIZE_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined"
+SANITIZE_FLAGS="$SANITIZE_FLAGS -fsanitize-ignorelist=$(pwd)/.ubsan-ignorelist.txt"
+SANITIZE_FLAGS="$SANITIZE_FLAGS -fno-omit-frame-pointer -g -O1"
+SANITIZE_FLAGS="$SANITIZE_FLAGS -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0"
+
 export CC=clang
 export CXX=clang++
-export CFLAGS="-fsanitize=address -fno-omit-frame-pointer -g -O1"
-export CXXFLAGS="-fsanitize=address -fno-omit-frame-pointer -g -O1"
-export LDFLAGS="-fsanitize=address"
+export CFLAGS="$SANITIZE_FLAGS"
+export CXXFLAGS="$SANITIZE_FLAGS"
+export LDFLAGS="-fsanitize=address,undefined"
 
 # Comprehensive ASAN options combining both implementations
-export ASAN_OPTIONS="detect_leaks=1:halt_on_error=0:print_stats=1:check_initialization_order=1:strict_init_order=1:print_module_map=1"
-export LSAN_OPTIONS="suppressions=$(pwd)/.lsan-suppressions.txt:print_suppressions=0"
+export ASAN_OPTIONS="detect_leaks=1:halt_on_error=0:print_stats=1:check_initialization_order=1:strict_init_order=1:print_module_map=1:suppressions=$(pwd)/.asan-suppressions.txt"
+
+# print_suppressions=1 lists which LSan rules actually fired, so dead ones can be
+# pruned. It is VERBOSE-only on purpose: LSan writes that summary to *stderr*,
+# these env vars are inherited by child processes, and multi-process.test.ts
+# asserts that a spawned child's stderr is empty. Leaving it on breaks that test.
+# Run `VERBOSE=1 npm run memory:asan` when auditing the suppression list.
+LSAN_PRINT_SUPPRESSIONS=0
+if [[ "$VERBOSE" == "1" ]]; then
+    LSAN_PRINT_SUPPRESSIONS=1
+fi
+# The suppressions file must never wildcard napi_/Napi:: frames -- see its header.
+export LSAN_OPTIONS="suppressions=$(pwd)/.lsan-suppressions.txt:print_suppressions=$LSAN_PRINT_SUPPRESSIONS"
+export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
 
 # Increase Node.js heap size for ASan overhead
 export NODE_OPTIONS="--max-old-space-size=8192"
@@ -99,6 +138,7 @@ echo -e "\n${YELLOW}Analyzing ASAN output...${NC}"
 
 # Count different types of issues
 OUR_ERRORS=0
+OUR_UB=0
 OUR_LEAKS=0
 PYTHON_LEAKS=0
 SYSTEM_LEAKS=0
@@ -107,6 +147,15 @@ TOTAL_LEAKS=0
 # Check for ASAN errors in our code (not V8/Node internals)
 if grep -E "(ERROR: AddressSanitizer|ERROR: LeakSanitizer)" "$OUTPUT_FILE" | grep -E "(phstr_sqlite\.node|/src/|aggregate_function|user_function|sqlite_impl)" > /dev/null; then
     OUR_ERRORS=1
+fi
+
+# Check for UBSan findings in our first-party sources. UBSan formats these as
+# "<file>:<line>:<col>: runtime error: <description>". The vendored SQLite
+# amalgamation is excluded from UB instrumentation (.ubsan-ignorelist.txt), so
+# anything here is ours. We build with -fno-sanitize-recover=undefined, so this
+# should already have aborted the run -- this catches it either way.
+if grep -E "runtime error:" "$OUTPUT_FILE" | grep -E "(sqlite_impl|user_function|aggregate_function|binding)\.(cpp|h)" > /dev/null; then
+    OUR_UB=1
 fi
 
 # Check for any leak summary
@@ -152,6 +201,12 @@ if [[ "$OUR_ERRORS" -eq 1 ]]; then
     EXIT_CODE=1
 fi
 
+if [[ "$OUR_UB" -eq 1 ]]; then
+    echo -e "${RED}\n✗ UndefinedBehaviorSanitizer found undefined behavior in sqlite code:${NC}"
+    grep -E "runtime error:" "$OUTPUT_FILE" | grep -E "(sqlite_impl|user_function|aggregate_function|binding)\.(cpp|h)" | head -20
+    EXIT_CODE=1
+fi
+
 if [[ "$OUR_LEAKS" -gt 0 ]]; then
     echo -e "${RED}\n✗ LeakSanitizer found $OUR_LEAKS memory leak(s) in sqlite code:${NC}"
     # Show leaks from our code
@@ -168,9 +223,9 @@ if [[ "$OUR_LEAKS" -gt 0 ]]; then
 fi
 
 # Check if we detected actual memory issues in our code
-if [[ "$OUR_ERRORS" -eq 1 ]] || [[ "$OUR_LEAKS" -gt 0 ]]; then
-    # We found actual memory safety issues in our code
-    echo -e "${RED}\n✗ Memory safety issues detected in @photostructure/sqlite code!${NC}"
+if [[ "$OUR_ERRORS" -eq 1 ]] || [[ "$OUR_LEAKS" -gt 0 ]] || [[ "$OUR_UB" -eq 1 ]]; then
+    # We found actual memory safety / UB issues in our code
+    echo -e "${RED}\n✗ Memory safety or undefined-behavior issues detected in @photostructure/sqlite code!${NC}"
     echo -e "${YELLOW}See $OUTPUT_FILE for full details${NC}"
 elif [[ "$TEST_EXIT_CODE" -ne 0 ]]; then
     # Tests failed but no memory issues in our code

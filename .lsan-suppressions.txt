@@ -1,5 +1,17 @@
 # LeakSanitizer suppressions for node-sqlite
-# Suppress known leaks in V8, Node.js, and system libraries
+#
+# RULE: suppress ONLY third-party / one-time-init noise we cannot rebuild
+# (V8, Node, libuv, libc, ICU, OpenSSL, build tools). NEVER suppress a frame
+# that our own code allocates through.
+#
+# In particular, do NOT re-add `leak:napi_`, `leak:Napi::`, `leak:node_modules/`
+# or `leak:napi_register_module`. Essentially every allocation this addon makes
+# passes through an napi_*/Napi:: frame, so those patterns silence the addon's
+# own reference/handle leaks -- the exact defect class LSan exists to find, and
+# the one thing the memory CI job is here to catch.
+#
+# Use LSAN_OPTIONS=...:print_suppressions=1 to see which rules actually fire,
+# and prune the dead ones.
 
 # V8 internal allocations
 leak:v8::internal::
@@ -17,9 +29,9 @@ leak:node::InitializeNodeWithArgs
 leak:node::CreateEnvironment
 leak:node::LoadEnvironment
 
-# N-API and node-addon-api
-leak:napi_
-leak:Napi::
+# NOTE: no `leak:napi_` / `leak:Napi::` here -- see the header. Those blanket
+# rules masked every first-party allocation. If Node's own N-API plumbing
+# proves noisy, suppress the specific node:: internal frame instead.
 
 # pthread and thread-local storage
 leak:pthread_create
@@ -88,11 +100,11 @@ leak:PyObject_
 leak:_PyEval_
 leak:import_find_and_load
 
-# Node.js modules and dependencies
-leak:node_modules/
+# Build-time tooling that runs in the same process as the test suite.
+# Scoped to the specific offending packages -- NOT a blanket `leak:node_modules/`,
+# which would also swallow leaks in our own prebuilt .node.
 leak:@rollup/rollup
 leak:rollup.linux
-leak:napi_register_module
 
 # System libraries
 leak:libstdc++
