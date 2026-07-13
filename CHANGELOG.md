@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.0.1]
+## [2.1.0]
 
 No API changes. Build hardening, supply-chain verification, and one undefined-behavior fix.
 
