@@ -22,6 +22,10 @@
       # including comparison with Node.js configuration and rationale for our choices
       "defines": [
         "NAPI_CPP_EXCEPTIONS",
+        # Pin the Node-API surface we compile against. 8 is the header default
+        # and the broadest ABI floor; stating it explicitly keeps a future
+        # node-addon-api bump from silently widening the surface we rely on.
+        "NAPI_VERSION=8",
         "HAVE_STDINT_H=1",
         "HAVE_USLEEP=1",
         # "SQLITE_DEFAULT_CACHE_SIZE=-16000", # Default is 2000.
@@ -59,34 +63,130 @@
         # "SQLITE_THREADSAFE=2", # default is SQLITE_THREADSAFE=1 (serialized)
         "SQLITE_USE_URI=1" # https://www.sqlite.org/uri.html
       ],
-      # cflags apply only to C files (not C++), so these warnings suppressions
-      # are specific to SQLite's C code and don't affect our C++ code:
-      # -Wno-implicit-fallthrough: SQLite uses intentional switch fallthroughs
+      # GYP flag scoping (make generator):
+      #   cflags    -> C *and* C++ TUs
+      #   cflags_c  -> C only (here: just the vendored SQLite amalgamation)
+      #   cflags_cc -> C++ only (our first-party code)
+      #
+      # Hardening baseline follows the OpenSSF Compiler Options Hardening Guide.
+      # Flag choices are pinned to our OLDEST shipped toolchain: the glibc
+      # prebuild is built in node:20-bullseye (Debian 11, GCC 10.2), so
+      # _FORTIFY_SOURCE=3 (needs GCC 12+) would silently degrade to =2 there --
+      # we ask for =2 honestly instead. See doc/build-flags.md.
       "cflags": [
         "-fvisibility=hidden",
         "-fPIC",
+        # Stack canary + libc/buffer misuse checks. FORTIFY is a no-op without
+        # -O1+ (the Release build supplies -O2); -U first because many distros
+        # predefine _FORTIFY_SOURCE and would otherwise warn on redefinition.
+        "-fstack-protector-strong",
+        "-U_FORTIFY_SOURCE",
+        "-D_FORTIFY_SOURCE=2",
+        # -Werror=format-security is not just inert without -Wformat: GCC 10
+        # *errors* ("ignored without -Wformat"). Keep these three together.
+        "-Wformat",
+        "-Wformat=2",
+        "-Werror=format-security"
+      ],
+      # -Wno-implicit-fallthrough: SQLite uses intentional switch fallthroughs.
+      # Scoped to C so it can no longer mask an unannotated fallthrough in our
+      # own C++ (it previously sat in "cflags" and applied to both).
+      "cflags_c": [
         "-Wno-implicit-fallthrough"
       ],
       "cflags_cc": [
         "-fexceptions",
-        "-fPIC"
+        "-fPIC",
+        "-Wall",
+        "-Wextra",
+        "-fvisibility-inlines-hidden"
       ],
       "xcode_settings": {
         "GCC_SYMBOLS_PRIVATE_EXTERN": "YES",
         "CLANG_CXX_LANGUAGE_STANDARD": "c++17",
         "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
         "CLANG_CXX_LIBRARY": "libc++",
-        "MACOSX_DEPLOYMENT_TARGET": "10.15"
+        "MACOSX_DEPLOYMENT_TARGET": "10.15",
+        # macOS gets the portable subset only: Apple clang does not support
+        # -fstack-clash-protection, and ld64 has no -Wl,-z,* equivalents (PIE,
+        # ASLR and W^X are platform defaults there).
+        "OTHER_CFLAGS": [
+          "-fstack-protector-strong",
+          "-U_FORTIFY_SOURCE",
+          "-D_FORTIFY_SOURCE=2",
+          "-Wformat",
+          "-Wformat=2",
+          "-Werror=format-security"
+        ],
+        "OTHER_CPLUSPLUSFLAGS": [
+          # "$(inherited)" is LOAD-BEARING, not boilerplate. gyp appends
+          # OTHER_CFLAGS only in GetCflagsC() -- i.e. to C TUs -- and C++ picks
+          # it up solely by expanding $(inherited) here (xcode_emulation.py:
+          # GetCflagsCC defaults OTHER_CPLUSPLUSFLAGS to ["$(inherited)"]).
+          # Setting this key WITHOUT it silently drops every OTHER_CFLAGS
+          # hardening flag above from our C++ objects, leaving only the vendored
+          # sqlite3.c hardened -- and the resulting Mach-O still shows
+          # __stack_chk/__memcpy_chk, so it looks fine unless you check the
+          # actual C++ compile line. Do not remove.
+          "$(inherited)",
+          "-Wall",
+          "-Wextra",
+          # Node's common.gypi pairs -Wall/-Wextra with -Wno-unused-parameter on
+          # POSIX; xcode_settings does not inherit that, and without it the
+          # deliberately-unused params in src/shims/* warn on every mac build.
+          "-Wno-unused-parameter",
+          "-fvisibility-inlines-hidden"
+        ]
       },
       "conditions": [
         [
           "OS=='linux'",
           {
+            "cflags": [
+              # Probe each stack page so a large frame cannot leap the guard
+              # page. Verified available on the GCC 10.2 floor for x64 AND
+              # arm64; not supported by Apple clang, hence Linux-only.
+              "-fstack-clash-protection"
+            ],
             # Avoid the ELF procedure linkage table for the many Node-API calls
             # made while materializing result rows. This keeps the stable
             # Node-API ABI while removing one indirection from each call.
             "cflags_cc": [
-              "-fno-plt"
+              "-fno-plt",
+              # libstdc++ bounds/precondition assertions. The libc++ equivalent
+              # would be _LIBCPP_HARDENING_MODE, which Apple clang does not yet
+              # support, so macOS goes without.
+              "-D_GLIBCXX_ASSERTIONS"
+            ],
+            "ldflags": [
+              # Full RELRO (GOT mapped read-only after load) + non-executable
+              # stack. GNU-ld/ELF only: macOS ld64 rejects -z, so these must
+              # never escape this branch.
+              "-Wl,-z,relro",
+              "-Wl,-z,now",
+              "-Wl,-z,noexecstack"
+            ],
+            "conditions": [
+              [
+                # Intel CET (endbr + shadow-stack marking). x86-only: GCC
+                # hard-errors with "not supported for this target" on aarch64.
+                "target_arch=='x64' or target_arch=='ia32'",
+                {
+                  "cflags": [
+                    "-fcf-protection=full"
+                  ]
+                }
+              ],
+              [
+                # AArch64 PAC return-signing + BTI. arm64-only: an unknown
+                # option (build error) on x86.
+                "target_arch=='arm64'",
+                {
+                  "cflags": [
+                    "-mbranch-protection=standard"
+                  ]
+                }
+              ]
             ]
           }
         ],
@@ -134,7 +234,20 @@
                     "VCCLCompilerTool": {
                       "WarningLevel": 4,
                       "AdditionalOptions": [
+                        # /Qspectre is NOT x64-only -- MSVC supports it on
+                        # ARM/ARM64 since VS 2017 15.7 and ships Spectre-
+                        # mitigated ARM64 libs. Omitting it here under-hardened
+                        # the ARM64 build.
+                        "/Qspectre",
+                        # Forward-edge CFI (same flag on both arches).
                         "/guard:cf",
+                        # Backward-edge CFI for ARM64: return-address signing
+                        # (hardware PAC). This is the ARM64 counterpart to x64's
+                        # /CETCOMPAT + /guard:ehcont, which are x64-only. Without
+                        # it ARM64 had NO backward-edge protection -- /guard:cf
+                        # is forward-edge only. Verified accepted by MSVC
+                        # 19.44 (VS 2022) targeting ARM64.
+                        "/guard:signret",
                         "/ZH:SHA_256",
                         "/sdl"
                       ],
@@ -142,6 +255,9 @@
                       "RuntimeTypeInfo": "true"
                     },
                     "VCLinkerTool": {
+                      # No /CETCOMPAT here: CET shadow-stack is an Intel/AMD
+                      # x64-only feature. ARM64's backward-edge protection comes
+                      # from /guard:signret on the compiler side (above).
                       "AdditionalOptions": [
                         "/guard:cf",
                         "/DYNAMICBASE"
