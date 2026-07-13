@@ -37,6 +37,13 @@ jobs:
       - run: npm run lint
         timeout-minutes: 20 # Give the lint step more time
 
+      # Native static analysis. This job already installed clang-tidy and bear
+      # but never actually ran them: `npm run lint` is only lint:ts + lint:eslint.
+      # clang-tidy gates on the ownership/lifetime checks (see .clang-tidy's
+      # WarningsAsErrors); style findings stay advisory.
+      - run: npm run lint:native
+        timeout-minutes: 20
+
   prebuild-mac-x64:
     runs-on: macos-15-intel # Intel x64 runner
     steps:

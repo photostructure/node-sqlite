@@ -1,6 +1,15 @@
 ---
 # Clang-tidy configuration for node-sqlite
 # Focus on C++ best practices and common issues
+#
+# WARNING: `Checks:` below is a single quoted YAML scalar. A "#" inside it is NOT
+# a comment -- it becomes literal check-pattern text and silently swallows the
+# next entry (a "# ..." line before `-cppcoreguidelines-owning-memory` re-enabled
+# that check). Keep all commentary out here, above the scalar.
+#
+# Notes on the disabled entries:
+#   -cppcoreguidelines-owning-memory: demands gsl::owner<> annotations and we do
+#     not depend on GSL. Ownership is expressed with RAII guards + ObjectWrap.
 
 Checks: '
   -*,
@@ -16,14 +25,12 @@ Checks: '
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -cppcoreguidelines-pro-type-reinterpret-cast,
   -cppcoreguidelines-pro-type-union-access,
-  -cppcoreguidelines-special-member-functions,
   -cppcoreguidelines-non-private-member-variables-in-classes,
   google-*,
   -google-build-using-namespace,
   -google-readability-casting,
   -google-runtime-references,
   hicpp-*,
-  -hicpp-special-member-functions,
   -hicpp-signed-bitwise,
   misc-*,
   -misc-include-cleaner,
@@ -40,8 +47,15 @@ Checks: '
   -readability-identifier-length
 '
 
-# Treat warnings as errors for CI
-WarningsAsErrors: ''
+# Gate CI on the high-signal ownership/lifetime checks only.
+#
+# These are the ones that actually protect an addon: raw owning pointers
+# (sqlite3*, sqlite3_stmt*), hand-written move guards, and the ObjectWrap
+# subclasses whose destruction order is the usual source of use-after-free.
+# Everything else (style, readability, modernize) stays advisory so it reports
+# without blocking -- an empty WarningsAsErrors made ALL of it advisory, which
+# meant clang-tidy could never fail a build.
+WarningsAsErrors: 'bugprone-use-after-move,bugprone-dangling-handle,bugprone-unchecked-optional-access,clang-analyzer-cplusplus.NewDelete,clang-analyzer-cplusplus.NewDeleteLeaks,clang-analyzer-unix.Malloc,cppcoreguidelines-special-member-functions,hicpp-special-member-functions'
 
 # Header filter - only check our headers, not system/node headers
 HeaderFilterRegex: '^((?!node_modules|vendored|upstream|shims).)*\.(h|hpp)$'

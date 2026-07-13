@@ -1298,11 +1298,17 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
     }
   }
 
-  // Apply initial limits from constructor options
-  for (size_t i = 0; i < config_.initial_limits().size(); i++) {
-    if (config_.initial_limits()[i].has_value()) {
-      sqlite3_limit(connection_, static_cast<int>(i),
-                    *config_.initial_limits()[i]);
+  // Apply initial limits from constructor options.
+  //
+  // Bind the array once rather than calling the accessor three times per
+  // iteration: it makes the has_value()/deref pair obviously operate on the
+  // same optional, which is also what lets clang-tidy's dataflow analysis see
+  // the access is checked (bugprone-unchecked-optional-access).
+  const auto &initial_limits = config_.initial_limits();
+  for (size_t i = 0; i < initial_limits.size(); i++) {
+    const std::optional<int> &limit = initial_limits[i];
+    if (limit.has_value()) {
+      sqlite3_limit(connection_, static_cast<int>(i), *limit);
     }
   }
 }
