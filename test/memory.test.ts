@@ -170,8 +170,7 @@ describeMemoryTests("Memory Tests", () => {
           throw new Error("No lastInsertRowid returned");
         }
         const row = select.get(Number(result.lastInsertRowid)) as
-          | { data: string }
-          | undefined;
+          { data: string } | undefined;
         if (!row || row.data.length !== 10001) {
           throw new Error(
             `Data mismatch: expected 10001, got ${row?.data.length ?? 0}`,
