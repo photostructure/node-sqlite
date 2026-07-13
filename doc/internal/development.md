@@ -28,7 +28,8 @@ This project was built with substantial assistance from [Claude Code](https://cl
 All code was reviewed by a human and validated by automated tests before merging:
 
 - Automated testing across platforms
-- Memory leak detection (Valgrind, ASAN)
+- Memory and undefined-behavior detection (AddressSanitizer, LeakSanitizer, UndefinedBehaviorSanitizer, Valgrind)
+- Native static analysis (clang-tidy, gating on ownership/lifetime checks)
 - Security scanning (npm audit, OSV, CodeQL)
 - Performance benchmarking
 
@@ -108,7 +109,16 @@ See [Architecture Documentation](./architecture.md) for details on:
 
 ## Release process
 
-See [Release Process](./release-process.md) for detailed release instructions.
+Releases are cut from CI: the **Build & Release** workflow
+(`.github/workflows/build.yml`) is triggered manually via `workflow_dispatch`
+with a version bump (`patch` / `minor` / `major`), builds the prebuilds for every
+platform, and publishes to npm with [provenance](https://docs.npmjs.com/generating-provenance-statements)
+using OIDC trusted publishing. The `version` field in `package.json` is owned by
+that workflow — do not bump it by hand.
+
+Before dispatching a release, run `npm run all` (full build, lint, clang-tidy,
+cross-platform tests, and the sanitizer/Valgrind memory suite) and confirm no
+workflow is red for the commit being released.
 
 ## Upstream synchronization
 

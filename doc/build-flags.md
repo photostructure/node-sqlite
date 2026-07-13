@@ -248,7 +248,7 @@ npm run build:native
 
 **Minimal build** (remove features):
 
-```gyp
+```python
 # Remove optional features for smaller binary
 # Comment out or remove these lines:
 "SQLITE_ENABLE_FTS4",
@@ -259,7 +259,7 @@ npm run build:native
 
 **Maximum features** (add more features):
 
-```gyp
+```python
 # Add these to the defines array:
 "SQLITE_ENABLE_ICU",           # Requires ICU library
 "SQLITE_ENABLE_ATOMIC_WRITE",  # Platform-specific
@@ -267,7 +267,7 @@ npm run build:native
 
 **Performance tuning**:
 
-```gyp
+```python
 # Larger cache for memory-rich environments
 "SQLITE_DEFAULT_CACHE_SIZE=-32000",  # 32MB cache
 

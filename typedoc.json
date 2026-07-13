@@ -28,10 +28,10 @@
     "doc/api-reference.md",
     "doc/features.md",
     "doc/library-comparison.md",
+    "doc/build-flags.md",
     "doc/internal/architecture.md",
     "doc/internal/async-design.md",
     "doc/internal/threading.md",
-    "doc/internal/release-process.md",
     "doc/internal/worker-implementation.md",
     "doc/internal/development.md",
     "doc/reference/sqlite-api.md",
@@ -50,6 +50,7 @@
     "json",
     "bash",
     "sql",
-    "yaml"
+    "yaml",
+    "python"
   ]
 }

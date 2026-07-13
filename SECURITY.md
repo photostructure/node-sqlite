@@ -30,9 +30,38 @@ Scans run on every push, PR, and weekly.
 
 ### Native Code Security
 
-- Uses official SQLite amalgamation source with recommended security flags
-- C++ code analyzed with clang-tidy and ASAN
-- Memory safety validated through comprehensive testing
+**Build hardening.** Released binaries are compiled with the [OpenSSF Compiler
+Options Hardening Guide](https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html)
+baseline on every platform we ship:
+
+| Protection             | Linux                                                                                       | macOS                      | Windows                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------- | -------------------------- | -------------------------------------------- |
+| Stack smashing         | `-fstack-protector-strong`, `-fstack-clash-protection`                                      | `-fstack-protector-strong` | `/GS` (default), `/sdl`                      |
+| Buffer / libc misuse   | `-D_FORTIFY_SOURCE=2`, `-D_GLIBCXX_ASSERTIONS`                                              | `-D_FORTIFY_SOURCE=2`      | `/sdl`                                       |
+| Forward-edge CFI       | `-fcf-protection=full` (x64, Intel CET IBT); `-mbranch-protection=standard` (arm64, BTI)    | —                          | `/guard:cf`                                  |
+| Backward-edge CFI      | `-fcf-protection=full` (x64, CET shadow stack); `-mbranch-protection=standard` (arm64, PAC) | —                          | `/CETCOMPAT` (x64), `/guard:signret` (arm64) |
+| Spectre v1             | —                                                                                           | —                          | `/Qspectre`                                  |
+| RELRO / non-exec stack | `-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack`                                                | n/a (ld64)                 | n/a                                          |
+| ASLR                   | `-fPIC`                                                                                     | default                    | `/DYNAMICBASE`, `/HIGHENTROPYVA`             |
+
+See [build configuration details](./doc/build-flags.md).
+
+**Vendored SQLite supply chain.** We compile the official SQLite amalgamation
+directly into the addon, with SQLite's recommended security options (including
+[API armor](https://sqlite.org/compile.html#enable_api_armor)). The sync tooling
+verifies each download against a **SHA3-256 hash pinned in this repository** and
+refuses to vendor a mismatch, so a corrupted or tampered amalgamation cannot
+reach the compiler.
+
+**Analysis in CI.** Every push and PR runs:
+
+- **AddressSanitizer + LeakSanitizer + UndefinedBehaviorSanitizer** and
+  **Valgrind Memcheck** over the full test suite. Leak suppressions deliberately
+  never wildcard N-API frames, so first-party leaks cannot be masked.
+- **clang-tidy**, gating on ownership/lifetime checks (use-after-move,
+  dangling-handle, unchecked-optional-access, the NewDelete/Malloc analyzers,
+  and rule-of-five on our resource-owning classes).
+- **CodeQL** C++ semantic analysis.
 
 ## Security Configuration
 
