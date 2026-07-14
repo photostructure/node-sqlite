@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.1.0] (2026-07-13)
+## [2.1.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.1.0) (2026-07-13)
 
 No API changes. Build hardening, supply-chain verification, and one undefined-behavior fix.
 
@@ -15,7 +15,7 @@ No API changes. Build hardening, supply-chain verification, and one undefined-be
 
 - **Empty changeset undefined behavior**: `session.changeset()` / `.patchset()` on a session with no recorded changes called `memcpy(NULL, NULL, 0)`, which is undefined behavior even at zero length. Results are unchanged (still a zero-length `Uint8Array`); the UB is gone. Surfaced by the new UndefinedBehaviorSanitizer pass in CI.
 
-## [2.0.0] (2026-07-11)
+## [2.0.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.0.0) (2026-07-11)
 
 API compatible with `node:sqlite` from Node.js v26.4.0.
 
@@ -51,13 +51,13 @@ API compatible with `node:sqlite` from Node.js v26.4.0.
 - Dependencies: node-addon-api 8.9.0, TypeScript 6, ESLint 10, prettier 3.8.5, `@types/node` 26.
 - CI: pinned-action updates (CodeQL, TruffleHog, OSV-Scanner, actions/checkout).
 
-## [1.2.1] (2026-04-28)
+## [1.2.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.1) (2026-04-28)
 
 ### Fixed
 
 - **Packaging**: Excluded test extension artifact (`test_extension.so`) from published npm tarball. The CI pipeline's `download-artifact` steps lacked a `pattern` filter, causing the musl test fixture to be merged into `prebuilds/` alongside production binaries.
 
-## [1.2.0] (2026-04-16)
+## [1.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.0) (2026-04-16)
 
 API compatible with `node:sqlite` from Node.js v25.9.0.
 
@@ -74,13 +74,13 @@ API compatible with `node:sqlite` from Node.js v25.9.0.
 
 - **Test sync**: skip `test-sqlite-serialize.js` — Node.js `DatabaseSync.prototype.serialize()` / `deserialize()` APIs are not yet ported.
 
-## [1.1.0] (2026-03-13)
+## [1.1.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.1.0) (2026-03-13)
 
 ### Changed
 
 - **SQLite 3.51.3**: Reverted from 3.52.0 (retracted by the SQLite team)
 
-## [1.0.0] (2026-03-07)
+## [1.0.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.0.0) (2026-03-07)
 
 Promotion to v1.0.0 following API stabilization and 0.5.0 release.
 
@@ -95,7 +95,7 @@ API compatible with `node:sqlite` from Node.js v25.8.0.
 
 - **SQLite 3.52.0**: Updated from 3.51.2
 
-## [0.5.0] (2026-02-06)
+## [0.5.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.5.0) (2026-02-06)
 
 ### Added
 
@@ -107,7 +107,7 @@ API compatible with `node:sqlite` from Node.js v25.8.0.
 - **`stmt.database`**: Back-reference from prepared statements to their parent database instance
 - **`EnhancedStatementMethods` type**: TypeScript interface for `pluck()`, `raw()`, `expand()`, and `database`
 
-## [0.4.0] (2026-02-04)
+## [0.4.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.4.0) (2026-02-04)
 
 API compatible with `node:sqlite` from Node.js v25.6.1.
 
@@ -141,7 +141,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - **Callback error preservation**: `applyChangeset()` now preserves the original error message when JavaScript callbacks throw
 - `createTagStore()` now throws errors with `code: 'ERR_INVALID_STATE'` property when database is closed, matching Node.js error format
 
-## [0.3.0] (2025-12-16)
+## [0.3.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.3.0) (2025-12-16)
 
 ### Changed
 
@@ -150,7 +150,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
   - After: `sql.size`
   - **Note**: This change was merged into Node.js main on December 11, 2025 and will appear in a future Node.js release. Current Node.js v24.x still uses `sql.size()` as a method.
 
-## [0.2.1] (2025-12-01)
+## [0.2.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.1) (2025-12-01)
 
 ### Added
 
@@ -161,7 +161,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - Error message handling on Windows ARM64 (ABI compatibility)
 - Error handling consistency across platforms
 
-## [0.2.0] (2025-12-01)
+## [0.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.0) (2025-12-01)
 
 ### Added
 
@@ -184,7 +184,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - Null and empty values in user function return value conversion
 - Native stability: N-API reference cleanup in aggregates/destructors, thread-local napi_env storage, statement-to-database reference tracking, deferred exception handling in authorizers
 
-## [0.0.1] - 2025-06-13
+## [0.0.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.0.1) (2025-06-13)
 
 ### Added
 
@@ -222,16 +222,3 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - Windows (x64, ARM64)
 - macOS (x64, ARM64)
 - Linux (x64, ARM64), (glibc 2.28+, musl)
-
-[2.1.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.1.0
-[2.0.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.0.0
-[1.2.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.1
-[1.2.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.0
-[1.1.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.1.0
-[1.0.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.0.0
-[0.5.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.5.0
-[0.4.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.4.0
-[0.3.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.3.0
-[0.2.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.1
-[0.2.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.0
-[0.0.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.0.1

@@ -167,12 +167,22 @@ If the bump is ambiguous (e.g. a subtle behavior change that could be called a b
 
 Open `CHANGELOG.md`. Follow the existing style exactly:
 
-- New section header: `## [X.Y.Z]` (no date yet — the release action commits on the release date, and prior entries show the release action leaves the date off until tagged; match whatever the most recent entries do).
+- New section header, with an inline link to the release and today's date:
+  `## [X.Y.Z](https://github.com/PhotoStructure/node-sqlite/releases/tag/vX.Y.Z) (YYYY-MM-DD)`
+  Write the date yourself. **The release action does not fill it in** — it only
+  runs `npm version` and `gh release create --generate-notes`, and never edits
+  `CHANGELOG.md`. Assuming otherwise is how 1.1.0 through 2.1.0 all shipped
+  undated. Use the date you expect to publish (it can be corrected against the
+  npm publish time afterwards if it slips).
 - Use these subsections in this order, only including ones that apply: `### Added`, `### Changed`, `### Fixed`, `### Removed`.
 - Mark breaking changes with `**BREAKING**:` prefix.
 - Lead each bullet with a bold feature name / area: e.g. `- **SQLite 3.52.1**: patch release, no API impact`.
 - Keep it terse. Users skim changelogs. One line per change. Link to upstream PRs (`[Node.js PR #12345](...)`) when the change traces back to upstream.
-- Add a reference link at the bottom: `[X.Y.Z]: https://github.com/PhotoStructure/node-sqlite/releases/tag/vX.Y.Z`
+- Do **not** add a reference-style link definition at the bottom of the file —
+  the version heading above is a plain inline link. Reference-style links were a
+  second place to keep in sync, and it drifted: five releases rendered as dead
+  literal `[2.1.0]` text with no definition, while a `[1.3.0]` definition pointed
+  at a release that never existed.
 - If `node:sqlite` API parity changed, mention the Node.js version we're now compatible with (e.g. "API compatible with `node:sqlite` from Node.js v25.10.0").
 
 ### 6. Update other docs
