@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.1.0]
+## [2.1.0] (2026-07-13)
 
 No API changes. Build hardening, supply-chain verification, and one undefined-behavior fix.
 
@@ -15,7 +15,7 @@ No API changes. Build hardening, supply-chain verification, and one undefined-be
 
 - **Empty changeset undefined behavior**: `session.changeset()` / `.patchset()` on a session with no recorded changes called `memcpy(NULL, NULL, 0)`, which is undefined behavior even at zero length. Results are unchanged (still a zero-length `Uint8Array`); the UB is gone. Surfaced by the new UndefinedBehaviorSanitizer pass in CI.
 
-## [2.0.0]
+## [2.0.0] (2026-07-11)
 
 API compatible with `node:sqlite` from Node.js v26.4.0.
 
@@ -51,13 +51,13 @@ API compatible with `node:sqlite` from Node.js v26.4.0.
 - Dependencies: node-addon-api 8.9.0, TypeScript 6, ESLint 10, prettier 3.8.5, `@types/node` 26.
 - CI: pinned-action updates (CodeQL, TruffleHog, OSV-Scanner, actions/checkout).
 
-## [1.2.1]
+## [1.2.1] (2026-04-28)
 
 ### Fixed
 
 - **Packaging**: Excluded test extension artifact (`test_extension.so`) from published npm tarball. The CI pipeline's `download-artifact` steps lacked a `pattern` filter, causing the musl test fixture to be merged into `prebuilds/` alongside production binaries.
 
-## [1.2.0]
+## [1.2.0] (2026-04-16)
 
 API compatible with `node:sqlite` from Node.js v25.9.0.
 
@@ -74,7 +74,7 @@ API compatible with `node:sqlite` from Node.js v25.9.0.
 
 - **Test sync**: skip `test-sqlite-serialize.js` — Node.js `DatabaseSync.prototype.serialize()` / `deserialize()` APIs are not yet ported.
 
-## [1.1.0]
+## [1.1.0] (2026-03-13)
 
 ### Changed
 
@@ -223,7 +223,11 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - macOS (x64, ARM64)
 - Linux (x64, ARM64), (glibc 2.28+, musl)
 
-[1.3.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.3.0
+[2.1.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.1.0
+[2.0.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.0.0
+[1.2.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.1
+[1.2.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.0
+[1.1.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.1.0
 [1.0.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.0.0
 [0.5.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.5.0
 [0.4.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.4.0
