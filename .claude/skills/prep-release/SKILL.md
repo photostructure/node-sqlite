@@ -172,8 +172,17 @@ Open `CHANGELOG.md`. Follow the existing style exactly:
   Write the date yourself. **The release action does not fill it in** — it only
   runs `npm version` and `gh release create --generate-notes`, and never edits
   `CHANGELOG.md`. Assuming otherwise is how 1.1.0 through 2.1.0 all shipped
-  undated. Use the date you expect to publish (it can be corrected against the
-  npm publish time afterwards if it slips).
+  undated.
+
+  Dates in this file are the maintainer's **local (America/Los_Angeles)** date,
+  not UTC. Releases often go out late evening Pacific, by which time UTC has
+  already rolled to the next day — so `npm view ... time` (which is UTC) will
+  read one day later than the correct entry. If you are back-filling a date from
+  npm, convert it to Pacific first:
+
+  ```bash
+  TZ=America/Los_Angeles date -d "$(npm view @photostructure/sqlite time --json | jq -r '."X.Y.Z"')" +%F
+  ```
 - Use these subsections in this order, only including ones that apply: `### Added`, `### Changed`, `### Fixed`, `### Removed`.
 - Mark breaking changes with `**BREAKING**:` prefix.
 - Lead each bullet with a bold feature name / area: e.g. `- **SQLite 3.52.1**: patch release, no API impact`.

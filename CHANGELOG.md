@@ -51,13 +51,13 @@ API compatible with `node:sqlite` from Node.js v26.4.0.
 - Dependencies: node-addon-api 8.9.0, TypeScript 6, ESLint 10, prettier 3.8.5, `@types/node` 26.
 - CI: pinned-action updates (CodeQL, TruffleHog, OSV-Scanner, actions/checkout).
 
-## [1.2.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.1) (2026-04-28)
+## [1.2.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.1) (2026-04-27)
 
 ### Fixed
 
 - **Packaging**: Excluded test extension artifact (`test_extension.so`) from published npm tarball. The CI pipeline's `download-artifact` steps lacked a `pattern` filter, causing the musl test fixture to be merged into `prebuilds/` alongside production binaries.
 
-## [1.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.0) (2026-04-16)
+## [1.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.0) (2026-04-15)
 
 API compatible with `node:sqlite` from Node.js v25.9.0.
 
@@ -141,7 +141,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - **Callback error preservation**: `applyChangeset()` now preserves the original error message when JavaScript callbacks throw
 - `createTagStore()` now throws errors with `code: 'ERR_INVALID_STATE'` property when database is closed, matching Node.js error format
 
-## [0.3.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.3.0) (2025-12-16)
+## [0.3.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.3.0) (2025-12-17)
 
 ### Changed
 
