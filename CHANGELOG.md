@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.2.0) (2026-07-25)
+
+No API changes. Upstream refresh and dependency updates.
+
+### Changed
+
+- **SQLite 3.53.4**: Updated from 3.53.3. A bug-fix release addressing defects found in 3.53.0–3.53.3, largely by automated analysis — bounds hardening in the JSON/JSONB parsers plus fixes in the session and RBU modules ([release notes](https://www.sqlite.org/releaselog/3_53_4.html)). No API changes, but the amalgamation is compiled into the shipped binary, so any SQLite bump gets a minor release: consumers choose when to take it.
+- **Upstream sync**: Node.js `v26.x-staging@955e669` → `v26.x-staging@68dc114`, now API compatible with `node:sqlite` from Node.js v26.5.0. The only `node_sqlite.cc` change in this range reads the column count after the first `step()` in `StatementSync.all()` ([Node.js PR #64219](https://github.com/nodejs/node/pull/64219)); our port already resolved column metadata lazily on the first row, so no change was needed.
+- **TypeScript held at 6.x**: `.ncurc.cjs` now pins `typescript` to the 6.x line. TypeScript 7 is not yet supported by `typedoc` (0.28.20 peers `<= 6.0.x`) or `typescript-eslint` (8.63.0 peers `< 6.1.0`).
+
 ## [2.1.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.1.0) (2026-07-13)
 
 No API changes. Build hardening, supply-chain verification, and one undefined-behavior fix.

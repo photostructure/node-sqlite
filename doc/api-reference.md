@@ -286,7 +286,7 @@ Closes the database connection. All prepared statements are finalized automatica
 db.close();
 ```
 
-#### [Symbol.dispose]()
+#### [Symbol.dispose](<>)
 
 ```typescript
 [Symbol.dispose](): void
