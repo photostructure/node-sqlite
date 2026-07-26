@@ -135,30 +135,30 @@
     "@eslint/js": "^10.0.1",
     "@photostructure/sqlite-vec": "^1.2.0",
     "@types/jest": "^30.0.0",
-    "@types/node": "26.0.1",
+    "@types/node": "26.1.1",
     "better-sqlite3": "12.11.1",
     "cross-env": "^10.1.0",
     "del-cli": "^7.0.0",
-    "eslint": "10.6.0",
+    "eslint": "10.7.0",
     "eslint-plugin-regexp": "3.1.1",
     "eslint-plugin-security": "4.0.1",
     "globals": "17.7.0",
     "jest": "^30.4.2",
-    "node-gyp": "13.0.0",
+    "node-gyp": "13.0.1",
     "npm-check-updates": "22.2.9",
     "npm-run-all2": "9.0.2",
     "prebuildify": "^6.0.1",
-    "prettier": "3.9.3",
+    "prettier": "3.9.5",
     "prettier-plugin-organize-imports": "^4.3.0",
     "ts-jest": "^29.4.11",
     "tsup": "^8.5.1",
-    "tsx": "4.22.4",
-    "typedoc": "^0.28.19",
+    "tsx": "4.23.0",
+    "typedoc": "0.28.20",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.62.1"
+    "typescript-eslint": "8.63.0"
   },
   "versions": {
-    "nodejs": "v26.x-staging@955e669",
-    "sqlite": "3.53.3"
+    "nodejs": "v26.x-staging@68dc114",
+    "sqlite": "3.53.4"
   }
 }
