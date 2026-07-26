@@ -9,3 +9,13 @@
 # the affected versions.
 id = "GHSA-g7r4-m6w7-qqqr"
 reason = "esbuild dev-server path traversal (Windows --servedir only); dev-only transitive dep via tsup, used only as a bundler — dev server never invoked."
+
+[[IgnoredVulns]]
+# GHSA-mh99-v99m-4gvg: unbounded brace expansion can exhaust memory when
+# attacker-controlled patterns reach brace-expansion directly or through glob.
+# The affected v1/v2 copies are dev-only transitive dependencies of Jest's
+# reporting and coverage tooling, receive only repository-controlled patterns,
+# and are not included in the published package. Remove this exception once
+# Jest's dependency tree uses brace-expansion >=5.0.8.
+id = "GHSA-mh99-v99m-4gvg"
+reason = "brace-expansion DoS requires attacker-controlled glob patterns; affected copies are dev-only Jest reporting/coverage transitives, receive only repository-controlled patterns, and are not shipped."
