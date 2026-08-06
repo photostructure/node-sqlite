@@ -1,9 +1,9 @@
 ---
-name: prep-release
+name: preflight
 description: Prepare a new release of @photostructure/sqlite. Syncs upstream Node.js + SQLite sources, updates npm deps, reviews commits since last release, decides semver bump (patch/minor/major), writes a CHANGELOG.md entry, and runs the full test+lint suite. Use when the user asks to "prep a release", "cut a release", "update everything and release", "sync upstream and release", or similar.
 ---
 
-# Prep Release
+# Preflight
 
 Prepare @photostructure/sqlite for a new release. This skill does NOT publish — it leaves the repo in a state where a human can trigger the GitHub Actions `Build & Release` workflow with the chosen version bump.
 
@@ -36,7 +36,7 @@ Create a todo list with TodoWrite for the steps below and work through them sequ
 
 ### 2. Update deps, sync upstream, run full checks
 
-Run the existing `preflight` orchestrator — it already does ~90% of release prep:
+Run the existing `npm run preflight` orchestrator — it already does ~90% of release prep:
 
 ```bash
 npm run preflight
@@ -61,7 +61,7 @@ This runs (see `scripts/preflight.ts`):
 
 ### 2.5. When the `preflight` orchestrator can't run end-to-end
 
-The `preflight` orchestrator depends on a set of tools that aren't always installed in ephemeral environments (osv-scanner, snyk, pinact, docker, valgrind, clang-tidy). It also hits the GitHub API unauthenticated, which rate-limits to 60/hour and will fail sync:tests if you've already burned the budget.
+The `npm run preflight` orchestrator depends on a set of tools that aren't always installed in ephemeral environments (osv-scanner, snyk, pinact, docker, valgrind, clang-tidy). It also hits the GitHub API unauthenticated, which rate-limits to 60/hour and will fail sync:tests if you've already burned the budget.
 
 If it can't complete, do NOT skip steps blindly. Run its sub-steps individually in this order and surface each failure:
 
