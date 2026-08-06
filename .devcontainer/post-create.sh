@@ -16,7 +16,7 @@ echo "🏗️ Running TypeScript build..."
 npm run build
 
 # Set up git hooks if available
-if [ -f "scripts/all.ts" ]; then
+if [ -f "scripts/preflight.ts" ]; then
     echo "🪝 Setting up git hooks..."
     npx husky install 2>/dev/null || true
 fi

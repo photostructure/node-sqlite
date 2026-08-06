@@ -154,6 +154,7 @@ This project follows consistent naming patterns for npm scripts to improve disco
 
 | Script                 | Description                                                  |
 | ---------------------- | ------------------------------------------------------------ |
+| `preflight`            | Everything that should pass before a release (also `make preflight`) |
 | `test`                 | Quick dev feedback (builds dist, runs Jest without coverage) |
 | `test:all`             | Comprehensive tests (builds everything, runs CJS + ESM)      |
 | `test:api`             | API compatibility tests against node:sqlite                  |

@@ -116,7 +116,7 @@ platform, and publishes to npm with [provenance](https://docs.npmjs.com/generati
 using OIDC trusted publishing. The `version` field in `package.json` is owned by
 that workflow — do not bump it by hand.
 
-Before dispatching a release, run `npm run all` (full build, lint, clang-tidy,
+Before dispatching a release, run `npm run preflight` (full build, lint, clang-tidy,
 cross-platform tests, and the sanitizer/Valgrind memory suite) and confirm no
 workflow is red for the commit being released.
 

@@ -18,9 +18,9 @@ Prepare @photostructure/sqlite for a new release. This skill does NOT publish �
 
 ## Workflow
 
-Create a todo list with TodoWrite for the steps below and work through them sequentially. Many steps run long (`npm run test:all`, `npm run all`) — surface failures immediately rather than pressing on.
+Create a todo list with TodoWrite for the steps below and work through them sequentially. Many steps run long (`npm run test:all`, `npm run preflight`) — surface failures immediately rather than pressing on.
 
-### 1. Preflight
+### 1. Repo state checks
 
 - Determine the environment with `echo $USER` (see Critical constraints). On local hardware (`$USER` is `mrm`), `main` is the expected branch — no action needed. On an Anthropic cloud VM, confirm the current branch (`git branch --show-current`) matches the `claude/*` development branch the session was started on.
 - `git status` must be clean (or have only intentional in-progress work). Stash/commit anything unexpected before proceeding.
@@ -36,13 +36,13 @@ Create a todo list with TodoWrite for the steps below and work through them sequ
 
 ### 2. Update deps, sync upstream, run full checks
 
-Run the existing `all` orchestrator — it already does ~90% of release prep:
+Run the existing `preflight` orchestrator — it already does ~90% of release prep:
 
 ```bash
-npm run all
+npm run preflight
 ```
 
-This runs (see `scripts/all.ts`):
+This runs (see `scripts/preflight.ts`):
 
 - `npm install` + `npm run update:actions` (pinact)
 - `npm-check-updates --upgrade` (respects `.ncurc.js` — pins eslint 9, cools down non-@photostructure deps 7 days)
@@ -59,9 +59,9 @@ This runs (see `scripts/all.ts`):
 - On Linux/macOS: `lint:native` (clang-tidy)
 - `npm run memory:check`
 
-### 2.5. When the `all` orchestrator can't run end-to-end
+### 2.5. When the `preflight` orchestrator can't run end-to-end
 
-The `all` orchestrator depends on a set of tools that aren't always installed in ephemeral environments (osv-scanner, snyk, pinact, docker, valgrind, clang-tidy). It also hits the GitHub API unauthenticated, which rate-limits to 60/hour and will fail sync:tests if you've already burned the budget.
+The `preflight` orchestrator depends on a set of tools that aren't always installed in ephemeral environments (osv-scanner, snyk, pinact, docker, valgrind, clang-tidy). It also hits the GitHub API unauthenticated, which rate-limits to 60/hour and will fail sync:tests if you've already burned the budget.
 
 If it can't complete, do NOT skip steps blindly. Run its sub-steps individually in this order and surface each failure:
 
