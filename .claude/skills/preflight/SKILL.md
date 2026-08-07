@@ -44,7 +44,8 @@ npm run preflight
 
 This runs (see `scripts/preflight.ts`):
 
-- `npm install` + `npm run update:actions` (pinact)
+- `gh auth token` → `GITHUB_TOKEN` (so the GitHub API calls below aren't capped at 60/hour)
+- `npm install` + `npm run update:pinact` (pins GitHub Actions to SHAs)
 - `npm-check-updates --upgrade` (respects `.ncurc.js` — pins eslint 9, cools down non-@photostructure deps 7 days)
 - `npm install` to re-sync the lockfile
 - `npm audit fix`, `npx snyk test --dev`
@@ -61,7 +62,7 @@ This runs (see `scripts/preflight.ts`):
 
 ### 2.5. When the `preflight` orchestrator can't run end-to-end
 
-The `npm run preflight` orchestrator depends on a set of tools that aren't always installed in ephemeral environments (osv-scanner, snyk, pinact, docker, valgrind, clang-tidy). It also hits the GitHub API unauthenticated, which rate-limits to 60/hour and will fail sync:tests if you've already burned the budget.
+The `npm run preflight` orchestrator depends on a set of tools that aren't always installed in ephemeral environments (osv-scanner, snyk, pinact, docker, valgrind, clang-tidy). It also needs a GitHub token: it borrows one from `gh auth token`, so if neither `gh` nor `GITHUB_TOKEN` is available, `update:pinact` and `sync:tests` are capped at 60 API requests/hour and will fail once that budget is burned.
 
 If it can't complete, do NOT skip steps blindly. Run its sub-steps individually in this order and surface each failure:
 
@@ -275,7 +276,7 @@ Learned from real release-prep sessions — consult this list when something sur
 
 - **`src/upstream/` is not the source of truth for implementation.** It's the exact Node.js source verbatim. The actual shipped code is `src/sqlite_impl.cpp` (ported). When upstream changes, ask yourself: "Does my port also need this change?" — fix-for-crash-on-musl commits upstream usually do; pure refactors usually don't.
 - **Sync scripts honor `.sync-cache.json`.** If you change the script's transform/skip logic, pass `--force` to re-apply against unchanged upstream.
-- **Rate limits.** Unauthenticated GitHub API gives you 60 req/hour across `sync:node`, `sync:tests`, and compare URLs. If you're iterating, export `GITHUB_TOKEN`.
+- **Rate limits.** Unauthenticated GitHub API gives you 60 req/hour across `update:pinact`, `sync:node`, `sync:tests`, and compare URLs — `pinact`'s `always: true` config re-verifies every pinned action on each run, so it burns that budget fast. `npm run preflight` pulls a token from `gh auth token` automatically; when running sub-steps by hand, export `GITHUB_TOKEN="$(gh auth token)"` first.
 - **Prettier after every sync:tests.** Upstream uses single quotes; our prettier rewrites to double. Without the formatter pass, every re-sync shows a massive noise diff.
 - **Node 22 CJS can't parse ERM `using`.** Don't assume the tests will parse just because they ran in Node 25. The rewriter at `scripts/sync-node-tests.ts` handles `using` today; extend it for future Node-only syntax (e.g. import attributes) as needed.
 - **`test:api` has a pre-existing failure on Node <25.** It compares constants against the host's `node:sqlite`, which exposes far fewer constants on Node 22 than Node 25. If you inherit this failure, confirm via `git stash` + re-run that it exists on the baseline before calling it a regression.
