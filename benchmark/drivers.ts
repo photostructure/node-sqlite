@@ -1,4 +1,5 @@
 import { DatabaseSync } from "../src/index";
+import type { CacheProfile } from "./cache-profile";
 
 // Optional dependencies - loaded lazily to allow running tests without them
 // Use any types to avoid TypeScript issues with optional deps
@@ -37,34 +38,118 @@ export interface Statement {
 
 export interface Driver {
   name: string;
-  initialize(filename: string): Promise<Driver>;
+  readonly benchmarkSettings: BenchmarkSettings;
+  initialize(
+    filename: string,
+    configuration: BenchmarkConfiguration,
+  ): Promise<Driver>;
   close(): Promise<void>;
   prepare(sql: string): Statement;
   transaction<T>(fn: (...args: any[]) => T): (...args: any[]) => T;
   exec(sql: string): void;
 }
 
-// Pin the durability-relevant pragmas to SQLite's defaults (rollback journal,
-// synchronous=FULL) so every driver is measured under identical write-durability
-// behavior. Without this, the "single-op writes tie across drivers" result in
-// the README would silently depend on each driver happening to ship the same
-// defaults — a driver that shipped e.g. WAL or synchronous=NORMAL would look
-// faster on writes for reasons unrelated to its own code.
-function pinDurabilityPragmas(db: { exec(sql: string): void }): void {
+export interface BenchmarkConfiguration {
+  cacheProfile: CacheProfile;
+}
+
+export interface BenchmarkSettings {
+  cacheProfile: CacheProfile;
+  initialCacheSize: number;
+  effectiveCacheSize: number;
+  journalMode: string;
+  synchronous: number;
+}
+
+type ConfigurableDatabase = {
+  exec(sql: string): void;
+  prepare(sql: string): { get(): Record<string, unknown> };
+};
+
+function readPragma(db: ConfigurableDatabase, name: string): unknown {
+  const row = db.prepare(`PRAGMA ${name}`).get();
+  return Object.values(row)[0];
+}
+
+function readNumericPragma(db: ConfigurableDatabase, name: string): number {
+  const value = readPragma(db, name);
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`PRAGMA ${name} returned a non-numeric value`);
+  }
+  return value;
+}
+
+// Apply the benchmark policy after opening a fresh database. Durability is
+// always normalized. Controlled mode also gives every driver the same 16 MiB
+// cache target; packaged mode deliberately leaves each compiled cache default
+// untouched so it can be measured as a separate policy sensitivity profile.
+function configureBenchmarkDatabase(
+  db: ConfigurableDatabase,
+  configuration: BenchmarkConfiguration,
+): BenchmarkSettings {
+  const initialCacheSize = readNumericPragma(db, "cache_size");
   db.exec("PRAGMA journal_mode = DELETE");
   db.exec("PRAGMA synchronous = FULL");
+  if (configuration.cacheProfile === "controlled") {
+    db.exec("PRAGMA cache_size = -16000");
+  } else if (configuration.cacheProfile !== "packaged") {
+    throw new Error(
+      `Unknown benchmark cache profile: ${String(configuration.cacheProfile)}`,
+    );
+  }
+
+  const effectiveCacheSize = readNumericPragma(db, "cache_size");
+  if (
+    configuration.cacheProfile === "controlled" &&
+    effectiveCacheSize !== -16000
+  ) {
+    throw new Error(
+      `controlled cache profile requires PRAGMA cache_size = -16000; received ${effectiveCacheSize}`,
+    );
+  }
+
+  const journalMode = readPragma(db, "journal_mode");
+  const synchronous = readNumericPragma(db, "synchronous");
+  if (typeof journalMode !== "string") {
+    throw new Error("PRAGMA journal_mode returned a non-string value");
+  }
+
+  return {
+    cacheProfile: configuration.cacheProfile,
+    initialCacheSize,
+    effectiveCacheSize,
+    journalMode,
+    synchronous,
+  };
 }
 
 // Base driver interface
 abstract class BaseDriver implements Driver {
   public name: string;
+  public benchmarkSettings!: BenchmarkSettings;
   protected db: any = null;
 
   constructor(name: string) {
     this.name = name;
   }
 
-  abstract initialize(filename: string): Promise<Driver>;
+  protected configureDatabase(configuration: BenchmarkConfiguration): void {
+    try {
+      this.benchmarkSettings = configureBenchmarkDatabase(
+        this.db,
+        configuration,
+      );
+    } catch (error) {
+      this.db?.close();
+      this.db = null;
+      throw error;
+    }
+  }
+
+  abstract initialize(
+    filename: string,
+    configuration: BenchmarkConfiguration,
+  ): Promise<Driver>;
   abstract close(): Promise<void>;
   abstract prepare(sql: string): Statement;
   abstract transaction<T>(fn: (...args: any[]) => T): (...args: any[]) => T;
@@ -79,9 +164,12 @@ class PhotostructureDriver extends BaseDriver {
     super("@photostructure/sqlite");
   }
 
-  async initialize(filename: string): Promise<Driver> {
+  async initialize(
+    filename: string,
+    configuration: BenchmarkConfiguration,
+  ): Promise<Driver> {
     this.db = new DatabaseSync(filename);
-    pinDurabilityPragmas(this.db);
+    this.configureDatabase(configuration);
     return this;
   }
 
@@ -135,14 +223,17 @@ class BetterSqlite3Driver extends BaseDriver {
     super("better-sqlite3");
   }
 
-  async initialize(filename: string): Promise<Driver> {
+  async initialize(
+    filename: string,
+    configuration: BenchmarkConfiguration,
+  ): Promise<Driver> {
     if (!Database) {
       throw new Error(
         "better-sqlite3 is not available - run 'npm install' in benchmark/",
       );
     }
     this.db = new Database(filename);
-    pinDurabilityPragmas(this.db);
+    this.configureDatabase(configuration);
     return this;
   }
 
@@ -184,12 +275,15 @@ class NodeSqliteDriver extends BaseDriver {
     super("node:sqlite");
   }
 
-  async initialize(filename: string): Promise<Driver> {
+  async initialize(
+    filename: string,
+    configuration: BenchmarkConfiguration,
+  ): Promise<Driver> {
     if (!nodeSqliteAvailable) {
       throw new Error("node:sqlite is not available");
     }
     this.db = new NodeSqliteDatabase(filename);
-    pinDurabilityPragmas(this.db);
+    this.configureDatabase(configuration);
     return this;
   }
 
@@ -248,6 +342,12 @@ export const drivers: Record<string, DriverConstructor> = {
 export async function createDriver(
   name: string,
   filename: string,
+  // Keep the shared memory/stress helpers on their historical packaged-cache
+  // behavior. The performance runner owns its controlled-by-default policy and
+  // passes that choice explicitly at every call site.
+  configuration: BenchmarkConfiguration = {
+    cacheProfile: "packaged",
+  },
 ): Promise<Driver> {
   const DriverClass = drivers[name];
   if (!DriverClass) {
@@ -255,7 +355,7 @@ export async function createDriver(
   }
 
   const driver = new DriverClass();
-  await driver.initialize(filename);
+  await driver.initialize(filename, configuration);
   return driver;
 }
 

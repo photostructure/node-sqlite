@@ -4,7 +4,16 @@ import chalk from "chalk";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDriver, getAvailableDrivers } from "./drivers.js";
+import {
+  DEFAULT_CACHE_PROFILE,
+  parseCacheProfile,
+  type CacheProfile,
+} from "./cache-profile.js";
+import {
+  createDriver,
+  getAvailableDrivers,
+  type BenchmarkSettings,
+} from "./drivers.js";
 import { sigFigs } from "./format.js";
 import { getScenarios, type Scenario } from "./scenarios.js";
 import { buildBenchmarkCharts, writeCharts } from "./svg-chart.js";
@@ -87,6 +96,7 @@ const options = {
   memory: args.includes("--memory"),
   verbose: args.includes("--verbose"),
   iterations: null as number | null,
+  cacheProfile: DEFAULT_CACHE_PROFILE as CacheProfile,
   // Write SVG charts to benchmark/charts/ after the run.
   charts: args.includes("--charts") ? "charts" : (null as string | null),
 };
@@ -104,6 +114,18 @@ for (let i = 0; i < args.length; i++) {
     }
     options.iterations = iterations;
     i++;
+  } else if (args[i] === "--cache-profile") {
+    try {
+      const profile = args[i + 1];
+      if (profile == null || profile.startsWith("--")) {
+        throw new Error("--cache-profile requires controlled|packaged");
+      }
+      options.cacheProfile = parseCacheProfile(profile);
+    } catch (error) {
+      console.error(chalk.red((error as Error).message));
+      process.exit(1);
+    }
+    i++;
   } else if (!args[i].startsWith("--")) {
     options.filter = args[i];
   }
@@ -118,6 +140,8 @@ Options:
   --drivers <list>     Comma-separated list of drivers to test
                        Available: ${getAvailableDrivers().join(", ")}
   --iterations <n>     Fixed per-trial iteration count (skips calibration)
+  --cache-profile <p>  SQLite cache policy: controlled|packaged
+                       Default: controlled
   --charts             Write SVG charts to benchmark/charts/
   --memory             Track memory usage
   --verbose            Show detailed output
@@ -128,6 +152,7 @@ Examples:
   tsx benchmark/index.ts select              # Run only select benchmarks
   tsx benchmark/index.ts --drivers @photostructure/sqlite,better-sqlite3
   tsx benchmark/index.ts insert --iterations 5000
+  tsx benchmark/index.ts select-range --cache-profile packaged
   tsx benchmark/index.ts --charts            # Run all benchmarks + emit SVG charts
 `);
   process.exit(0);
@@ -170,7 +195,9 @@ async function calibrateIterations(
   const targetDurationMs = 2000;
   const tempDir = mkdtempSync(join(tmpdir(), "sqlite-bench-cal-"));
   const dbPath = join(tempDir, "bench.db");
-  const driver = await createDriver(driverName, dbPath);
+  const driver = await createDriver(driverName, dbPath, {
+    cacheProfile: options.cacheProfile,
+  });
   try {
     const ctx = scenario.setup(driver);
     let iterations = 0;
@@ -202,7 +229,9 @@ async function runTrial(
 ): Promise<number> {
   const tempDir = mkdtempSync(join(tmpdir(), "sqlite-bench-"));
   const dbPath = join(tempDir, "bench.db");
-  const driver = await createDriver(driverName, dbPath);
+  const driver = await createDriver(driverName, dbPath, {
+    cacheProfile: options.cacheProfile,
+  });
   try {
     const ctx = scenario.setup(driver);
     const start = process.hrtime.bigint();
@@ -212,6 +241,25 @@ async function runTrial(
     const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
     cleanupContext(scenario, ctx);
     return (iters / durationMs) * 1000;
+  } finally {
+    await driver.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+// Open one fresh database per driver before calibration/timing so the active
+// policy is visible and a controlled-profile mismatch fails before any result
+// can be recorded.
+async function inspectBenchmarkSettings(
+  driverName: string,
+): Promise<BenchmarkSettings> {
+  const tempDir = mkdtempSync(join(tmpdir(), "sqlite-bench-config-"));
+  const dbPath = join(tempDir, "bench.db");
+  const driver = await createDriver(driverName, dbPath, {
+    cacheProfile: options.cacheProfile,
+  });
+  try {
+    return { ...driver.benchmarkSettings };
   } finally {
     await driver.close();
     rmSync(tempDir, { recursive: true, force: true });
@@ -228,6 +276,25 @@ async function runTrial(
   const driverList = driversToTest.filter((d) =>
     getAvailableDrivers().includes(d),
   );
+  if (driverList.length === 0) {
+    throw new Error("No requested benchmark drivers are available");
+  }
+
+  console.log(chalk.gray(`Cache profile: ${options.cacheProfile}`));
+  const benchmarkSettings: Record<string, BenchmarkSettings> = {};
+  for (const driverName of driverList) {
+    const settings = await inspectBenchmarkSettings(driverName);
+    benchmarkSettings[driverName] = settings;
+    console.log(
+      chalk.gray(
+        `  ${driverName}: cache_size=${settings.effectiveCacheSize} ` +
+          `(packaged=${settings.initialCacheSize}), ` +
+          `journal_mode=${settings.journalMode}, ` +
+          `synchronous=${settings.synchronous}`,
+      ),
+    );
+  }
+  console.log();
 
   // Results storage
   const results: Record<string, Record<string, any>> = {};
@@ -360,6 +427,23 @@ async function runTrial(
   // Summary
   console.log(chalk.bold.cyan("\n\n### 📈 Summary\n"));
 
+  // Keep the configuration directly beside the copyable Markdown table. The
+  // startup preamble is useful interactively, but is easy to omit when results
+  // are pasted into documentation or an issue.
+  const markdownSettings = driverList
+    .map((driverName) => {
+      const settings = benchmarkSettings[driverName];
+      return (
+        `\`${driverName}\`: cache_size=${settings.effectiveCacheSize} ` +
+        `(packaged=${settings.initialCacheSize}), ` +
+        `journal_mode=${settings.journalMode}, ` +
+        `synchronous=${settings.synchronous}`
+      );
+    })
+    .join("; ");
+  console.log(`Cache profile: \`${options.cacheProfile}\``);
+  console.log(`Effective settings: ${markdownSettings}\n`);
+
   // Generate markdown table
   const availableDrivers = driverList;
 
@@ -485,7 +569,10 @@ async function runTrial(
           { name: s.name, description: s.description, category: s.category },
         ] as [string, { name: string; description: string; category: string }],
     );
-    const charts = buildBenchmarkCharts(results, scenarioMeta, driverList);
+    const charts = buildBenchmarkCharts(results, scenarioMeta, driverList, {
+      cacheProfile: options.cacheProfile,
+      driverSettings: benchmarkSettings,
+    });
     writeCharts(charts, outDir);
     console.log(
       chalk.bold.cyan(`\n\n### 📊 Charts\n`) +

@@ -77,6 +77,9 @@ npm install
 # Full performance suite
 npm run bench
 
+# Packaged-cache sensitivity (leave each driver's compiled cache default)
+npm run bench -- --cache-profile packaged
+
 # Read scenarios only
 npm run bench select
 
@@ -119,6 +122,9 @@ npm rebuild better-sqlite3 --build-from-source
 
 - `--drivers <list>` selects a comma-separated driver list.
 - `--iterations <n>` fixes the per-trial iteration count instead of calibrating.
+- `--cache-profile controlled|packaged` selects the SQLite page-cache policy.
+  `controlled` is the default. It sets `PRAGMA cache_size = -16000` for every
+  driver. `packaged` leaves each driver's compiled cache default unchanged.
 - `--verbose` prints detailed progress.
 - `--memory` tracks memory during the performance run.
 - `--help` prints all options.
@@ -147,7 +153,15 @@ timed work and makes randomized scenarios execute the same access sequence.
 Trials are interleaved across drivers. Results report the median and the
 conservative relative half-width of an exact, distribution-free 95% confidence
 interval for that median. All drivers use rollback journal mode and
-`synchronous=FULL` so write durability is comparable.
+`synchronous=FULL` so write durability is comparable. The default `controlled`
+cache profile gives every driver the same 16 MiB target; the separate
+`packaged` profile shows the policy users receive from each package. Negative
+SQLite `cache_size` values are kibibyte targets, not page counts or eager
+allocations. The runner prints the active profile and every driver's effective
+settings before timing.
+
+The published table and charts above predate the named profiles and used each
+driver's packaged cache default, equivalent to today's `--cache-profile packaged`.
 
 The `vs node:sqlite` column reports this package's throughput divided by
 `node:sqlite` throughput for that scenario. We do not publish a blended score;

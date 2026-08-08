@@ -10,7 +10,9 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { sigFigs } from "./format.js";
+import type { CacheProfile } from "./cache-profile.js";
+import type { BenchmarkSettings } from "./drivers.js";
+import { sigFigs } from "./format";
 
 // Distinct, white-background-legible colors per driver.
 export const DRIVER_COLORS: Record<string, string> = {
@@ -96,8 +98,9 @@ function renderBarChart(opts: {
   fixedMax?: number;
   refLine?: RefLine;
   legend?: Array<{ label: string; color: string }>;
+  metadata?: BenchmarkChartMetadata;
 }): string {
-  const { title, subtitle, bars, fixedMax, refLine, legend } = opts;
+  const { title, subtitle, bars, fixedMax, refLine, legend, metadata } = opts;
 
   const width = 680;
   // Leave separate text rows for the subtitle and optional reference-line
@@ -127,6 +130,11 @@ function renderBarChart(opts: {
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="${FONT}">`,
   );
   out.push(`  <title>${escXml(title)}</title>`);
+  if (metadata) {
+    out.push(
+      `  <metadata id="benchmark-configuration">${escXml(JSON.stringify(metadata))}</metadata>`,
+    );
+  }
   out.push(`  <rect width="${width}" height="${height}" fill="#fff" rx="6" />`);
   out.push(
     `  <text x="${width / 2}" y="20" text-anchor="middle" font-size="15" font-weight="600" fill="#222">${escXml(title)}</text>`,
@@ -205,6 +213,11 @@ interface ScenarioMeta {
 }
 type Results = Record<string, Record<string, { hz: number; rme?: number }>>;
 
+export interface BenchmarkChartMetadata {
+  cacheProfile: CacheProfile;
+  driverSettings: Record<string, BenchmarkSettings>;
+}
+
 /**
  * Build all benchmark charts, keyed by output filename.
  *
@@ -216,6 +229,7 @@ export function buildBenchmarkCharts(
   results: Results,
   scenarios: Array<[string, ScenarioMeta]>,
   drivers: string[],
+  metadata?: BenchmarkChartMetadata,
 ): Map<string, string> {
   const charts = new Map<string, string>();
   const opsLabel = (hz: number) =>
@@ -253,7 +267,9 @@ export function buildBenchmarkCharts(
         "overview-ratio.svg",
         renderBarChart({
           title: `${subject} throughput vs node:sqlite`,
-          subtitle: "ratio of ops/sec (1.0× = parity; higher is faster)",
+          subtitle:
+            "ratio of ops/sec (1.0× = parity; higher is faster)" +
+            (metadata ? ` · cache profile: ${metadata.cacheProfile}` : ""),
           bars,
           fixedMax: maxRatio <= 1.05 ? 1.2 : maxRatio * 1.1,
           refLine: { value: 1, label: "node:sqlite = 1.0×" },
@@ -261,6 +277,7 @@ export function buildBenchmarkCharts(
             label: c.label,
             color: CATEGORY_COLORS[c.key],
           })),
+          ...(metadata ? { metadata } : {}),
         }),
       );
     }
@@ -284,8 +301,11 @@ export function buildBenchmarkCharts(
       `ops-${key}.svg`,
       renderBarChart({
         title: meta.name,
-        subtitle: `${meta.description} · higher is better`,
+        subtitle:
+          `${meta.description} · higher is better` +
+          (metadata ? ` · cache profile: ${metadata.cacheProfile}` : ""),
         bars,
+        ...(metadata ? { metadata } : {}),
       }),
     );
   }
