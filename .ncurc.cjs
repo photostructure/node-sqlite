@@ -2,6 +2,7 @@
 module.exports = {
   removeRange: true,
   cooldown: 14,
+  peer: true,
 
   // TypeScript is held on the 6.x line: TypeScript 7 is not yet supported by
   // our toolchain.
