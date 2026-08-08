@@ -95,8 +95,7 @@
     "preflight": "npx --yes tsx scripts/preflight.ts",
     "release:prepare": "npm run build:dist",
     "install:osv-scanner": "go install github.com/google/osv-scanner/cmd/osv-scanner@latest",
-    "update:pinact": "pinact run -u",
-    "install:pinact": "go install github.com/suzuki-shunsuke/pinact/v3/cmd/pinact@latest"
+    "update:pinact": "tsx scripts/pinact.ts"
   },
   "gypfile": true,
   "publishConfig": {

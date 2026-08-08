@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { platform } from "node:os";
 import { createInterface } from "node:readline";
+import { ensureGitHubToken } from "./github-api";
 
 const isWin = platform() === "win32";
 const isLinux = platform() === "linux";
@@ -124,6 +125,10 @@ function run({
 (async () => {
   // Check for root-owned files first (common Docker/sudo issue)
   await checkRootOwnedFiles();
+
+  // Authenticate GitHub API calls before any step that makes them
+  console.log("\n▶ Resolving GitHub API token");
+  ensureGitHubToken();
 
   // Always run these
   run({ cmd: "npm install", desc: "Installing dependencies" });

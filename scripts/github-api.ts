@@ -2,7 +2,48 @@
  * Shared utilities for GitHub API interactions
  */
 
+import { spawnSync } from "node:child_process";
 import * as https from "node:https";
+import { platform } from "node:os";
+
+let tokenResolved = false;
+
+/**
+ * pinact and the sync:* scripts all hit the GitHub API, which rate-limits
+ * unauthenticated requests to 60/hour — far short of a single full run.
+ * Borrow a token from the `gh` CLI when the environment doesn't supply one;
+ * child processes inherit it via process.env.
+ *
+ * Idempotent: only the first call shells out to `gh`.
+ */
+export function ensureGitHubToken(): void {
+  if (tokenResolved) return;
+  tokenResolved = true;
+
+  if (process.env.GITHUB_TOKEN) {
+    console.log("Using GITHUB_TOKEN from the environment");
+    return;
+  }
+
+  const result = spawnSync("gh", ["auth", "token"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: platform() === "win32",
+    timeout: 30_000,
+  });
+  const token = result.stdout?.trim();
+
+  if (result.status !== 0 || !token) {
+    console.warn(
+      "No GITHUB_TOKEN and `gh auth token` unavailable — GitHub API requests are capped at 60/hour",
+    );
+    console.warn("Fix with `gh auth login`, or export GITHUB_TOKEN yourself");
+    return;
+  }
+
+  process.env.GITHUB_TOKEN = token;
+  console.log("Using the token from `gh auth token`");
+}
 
 /**
  * Check if a URL is for the GitHub API by parsing the hostname.
@@ -51,18 +92,12 @@ export async function githubFetch(
 
   // Prepare headers with GitHub authentication if available
   // See: https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api
+  ensureGitHubToken();
   const authHeaders: HeadersInit = { ...headers };
   const githubToken = process.env.GITHUB_TOKEN;
 
   if (githubToken) {
     authHeaders["Authorization"] = `Bearer ${githubToken}`;
-    if (logRateLimit) {
-      console.log("Using GitHub authentication token");
-    }
-  } else if (logRateLimit) {
-    console.warn(
-      "No GITHUB_TOKEN found - API requests will be rate limited to 60/hour",
-    );
   }
 
   const response = await fetch(url, { headers: authHeaders });
@@ -106,6 +141,7 @@ export async function githubFetchUrl(
   return new Promise<string>((resolve, reject) => {
     // Prepare headers with GitHub authentication if available
     // See: https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api
+    ensureGitHubToken();
     const authHeaders: Record<string, string> = {
       "User-Agent": "node-sqlite-sync-script",
       ...headers,
@@ -114,11 +150,6 @@ export async function githubFetchUrl(
     const githubToken = process.env.GITHUB_TOKEN;
     if (githubToken) {
       authHeaders["Authorization"] = `Bearer ${githubToken}`;
-      console.log("Using GitHub authentication token");
-    } else {
-      console.warn(
-        "No GITHUB_TOKEN found - API requests will be rate limited to 60/hour",
-      );
     }
 
     const options = { headers: authHeaders };
