@@ -567,9 +567,17 @@ process.on("unhandledRejection", (error) => {
   process.exit(1);
 });
 
-main().catch((error) => {
-  console.error("Error:", error.message);
-  process.exit(1);
-});
+// Only sync when invoked as a script. sync-node-tests.ts imports
+// resolveLatestStagingBranch() from here so both syncs target the same branch;
+// without this guard that import would kick off a full source sync.
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === path.resolve(__filename)
+) {
+  main().catch((error) => {
+    console.error("Error:", error.message);
+    process.exit(1);
+  });
+}
 
-export { downloadFile, ensureDir, filesToSync };
+export { downloadFile, ensureDir, filesToSync, resolveLatestStagingBranch };

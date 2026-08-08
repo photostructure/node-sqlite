@@ -17,6 +17,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { githubFetch } from "./github-api";
+import { resolveLatestStagingBranch } from "./sync-from-node";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,6 +58,16 @@ const skipTests: Record<string, Array<{ name: string; reason: string }>> = {
     {
       name: "concurrent applyChangeset with workers",
       reason: "Worker thread changeset serialization issue",
+    },
+    {
+      name: "session - keeps its database alive after the db handle is dropped",
+      reason:
+        "Intentional divergence: upstream keeps the database alive via a " +
+        "strong reference from Session. We cannot -- commit 4da0638 removed " +
+        "Session::database_ref_ because Napi::Reference teardown during GC " +
+        "finalization corrupts V8 JIT pages on Alpine/musl (SIGSEGV). We " +
+        "detach instead, so an orphaned session reports 'database is not " +
+        "open'. Also needs Node's internal ../common/gc helper.",
     },
   ],
   "test-sqlite-template-tag.js": [
@@ -244,7 +255,12 @@ function toTestFileName(nodeFileName: string): string {
 function parseArgs() {
   const args = {
     help: false,
-    branch: "main",
+    // Resolved at runtime to the same vNN.x-staging branch sync-from-node.ts
+    // pulls the implementation from. Syncing tests from a different branch
+    // than the sources they exercise produces failures for APIs that simply
+    // do not exist in our baseline yet -- `main` carries the next major's
+    // in-flight work.
+    branch: undefined as string | undefined,
     repo: "nodejs/node",
     dryRun: false,
     force: false,
@@ -286,7 +302,8 @@ Usage:
 
 Options:
   --help, -h        Show this help message
-  --branch, -b      Branch/tag to sync from (default: main)
+  --branch, -b      Branch/tag to sync from (default: the same vNN.x-staging
+                    branch sync-from-node.ts resolves, so tests match sources)
   --repo, -r        GitHub repository (default: nodejs/node)
   --dry-run         Show what would be done
   --force, -f       Force sync even if unchanged
@@ -392,24 +409,29 @@ async function main() {
     return;
   }
 
-  console.log(`Syncing Node.js SQLite tests from ${args.repo}@${args.branch}`);
+  const branch = args.branch ?? (await resolveLatestStagingBranch(args.repo));
+  if (!args.branch) {
+    console.log(`Resolved default branch: ${branch}`);
+  }
+
+  console.log(`Syncing Node.js SQLite tests from ${args.repo}@${branch}`);
 
   let sha: string | null = null;
   try {
     const res = await githubFetch(
-      `https://api.github.com/repos/${args.repo}/commits/${args.branch}`,
+      `https://api.github.com/repos/${args.repo}/commits/${branch}`,
     );
     if (res.ok) sha = ((await res.json()) as any).sha;
   } catch {
     // API error - proceed without SHA
   }
 
-  if (sha && shouldSkipSync(args.repo, args.branch, sha, args.force)) {
+  if (sha && shouldSkipSync(args.repo, branch, sha, args.force)) {
     console.log("✅ Already up to date");
     return;
   }
 
-  const ref = sha ?? args.branch;
+  const ref = sha ?? branch;
   console.log(sha ? `Commit: ${sha.substring(0, 7)}` : "");
 
   // Dynamically discover test files from the Node.js repo
@@ -450,7 +472,7 @@ async function main() {
   console.log(`\nSynced ${successCount}/${filesToSync.length} tests`);
 
   if (!args.dryRun) {
-    if (sha) updateSyncCache(args.repo, args.branch, sha);
+    if (sha) updateSyncCache(args.repo, branch, sha);
 
     // Write README
     fs.writeFileSync(
@@ -473,8 +495,8 @@ Or run a specific test:
 node --test test/node-compat/test-sqlite-statement-sync-columns.test.js
 \`\`\`
 
-Source: https://github.com/${args.repo}/tree/${args.branch}/test/parallel
-Commit: ${sha ?? args.branch}
+Source: https://github.com/${args.repo}/tree/${branch}/test/parallel
+Commit: ${sha ?? branch}
 `,
     );
 

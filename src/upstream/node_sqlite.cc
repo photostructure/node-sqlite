@@ -912,10 +912,9 @@ void DatabaseSync::RemoveBackup(BackupJob* job) {
 void DatabaseSync::DeleteSessions() {
   // all attached sessions need to be deleted before the database is closed
   // https://www.sqlite.org/session/sqlite3session_create.html
-  for (auto* session : sessions_) {
-    sqlite3session_delete(session);
+  while (!sessions_.empty()) {
+    (*sessions_.begin())->Delete();
   }
-  sessions_.clear();
 }
 
 DatabaseSync::~DatabaseSync() {
@@ -1584,6 +1583,13 @@ void DatabaseSync::Exec(const FunctionCallbackInfo<Value>& args) {
     return;
   }
 
+  // Keep the database alive during sqlite3_exec(), which may call
+  // user-defined SQLite functions that trigger JavaScript callbacks.
+  // If the JavaScript callback drops all references to the database,
+  // the DatabaseSync could otherwise be garbage-collected while the
+  // SQLite callback is still executing, causing a use-after-free.
+  BaseObjectPtr<DatabaseSync> guard(db);
+
   Utf8Value sql(env->isolate(), args[0].As<String>());
   int r = sqlite3_exec(db->connection_, *sql, nullptr, nullptr, nullptr);
   CHECK_ERROR_OR_THROW(env->isolate(), db, r, SQLITE_OK, void());
@@ -2111,13 +2117,22 @@ void DatabaseSync::CreateSession(const FunctionCallbackInfo<Value>& args) {
   sqlite3_session* pSession;
   int r = sqlite3session_create(db->connection_, db_name.c_str(), &pSession);
   CHECK_ERROR_OR_THROW(env->isolate(), db, r, SQLITE_OK, void());
-  db->sessions_.insert(pSession);
+  bool wrapper_owns_session = false;
+  auto delete_session_on_failure = OnScopeLeave([&]() {
+    if (!wrapper_owns_session) {
+      sqlite3session_delete(pSession);
+    }
+  });
 
   r = sqlite3session_attach(pSession, table == "" ? nullptr : table.c_str());
   CHECK_ERROR_OR_THROW(env->isolate(), db, r, SQLITE_OK, void());
 
   BaseObjectPtr<Session> session =
-      Session::Create(env, BaseObjectWeakPtr<DatabaseSync>(db), pSession);
+      Session::Create(env, BaseObjectPtr<DatabaseSync>(db), pSession);
+  if (!session) {
+    return;
+  }
+  wrapper_owns_session = true;
   args.GetReturnValue().Set(session->object());
 }
 
@@ -2358,6 +2373,13 @@ void DatabaseSync::ApplyChangeset(const FunctionCallbackInfo<Value>& args) {
     }
   }
 
+  // Keep the database alive during sqlite3changeset_apply(), which may
+  // call conflict or filter callbacks that trigger JavaScript execution.
+  // If the JavaScript callback drops all references to the database,
+  // the DatabaseSync could otherwise be garbage-collected while the
+  // callback is still executing, causing a use-after-free.
+  BaseObjectPtr<DatabaseSync> guard(db);
+
   ArrayBufferViewContents<uint8_t> buf(args[0]);
   int r = sqlite3changeset_apply(
       db->connection_,
@@ -2382,7 +2404,10 @@ void DatabaseSync::EnableLoadExtension(
     const FunctionCallbackInfo<Value>& args) {
   DatabaseSync* db;
   ASSIGN_OR_RETURN_UNWRAP(&db, args.This());
-  auto isolate = args.GetIsolate();
+  Environment* env = Environment::GetCurrent(args);
+  THROW_AND_RETURN_ON_BAD_STATE(env, !db->IsOpen(), "database is not open");
+
+  Isolate* isolate = env->isolate();
   if (!args[0]->IsBoolean()) {
     THROW_ERR_INVALID_ARG_TYPE(isolate,
                                "The \"allow\" argument must be a boolean.");
@@ -2410,7 +2435,7 @@ void DatabaseSync::EnableDefensive(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   THROW_AND_RETURN_ON_BAD_STATE(env, !db->IsOpen(), "database is not open");
 
-  auto isolate = args.GetIsolate();
+  Isolate* isolate = env->isolate();
   if (!args[0]->IsBoolean()) {
     THROW_ERR_INVALID_ARG_TYPE(isolate,
                                "The \"active\" argument must be a boolean.");
@@ -2461,6 +2486,8 @@ void DatabaseSync::SetAuthorizer(const FunctionCallbackInfo<Value>& args) {
   DatabaseSync* db;
   ASSIGN_OR_RETURN_UNWRAP(&db, args.This());
   Environment* env = Environment::GetCurrent(args);
+  THROW_AND_RETURN_ON_BAD_STATE(env, !db->IsOpen(), "database is not open");
+
   Isolate* isolate = env->isolate();
 
   if (args[0]->IsNull()) {
@@ -3369,7 +3396,7 @@ void SQLTagStore::Run(const FunctionCallbackInfo<Value>& args) {
   }
 
   uint32_t n_params = args.Length() - 1;
-  int r = sqlite3_reset(stmt->statement_);
+  int r = stmt->ResetStatement();
   CHECK_ERROR_OR_THROW(env->isolate(), stmt->db_.get(), r, SQLITE_OK, void());
   int param_count = sqlite3_bind_parameter_count(stmt->statement_);
   for (int i = 0; i < static_cast<int>(n_params) && i < param_count; ++i) {
@@ -3402,7 +3429,7 @@ void SQLTagStore::Iterate(const FunctionCallbackInfo<Value>& args) {
   }
 
   uint32_t n_params = args.Length() - 1;
-  int r = sqlite3_reset(stmt->statement_);
+  int r = stmt->ResetStatement();
   CHECK_ERROR_OR_THROW(env->isolate(), stmt->db_.get(), r, SQLITE_OK, void());
   int param_count = sqlite3_bind_parameter_count(stmt->statement_);
   for (int i = 0; i < static_cast<int>(n_params) && i < param_count; ++i) {
@@ -3439,7 +3466,7 @@ void SQLTagStore::Get(const FunctionCallbackInfo<Value>& args) {
   uint32_t n_params = args.Length() - 1;
   Isolate* isolate = env->isolate();
 
-  int r = sqlite3_reset(stmt->statement_);
+  int r = stmt->ResetStatement();
   CHECK_ERROR_OR_THROW(isolate, stmt->db_.get(), r, SQLITE_OK, void());
 
   int param_count = sqlite3_bind_parameter_count(stmt->statement_);
@@ -3478,7 +3505,7 @@ void SQLTagStore::All(const FunctionCallbackInfo<Value>& args) {
   uint32_t n_params = args.Length() - 1;
   Isolate* isolate = env->isolate();
 
-  int r = sqlite3_reset(stmt->statement_);
+  int r = stmt->ResetStatement();
   CHECK_ERROR_OR_THROW(isolate, stmt->db_.get(), r, SQLITE_OK, void());
 
   int param_count = sqlite3_bind_parameter_count(stmt->statement_);
@@ -3722,6 +3749,7 @@ void StatementSyncIterator::Next(const FunctionCallbackInfo<Value>& args) {
     CHECK_ERROR_OR_THROW(
         env->isolate(), iter->stmt_->db_.get(), r, SQLITE_DONE, void());
     sqlite3_reset(iter->stmt_->statement_);
+    iter->done_ = true;
     MaybeLocal<Value> values[] = {Boolean::New(isolate, true), Null(isolate)};
     Local<Object> result;
     if (NewDictionaryInstanceNullProto(env->context(), iter_template, values)
@@ -3788,11 +3816,12 @@ void StatementSyncIterator::Return(const FunctionCallbackInfo<Value>& args) {
 
 Session::Session(Environment* env,
                  Local<Object> object,
-                 BaseObjectWeakPtr<DatabaseSync> database,
+                 BaseObjectPtr<DatabaseSync> database,
                  sqlite3_session* session)
     : BaseObject(env, object),
       session_(session),
       database_(std::move(database)) {
+  database_->sessions_.insert(this);
   MakeWeak();
 }
 
@@ -3801,7 +3830,7 @@ Session::~Session() {
 }
 
 BaseObjectPtr<Session> Session::Create(Environment* env,
-                                       BaseObjectWeakPtr<DatabaseSync> database,
+                                       BaseObjectPtr<DatabaseSync> database,
                                        sqlite3_session* session) {
   Local<Object> obj;
   if (!GetConstructorTemplate(env)
@@ -3835,7 +3864,9 @@ Local<FunctionTemplate> Session::GetConstructorTemplate(Environment* env) {
   return tmpl;
 }
 
-void Session::MemoryInfo(MemoryTracker* tracker) const {}
+void Session::MemoryInfo(MemoryTracker* tracker) const {
+  tracker->TrackField("database", database_);
+}
 
 template <Sqlite3ChangesetGenFunc sqliteChangesetFunc>
 void Session::Changeset(const FunctionCallbackInfo<Value>& args) {
@@ -3883,10 +3914,12 @@ void Session::Dispose(const v8::FunctionCallbackInfo<v8::Value>& args) {
 }
 
 void Session::Delete() {
-  if (!database_ || !database_->connection_ || session_ == nullptr) return;
+  if (session_ == nullptr) return;
   sqlite3session_delete(session_);
-  database_->sessions_.erase(session_);
   session_ = nullptr;
+  if (database_) {
+    database_->sessions_.erase(this);
+  }
 }
 
 void DefineConstants(Local<Object> target) {

@@ -315,4 +315,19 @@ suite("DatabaseSync.prototype.setAuthorizer()", () => {
       },
     );
   });
+
+  it("throws if database is not open", () => {
+    const db = new DatabaseSync(":memory:");
+    db.close();
+
+    assert.throws(
+      () => {
+        db.setAuthorizer(() => constants.SQLITE_OK);
+      },
+      {
+        code: "ERR_INVALID_STATE",
+        message: "database is not open",
+      },
+    );
+  });
 });
