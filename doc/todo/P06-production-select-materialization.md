@@ -1,6 +1,6 @@
 # TPP: Production-compatible SELECT materialization
 
-**Status:** In progress; Task 0 completed 2026-08-07.
+**Status:** In progress; Task 0 and Task 1A completed through 2026-08-08.
 
 ## Goal definition
 
@@ -20,8 +20,8 @@
 
 ## Current phase
 
-Task 1: freeze the observable materialization and lifetime behavior before introducing a
-factory candidate.
+Task 1B: freeze statement lifetime and environment behavior before introducing a factory
+candidate. Task 1A now captures row and iterator-record materialization semantics.
 
 - [x] Task 0: Normalize and expose benchmark cache profiles
 - [ ] Task 1: Freeze materialization compatibility and lifetime behavior
@@ -295,9 +295,23 @@ a substitute for traced ownership.
 
 **Proof**:
 
-- [ ] Focused CJS and ESM tests pass on the untouched baseline
+- [x] Focused CJS and ESM row-materialization tests pass on the untouched native baseline
 - [ ] Focused Node-compatibility tests pass against the supported Node matrix
 - [ ] Worker termination test exits normally under repeated execution
+
+**Task 1A implementation record (2026-08-08)**:
+
+- Added `test/statement-materialization.test.ts` as the one focused cross-path suite. Its 22
+  baseline characterization cases exercise `get()`, `all()`, `iterate().next()`, and
+  `iterate().toArray()` without changing production code.
+- The suite pins null-prototype rows and records, own `__proto__`, duplicate last-wins and key
+  order, empty and non-row results, idle return-array toggles, all SQLite value kinds,
+  `readBigInts`, the exact unsafe-integer error, and post-auto-reprepare shapes.
+- Focused CJS and ESM runs each passed all 22 cases. The full CJS suite passed 950 tests, and
+  lint passed. The generated Node-compat statement suite also passed locally on Node 26.6.0;
+  the supported-version matrix remains a CI proof item.
+- Task 1B remains: consolidate lifetime/reentrancy/invalidation coverage, add repeated abrupt
+  worker termination, and prove import/SELECT with string code generation disabled.
 
 ### Task 2: Screen compatible row-factory candidates
 
