@@ -6,29 +6,43 @@
 
 In our pinned benchmark run:
 
-- Indexed single-row reads reach about 110,000 queries per second, within
+- Indexed single-row reads reach about 97,000 queries per second, within
   roughly 20% of the fastest driver.
-- Durable single-row writes match `node:sqlite` and `better-sqlite3`. At roughly
-  360–390 commits per second, storage sync time dominates driver overhead.
+- Durable single-row writes match `node:sqlite` and `better-sqlite3`; storage
+  sync time dominates driver overhead.
 - Joins and batched writes are in the same general range, though not always at
   parity.
 - Large result sets are the known gap. Fetching or iterating roughly 1,000 rows
   at a time is 1.4x to 2.2x faster in `node:sqlite`, and `better-sqlite3` is
-  faster still on the range query.
+  faster still in both cases.
 
-Even the slowest read cases here materialize roughly half a million rows per
-second. Most applications will not notice the difference. If large result sets
-sit in a hot loop, benchmark your own workload before choosing a driver.
+Even the slowest read cases here materialize more than 400,000 rows per second.
+Most applications will not notice the difference. If large result sets sit in
+a hot loop, benchmark your own workload before choosing a driver.
 
 ![Throughput relative to node:sqlite](charts/overview-ratio.svg)
 
 ## Why bulk reads trail
 
-The gap is in converting SQLite rows into JavaScript values, not in SQLite
-query execution. `@photostructure/sqlite` uses stable Node-API so its prebuilt
-addon remains compatible across supported Node.js releases. Each returned
-value crosses that API boundary. The built-in `node:sqlite` module can instead
-use V8-only bulk constructors inside Node.js.
+Two independent effects drive the bulk-read results: JavaScript row construction
+and, for the range fixture, SQLite page-cache policy.
+
+For equal cache settings, the remaining gap is in constructing JavaScript rows.
+`@photostructure/sqlite` uses stable Node-API and assigns each column to a
+null-prototype row through a separate property call. The built-in `node:sqlite`
+module can use V8-only bulk constructors inside Node.js.
+
+`better-sqlite3` 13 also uses Node-API, but reduces call count with cached,
+shape-specialized JavaScript row factories and a separate iterator-record
+factory. In controlled spikes, removing our safe-integer check or switching to
+ordinary-prototype allocation was flat; reproducing those factory call shapes
+accounted for most of this package's binding-side deficit to `node:sqlite`.
+
+The range row also reflects different packaged SQLite defaults:
+`better-sqlite3` uses a 16 MiB page cache, while this package and `node:sqlite`
+use 2 MiB. A controlled run pinning every driver to 2 MiB measured 413, 658,
+and 583 ops/s, respectively. The table below intentionally reports out-of-box
+defaults, so its range result combines cache policy and row-construction cost.
 
 We keep the stable path because compatibility and predictable behavior matter
 more than a benchmark-only win. The cost grows with the number of rows and
@@ -38,22 +52,24 @@ queries show the largest difference.
 <details>
 <summary>Full performance results</summary>
 
-These results come from Linux x64 on an AMD Ryzen 9 5950X with Node.js 26.5.
-The process was pinned to one core with `taskset -c 2` and run with
-`BENCH_TRIALS=30 BENCH_WARMUP=5`. Absolute throughput varies by machine; the
-relationships between drivers are the useful part.
+These results come from Linux x64 on an AMD Ryzen 9 5950X with Node.js 26.6 and
+`better-sqlite3` 13.0.3. The process was pinned to one core with `taskset -c 2`
+and run with `BENCH_TRIALS=30 BENCH_WARMUP=5`. The BLOB row was repeated with
+the same settings after the full run encountered transient storage latency.
+Absolute throughput varies by machine; the relationships between drivers are
+the useful part.
 
 | Scenario                | @photostructure/sqlite |      better-sqlite3 |         node:sqlite | vs node:sqlite |
 | ----------------------- | ---------------------: | ------------------: | ------------------: | -------------: |
-| SELECT by Primary Key   |    110,000 ops/s ±0.3% | 130,000 ops/s ±0.5% | 120,000 ops/s ±0.6% |          0.89x |
-| SELECT Range            |        490 ops/s ±6.2% |   1,700 ops/s ±9.1% |     670 ops/s ±4.6% |          0.74x |
-| SELECT with Iterator    |        590 ops/s ±0.9% |   1,200 ops/s ±0.7% |   1,300 ops/s ±1.9% |          0.47x |
-| INSERT Single Row †     |        360 ops/s ±3.3% |     360 ops/s ±3.0% |     370 ops/s ±5.4% |          0.97x |
-| INSERT in Transaction ‡ |        240 ops/s ±3.1% |     270 ops/s ±2.8% |     290 ops/s ±2.0% |          0.83x |
-| SELECT with JOIN        |      1,700 ops/s ±0.6% |   1,700 ops/s ±0.8% |   1,900 ops/s ±0.7% |          0.86x |
-| INSERT with BLOB †      |        390 ops/s ±0.6% |     390 ops/s ±0.5% |     390 ops/s ±0.7% |          0.99x |
-| UPDATE with Index †     |        390 ops/s ±0.8% |     390 ops/s ±0.7% |     390 ops/s ±1.4% |          1.00x |
-| DELETE Bulk ‡           |        230 ops/s ±0.9% |     270 ops/s ±0.5% |     280 ops/s ±1.3% |          0.84x |
+| SELECT by Primary Key   |     97,000 ops/s ±0.6% | 120,000 ops/s ±0.6% | 110,000 ops/s ±0.5% |          0.90x |
+| SELECT Range            |        420 ops/s ±0.5% |   1,500 ops/s ±3.5% |     580 ops/s ±1.6% |          0.71x |
+| SELECT with Iterator    |        520 ops/s ±0.8% |   1,400 ops/s ±1.1% |   1,100 ops/s ±1.2% |          0.45x |
+| INSERT Single Row †     |         65 ops/s ±3.4% |      65 ops/s ±2.1% |      65 ops/s ±2.2% |          1.00x |
+| INSERT in Transaction ‡ |         57 ops/s ±2.7% |      58 ops/s ±2.5% |      59 ops/s ±2.9% |          0.97x |
+| SELECT with JOIN        |      1,700 ops/s ±1.4% |   1,700 ops/s ±0.4% |   1,600 ops/s ±0.7% |          1.02x |
+| INSERT with BLOB †      |        730 ops/s ±1.6% |     730 ops/s ±0.4% |     720 ops/s ±1.8% |          1.01x |
+| UPDATE with Index †     |        740 ops/s ±4.5% |     740 ops/s ±3.2% |     750 ops/s ±4.5% |          0.99x |
+| DELETE Bulk ‡           |         81 ops/s ±3.9% |      83 ops/s ±3.3% |      88 ops/s ±4.6% |          0.92x |
 
 † Single-operation writes commit once per operation. With rollback journaling
 and `synchronous=FULL`, durable storage sync dominates and the drivers tie.
