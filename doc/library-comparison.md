@@ -17,8 +17,9 @@ This guide compares @photostructure/sqlite with the alternatives to help you cho
 
 ### Choose **`better-sqlite3`** when you want:
 
-- A well-established synchronous SQLite library in maintenance mode
-- A specific API design that differs from Node.js
+- A mature, actively maintained synchronous SQLite library
+- Its established API and especially fast row-heavy SELECTs
+- Bundled Node-API prebuilds and Node.js 22+ support
 
 ### ~~Choose **`sqlite3`**~~ (deprecated)
 
@@ -68,25 +69,24 @@ _The official SQLite module included with Node.js 22.5.0+. Promoted to Release C
 
 ### [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3)
 
-_A well-established synchronous SQLite library, now in maintenance mode (SQLite version updates and prebuild maintenance only)_
+_A mature, actively maintained synchronous SQLite library with its own API._
 
 **Pros:**
 
-- **Proven**: widely used in thousands of production apps
-- **Stable API**: no breaking changes in years
+- **Mature API**: long-established synchronous database and statement interfaces
 - **Feature-rich**: user functions, aggregates, virtual tables, extensions
-- **Large community**: many resources and Stack Overflow answers
+- **Fast bulk reads**: cached shape-specialized row factories avoid repeated per-column Node-API property calls
+- **Hassle-free installs**: Node-API prebuilds are bundled in the npm package
 
 **Cons:**
 
-- **Maintenance mode**: receives SQLite updates and prebuild refreshes, but no new feature development
 - **Different API**: not compatible with Node.js built-in SQLite
-- **Postinstall download**: prebuilds are fetched from GitHub at install time, which can fail behind firewalls or in air-gapped environments
-- **V8-specific**: requires separate prebuilds for each Node.js ABI version (no Node-API)
+- **Requires Node.js 22+**: current releases no longer support older Node.js versions
+- **Community TypeScript types**: types are provided separately by `@types/better-sqlite3`
 - **Migration effort**: switching from other libraries requires code changes
 - **No session support**: doesn't expose SQLite's session/changeset functionality
 
-**Best for:** Existing users who are happy with the current API and don't need new features.
+**Best for:** Projects that prefer its API or prioritize maximum synchronous bulk-read throughput over `node:sqlite` API compatibility.
 
 ---
 
@@ -110,29 +110,28 @@ _The original asynchronous SQLite binding for Node.js, [unmaintained since Decem
 
 ## Feature matrix
 
-| Feature                  | @photostructure/sqlite | node:sqlite                                       | better-sqlite3        | sqlite3               |
-| ------------------------ | ---------------------- | ------------------------------------------------- | --------------------- | --------------------- |
-| **API Compatibility**    | node:sqlite            | -                                                 | Custom                | Custom                |
-| **SQLite Version**       | Independent            | Tied to Node.js release                           | Independent           | Independent           |
-| **Min Node.js Version**  | 22.0.0                 | 22.5.0                                            | 14.0.0                | 10.0.0                |
-| **Experimental Flag**    | ✅ Never needed        | ⚠️ Required on 22.5–22.12; not needed since 22.13 | ✅ Not needed         | ✅ Not needed         |
-| **Synchronous API**      | ✅                     | ✅                                                | ✅                    | ❌                    |
-| **Asynchronous API**     | ❌                     | ❌                                                | ❌                    | ✅                    |
-| **TypeScript Types**     | ✅ Built-in            | ✅ Built-in                                       | ✅ Via @types         | ✅ Via @types         |
-| **Custom Functions**     | ✅                     | ✅                                                | ✅                    | ✅                    |
-| **Aggregate Functions**  | ✅                     | ✅                                                | ✅                    | ❌                    |
-| **Window Functions**     | ✅                     | ✅                                                | ✅                    | ❌                    |
-| **Sessions/Changesets**  | ✅                     | ✅                                                | ❌                    | ❌                    |
-| **Backup API**           | ✅                     | ✅                                                | ✅ Different API      | ✅                    |
-| **Extension Loading**    | ✅                     | ✅                                                | ✅                    | ✅                    |
-| **Worker Threads**       | ✅                     | ✅                                                | ✅                    | ⚠️ Limited            |
-| **FTS5**                 | ✅                     | ✅                                                | ✅                    | ✅                    |
-| **JSON Functions**       | ✅                     | ✅                                                | ✅                    | ✅                    |
-| **R\*Tree**              | ✅                     | ✅                                                | ✅                    | ✅                    |
-| **Prebuild Strategy**    | Bundled in npm         | N/A (built-in)                                    | Downloaded on install | Downloaded on install |
-| **Node-API**             | ✅                     | N/A                                               | ❌ V8-specific        | ✅                    |
-| **Disposable Interface** | ✅ Native C++          | ✅ Native C++                                     | ❌                    | ❌                    |
-| **node_modules Size**    | ~28MB (all prebuilds)  | 0 (built-in)                                      | ~14MB (with deps)     | ~15MB (with deps)     |
+| Feature                  | @photostructure/sqlite | node:sqlite                                       | better-sqlite3   | sqlite3               |
+| ------------------------ | ---------------------- | ------------------------------------------------- | ---------------- | --------------------- |
+| **API Compatibility**    | node:sqlite            | -                                                 | Custom           | Custom                |
+| **SQLite Version**       | Independent            | Tied to Node.js release                           | Independent      | Independent           |
+| **Min Node.js Version**  | 22.0.0                 | 22.5.0                                            | 22.0.0           | 10.0.0                |
+| **Experimental Flag**    | ✅ Never needed        | ⚠️ Required on 22.5–22.12; not needed since 22.13 | ✅ Not needed    | ✅ Not needed         |
+| **Synchronous API**      | ✅                     | ✅                                                | ✅               | ❌                    |
+| **Asynchronous API**     | ❌                     | ❌                                                | ❌               | ✅                    |
+| **TypeScript Types**     | ✅ Built-in            | ✅ Built-in                                       | ✅ Via @types    | ✅ Via @types         |
+| **Custom Functions**     | ✅                     | ✅                                                | ✅               | ✅                    |
+| **Aggregate Functions**  | ✅                     | ✅                                                | ✅               | ❌                    |
+| **Window Functions**     | ✅                     | ✅                                                | ✅               | ❌                    |
+| **Sessions/Changesets**  | ✅                     | ✅                                                | ❌               | ❌                    |
+| **Backup API**           | ✅                     | ✅                                                | ✅ Different API | ✅                    |
+| **Extension Loading**    | ✅                     | ✅                                                | ✅               | ✅                    |
+| **Worker Threads**       | ✅                     | ✅                                                | ✅               | ⚠️ Limited            |
+| **FTS5**                 | ✅                     | ✅                                                | ✅               | ✅                    |
+| **JSON Functions**       | ✅                     | ✅                                                | ✅               | ✅                    |
+| **R\*Tree**              | ✅                     | ✅                                                | ✅               | ✅                    |
+| **Prebuild Strategy**    | Bundled in npm         | N/A (built-in)                                    | Bundled in npm   | Downloaded on install |
+| **Node-API**             | ✅ N-API 8             | N/A                                               | ✅ N-API 10      | ✅                    |
+| **Disposable Interface** | ✅ Native C++          | ✅ Native C++                                     | ❌               | ❌                    |
 
 ## Performance comparison
 
@@ -142,10 +141,29 @@ sync time dominates, and indexed single-row reads are within roughly 20% of the
 fastest driver in our benchmark. `@photostructure/sqlite` is slower when one
 call materializes roughly 1,000 rows.
 
-That bulk-read gap comes from the stable Node-API boundary. This package
-converts each returned value through Node-API so its prebuilds work across
-supported Node.js releases. `node:sqlite` is built into Node.js and can use
-V8-only bulk constructors. See the [full benchmark results and
+Two independent effects drive the bulk-read results: JavaScript row construction
+and, for the range fixture, SQLite page-cache policy. `better-sqlite3` 13 also
+uses Node-API, but its migration added cached JavaScript factories. Native code
+passes all values for a stable row shape through one object-literal call,
+batches result-array construction, and uses a similar factory for iterator
+records. This package creates null-prototype, `node:sqlite`-compatible rows and
+assigns each column through a separate Node-API property call.
+
+The published range result also includes a configuration difference:
+`better-sqlite3` defaults SQLite's page cache to 16 MiB, while this package and
+`node:sqlite` default to 2 MiB. Pinning all three drivers to 2 MiB reduced
+better-sqlite3's range result from roughly 1,500 to 658 ops/s on this fixture
+(this package: 413; `node:sqlite`: 583). The default-cache result is still a
+valid out-of-box comparison, but it is not purely binding overhead.
+
+Controlled spikes confirm the distinction. Removing the safe-integer range
+check or using ordinary-prototype rows made no measurable difference. A
+shape-specialized ordinary row factory improved this package's by-id,
+1,000-row range, and iterator cases by about 13%, 40%, and 74%, respectively. A
+separate ordinary iterator-record factory improved iteration by about 17%. An
+experimental Node-API bulk null-prototype constructor improved range reads by
+about 20%, but cannot be shipped across the supported Node.js range because
+that API is still experimental. See the [full benchmark results and
 methodology](../benchmark/README.md).
 
 ### SQLTagStore performance
@@ -209,12 +227,12 @@ try {
 
 - **@photostructure/sqlite**: Actively maintained, tracks Node.js upstream
 - **node:sqlite**: Part of Node.js core, follows Node.js release cycle
-- **better-sqlite3**: Maintenance mode — receives SQLite version updates and prebuild refreshes, but no recent feature development
+- **better-sqlite3**: Actively maintained, with SQLite updates, correctness fixes, and API work
 - **sqlite3**: [Deprecated and unmaintained](https://github.com/TryGhost/node-sqlite3/pull/1844) since December 2025
 
 ### Community and support
 
-- **better-sqlite3**: Largest community, most Stack Overflow answers
+- **better-sqlite3**: Mature ecosystem around its long-established API
 - **node:sqlite**: Growing community as adoption increases
 - **@photostructure/sqlite**: New but benefits from `node:sqlite` compatibility
 - **sqlite3**: Large legacy community, but no longer maintained

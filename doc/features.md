@@ -60,7 +60,7 @@ This package includes SQLite 3.53.4 with extensive compile-time options enabled.
 - `SQLITE_ENABLE_SNAPSHOT` - Database snapshots
 - `SQLITE_USE_URI` - URI filename support
 - `SQLITE_DEFAULT_FOREIGN_KEYS=1` - Foreign keys enabled by default
-- `SQLITE_THREADSAFE=2` - Multi-thread safe (serialized mode)
+- `SQLITE_THREADSAFE=1` - Serialized mode (SQLite's default; full mutex protection)
 
 ### Security and safety
 
@@ -71,8 +71,8 @@ This package includes SQLite 3.53.4 with extensive compile-time options enabled.
 
 ### Default configuration
 
-- `SQLITE_DEFAULT_CACHE_SIZE=-16000` - 16MB default cache
-- Thread-safe multi-connection access
+- `SQLITE_DEFAULT_CACHE_SIZE` left undefined - SQLite's own 2MB default page cache, matching `node:sqlite`. Raise it per connection with `PRAGMA cache_size`.
+- Serialized threading, so each worker thread can open its own connection
 - Error handling with detailed error codes
 
 ## JavaScript/TypeScript features

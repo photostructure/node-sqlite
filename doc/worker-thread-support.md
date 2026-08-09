@@ -22,10 +22,12 @@ Worker thread support is **fully implemented and working** in @photostructure/sq
 SQLite supports three threading modes:
 
 - **Single-thread** (`SQLITE_THREADSAFE=0`): No thread safety, one thread only
-- **Multi-thread** (`SQLITE_THREADSAFE=2`): Multiple threads, separate connections per thread **CURRENT**
-- **Serialized** (`SQLITE_THREADSAFE=1`): Full thread safety with mutexes (default)
+- **Multi-thread** (`SQLITE_THREADSAFE=2`): Multiple threads, separate connections per thread
+- **Serialized** (`SQLITE_THREADSAFE=1`): Full thread safety with mutexes (default) **CURRENT**
 
-**Current Configuration:** Using `SQLITE_THREADSAFE=2` (multi-thread mode), the correct choice for worker threads where each thread gets its own database connection.
+**Current Configuration:** Using the default `SQLITE_THREADSAFE=1` (serialized mode). `binding.gyp` does not define `SQLITE_THREADSAFE`, so SQLite's own default applies. This provides full thread safety with mutex protection, which is safe for worker threads where each thread creates its own database connection.
+
+Serialized mode is not merely a conservative default here — `db.backup()` depends on it. `BackupJob` steps the backup against the source connection on a libuv worker thread while the main thread may still be using that same connection, and SQLite only permits that "if SQLite is compiled and configured to support threadsafe database connections" (see the Online Backup API notes in `sqlite3.h`). Switching to `SQLITE_THREADSAFE=2` would make every concurrent use during a backup a data race. If an async API ever needs to drop the per-connection mutex, do it per connection with `SQLITE_OPEN_NOMUTEX` at open time, not by changing the compile-time mode.
 
 ### Implemented components
 

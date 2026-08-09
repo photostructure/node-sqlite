@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+API compatible with `node:sqlite` from Node.js v26.7.0, plus three APIs landed upstream but not yet in a Node.js release line. SQLite is unchanged at 3.53.4.
+
+### Added
+
+- **`StatementSync.prototype.close()`**: Finalizes a prepared statement deterministically instead of waiting for garbage collection or database close. Throws `ERR_INVALID_STATE` if the statement is already finalized, if it is currently executing, or if called from inside an authorizer callback — `sqlite3_finalize()` modifies the connection, which SQLite forbids there, so `close()` joins the same guard the other statement methods use. Ported from [Node.js PR #64232](https://github.com/nodejs/node/pull/64232).
+- **`StatementSync.prototype[Symbol.dispose]()`**: Enables `using stmt = db.prepare(...)`. Unlike `close()`, it is idempotent and never throws; the two cases `close()` rejects for safety become no-ops, leaving the statement to be finalized later by GC or database close. Also from [Node.js PR #64232](https://github.com/nodejs/node/pull/64232).
+- **`ArrayBuffer` and `SharedArrayBuffer` parameter binding**: Both now bind as BLOBs, matching [Node.js PR #62061](https://github.com/nodejs/node/pull/62061). Previously only `ArrayBufferView`s (Buffer, TypedArray, DataView) were accepted.
+
+These three landed on `nodejs/node@main` but are not in the `v26.x-staging` line this package syncs from, so they ship here ahead of their Node.js release. They are covered by this package's own tests; the corresponding upstream tests will arrive with a future sync.
+
+### Fixed
+
+- **Use-after-free when a session outlives its database**: `Session` holds a raw `DatabaseSync *`, and N-API finalization order between the two wrappers is unspecified. If the database was finalized first, every surviving session was left pointing at freed memory and the next session method dereferenced it. Both sides now clear the link, and an orphaned session reports `database is not open`. Confirmed with Valgrind before and after. Ports [Node.js PR #63797](https://github.com/nodejs/node/pull/63797) and [#64783](https://github.com/nodejs/node/pull/64783) in the shape our N-API port allows — upstream keeps the database alive with a strong reference, which we cannot do: a `Napi::Reference` member on a GC-finalized `ObjectWrap` corrupts V8 JIT pages on Alpine/musl (see commit 4da0638).
+- **`ArrayBuffer` bound as SQL `NULL`**: An `ArrayBuffer` or `SharedArrayBuffer` passed as the sole argument to `run()`/`get()`/`all()` was treated as a named-parameter object rather than a value, leaving the real parameter unbound. The insert silently stored `NULL` instead of the blob.
+
+### Changed
+
+- **Upstream sync**: Node.js `v26.x-staging@68dc114` → `v26.x-staging@079339a`. Beyond the session lifetime fix above, this range adds `IsOpen()` guards to `enableLoadExtension()` and `setAuthorizer()` ([Node.js PR #64812](https://github.com/nodejs/node/pull/64812)) and marks the statement iterator done at exhaustion — all three already matched our port, which had them first. Upstream's `BaseObjectPtr` guards in `Exec()`/`applyChangeset()` ([Node.js PR #64535](https://github.com/nodejs/node/pull/64535)) do not apply: an N-API `ObjectWrap` receiver is rooted by the handle scope for the whole synchronous call, verified under Valgrind.
+- **Close-inside-callback error message**: now `database cannot be closed while in a callback`, matching the wording upstream adopted in [Node.js PR #64743](https://github.com/nodejs/node/pull/64743). Previously `database cannot be closed inside a user-defined function callback`. The error `code` (`ERR_INVALID_STATE`) is unchanged; only the message text differs, so any test matching the old string needs updating.
+- **Node.js compatibility tests sync from the same branch as the sources**: `sync:tests` defaulted to `main` while `sync:node` tracks `vNN.x-staging`, so the suite ran the next major's tests against current-line sources and reported failures for APIs that did not exist in the baseline. Both now resolve the same staging branch. `test-sqlite-udf-close.js` had also been downloaded but never adapted, so its four cases — the ones that pin the close-inside-callback message below — were absent from `npm run test:node`; the adapted file is now generated, and `sync-node-tests.ts` only runs its sync when invoked directly, so its exports can be reused without triggering one.
+- **`memory:check` runs again** (developer tooling): the sanitizer harness had three independent faults, each masking the next. It exported `LD_PRELOAD` for the whole script, so `binding.gyp`'s `node -p` helper ran under LeakSanitizer, exited non-zero on an unrelated leak, and failed `configure`; it drove the build through `npx node-gyp`, which races on creating the `.deps` directories; and it preloaded only an ASan runtime, so the UBSan `*_abort` handlers were missing at load. The preload is now applied to the test command alone, the build goes through `npm run build:native:rebuild`, and both runtimes are preloaded. It also probes candidate ASan runtimes and skips any that cannot complete a leak check — clang's compiler-rt runtime wedges in LSan's `StopTheWorld` on clang 21 + Linux 7.x, where GCC's libasan works.
+- **Benchmark comparison refreshed** (developer tooling): pinned `better-sqlite3` 13.0.3 and regenerated the published throughput table and charts.
+
 ## [2.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.2.0) (2026-07-25)
 
 No API changes. Upstream refresh and dependency updates.
