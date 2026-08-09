@@ -2787,8 +2787,7 @@ Napi::Value StatementSync::Dispose(const Napi::CallbackInfo &info) {
   // close() rejects become no-ops here: mid-step and inside an authorizer
   // callback, finalizing is unsafe for the reasons given above. The statement
   // stays live and is finalized later by GC or database close.
-  if (!stepping_ &&
-      !(database_ && database_->IsInAuthorizerCallback())) {
+  if (!stepping_ && !(database_ && database_->IsInAuthorizerCallback())) {
     CloseStatement();
   }
   return info.Env().Undefined();
