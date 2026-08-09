@@ -648,6 +648,10 @@ DatabaseSync::~DatabaseSync() {
   if (connection_) {
     InternalClose();
   }
+
+  // Sessions are separate JS objects that can outlive this one. Clear their
+  // back-pointers so their methods can't dereference this freed instance.
+  DetachAllSessions();
 }
 
 void DatabaseSync::CleanupHook(void *arg) {
@@ -1877,21 +1881,29 @@ void DatabaseSync::RemoveSession(Session *session) {
 
 void DatabaseSync::DeleteAllSessions() {
   std::lock_guard<std::mutex> lock(sessions_mutex_);
-  // Copy the set to avoid iterator invalidation
-  std::set<Session *> sessions_copy = sessions_;
-  sessions_.clear(); // Clear first to prevent re-entrance
-
-  // Now delete each session
-  for (auto *session : sessions_copy) {
+  // Retain the set: these Session wrappers may outlive us, and ~DatabaseSync
+  // needs the list to clear their back-pointers via DetachAllSessions().
+  // Iteration is safe because nothing below re-enters Add/RemoveSession.
+  for (auto *session : sessions_) {
     // Direct SQLite cleanup since we're in database destruction
     if (session->GetSession()) {
       sqlite3session_delete(session->GetSession());
       // Clear the session pointer but KEEP database_ so we can detect
-      // "database closed" vs "session closed" in Session methods
+      // "database closed" vs "session closed" in Session methods. This object
+      // is still alive here, so the back-pointer stays valid.
       session->session_ = nullptr;
-      // Note: Don't null database_ - we need it to check IsOpen()
     }
   }
+}
+
+void DatabaseSync::DetachAllSessions() {
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  for (auto *session : sessions_) {
+    // Session::Delete() checks database_ before calling RemoveSession(), so
+    // nulling it here also keeps a later ~Session from touching this object.
+    session->database_ = nullptr;
+  }
+  sessions_.clear();
 }
 
 void DatabaseSync::AddBackup(BackupJob *backup) {
@@ -3672,7 +3684,18 @@ Napi::Object Session::Create(Napi::Env env, DatabaseSync *database,
 Session::Session(const Napi::CallbackInfo &info)
     : Napi::ObjectWrap<Session>(info), session_(nullptr) {}
 
-Session::~Session() { Delete(); }
+Session::~Session() {
+  Delete();
+  // Sessions stay registered for the whole life of the wrapper (see Delete()),
+  // so this is the one place that deregisters while the database is still
+  // alive. A non-null database_ means ~DatabaseSync has not run -- once it
+  // does, DetachAllSessions() nulls this and drops us from the set, and the
+  // check below correctly does nothing.
+  if (database_ != nullptr) {
+    database_->RemoveSession(this);
+    database_ = nullptr;
+  }
+}
 
 void Session::SetSession(DatabaseSync *database, sqlite3_session *session) {
   database_ = database;
@@ -3691,15 +3714,14 @@ void Session::Delete() {
   sqlite3_session *session_to_delete = session_;
   session_ = nullptr;
 
-  // Remove ourselves from the database's session list BEFORE deleting
-  // to avoid any potential issues with the database trying to access us
-  // Note: Keep database_ non-null so we can check if db is open vs session
-  // closed
-  if (database_) {
-    database_->RemoveSession(this);
-  }
-
-  // Now it's safe to delete the SQLite session
+  // Deliberately stay registered in the database's session list, and keep
+  // database_ non-null, so Session methods can still tell "database closed"
+  // from "session closed". Registration is what lets ~DatabaseSync find us and
+  // clear database_ (DetachAllSessions); dropping out of the list here while
+  // keeping the pointer would leave a closed session holding a back-pointer
+  // nobody ever clears, and ~Session would then call into a freed database.
+  // Deregistration happens in ~Session (database alive) or DetachAllSessions
+  // (database dying), whichever comes first.
   sqlite3session_delete(session_to_delete);
 }
 
@@ -3707,9 +3729,10 @@ template <int (*sqliteChangesetFunc)(sqlite3_session *, int *, void **)>
 Napi::Value Session::GenericChangeset(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  // Check database first - if db was closed, that's the primary error
-  // Note: database_ is preserved in Delete(), so we can check IsOpen()
-  if (database_ && !database_->IsOpen()) {
+  // Check database first - if db was closed or destroyed, that's the primary
+  // error. database_ is preserved by Delete() but nulled by DetachAllSessions()
+  // when the database is destroyed, so both cases report identically.
+  if (!database_ || !database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
@@ -3717,11 +3740,6 @@ Napi::Value Session::GenericChangeset(const Napi::CallbackInfo &info) {
   // Then check if session was explicitly closed
   if (session_ == nullptr) {
     node::THROW_ERR_INVALID_STATE(env, "session is not open");
-    return env.Undefined();
-  }
-
-  if (!database_) {
-    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 
@@ -3794,9 +3812,9 @@ Napi::Value Session::Patchset(const Napi::CallbackInfo &info) {
 Napi::Value Session::Close(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  // Check database first - if db was closed, that's the primary error
-  // Note: database_ is preserved in Delete(), so we can check IsOpen()
-  if (database_ && !database_->IsOpen()) {
+  // Check database first - if db was closed or destroyed, that's the primary
+  // error. See GenericChangeset() for why the null check comes first.
+  if (!database_ || !database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
@@ -3804,11 +3822,6 @@ Napi::Value Session::Close(const Napi::CallbackInfo &info) {
   // Then check if session was explicitly closed
   if (session_ == nullptr) {
     node::THROW_ERR_INVALID_STATE(env, "session is not open");
-    return env.Undefined();
-  }
-
-  if (!database_) {
-    node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();
   }
 

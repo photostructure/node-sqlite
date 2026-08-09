@@ -221,6 +221,10 @@ public:
   void AddSession(Session *session);
   void RemoveSession(Session *session);
   void DeleteAllSessions();
+  // Clears the back-pointer every surviving Session holds to this database.
+  // Must run during ~DatabaseSync: Session wrappers are independent JS objects
+  // whose finalization order relative to this one is unspecified.
+  void DetachAllSessions();
 
   // Backup management - prevents use-after-free when database is closed
   // during an active backup operation

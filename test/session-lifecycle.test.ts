@@ -144,6 +144,116 @@ describe("Session Lifecycle Management (RAII)", () => {
       expect(() => session.close()).toThrow(/database is not open/);
     });
 
+    it("should invalidate a session whose database is garbage collected", async () => {
+      // Regression test for a use-after-free: Session holds a raw
+      // DatabaseSync*, and N-API finalization order between the two wrappers
+      // is unspecified. If the DatabaseSync is finalized first, every
+      // surviving Session was left pointing at freed memory, and the next
+      // Session method dereferenced it. Ports the upstream fix from
+      // nodejs/node@bb86521a4 / @14e802d1c.
+      //
+      // Unlike the sibling tests above, this one deliberately does NOT call
+      // db.close() -- the destructor path is what leaves the dangling pointer.
+      expect(typeof global.gc).toBe("function");
+
+      let session: Session;
+      let dbCollected = false;
+      const registry = new FinalizationRegistry(() => {
+        dbCollected = true;
+      });
+
+      (() => {
+        const db = new DatabaseSync(":memory:");
+        db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)");
+        registry.register(db, "db");
+        session = db.createSession();
+        db.exec("INSERT INTO test VALUES (1, 'a')");
+      })();
+
+      // Drop the last reference to the database and let it be finalized.
+      for (let i = 0; i < 3 && !dbCollected; i++) {
+        global.gc!();
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      expect(dbCollected).toBe(true);
+
+      // The session must report the database as gone rather than reading
+      // through a dangling pointer.
+      expect(() => session!.changeset()).toThrow(/database is not open/);
+      expect(() => session!.close()).toThrow(/database is not open/);
+
+      // Disposal of the orphaned session must not crash. Session.dispose() is
+      // exposed by the native layer but not yet declared on the TS interface.
+      const disposable = session! as unknown as { dispose(): void };
+      expect(() => disposable.dispose()).not.toThrow();
+    });
+
+    it("should survive a session being finalized before its closed database", async () => {
+      // The mirror of the test above: db.close() invalidates each Session's
+      // sqlite3_session but leaves the wrapper registered, so whichever object
+      // is finalized first must clear the link. Session finalizing first used
+      // to leave a dangling entry that ~DatabaseSync then wrote through.
+      expect(typeof global.gc).toBe("function");
+
+      let sessionCollected = false;
+      const registry = new FinalizationRegistry(() => {
+        sessionCollected = true;
+      });
+
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY)");
+
+      (() => {
+        const session = db.createSession();
+        registry.register(session, "session");
+        // Closing the database invalidates the session but keeps the wrapper.
+        db.close();
+      })();
+
+      for (let i = 0; i < 3 && !sessionCollected; i++) {
+        global.gc!();
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      expect(sessionCollected).toBe(true);
+
+      // Destroying the database after the session must not touch freed memory.
+      expect(() => db.close()).toThrow();
+    });
+
+    it("should survive a closed session outliving its database", async () => {
+      // Third ordering: session.close() must not drop the wrapper out of the
+      // database's tracking list. If it did, ~DatabaseSync would never clear
+      // the wrapper's back-pointer, and ~Session would later call
+      // RemoveSession() on a freed database. Caught by AddressSanitizer.
+      expect(typeof global.gc).toBe("function");
+
+      let dbCollected = false;
+      const registry = new FinalizationRegistry(() => {
+        dbCollected = true;
+      });
+
+      let session: Session | null;
+      (() => {
+        const scoped = new DatabaseSync(":memory:");
+        registry.register(scoped, "db");
+        scoped.exec("CREATE TABLE test (id INTEGER PRIMARY KEY)");
+        session = scoped.createSession();
+        session.close();
+      })();
+
+      for (let i = 0; i < 5 && !dbCollected; i++) {
+        global.gc!();
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      expect(dbCollected).toBe(true);
+
+      session = null;
+      for (let i = 0; i < 5; i++) {
+        global.gc!();
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    });
+
     it("should handle multiple databases being destroyed in different order", () => {
       const sessions: any[] = [];
 
