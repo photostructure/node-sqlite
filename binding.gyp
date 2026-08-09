@@ -28,7 +28,7 @@
         "NAPI_VERSION=8",
         "HAVE_STDINT_H=1",
         "HAVE_USLEEP=1",
-        # "SQLITE_DEFAULT_CACHE_SIZE=-16000", # Default is 2000.
+        # "SQLITE_DEFAULT_CACHE_SIZE=-16000", # SQLite default is -2000 (2 MiB).
         "SQLITE_DEFAULT_FOREIGN_KEYS=1",
         "SQLITE_DEFAULT_MEMSTATUS=0", # See https://www.sqlite.org/forum/forumpost/c1cc8b057a
         "SQLITE_DEFAULT_WAL_SYNCHRONOUS=1",
