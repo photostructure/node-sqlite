@@ -506,6 +506,14 @@ Commit: ${sha ?? branch}
   }
 }
 
-main().catch(console.error);
+// Only sync when invoked as a script, matching sync-from-node.ts. Without this
+// guard the exports below cannot be reused -- importing adaptTest() to
+// regenerate a single adapted test would kick off a full network sync.
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === path.resolve(__filename)
+) {
+  main().catch(console.error);
+}
 
 export { adaptTest, discoverTestFiles, skipFiles, toTestFileName };

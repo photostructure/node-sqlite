@@ -42,7 +42,7 @@ describe("operations forbidden inside a user-defined function callback", () => {
       expect.objectContaining({
         code: "ERR_INVALID_STATE",
         message: expect.stringContaining(
-          "cannot be closed inside a user-defined function callback",
+          "cannot be closed while in a callback",
         ),
       }),
     );

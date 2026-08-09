@@ -754,9 +754,9 @@ Napi::Value DatabaseSync::Close(const Napi::CallbackInfo &info) {
   // callback invoked by sqlite3_step()/sqlite3_exec(); reject it rather than
   // finalize a statement whose VM is still on the stack (undefined behavior).
   if (IsExecutingStatement()) {
+    // Wording matches node:sqlite so the upstream compatibility tests pass.
     node::THROW_ERR_INVALID_STATE(
-        env,
-        "database cannot be closed inside a user-defined function callback");
+        env, "database cannot be closed while in a callback");
     return env.Undefined();
   }
 
