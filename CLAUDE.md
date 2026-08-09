@@ -299,6 +299,12 @@ This approach reduces test brittleness while ensuring error handling works corre
 - **Multi-platform prebuilds** are generated via GitHub Actions
 - **`package.json` version** is managed by the release GitHub Action — do not bump it manually
 
+### Git History Is Append-Only
+
+- Treat commits reachable from any remote ref as immutable; fix them only with new forward commits.
+- Never force-push `main` (`--force` or `--force-with-lease`); force pushes to `main` are disabled.
+- If local and upstream diverge, stop and ask; do not rebase, reset, merge, pull, push, or sync.
+
 ### Git Commit Messages
 
 Follow Conventional Commits format with these guidelines:
