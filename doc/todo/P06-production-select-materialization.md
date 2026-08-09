@@ -1,6 +1,7 @@
 # TPP: Production-compatible SELECT materialization
 
-**Status:** In progress; Tasks 0 and 1 completed through 2026-08-09.
+**Status:** In progress; Tasks 0-2 completed through 2026-08-09. Task 2 retained no
+row-factory candidate.
 
 ## Goal definition
 
@@ -9,9 +10,10 @@
   `node:sqlite`-compatible row/iterator materialization changes that clear the performance,
   lifetime, memory, and platform gates below.
 - **Core problem**: better-sqlite3 13 uses stable Node-API and still wins some bulk SELECTs.
-  The completed P05 investigation found two independent causes: its 16 MiB packaged SQLite
-  page cache versus our and `node:sqlite`'s 2 MiB default, and its cached JavaScript row and
-  iterator-record factories versus our per-property Node-API calls.
+  The completed P05 investigation established that its 16 MiB packaged SQLite page cache
+  explains much of the published range gap. It also proposed cached JavaScript row and
+  iterator-record factories as a second cause, but Task 2 did not reproduce a material row
+  gain against the same current harness.
 - **Key constraint**: this is an optimization project, not permission to loosen observable
   behavior, ABI stability, cleanup safety, or the package's memory default.
 - **Acceptable outcome**: ship a compatible optimization that clears every gate, or record
@@ -20,13 +22,16 @@
 
 ## Current phase
 
-Task 2: screen compatible row-factory candidates. Task 1 now freezes row/iterator-record
-semantics, statement lifetime behavior, and the worker/string-codegen environment boundaries.
+Repair benchmark attribution before screening another optimization. Task 2 rejected the
+row-factory candidates after same-harness A/B failed the 20% gate. Do not start Task 4 until
+the statement-lifecycle asymmetry described below is removed and a native/native self-control
+is flat.
 
 - [x] Task 0: Normalize and expose benchmark cache profiles
 - [x] Task 1: Freeze materialization compatibility and lifetime behavior
-- [ ] Task 2: Screen compatible row-factory candidates
-- [ ] Task 3: Implement bounded shape caching and reprepare handling
+- [x] Task 2: Screen compatible row-factory candidates — no candidate retained
+- [ ] Benchmark prerequisite: establish a lifecycle-neutral controlled baseline
+- [ ] Task 3: Implement bounded shape caching and reprepare handling — not justified by Task 2
 - [ ] Task 4: Screen and, if justified, implement iterator-record factories
 - [ ] Task 5: Decide `SQLITE_THREADSAFE=2` independently
 - [ ] Task 6: Publish controlled results and default-policy sensitivity
@@ -105,7 +110,7 @@ The handoff agent should not repeat the completed ceiling experiments.
 | Allocate ordinary rows but keep property sets |        flat |            flat |     flat | Keep null prototype                   |
 | Omit row property insertion                   |        +13% |            +38% |     +73% | Incompatible ceiling                  |
 | Cached outer result-array factory             |           — | flat normalized |        — | Do not repeat                         |
-| Ordinary shape-specialized row factory        |        +13% |            +40% |     +74% | Mechanism proven; spike incompatible  |
+| Ordinary shape-specialized row factory        |        +13% |            +40% |     +74% | Historical spike; not reproduced      |
 | Ordinary iterator-record factory              |           — |               — |     +17% | Compatible candidate worth screening  |
 | Experimental bulk null-prototype API          |         +2% |            +20% |     +10% | Stability policy blocks shipping      |
 | C++ LTO                                       |        flat |            flat |     flat | Do not repeat                         |
@@ -114,12 +119,13 @@ The handoff agent should not repeat the completed ceiling experiments.
 | `SQLITE_THREADSAFE=2`                         |        flat |     small/noisy |      +7% | Separate safety decision only         |
 | 16 MiB SQLite cache for this package          | small/noisy |            +60% |     flat | Benchmark policy, not library default |
 
-On Node 26.6 with CPU 2 pinned, the preserved baseline was roughly 97,936 by-id,
+On Node 26.6 with CPU 2 pinned, the P05 baseline was roughly 97,936 by-id,
 401 range, and 522 iterator ops/s. With all drivers temporarily pinned to 2 MiB, range
 throughput was ours 413, better-sqlite3 658, and `node:sqlite` 583 ops/s. The published
 better-sqlite3 range result fell from about 1,500 to 658, proving that most of that unusually
-large score came from the cache default. The remaining row-heavy gap is real and tracks
-per-column property insertion.
+large score came from the cache default. Treat P05's attribution of the remaining row-heavy
+gap to property insertion as a hypothesis: the Task 2 reproduction below did not validate the
+claimed factory gain.
 
 ## Compatibility and lifetime landmines
 
@@ -365,11 +371,63 @@ medians, confidence intervals, fallback result, and decision. Stop this TPP afte
 the negative result if no candidate clears the row gate; Tasks 3 and 4 would add unjustified
 complexity.
 
+#### Corrected screening record — 2026-08-09
+
+No row factory was retained. The original Task 2/3 result claimed large gains, but those gains
+were not reproducible when the preserved native and eval-free addons were run through the same
+current benchmark harness. The full comparison table is a cross-driver snapshot, not a
+before/after measurement of this optimization.
+
+The rejection screen used Node 26.6, controlled cache settings, CPU 2, fixed iteration counts
+of 62 for range and 56 for iterator, and 15 measured trials after 5 warmups. Each artifact ran
+in a fresh process selected through the verified prebuild override.
+
+| Path     | Preserved native baseline | Eval-free row factory | Decision                             |
+| -------- | ------------------------: | --------------------: | ------------------------------------ |
+| Range    |           906 ops/s ±3.0% |       925 ops/s ±4.4% | Reject: about +2%; intervals overlap |
+| Iterator |           793 ops/s ±0.7% |       786 ops/s ±0.9% | Reject: no gain                      |
+
+The preserved native addon was
+`790a4298f2315a626e7d8e68c8470d42fd0ad3646b6a3a0599ff317fb6a426b0`; the eval-free
+candidate was `cc5a0fc1cc989e6ef66a906a3bffe5ac4401dc63ad6ecd3210eafe9847520d98`.
+These were separate-process screening runs rather than the protocol's interleaved decision
+runs, so they do not establish a small effect. They are sufficient to reject the required
+20% gain: neither path approached the gate, and iterator moved in the wrong direction.
+
+A benchmark lifecycle change also invalidated the earlier attribution. Commit `59b8b62`
+changed only this package's adapter from a no-op `finalize()` to `StatementSync.close()`;
+the other two adapters still could not release statements. In a diagnostic run, the same
+native addon moved from 770 ops/s ±0.8% with the no-op harness to 906 ops/s ±3.0% with the
+closing harness. This is not a formal estimate of the lifecycle effect, but it proves the
+harness state materially changes the result. The asymmetric change was therefore withdrawn.
+
+Per the simple-design rule, the row creator, bounded JavaScript cache, native lookup state,
+diagnostic scenarios, and their tests were all reverted. Retaining their roughly 300 lines of
+shipping code is not justified by a statistically indistinguishable result. Correctness
+review also found prototype-sensitive shape serialization, iterator hot-entry thrash, and
+avoidable JavaScript cache growth risks; do not replace the rejected design with a simpler
+unsafe cache.
+
+Before another performance candidate:
+
+1. Give setup and timed statements an equivalent lifecycle across all compared drivers, or
+   structure the fixture so every driver holds an equivalent pre-prepared pool outside the
+   timed loop.
+2. Add an A/B runner that alternates fresh baseline and candidate processes and records the
+   resolved addon path and hash.
+3. Run a native/native self-control through both arms and require it to be flat before
+   attributing a candidate effect.
+4. Only then decide whether the independent iterator-record candidate in Task 4 warrants a
+   screen.
+
 ### Task 3: Implement bounded shape caching and reprepare handling
 
 **Success**: the winning row factory is reusable across statements without per-wrapper N-API
 references, selects the correct post-reprepare shape, stays bounded under hostile shape churn,
 and retains the measured gain.
+
+**Outcome**: not started and not currently justified. Reopen only if a lifecycle-neutral
+Task 2 rerun clears the row-factory gate on both bulk paths.
 
 Preferred ownership model:
 
@@ -409,13 +467,15 @@ Suggested standalone commit if retained:
 
 ### Task 4: Screen and implement iterator-record factories separately
 
-**Success**: a compatible record factory reduces wrapper cost after the row factory is fixed,
-or is reverted as too small.
+**Success**: a compatible record factory reduces wrapper cost against the retained native row
+path, or is reverted as too small. Do not screen it until the corrected benchmark prerequisite
+is complete.
 
 1. Add one eval-free factory that accepts `(value, done)`, constructs the record in the current
    key order, and sets its prototype to null before return. Use it for row, terminal, repeated
    terminal, and `return()` records so behavior does not depend on branch.
-2. Keep row materialization fixed at the Task 3 result and measure only record construction.
+2. Keep row materialization fixed at the retained native path and measure only record
+   construction.
 3. Verify exceptions from row materialization propagate before any record factory call.
 4. Reuse an `AddonData` module/worker-lifetime function reference; do not add an iterator-owned
    persistent reference.
