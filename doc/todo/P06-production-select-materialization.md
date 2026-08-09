@@ -1,6 +1,6 @@
 # TPP: Production-compatible SELECT materialization
 
-**Status:** In progress; Task 0 and Task 1A completed through 2026-08-08.
+**Status:** In progress; Tasks 0 and 1 completed through 2026-08-09.
 
 ## Goal definition
 
@@ -20,11 +20,11 @@
 
 ## Current phase
 
-Task 1B: freeze statement lifetime and environment behavior before introducing a factory
-candidate. Task 1A now captures row and iterator-record materialization semantics.
+Task 2: screen compatible row-factory candidates. Task 1 now freezes row/iterator-record
+semantics, statement lifetime behavior, and the worker/string-codegen environment boundaries.
 
 - [x] Task 0: Normalize and expose benchmark cache profiles
-- [ ] Task 1: Freeze materialization compatibility and lifetime behavior
+- [x] Task 1: Freeze materialization compatibility and lifetime behavior
 - [ ] Task 2: Screen compatible row-factory candidates
 - [ ] Task 3: Implement bounded shape caching and reprepare handling
 - [ ] Task 4: Screen and, if justified, implement iterator-record factories
@@ -296,8 +296,7 @@ a substitute for traced ownership.
 **Proof**:
 
 - [x] Focused CJS and ESM row-materialization tests pass on the untouched native baseline
-- [ ] Focused Node-compatibility tests pass against the supported Node matrix
-- [ ] Worker termination test exits normally under repeated execution
+- [x] Worker termination test exits normally under repeated execution
 
 **Task 1A implementation record (2026-08-08)**:
 
@@ -307,11 +306,30 @@ a substitute for traced ownership.
 - The suite pins null-prototype rows and records, own `__proto__`, duplicate last-wins and key
   order, empty and non-row results, idle return-array toggles, all SQLite value kinds,
   `readBigInts`, the exact unsafe-integer error, and post-auto-reprepare shapes.
-- Focused CJS and ESM runs each passed all 22 cases. The full CJS suite passed 950 tests, and
-  lint passed. The generated Node-compat statement suite also passed locally on Node 26.6.0;
-  the supported-version matrix remains a CI proof item.
+- Focused CJS and ESM runs each passed all 22 cases. A clean reconstruction of this commit later
+  passed 930 of 952 CJS tests (22 skipped). The original full-suite and lint runs included
+  unrelated in-progress native and test changes. The generated Node-compat statement suite also
+  passed locally on Node 26.6.0; the supported-version matrix remains a CI proof item.
 - Task 1B remains: consolidate lifetime/reentrancy/invalidation coverage, add repeated abrupt
   worker termination, and prove import/SELECT with string code generation disabled.
+
+**Task 1B implementation record (2026-08-09)**:
+
+- Audited the existing lifetime suites rather than duplicating them. Together,
+  `close-from-user-function.test.ts`, `statement-close.test.ts`, the Node-compat statement
+  suite, and `invalid-operations.test.ts` already pin authorizer/user-function reentrancy,
+  reset and iterator invalidation, statement/database close, and explicit close/disposal.
+- Added `test/statement-environment.test.ts` for the two remaining environment boundaries.
+  Its worker case independently imports the CommonJS build, opens an in-memory database,
+  advances a live statement iterator, waits for an explicit readiness handshake, and then
+  abruptly terminates the worker with the database, statement, and iterator still reachable.
+  All 25 sequential teardown repetitions completed without crashing the parent process.
+- Child processes started with `--disallow-code-generation-from-strings` successfully import
+  both published CommonJS and ESM builds and execute `SELECT 42`. This freezes the required
+  eval-free import and execution baseline before any generated factory candidate exists.
+- Focused CJS and ESM Jest runs each passed all three environment cases. The full default CJS
+  suite passed 954 tests, and lint passed. No production code changed. The supported
+  Node-version matrix remains an integration/CI proof item in Task 7.
 
 ### Task 2: Screen compatible row-factory candidates
 
@@ -469,6 +487,7 @@ Run and record:
 - [ ] `npm test`
 - [ ] `npm run test:all`
 - [ ] `npm run test:node`
+- [ ] focused Node-compatibility tests pass against the supported Node matrix
 - [ ] `npm run lint:full`
 - [ ] `cd benchmark && npx tsc --noEmit`
 - [ ] controlled and packaged-cache benchmark profiles

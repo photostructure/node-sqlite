@@ -154,9 +154,10 @@ describe("Statement row materialization", () => {
       expect(row["floatValue"]).toBe(1.25);
       expect(row["textValue"]).toBe("a\0b");
       expect(row["nullValue"]).toBeNull();
-      expect(row["blobValue"]).toEqual(
-        new Uint8Array([0xde, 0xad, 0xbe, 0xef]),
-      );
+      const blobValue = row["blobValue"];
+      expect(blobValue).toBeInstanceOf(Uint8Array);
+      expect(Buffer.isBuffer(blobValue)).toBe(false);
+      expect(blobValue).toEqual(new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
       expect(row["bigValue"]).toBe(9007199254740992n);
     },
   );
