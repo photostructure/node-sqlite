@@ -91,43 +91,115 @@ export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
 # Increase Node.js heap size for ASan overhead
 export NODE_OPTIONS="--max-old-space-size=8192"
 
-# Find and set ASan runtime library
+# Find and set ASan runtime library.
+#
+# We preload a runtime into an *uninstrumented* node, and not every runtime
+# survives that. clang's compiler-rt build wedges in LeakSanitizer's
+# StopTheWorld on some clang/kernel combinations (seen with clang 21 on Linux
+# 7.x): node starts, runs, prints its output, then hangs forever at exit while
+# the tracer attaches, fails to suspend node's threads, detaches, and retries.
+# The symptom is an apparent build hang, because LD_PRELOAD is inherited by
+# every child -- including the npm/node-gyp invocations below.
+#
+# GCC's libasan drives the same node binary to completion, and clang-instrumented
+# objects resolve against it (both implement the same __asan_* interface), so
+# probe each candidate and use the first that can finish a leak check. Mixing
+# clang instrumentation with GCC's runtime is not an officially supported
+# configuration; it is a deliberate fallback, taken only when the matching
+# runtime cannot complete.
 echo "Detecting ASan runtime library..."
-ASAN_LIB=$(clang -print-file-name=libclang_rt.asan-x86_64.so 2>/dev/null || echo "")
 
-if [[ -n "$ASAN_LIB" && "$ASAN_LIB" != *"not found"* && -f "$ASAN_LIB" ]]; then
-    export LD_PRELOAD="$ASAN_LIB"
-    echo -e "${BLUE}Using ASan library: $ASAN_LIB${NC}"
-else
-    # Try common paths as fallback
-    for lib in /usr/lib/x86_64-linux-gnu/libasan.so.{8,6} /usr/lib64/libasan.so.{8,6}; do
-        if [[ -f "$lib" ]]; then
-            export LD_PRELOAD="$lib"
-            echo -e "${BLUE}Using ASan library: $lib${NC}"
-            break
-        fi
-    done
+# Exits 0 (clean) or 1 (leaks found) when usable; 124/137 when it hangs.
+probe_asan_runtime() {
+    local lib="$1" rc=0
+    timeout -k 1 -s KILL 30 env LD_PRELOAD="$lib" ASAN_OPTIONS=detect_leaks=1 \
+        node -e '' >/dev/null 2>&1 || rc=$?
+    [[ $rc -eq 0 || $rc -eq 1 ]]
+}
+
+ASAN_CANDIDATES=()
+CLANG_ASAN=$(clang -print-file-name=libclang_rt.asan-x86_64.so 2>/dev/null || echo "")
+if [[ -n "$CLANG_ASAN" && "$CLANG_ASAN" != *"not found"* && -f "$CLANG_ASAN" ]]; then
+    ASAN_CANDIDATES+=("$CLANG_ASAN")
+fi
+for lib in /usr/lib/x86_64-linux-gnu/libasan.so.{8,6} /usr/lib64/libasan.so.{8,6}; do
+    [[ -f "$lib" ]] && ASAN_CANDIDATES+=("$lib")
+done
+
+# NOTE: the winner is kept in ASAN_RUNTIME and applied to the test command
+# only -- never exported. LD_PRELOAD is inherited by every child process, and
+# binding.gyp shells out to `node -p "require('node-addon-api').targets ..."`
+# during configure. Under a preloaded ASan, LeakSanitizer reports a leak in
+# that throwaway node and exits 1, so gyp reads the helper as failed and
+# aborts with "Call to 'node -p ...' returned exit status 1".
+ASAN_RUNTIME=""
+for lib in "${ASAN_CANDIDATES[@]}"; do
+    echo -e "${BLUE}Probing ASan runtime: $lib${NC}"
+    if probe_asan_runtime "$lib"; then
+        ASAN_RUNTIME="$lib"
+        echo -e "${BLUE}Using ASan library: $lib${NC}"
+        break
+    fi
+    echo -e "${YELLOW}  unusable (hung during leak check) -- trying next${NC}"
+done
+
+# UBSan ships as its own runtime. The addon is compiled -fsanitize=undefined
+# with -fno-sanitize-recover, so it references the *_abort handlers; without a
+# matching libubsan every test suite dies at load with
+# "undefined symbol: __ubsan_handle_type_mismatch_v1_abort". Pick the one that
+# goes with whichever ASan runtime won the probe above.
+UBSAN_RUNTIME=""
+case "$ASAN_RUNTIME" in
+    *libclang_rt.asan*)
+        cand=$(clang -print-file-name=libclang_rt.ubsan_standalone-x86_64.so 2>/dev/null || echo "")
+        [[ -n "$cand" && "$cand" != *"not found"* && -f "$cand" ]] && UBSAN_RUNTIME="$cand"
+        ;;
+    ?*)
+        for cand in "${ASAN_RUNTIME%/*}"/libubsan.so.{1,0} \
+                    /usr/lib/x86_64-linux-gnu/libubsan.so.1 /usr/lib64/libubsan.so.1; do
+            [[ -f "$cand" ]] && { UBSAN_RUNTIME="$cand"; break; }
+        done
+        ;;
+esac
+
+SAN_PRELOAD="$ASAN_RUNTIME"
+if [[ -n "$UBSAN_RUNTIME" ]]; then
+    SAN_PRELOAD="$SAN_PRELOAD:$UBSAN_RUNTIME"
+    echo -e "${BLUE}Using UBSan library: $UBSAN_RUNTIME${NC}"
 fi
 
-if [[ -z "${LD_PRELOAD:-}" ]]; then
-    echo -e "${YELLOW}Warning: Could not find ASan runtime library${NC}"
+if [[ -z "$ASAN_RUNTIME" ]]; then
+    echo -e "${YELLOW}Warning: no usable ASan runtime library found${NC}"
+    if (( ${#ASAN_CANDIDATES[@]} > 0 )); then
+        echo -e "${YELLOW}  Candidates were tried but all hung in LeakSanitizer.${NC}"
+        echo -e "${YELLOW}  Install GCC's libasan (apt install libasan8), or run${NC}"
+        echo -e "${YELLOW}  with ASAN_OPTIONS=detect_leaks=0 and use${NC}"
+        echo -e "${YELLOW}  'npm run memory:valgrind' for leak coverage.${NC}"
+    fi
 fi
 
-# Build the native module
-# Use separate clean/configure/build steps to avoid node-gyp .deps issues
+# Build the native module via the same path as a normal rebuild.
+#
+# Do NOT use `npx node-gyp` here. Invoked through npx, make dies with
+#   fatal error: opening dependency file
+#   ./Release/.deps/.../<unit>.o.d.raw: No such file or directory
+# and the unit that fails changes between runs, so it is a race creating the
+# .deps subdirectories rather than anything about a particular source file.
+# The same node-gyp version driven by `npm run` builds cleanly from scratch.
+# Reproducible with no sanitizer flags set -- this is not an ASan interaction.
 echo "Building with AddressSanitizer..."
-npx node-gyp clean 2>/dev/null || true
-npx node-gyp configure
-npx node-gyp build
+npm run build:native:rebuild
 
 # Build the distribution bundle
 echo "Building distribution bundle..."
 npm run build:dist
 
-# Run tests and capture output
+# Run tests and capture output. LD_PRELOAD is applied here and nowhere else:
+# the addon is instrumented, but node is not, so the ASan runtime has to be
+# loaded first -- and only for processes that actually load the addon.
 echo -e "${YELLOW}Running tests with AddressSanitizer...${NC}"
 set +e  # Don't exit on test failure
-npm test -- --no-coverage --forceExit 2>&1 | tee "$OUTPUT_FILE"
+LD_PRELOAD="$SAN_PRELOAD" npm test -- --no-coverage --forceExit 2>&1 | tee "$OUTPUT_FILE"
 TEST_EXIT_CODE=${PIPESTATUS[0]}
 set -e
 
@@ -264,8 +336,8 @@ if [[ "$VERBOSE" -eq 1 ]] || [[ "$EXIT_CODE" -eq 0 ]]; then
         echo -e "${YELLOW}\nNote: No ASAN/LSAN output detected. This could mean:${NC}"
         echo -e "${YELLOW}  - No memory errors or leaks were found${NC}"
         echo -e "${YELLOW}  - ASAN might not be properly loaded${NC}"
-        if [[ -n "${LD_PRELOAD:-}" ]]; then
-            echo -e "${BLUE}  - LD_PRELOAD is set to: $LD_PRELOAD${NC}"
+        if [[ -n "$ASAN_RUNTIME" ]]; then
+            echo -e "${BLUE}  - tests ran with LD_PRELOAD=$SAN_PRELOAD${NC}"
         fi
     fi
 fi
