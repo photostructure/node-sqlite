@@ -123,7 +123,7 @@ This package includes SQLite 3.53.4 with extensive compile-time options enabled.
 - INTEGER (number and BigInt, configurable via `readBigInts`)
 - REAL (number)
 - TEXT (string)
-- BLOB (TypedArray/DataView input, Uint8Array output)
+- BLOB (TypedArray/DataView/ArrayBuffer/SharedArrayBuffer input, Uint8Array output)
 - NULL (null)
 
 ### Resource management

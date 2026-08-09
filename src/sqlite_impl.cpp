@@ -12,6 +12,26 @@
 
 // Database-aware error handling functions to avoid forward declaration issues
 namespace {
+// SharedArrayBuffer is neither an ArrayBufferView nor a Napi ArrayBuffer, and
+// node-addon-api's IsSharedArrayBuffer() is gated behind the experimental
+// NODE_API_EXPERIMENTAL_HAS_SHAREDARRAYBUFFER, so we detect it ourselves.
+//
+// This reads Symbol.toStringTag rather than doing an `instanceof` against the
+// global SharedArrayBuffer: `instanceof` is realm-sensitive, and callers can
+// legitimately live in another realm (Jest runs each test file in its own vm
+// context, worker threads have their own globals), where the constructor
+// identity differs and the check silently fails.
+bool IsSharedArrayBufferValue(Napi::Env env, Napi::Value value) {
+  if (!value.IsObject() || value.IsArrayBuffer()) {
+    return false;
+  }
+  // NAPI_CPP_EXCEPTIONS is enabled, so MaybeOrValue<Symbol> is a plain Symbol.
+  Napi::Symbol tag_key = Napi::Symbol::WellKnown(env, "toStringTag");
+  Napi::Value tag = value.As<Napi::Object>().Get(tag_key);
+  return tag.IsString() &&
+         tag.As<Napi::String>().Utf8Value() == "SharedArrayBuffer";
+}
+
 inline void ThrowErrSqliteErrorWithDb(Napi::Env env,
                                       photostructure::sqlite::DatabaseSync *db,
                                       const char *message = nullptr) {
@@ -2979,11 +2999,15 @@ void StatementSync::BindParameters(const Napi::CallbackInfo &info,
   // Track where positional parameters start
   size_t positional_start = start_index;
 
-  // Check if first argument is an object for named parameters
-  // (not a Buffer, TypedArray, or Array - those are positional values)
+  // Check if first argument is an object for named parameters. Binary values
+  // are positional even though they are objects: IsBuffer() covers every
+  // ArrayBufferView, and ArrayBuffer/SharedArrayBuffer must be excluded
+  // explicitly or they bind as an empty named-parameter set (leaving the real
+  // parameter unbound, i.e. silently NULL).
   if (info.Length() > start_index && info[start_index].IsObject() &&
       !info[start_index].IsBuffer() && !info[start_index].IsArray() &&
-      !info[start_index].IsTypedArray()) {
+      !info[start_index].IsTypedArray() && !info[start_index].IsArrayBuffer() &&
+      !IsSharedArrayBufferValue(env, info[start_index])) {
     // Named parameters binding from the object
     Napi::Object obj = info[start_index].As<Napi::Object>();
     positional_start =
@@ -3185,6 +3209,20 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
       rc = sqlite3_bind_blob(statement_, param_index, data ? data : "",
                              SafeCastToInt(arrayBuffer.ByteLength()),
                              SQLITE_TRANSIENT);
+    } else if (IsSharedArrayBufferValue(Env(), param)) {
+      // A SharedArrayBuffer cannot be cast to Napi::ArrayBuffer, so read its
+      // bytes through a Uint8Array view. SQLITE_TRANSIENT copies immediately,
+      // so the view does not need to outlive this call.
+      Napi::Object view = Env()
+                              .Global()
+                              .Get("Uint8Array")
+                              .As<Napi::Function>()
+                              .New({param})
+                              .As<Napi::Object>();
+      Napi::Buffer<uint8_t> bytes = view.As<Napi::Buffer<uint8_t>>();
+      const void *data = bytes.Data();
+      rc = sqlite3_bind_blob(statement_, param_index, data ? data : "",
+                             SafeCastToInt(bytes.Length()), SQLITE_TRANSIENT);
     } else if (param.IsObject()) {
       // Objects and arrays cannot be bound to SQLite parameters (same as
       // Node.js behavior). Note: DataView, Buffer, TypedArray, and ArrayBuffer

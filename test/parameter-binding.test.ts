@@ -174,6 +174,61 @@ describe("Parameter Binding Tests", () => {
       });
     });
 
+    test("ArrayBuffer and SharedArrayBuffer binding", () => {
+      // Regression: neither is an ArrayBufferView, so both were treated as a
+      // named-parameter object and bound as SQL NULL instead of a blob.
+      const stmt = db.prepare(
+        "INSERT INTO test_params (value_blob) VALUES (?)",
+      );
+      const bytes = [0x00, 0x01, 0xfe, 0xff];
+
+      const arrayBuffer = new Uint8Array(bytes).buffer;
+      const sharedArrayBuffer = new SharedArrayBuffer(bytes.length);
+      new Uint8Array(sharedArrayBuffer).set(bytes);
+
+      for (const buffer of [arrayBuffer, sharedArrayBuffer]) {
+        const result = stmt.run(buffer);
+        const row = db
+          .prepare("SELECT value_blob FROM test_params WHERE id = ?")
+          .get(result.lastInsertRowid) as { value_blob: Uint8Array };
+
+        expect(row.value_blob).toBeInstanceOf(Uint8Array);
+        expect(Array.from(row.value_blob)).toEqual(bytes);
+      }
+    });
+
+    test("ArrayBuffer and SharedArrayBuffer bind as named parameters", () => {
+      const stmt = db.prepare(
+        "INSERT INTO test_params (value_blob) VALUES ($blob)",
+      );
+      const bytes = [0xaa, 0xbb];
+
+      const sharedArrayBuffer = new SharedArrayBuffer(bytes.length);
+      new Uint8Array(sharedArrayBuffer).set(bytes);
+
+      for (const buffer of [new Uint8Array(bytes).buffer, sharedArrayBuffer]) {
+        const result = stmt.run({ blob: buffer });
+        const row = db
+          .prepare("SELECT value_blob FROM test_params WHERE id = ?")
+          .get(result.lastInsertRowid) as { value_blob: Uint8Array };
+
+        expect(Array.from(row.value_blob)).toEqual(bytes);
+      }
+    });
+
+    test("empty ArrayBuffer binds as an empty blob, not NULL", () => {
+      const stmt = db.prepare(
+        "INSERT INTO test_params (value_blob) VALUES (?)",
+      );
+      const result = stmt.run(new ArrayBuffer(0));
+      const row = db
+        .prepare("SELECT value_blob FROM test_params WHERE id = ?")
+        .get(result.lastInsertRowid) as { value_blob: Uint8Array };
+
+      expect(row.value_blob).toBeInstanceOf(Uint8Array);
+      expect(row.value_blob).toHaveLength(0);
+    });
+
     test("TypedArray binding - all types", () => {
       const stmt = db.prepare(
         "INSERT INTO test_params (value_blob) VALUES (?)",
