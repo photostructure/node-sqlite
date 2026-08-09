@@ -379,13 +379,14 @@ public:
   Napi::Value Get(const Napi::CallbackInfo &info);
   Napi::Value All(const Napi::CallbackInfo &info);
   Napi::Value Iterate(const Napi::CallbackInfo &info);
-  Napi::Value FinalizeStatement(const Napi::CallbackInfo &info);
+  // node:sqlite's StatementSync.prototype.close(): throws if the statement was
+  // already finalized. Symbol.dispose maps to Dispose(), which is idempotent.
+  Napi::Value Close(const Napi::CallbackInfo &info);
   Napi::Value Dispose(const Napi::CallbackInfo &info);
 
   // Properties
   Napi::Value SourceSQLGetter(const Napi::CallbackInfo &info);
   Napi::Value ExpandedSQLGetter(const Napi::CallbackInfo &info);
-  Napi::Value FinalizedGetter(const Napi::CallbackInfo &info);
 
   // Configuration methods
   Napi::Value SetReadBigInts(const Napi::CallbackInfo &info);
@@ -397,6 +398,9 @@ public:
   Napi::Value Columns(const Napi::CallbackInfo &info);
 
 private:
+  // Finalizes the underlying sqlite3_stmt and stops the database tracking it.
+  // Idempotent; shared by close() and Symbol.dispose().
+  void CloseStatement();
   void BindParameters(const Napi::CallbackInfo &info, size_t start_index = 0);
   void BindSingleParameter(int param_index, Napi::Value param);
   Napi::Value CreateResult();

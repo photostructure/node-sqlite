@@ -2299,6 +2299,7 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("setAllowUnknownNamedParameters",
                       &StatementSync::SetAllowUnknownNamedParameters),
        InstanceMethod("columns", &StatementSync::Columns),
+       InstanceMethod("close", &StatementSync::Close),
        InstanceAccessor("sourceSQL", &StatementSync::SourceSQLGetter, nullptr),
        InstanceAccessor("expandedSQL", &StatementSync::ExpandedSQLGetter,
                         nullptr)});
@@ -2308,6 +2309,22 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
   if (addon_data) {
     addon_data->statementSyncConstructor =
         Napi::Reference<Napi::Function>::New(func);
+  }
+
+  // Add Symbol.dispose to the prototype so `using stmt = db.prepare(...)`
+  // deterministically finalizes the statement.
+  Napi::Value symbolDispose =
+      env.Global().Get("Symbol").As<Napi::Object>().Get("dispose");
+  if (!symbolDispose.IsUndefined()) {
+    func.Get("prototype")
+        .As<Napi::Object>()
+        .Set(symbolDispose,
+             Napi::Function::New(
+                 env, [](const Napi::CallbackInfo &info) -> Napi::Value {
+                   StatementSync *stmt =
+                       StatementSync::Unwrap(info.This().As<Napi::Object>());
+                   return stmt->Dispose(info);
+                 }));
   }
 
   exports.Set("StatementSync", func);
@@ -2709,28 +2726,70 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
   return StatementSyncIterator::Create(info.Env(), this);
 }
 
-Napi::Value StatementSync::FinalizeStatement(const Napi::CallbackInfo &info) {
-  if (statement_ && !finalized_) {
-    // It's safe to finalize even if database is closed
-    // SQLite handles this gracefully
+void StatementSync::CloseStatement() {
+  if (finalized_) {
+    return;
+  }
+  // Stop the database from tracking us first, so a later close()/deserialize()
+  // does not walk a statement we have already finalized.
+  if (database_) {
+    database_->UntrackStatement(this);
+    // Drop the back-pointer for the same reason FinalizeFromDatabase() does.
+    // Once we are untracked, FinalizeStatements() will never visit us again,
+    // so nothing else would ever clear it -- and ~StatementSync must not call
+    // UntrackStatement() on a database that has already been finalized. N-API
+    // gives no ordering guarantee between the two wrappers.
+    database_ = nullptr;
+  }
+  if (statement_) {
+    // Safe to finalize even if the database is already closed; SQLite handles
+    // that gracefully.
     sqlite3_finalize(statement_);
     statement_ = nullptr;
-    finalized_ = true;
   }
-  return info.Env().Undefined();
+  finalized_ = true;
+}
+
+Napi::Value StatementSync::Close(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
+
+  if (finalized_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
+    return env.Undefined();
+  }
+
+  // Finalizing a statement whose sqlite3_step() is still on the stack is
+  // undefined behavior. That is reachable by calling close() on the executing
+  // statement from inside a user-defined function callback.
+  if (stepping_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    return env.Undefined();
+  }
+
+  // sqlite3_finalize() modifies the connection, which SQLite forbids from
+  // inside an authorizer callback, so this joins the same guard every other
+  // SQLite-backed statement method uses.
+  if (database_ &&
+      database_->ThrowIfInAuthorizerCallback(env, "close statement")) {
+    return env.Undefined();
+  }
+
+  CloseStatement();
+  return env.Undefined();
 }
 
 Napi::Value StatementSync::Dispose(const Napi::CallbackInfo &info) {
-  // Try to finalize, but ignore errors during disposal (matches Node.js v25
-  // behavior)
-  try {
-    if (statement_ && !finalized_) {
-      sqlite3_finalize(statement_);
-      statement_ = nullptr;
-      finalized_ = true;
-    }
-  } catch (...) {
-    // Ignore errors during disposal
+  // Unlike close(), disposal is idempotent and never throws, so the conditions
+  // close() rejects become no-ops here: mid-step and inside an authorizer
+  // callback, finalizing is unsafe for the reasons given above. The statement
+  // stays live and is finalized later by GC or database close.
+  if (!stepping_ &&
+      !(database_ && database_->IsInAuthorizerCallback())) {
+    CloseStatement();
   }
   return info.Env().Undefined();
 }
@@ -2764,10 +2823,6 @@ Napi::Value StatementSync::ExpandedSQLGetter(const Napi::CallbackInfo &info) {
     }
   }
   return info.Env().Undefined();
-}
-
-Napi::Value StatementSync::FinalizedGetter(const Napi::CallbackInfo &info) {
-  return Napi::Boolean::New(info.Env(), finalized_);
 }
 
 Napi::Value StatementSync::SetReadBigInts(const Napi::CallbackInfo &info) {

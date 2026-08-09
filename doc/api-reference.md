@@ -818,6 +818,40 @@ stmt.setAllowUnknownNamedParameters(true);
 stmt.run({ name: "Alice" }); // Extra params in object are ignored
 ```
 
+#### close()
+
+```typescript
+close(): void
+```
+
+Finalizes the prepared statement and releases its resources. Statements are otherwise finalized when garbage collected or when the database is closed; `close()` makes that deterministic.
+
+Throws `ERR_INVALID_STATE` if the statement is already finalized, or if it is currently executing (which is reachable by calling `close()` on the running statement from inside a user-defined function).
+
+```javascript
+const stmt = db.prepare("SELECT * FROM users");
+const rows = stmt.all();
+stmt.close();
+
+stmt.get(); // throws ERR_INVALID_STATE: statement has been finalized
+```
+
+#### [Symbol.dispose](<>)
+
+```typescript
+[Symbol.dispose](): void
+```
+
+Implements the disposable interface for automatic resource management. Unlike `close()`, this is idempotent and never throws.
+
+```javascript
+// Automatic cleanup with using statement
+{
+  using stmt = db.prepare("SELECT * FROM users");
+  const rows = stmt.all();
+} // stmt finalized automatically when leaving scope
+```
+
 ### Properties
 
 #### sourceSQL

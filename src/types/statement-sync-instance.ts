@@ -96,4 +96,26 @@ export interface StatementSyncInstance {
    * @returns Array of column metadata objects with name, column, database, table, and type.
    */
   columns(): StatementColumnMetadata[];
+  /**
+   * Finalize the prepared statement and release its resources.
+   *
+   * Statements are otherwise finalized when garbage collected or when the
+   * database is closed; `close()` makes that deterministic.
+   *
+   * @throws {Error} `ERR_INVALID_STATE` if the statement is already finalized.
+   */
+  close(): void;
+  /**
+   * Finalize the prepared statement, for use with `using` declarations.
+   *
+   * Unlike {@link close}, this is idempotent and never throws.
+   *
+   * @example
+   * ```ts
+   * using stmt = db.prepare("SELECT * FROM users");
+   * const rows = stmt.all();
+   * // stmt is finalized when the block exits
+   * ```
+   */
+  [Symbol.dispose](): void;
 }

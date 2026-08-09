@@ -633,6 +633,48 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
       db.close();
     });
 
+    it("rejects statement.close() on the invoking connection", () => {
+      // sqlite3_finalize() modifies the connection, which SQLite forbids from
+      // inside an authorizer callback, so close() must reject there like every
+      // other SQLite-backed statement method. Symbol.dispose cannot throw, so
+      // it no-ops instead and leaves the statement usable.
+      const db = new DatabaseSync(":memory:");
+      const closeTarget = db.prepare("SELECT 42 AS value");
+      const disposeTarget = db.prepare("SELECT 43 AS value");
+      let closeError: unknown;
+      let checked = false;
+
+      db.setAuthorizer(() => {
+        if (!checked) {
+          checked = true;
+          try {
+            closeTarget.close();
+          } catch (error) {
+            closeError = error;
+          }
+          disposeTarget[Symbol.dispose]();
+        }
+        return constants.SQLITE_OK;
+      });
+
+      db.prepare("SELECT 1");
+
+      expect(closeError).toEqual(
+        expect.objectContaining({
+          code: "ERR_INVALID_STATE",
+          message: expect.stringContaining("authorizer callback"),
+        }),
+      );
+
+      db.setAuthorizer(null);
+
+      // Neither statement was finalized, so both still work.
+      expect(closeTarget.get()).toEqual({ value: 42 });
+      expect(disposeTarget.get()).toEqual({ value: 43 });
+
+      db.close();
+    });
+
     it("allows operations on a different connection", () => {
       const outer = new DatabaseSync(":memory:");
       const inner = new DatabaseSync(":memory:");
