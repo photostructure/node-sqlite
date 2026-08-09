@@ -152,17 +152,17 @@ This project follows consistent naming patterns for npm scripts to improve disco
 
 ### Key Scripts
 
-| Script                 | Description                                                  |
-| ---------------------- | ------------------------------------------------------------ |
+| Script                 | Description                                                          |
+| ---------------------- | -------------------------------------------------------------------- |
 | `preflight`            | Everything that should pass before a release (also `make preflight`) |
-| `test`                 | Quick dev feedback (builds dist, runs Jest without coverage) |
-| `test:all`             | Comprehensive tests (builds everything, runs CJS + ESM)      |
-| `test:api`             | API compatibility tests against node:sqlite                  |
-| `test:node`            | Node.js behavioral compatibility tests                       |
-| `lint`                 | Runs TypeScript and eslint (always works)                    |
-| `lint:full`            | Adds optional native linting and API checks                  |
-| `build:native:linux`   | Linux-specific portable GLIBC build                          |
-| `build:native:rebuild` | Direct node-gyp rebuild                                      |
+| `test`                 | Quick dev feedback (builds dist, runs Jest without coverage)         |
+| `test:all`             | Comprehensive tests (builds everything, runs CJS + ESM)              |
+| `test:api`             | API compatibility tests against node:sqlite                          |
+| `test:node`            | Node.js behavioral compatibility tests                               |
+| `lint`                 | Runs TypeScript and eslint (always works)                            |
+| `lint:full`            | Adds optional native linting and API checks                          |
+| `build:native:linux`   | Linux-specific portable GLIBC build                                  |
+| `build:native:rebuild` | Direct node-gyp rebuild                                              |
 
 ### Naming Guidelines
 
