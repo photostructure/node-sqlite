@@ -19,6 +19,21 @@
     },
     "./package.json": "./package.json"
   },
+  "//files": "Everything binding.gyp compiles must ship: node-gyp-build falls back to a source build on platforms without a prebuild.",
+  "files": [
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "binding.gyp",
+    "dist/",
+    "prebuilds/",
+    "src/*.cpp",
+    "src/*.h",
+    "src/shims/*.h",
+    "src/upstream/sqlite3.c",
+    "src/upstream/sqlite3.h",
+    "src/upstream/sqlite3ext.h"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/photostructure/node-sqlite.git"
