@@ -77,7 +77,7 @@
         "-fvisibility=hidden",
         "-fPIC",
         # Stack canary + libc/buffer misuse checks. FORTIFY is a no-op without
-        # -O1+ (the Release build supplies -O2); -U first because many distros
+        # -O1+ (the Release build supplies -O3); -U first because many distros
         # predefine _FORTIFY_SOURCE and would otherwise warn on redefinition.
         "-fstack-protector-strong",
         "-U_FORTIFY_SOURCE",
