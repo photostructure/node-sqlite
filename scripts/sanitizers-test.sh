@@ -72,8 +72,13 @@ export CFLAGS="$SANITIZE_FLAGS"
 export CXXFLAGS="$SANITIZE_FLAGS"
 export LDFLAGS="-fsanitize=address,undefined"
 
-# Comprehensive ASAN options combining both implementations
-export ASAN_OPTIONS="detect_leaks=1:halt_on_error=0:print_stats=1:check_initialization_order=1:strict_init_order=1:print_module_map=1:suppressions=$(pwd)/.asan-suppressions.txt"
+# Comprehensive ASAN options combining both implementations. Keep leak
+# detection off while node-gyp runs: LD_PRELOAD also instruments its Node and
+# Python helper processes, and LeakSanitizer cannot inspect those helpers in
+# ptrace-based CI/sandbox environments. Enable it immediately before the test
+# process below.
+ASAN_OPTIONS_BASE="halt_on_error=0:symbolize=0:print_stats=1:check_initialization_order=1:strict_init_order=1:print_module_map=1:suppressions=$(pwd)/.asan-suppressions.txt"
+export ASAN_OPTIONS="detect_leaks=0:$ASAN_OPTIONS_BASE"
 
 # print_suppressions=1 lists which LSan rules actually fired, so dead ones can be
 # pruned. It is VERBOSE-only on purpose: LSan writes that summary to *stderr*,
@@ -86,6 +91,10 @@ if [[ "$VERBOSE" == "1" ]]; then
 fi
 # The suppressions file must never wildcard napi_/Napi:: frames -- see its header.
 export LSAN_OPTIONS="suppressions=$(pwd)/.lsan-suppressions.txt:print_suppressions=$LSAN_PRINT_SUPPRESSIONS"
+# The focused pool probe is small enough to run without suppressions. In
+# particular, broad Node/V8/libuv patterns can otherwise match beneath an
+# addon's allocation frame and hide exactly the leaks this probe targets.
+LSAN_POOL_OPTIONS="print_suppressions=$LSAN_PRINT_SUPPRESSIONS"
 export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
 
 # Increase Node.js heap size for ASan overhead
@@ -194,14 +203,37 @@ npm run build:native:rebuild
 echo "Building distribution bundle..."
 npm run build:dist
 
-# Run tests and capture output. LD_PRELOAD is applied here and nowhere else:
-# the addon is instrumented, but node is not, so the ASan runtime has to be
-# loaded first -- and only for processes that actually load the addon.
+# Run tests and capture output. Sanitizer instrumentation is deliberately run
+# in-band: a default Jest worker fan-out can saturate the machine with dozens of
+# instrumented Node processes and make unrelated fixed-timeout multi-process
+# tests fail from scheduler contention. Leak-at-exit is disabled for Jest: its
+# retained VM graph is noisy and too broad for first-party attribution.
+# LD_PRELOAD is scoped to the Node processes that load the instrumented addon;
+# exporting it would also instrument npm, node-gyp, and shell helpers.
 echo -e "${YELLOW}Running tests with AddressSanitizer...${NC}"
+ASAN_TEST_OPTIONS="detect_leaks=0:$ASAN_OPTIONS_BASE"
+LSAN_TEST_OPTIONS="detect_leaks=1:$ASAN_OPTIONS_BASE"
 set +e  # Don't exit on test failure
-LD_PRELOAD="$SAN_PRELOAD" npm test -- --no-coverage --forceExit 2>&1 | tee "$OUTPUT_FILE"
-TEST_EXIT_CODE=${PIPESTATUS[0]}
+LD_PRELOAD="$SAN_PRELOAD" ASAN_OPTIONS="$ASAN_TEST_OPTIONS" \
+    node --expose-gc node_modules/jest/bin/jest.js --runInBand --no-coverage --forceExit 2>&1 | tee "$OUTPUT_FILE"
+ASAN_TEST_EXIT_CODE=${PIPESTATUS[0]}
+
+# A minimal process gives LSan an attributable native ownership graph without
+# Jest/TypeScript/compiler state. This loop covers open, transport, batches,
+# errors, and close often enough to expose per-connection leaks.
+echo -e "${YELLOW}Running focused LeakSanitizer lifecycle loop...${NC}"
+LD_PRELOAD="$SAN_PRELOAD" ASAN_OPTIONS="$LSAN_TEST_OPTIONS" \
+    LSAN_OPTIONS="$LSAN_POOL_OPTIONS" node scripts/lsan-pool-test.cjs 2>&1 | tee -a "$OUTPUT_FILE"
+LSAN_TEST_EXIT_CODE=${PIPESTATUS[0]}
 set -e
+
+TEST_EXIT_CODE=0
+if [[ "$ASAN_TEST_EXIT_CODE" -ne 0 ]] || [[ "$LSAN_TEST_EXIT_CODE" -ne 0 ]]; then
+    TEST_EXIT_CODE=1
+fi
+
+# Do not instrument the shell utilities used to classify the captured report.
+export ASAN_OPTIONS="$ASAN_TEST_OPTIONS"
 
 echo -e "${BLUE}\nFull ASAN output saved to: $OUTPUT_FILE${NC}"
 
@@ -217,7 +249,7 @@ SYSTEM_LEAKS=0
 TOTAL_LEAKS=0
 
 # Check for ASAN errors in our code (not V8/Node internals)
-if grep -E "(ERROR: AddressSanitizer|ERROR: LeakSanitizer)" "$OUTPUT_FILE" | grep -E "(phstr_sqlite\.node|/src/|aggregate_function|user_function|sqlite_impl)" > /dev/null; then
+if grep -E "(ERROR: AddressSanitizer|ERROR: LeakSanitizer)" "$OUTPUT_FILE" | grep -E "(phstr_sqlite\.node|/src/|aggregate_function|user_function|sqlite_impl|async_pool_impl)" > /dev/null; then
     OUR_ERRORS=1
 fi
 
@@ -226,7 +258,7 @@ fi
 # amalgamation is excluded from UB instrumentation (.ubsan-ignorelist.txt), so
 # anything here is ours. We build with -fno-sanitize-recover=undefined, so this
 # should already have aborted the run -- this catches it either way.
-if grep -E "runtime error:" "$OUTPUT_FILE" | grep -E "(sqlite_impl|user_function|aggregate_function|binding)\.(cpp|h)" > /dev/null; then
+if grep -E "runtime error:" "$OUTPUT_FILE" | grep -E "(sqlite_impl|async_pool_impl|user_function|aggregate_function|binding)\.(cpp|h)" > /dev/null; then
     OUR_UB=1
 fi
 
@@ -243,7 +275,7 @@ if grep -q "SUMMARY: AddressSanitizer.*leaked" "$OUTPUT_FILE"; then
         context=$(sed -n "${start},${end}p" "$OUTPUT_FILE")
         
         # Check if this leak is from our code
-        if echo "$context" | grep -E "(phstr_sqlite\.node|/src/|aggregate_function|user_function|sqlite_impl|photostructure)" > /dev/null && ! echo "$context" | grep -E "/node_modules/" > /dev/null; then
+        if echo "$context" | grep -E "(phstr_sqlite\.node|/src/|aggregate_function|user_function|sqlite_impl|async_pool_impl|photostructure)" > /dev/null && ! echo "$context" | grep -E "/node_modules/" > /dev/null; then
             OUR_LEAKS=$((OUR_LEAKS + 1))
         # Check if this leak is from Python
         elif echo "$context" | grep -iE "(python|libpython|\.py:|Py_|PyObject)" > /dev/null; then
@@ -275,7 +307,7 @@ fi
 
 if [[ "$OUR_UB" -eq 1 ]]; then
     echo -e "${RED}\n✗ UndefinedBehaviorSanitizer found undefined behavior in sqlite code:${NC}"
-    grep -E "runtime error:" "$OUTPUT_FILE" | grep -E "(sqlite_impl|user_function|aggregate_function|binding)\.(cpp|h)" | head -20
+    grep -E "runtime error:" "$OUTPUT_FILE" | grep -E "(sqlite_impl|async_pool_impl|user_function|aggregate_function|binding)\.(cpp|h)" | head -20
     EXIT_CODE=1
 fi
 
@@ -286,7 +318,7 @@ if [[ "$OUR_LEAKS" -gt 0 ]]; then
         start=$((line_num - 2))
         end=$((line_num + 15))
         context=$(sed -n "${start},${end}p" "$OUTPUT_FILE")
-        if echo "$context" | grep -E "(phstr_sqlite\.node|/src/|aggregate_function|user_function|sqlite_impl|photostructure)" > /dev/null; then
+        if echo "$context" | grep -E "(phstr_sqlite\.node|/src/|aggregate_function|user_function|sqlite_impl|async_pool_impl|photostructure)" > /dev/null; then
             echo "$context"
             echo "---"
         fi

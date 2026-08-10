@@ -82,6 +82,124 @@ Transaction` and `DELETE Bulk` each write roughly 1,000 rows per operation.
 
 </details>
 
+## Experimental async pool
+
+The async pool has a separate focused benchmark because its promise and
+concurrency semantics do not fit the synchronous driver harness above. The
+benchmark runs every case against a fresh, identically seeded database and
+reports repeated raw samples plus a median and distribution-free relative
+margin of error. It compares:
+
+- a warm synchronous connection with a reused statement;
+- a fresh synchronous connection per operation;
+- a `worker_threads` control that owns a `DatabaseSync` and receives one message
+  per operation;
+- `strict` and `none` pool authorizers with one, two, three, and four connections;
+- individual concurrent calls and explicit batches of 10 and 100 operations;
+- `all()` results containing 1, 100, and 1,000 rows;
+- 100/0, 90/10, and 0/100 read/write mixes;
+- repeated identical SQL text versus 32 equivalent rotating texts, exposing
+  prepare and cache effects;
+- pool reads while representative PBKDF2 or filesystem reads compete for
+  libuv workers; and
+- operations and materialized rows per millisecond, with event-loop heartbeat
+  delay as a diagnostic.
+
+Run it from the repository root:
+
+```bash
+npm run bench:async
+```
+
+For a reproducible comparison, run inside the benchmark directory and record
+both Node's default libuv pool and a larger process-startup pool. Keep the
+commands and all CLI values the same between runs:
+
+```bash
+cd benchmark
+npm install
+
+unset UV_THREADPOOL_SIZE
+npm run bench:async -- \
+  --iterations=10000 \
+  --write-iterations=2000 \
+  --connections=1,2,3,4 \
+  --samples=6 \
+  --warmup=1 \
+  --output=results/async-pool-default.json
+
+UV_THREADPOOL_SIZE=8 npm run bench:async -- \
+  --iterations=10000 \
+  --write-iterations=2000 \
+  --connections=1,2,3,4 \
+  --samples=6 \
+  --warmup=1 \
+  --output=results/async-pool-uv8.json
+```
+
+The checked-in reference run used Node 26.6.0 on Linux x64 with an AMD Ryzen 9
+5950X (32 logical CPUs). Each figure below is the median of six measured
+samples after one warmup; the raw reports retain every sample. These reports
+predate the current addition of a three-connection scaling case and remain
+valid historical results for their recorded one/two/four-connection matrix.
+
+| Reference scenario                                       |             Median ops/ms |
+| -------------------------------------------------------- | ------------------------: |
+| Warm sync, reused statement                              |                     244.7 |
+| Fresh sync connection per operation                      |                       4.1 |
+| `worker_threads` sync control                            |                     123.9 |
+| Pool `none`, one connection                              |                      37.9 |
+| Pool `strict`, one connection                            |                      39.9 |
+| Pool `none`, four connections                            |                     132.7 |
+| Pool `none`, batches of 100                              |                     131.6 |
+| Pool `all()` with 1,000 rows                             | 0.9 ops/ms; 883.0 rows/ms |
+| Four-connection pool plus PBKDF2, default libuv pool     |                      11.3 |
+| Four-connection pool plus PBKDF2, `UV_THREADPOOL_SIZE=8` |                     123.6 |
+
+These numbers meet the goal of multiple simple operations per millisecond and
+also make the global-libuv tradeoff concrete: increasing the startup-time pool
+size mostly mattered when four SQLite jobs competed with four crypto jobs. It
+did not materially improve the uncontended four-connection point-read case.
+
+The canonical raw result locations are
+`benchmark/results/async-pool-default.json` and
+`benchmark/results/async-pool-uv8.json`. The versioned JSON schema records the
+package and SQLite versions, git revision and dirty state, Node/V8/N-API/libuv
+versions, CPU and platform, effective `UV_THREADPOOL_SIZE`, all CLI options, each
+scenario's settings, every raw sample, and the computed summaries. Do not
+publish only the console table: keep both raw files and the exact commands with
+any comparison. Absolute throughput is machine-specific, so compare repeated
+samples on the same otherwise-idle machine rather than treating one run as a
+performance guarantee.
+
+Runtime and scope are fully controllable. List scenario IDs and groups with
+`npm run bench:async -- --list`, or see all options with
+`npm run bench:async -- --help`. For example, this quick sanity run exercises one
+control and the result-size group without writing a report:
+
+```bash
+npm run bench:async -- \
+  --scenarios=worker-thread-sync-control,result-size \
+  --iterations=10 \
+  --result-sizes=1,10 \
+  --seed-rows=10 \
+  --samples=2 \
+  --warmup=0
+```
+
+Idle SQLite connections consume no libuv worker, but each active pool operation
+competes for Node's process-global worker threads with filesystem, DNS, crypto,
+and zlib work. More busy connections than `UV_THREADPOOL_SIZE` do not create
+more simultaneous SQLite execution. Set the environment variable before Node
+starts, only after measuring the complete application; the library never
+changes it.
+
+The heartbeat is diagnostic benchmark evidence, not a functional timing test.
+Deterministic tests separately prove that long SQLite work leaves the event loop
+responsive. See the [experimental async pool guide](../doc/experimental-async-pool.md)
+for operational limits, authorizer policy, setup replay, result memory, and
+shutdown behavior.
+
 ## Run the benchmarks
 
 ```bash

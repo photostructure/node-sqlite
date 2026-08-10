@@ -10,8 +10,13 @@ const distDir = join(__dirname, "..", "dist");
 // Copy .d.ts to .d.cts for CommonJS type safety
 async function createCjsTypes() {
   try {
-    await copyFile(join(distDir, "index.d.ts"), join(distDir, "index.d.cts"));
-    console.log("Created index.d.cts for CommonJS type safety");
+    for (const entry of ["index", "experimental"]) {
+      await copyFile(
+        join(distDir, `${entry}.d.ts`),
+        join(distDir, `${entry}.d.cts`),
+      );
+    }
+    console.log("Created CommonJS declaration files");
   } catch (error) {
     console.error("Error creating .d.cts file:", error);
     process.exit(1);

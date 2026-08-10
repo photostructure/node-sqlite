@@ -3,6 +3,7 @@
 #include <set>
 
 #include "aggregate_function.h"
+#include "async_pool_impl.h"
 #include "sqlite_impl.h"
 
 namespace photostructure::sqlite {
@@ -11,6 +12,10 @@ namespace photostructure::sqlite {
 void CleanupAddonData([[maybe_unused]] napi_env env, void *finalize_data,
                       [[maybe_unused]] void *finalize_hint) {
   auto *addon_data = static_cast<AddonData *>(finalize_data);
+
+  // The asynchronous cleanup hook runs before instance-data finalizers. At
+  // this point all pool work and SQLite handles have drained.
+  DestroyAsyncPoolEnvironment(addon_data);
 
   // Clean up any remaining database connections
   {
@@ -70,9 +75,19 @@ void UnregisterDatabaseInstance(Napi::Env env, DatabaseSync *database) {
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   // Set up per-worker instance data
   AddonData *addon_data = new AddonData();
+
+  // Register asynchronous pool cleanup before publishing AddonData as instance
+  // data. If either step fails, remove the hook before deleting its argument.
+  if (!InitializeAsyncPool(env, exports, addon_data)) {
+    DestroyAsyncPoolEnvironment(addon_data);
+    delete addon_data;
+    return exports;
+  }
+
   napi_status status =
       napi_set_instance_data(env, addon_data, CleanupAddonData, nullptr);
   if (status != napi_ok) {
+    DestroyAsyncPoolEnvironment(addon_data);
     delete addon_data;
     Napi::Error::New(env, "Failed to set instance data")
         .ThrowAsJavaScriptException();

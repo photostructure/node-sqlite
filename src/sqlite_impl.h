@@ -35,6 +35,7 @@ class StatementSync;
 class StatementSyncIterator;
 class Session;
 class BackupJob;
+class AsyncPoolEnvironment;
 
 // Per-worker instance data
 struct AddonData {
@@ -47,6 +48,12 @@ struct AddonData {
   Napi::FunctionReference statementSyncConstructor;
   Napi::FunctionReference statementSyncIteratorConstructor;
   Napi::FunctionReference sessionConstructor;
+  Napi::FunctionReference asyncPoolConnectionConstructor;
+  Napi::Reference<Napi::Value> asyncPoolConnectionToken;
+
+  // Per-Node-environment ownership and teardown coordination for the hidden
+  // async pool connections. The concrete type lives in async_pool_impl.cpp.
+  AsyncPoolEnvironment *async_pool_environment = nullptr;
 
   // Cached Object.create function for creating objects with null prototype
   Napi::FunctionReference objectCreateFn;

@@ -1,0 +1,2347 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T08:36:15.628Z",
+  "package": {
+    "name": "@photostructure/sqlite",
+    "version": "2.2.0",
+    "sqlite": "3.53.4"
+  },
+  "git": {
+    "commit": "9ac2e43995ae039488590ea5999576884c5990fb",
+    "dirty": true
+  },
+  "environment": {
+    "node": "v26.6.0",
+    "v8": "14.6.202.34-node.26",
+    "napi": "10",
+    "uv": "1.52.1",
+    "platform": "linux",
+    "arch": "x64",
+    "cpuModel": "AMD Ryzen 9 5950X 16-Core Processor",
+    "cpuCount": 32,
+    "uvThreadpoolSize": "8"
+  },
+  "config": {
+    "iterations": 10000,
+    "writeIterations": 2000,
+    "samples": 6,
+    "warmup": 1,
+    "seedRows": 2000,
+    "connections": [1, 2, 4],
+    "batchSizes": [10, 100],
+    "resultSizes": [1, 100, 1000],
+    "scenarioFilters": null,
+    "contentionWorkers": 4,
+    "cryptoIterations": 10000,
+    "heartbeatIntervalMs": 10
+  },
+  "results": [
+    {
+      "id": "warm-sync-reused-statement",
+      "group": "controls",
+      "description": "Warm DatabaseSync connection with one reused statement",
+      "settings": {
+        "implementation": "DatabaseSync",
+        "connection": "warm"
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 40.523637999999664,
+          "operationsPerMs": 246.76955213152587,
+          "rowsPerMs": 246.76955213152587,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 41.10378700000001,
+          "operationsPerMs": 243.2865857347888,
+          "rowsPerMs": 243.2865857347888,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 41.00859499999933,
+          "operationsPerMs": 243.85131946120472,
+          "rowsPerMs": 243.85131946120472,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 41.78328600000168,
+          "operationsPerMs": 239.3301474661327,
+          "rowsPerMs": 239.3301474661327,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 40.40332599999965,
+          "operationsPerMs": 247.50437624863076,
+          "rowsPerMs": 247.50437624863076,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 40.53912799999671,
+          "operationsPerMs": 246.67526149059773,
+          "rowsPerMs": 246.67526149059773,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 245.26329047590121,
+        "medianRowsPerMs": 245.26329047590121,
+        "medianElapsedMs": 40.77386149999802,
+        "relativeMarginOfErrorPct": 2.4190913357869532,
+        "minOperationsPerMs": 239.3301474661327,
+        "maxOperationsPerMs": 247.50437624863076,
+        "medianEventLoopHeartbeats": 0,
+        "maxEventLoopDelayMs": null
+      }
+    },
+    {
+      "id": "fresh-sync-connection",
+      "group": "controls",
+      "description": "Open, query, and close DatabaseSync for every operation",
+      "settings": {
+        "implementation": "DatabaseSync",
+        "connection": "fresh"
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 2392.8839150000003,
+          "operationsPerMs": 4.179057720817183,
+          "rowsPerMs": 4.179057720817183,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 2412.1381600000004,
+          "operationsPerMs": 4.145699514989638,
+          "rowsPerMs": 4.145699514989638,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 2390.737924000001,
+          "operationsPerMs": 4.182808956018383,
+          "rowsPerMs": 4.182808956018383,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 2419.582601000002,
+          "operationsPerMs": 4.132944250742689,
+          "rowsPerMs": 4.132944250742689,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 2395.9573619999974,
+          "operationsPerMs": 4.173696977500725,
+          "rowsPerMs": 4.173696977500725,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 2397.0637170000045,
+          "operationsPerMs": 4.171770624652103,
+          "rowsPerMs": 4.171770624652103,
+          "eventLoop": {
+            "heartbeats": 0,
+            "intervalMs": 10,
+            "maxDelayMs": null,
+            "meanDelayMs": null
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 4.172733801076414,
+        "medianRowsPerMs": 4.172733801076414,
+        "medianElapsedMs": 2396.510539500001,
+        "relativeMarginOfErrorPct": 0.9535607165609474,
+        "minOperationsPerMs": 4.132944250742689,
+        "maxOperationsPerMs": 4.182808956018383,
+        "medianEventLoopHeartbeats": 0,
+        "maxEventLoopDelayMs": null
+      }
+    },
+    {
+      "id": "worker-thread-sync-control",
+      "group": "controls",
+      "description": "One DatabaseSync worker thread with per-operation messages",
+      "settings": {
+        "implementation": "worker_threads + DatabaseSync",
+        "workers": 1
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 82.30933499999992,
+          "operationsPerMs": 121.49290235427135,
+          "rowsPerMs": 121.49290235427135,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 0.012167999999292078,
+            "meanDelayMs": 0.002391624999859232
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 79.14401799999905,
+          "operationsPerMs": 126.3519372999248,
+          "rowsPerMs": 126.3519372999248,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.007928000000902102,
+            "meanDelayMs": 0.0012307142858065032
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 79.31438100000014,
+          "operationsPerMs": 126.08054017341424,
+          "rowsPerMs": 126.08054017341424,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.01030700000046636,
+            "meanDelayMs": 0.0018547142857901885
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 80.24122400000124,
+          "operationsPerMs": 124.6242205876601,
+          "rowsPerMs": 124.6242205876601,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 0.0029070000018691644,
+            "meanDelayMs": 0.0005488750002768938
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 80.153581999999,
+          "operationsPerMs": 124.76048793427752,
+          "rowsPerMs": 124.76048793427752,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 0.009136999997281237,
+            "meanDelayMs": 0.0019816249996438273
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 83.9640600000057,
+          "operationsPerMs": 119.09857622415258,
+          "rowsPerMs": 119.09857622415258,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 0.0246880000049714,
+            "meanDelayMs": 0.003799250000156462
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 124.69235426096881,
+        "medianRowsPerMs": 124.69235426096881,
+        "medianElapsedMs": 80.19740300000012,
+        "relativeMarginOfErrorPct": 4.486063375713482,
+        "minOperationsPerMs": 119.09857622415258,
+        "maxOperationsPerMs": 126.3519372999248,
+        "medianEventLoopHeartbeats": 8,
+        "maxEventLoopDelayMs": 0.0246880000049714
+      }
+    },
+    {
+      "id": "pool-none-1c-point-read",
+      "group": "pool-scale",
+      "description": "1-connection none pool, concurrent point reads",
+      "settings": {
+        "authorizer": "none",
+        "connections": 1,
+        "operation": "get"
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 268.61187299999983,
+          "operationsPerMs": 37.22843628732676,
+          "rowsPerMs": 37.22843628732676,
+          "eventLoop": {
+            "heartbeats": 25,
+            "intervalMs": 10,
+            "maxDelayMs": 13.43997599999966,
+            "meanDelayMs": 0.5991200799999206
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 273.2921219999989,
+          "operationsPerMs": 36.59088277707485,
+          "rowsPerMs": 36.59088277707485,
+          "eventLoop": {
+            "heartbeats": 26,
+            "intervalMs": 10,
+            "maxDelayMs": 11.237342999998873,
+            "meanDelayMs": 0.4537951153847294
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 248.22235299999738,
+          "operationsPerMs": 40.28646042203985,
+          "rowsPerMs": 40.28646042203985,
+          "eventLoop": {
+            "heartbeats": 24,
+            "intervalMs": 10,
+            "maxDelayMs": 0.039358999998512445,
+            "meanDelayMs": 0.007607416666663387
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 288.6838000000025,
+          "operationsPerMs": 34.639976333967866,
+          "rowsPerMs": 34.639976333967866,
+          "eventLoop": {
+            "heartbeats": 27,
+            "intervalMs": 10,
+            "maxDelayMs": 14.364740000000893,
+            "meanDelayMs": 0.5373910740742792
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 293.88294600000154,
+          "operationsPerMs": 34.0271531101364,
+          "rowsPerMs": 34.0271531101364,
+          "eventLoop": {
+            "heartbeats": 27,
+            "intervalMs": 10,
+            "maxDelayMs": 19.490355000001728,
+            "meanDelayMs": 0.7261374444444502
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 263.454227000002,
+          "operationsPerMs": 37.95725775164702,
+          "rowsPerMs": 37.95725775164702,
+          "eventLoop": {
+            "heartbeats": 25,
+            "intervalMs": 10,
+            "maxDelayMs": 12.796675999998115,
+            "meanDelayMs": 0.5153334399999585
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 36.909659532200806,
+        "medianRowsPerMs": 36.909659532200806,
+        "medianElapsedMs": 270.9519974999994,
+        "relativeMarginOfErrorPct": 9.14882698089656,
+        "minOperationsPerMs": 34.0271531101364,
+        "maxOperationsPerMs": 40.28646042203985,
+        "medianEventLoopHeartbeats": 25.5,
+        "maxEventLoopDelayMs": 19.490355000001728
+      }
+    },
+    {
+      "id": "pool-none-2c-point-read",
+      "group": "pool-scale",
+      "description": "2-connection none pool, concurrent point reads",
+      "settings": {
+        "authorizer": "none",
+        "connections": 2,
+        "operation": "get"
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 123.20647800000006,
+          "operationsPerMs": 81.16456344121772,
+          "rowsPerMs": 81.16456344121772,
+          "eventLoop": {
+            "heartbeats": 12,
+            "intervalMs": 10,
+            "maxDelayMs": 0.03214800000023388,
+            "meanDelayMs": 0.006960333333457432
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 124.81551199999922,
+          "operationsPerMs": 80.1182468409861,
+          "rowsPerMs": 80.1182468409861,
+          "eventLoop": {
+            "heartbeats": 12,
+            "intervalMs": 10,
+            "maxDelayMs": 0.04271800000060466,
+            "meanDelayMs": 0.0071638333333794435
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 125.09168599999975,
+          "operationsPerMs": 79.94136396882539,
+          "rowsPerMs": 79.94136396882539,
+          "eventLoop": {
+            "heartbeats": 12,
+            "intervalMs": 10,
+            "maxDelayMs": 0.04370799999742303,
+            "meanDelayMs": 0.0067272499994336
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 144.96003899999778,
+          "operationsPerMs": 68.98452890179033,
+          "rowsPerMs": 68.98452890179033,
+          "eventLoop": {
+            "heartbeats": 14,
+            "intervalMs": 10,
+            "maxDelayMs": 3.029392000000371,
+            "meanDelayMs": 0.21948707142863505
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 132.81474999999773,
+          "operationsPerMs": 75.29284209773516,
+          "rowsPerMs": 75.29284209773516,
+          "eventLoop": {
+            "heartbeats": 12,
+            "intervalMs": 10,
+            "maxDelayMs": 5.20113499999934,
+            "meanDelayMs": 0.43898641666661814
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 127.22765699999582,
+          "operationsPerMs": 78.59926242295202,
+          "rowsPerMs": 78.59926242295202,
+          "eventLoop": {
+            "heartbeats": 12,
+            "intervalMs": 10,
+            "maxDelayMs": 0.022248000001127366,
+            "meanDelayMs": 0.006182249999862203
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 79.2703131958887,
+        "medianRowsPerMs": 79.2703131958887,
+        "medianElapsedMs": 126.15967149999778,
+        "relativeMarginOfErrorPct": 12.975581752377687,
+        "minOperationsPerMs": 68.98452890179033,
+        "maxOperationsPerMs": 81.16456344121772,
+        "medianEventLoopHeartbeats": 12,
+        "maxEventLoopDelayMs": 5.20113499999934
+      }
+    },
+    {
+      "id": "pool-none-4c-point-read",
+      "group": "pool-scale",
+      "description": "4-connection none pool, concurrent point reads",
+      "settings": {
+        "authorizer": "none",
+        "connections": 4,
+        "operation": "get"
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 75.67996700000003,
+          "operationsPerMs": 132.13536417107576,
+          "rowsPerMs": 132.13536417107576,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.015658000000257744,
+            "meanDelayMs": 0.0032494285712475956
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 76.89895500000057,
+          "operationsPerMs": 130.04077883763082,
+          "rowsPerMs": 130.04077883763082,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.005338000000847387,
+            "meanDelayMs": 0.0017690000001623827
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 76.604589999999,
+          "operationsPerMs": 130.54048066832718,
+          "rowsPerMs": 130.54048066832718,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.01936800000112271,
+            "meanDelayMs": 0.007610571428293562
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 78.97699499999726,
+          "operationsPerMs": 126.61915029813868,
+          "rowsPerMs": 126.61915029813868,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.03017800000088755,
+            "meanDelayMs": 0.0046547142857369704
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 72.64321100000234,
+          "operationsPerMs": 137.65911311381427,
+          "rowsPerMs": 137.65911311381427,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.018897999998443993,
+            "meanDelayMs": 0.0053251428570157645
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 78.53970900000058,
+          "operationsPerMs": 127.3241284863931,
+          "rowsPerMs": 127.3241284863931,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.01282799999898998,
+            "meanDelayMs": 0.0024389999998675194
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 130.290629752979,
+        "medianRowsPerMs": 130.290629752979,
+        "medianElapsedMs": 76.75177249999979,
+        "relativeMarginOfErrorPct": 5.655420788743873,
+        "minOperationsPerMs": 126.61915029813868,
+        "maxOperationsPerMs": 137.65911311381427,
+        "medianEventLoopHeartbeats": 7,
+        "maxEventLoopDelayMs": 0.03017800000088755
+      }
+    },
+    {
+      "id": "pool-strict-1c-point-read",
+      "group": "pool-scale",
+      "description": "1-connection strict pool, concurrent point reads",
+      "settings": {
+        "authorizer": "strict",
+        "connections": 1,
+        "operation": "get"
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 246.20119300000079,
+          "operationsPerMs": 40.61718742362052,
+          "rowsPerMs": 40.61718742362052,
+          "eventLoop": {
+            "heartbeats": 24,
+            "intervalMs": 10,
+            "maxDelayMs": 0.02517699999953038,
+            "meanDelayMs": 0.005774416666554316
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 256.4729439999992,
+          "operationsPerMs": 38.990467548109216,
+          "rowsPerMs": 38.990467548109216,
+          "eventLoop": {
+            "heartbeats": 25,
+            "intervalMs": 10,
+            "maxDelayMs": 0.11105900000075053,
+            "meanDelayMs": 0.008482200000071317
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 257.21237499999916,
+          "operationsPerMs": 38.87837822733075,
+          "rowsPerMs": 38.87837822733075,
+          "eventLoop": {
+            "heartbeats": 25,
+            "intervalMs": 10,
+            "maxDelayMs": 0.02545800000007148,
+            "meanDelayMs": 0.00586167999994359
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 243.86782900000253,
+          "operationsPerMs": 41.00581877078955,
+          "rowsPerMs": 41.00581877078955,
+          "eventLoop": {
+            "heartbeats": 24,
+            "intervalMs": 10,
+            "maxDelayMs": 0.03882799999701092,
+            "meanDelayMs": 0.005780208333059515
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 250.49681599999894,
+          "operationsPerMs": 39.92066709542544,
+          "rowsPerMs": 39.92066709542544,
+          "eventLoop": {
+            "heartbeats": 25,
+            "intervalMs": 10,
+            "maxDelayMs": 0.46170400000119116,
+            "meanDelayMs": 0.025724279999849387
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 276.8644349999995,
+          "operationsPerMs": 36.11875970996426,
+          "rowsPerMs": 36.11875970996426,
+          "eventLoop": {
+            "heartbeats": 27,
+            "intervalMs": 10,
+            "maxDelayMs": 0.03999800000019604,
+            "meanDelayMs": 0.007384444445051486
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 39.45556732176733,
+        "medianRowsPerMs": 39.45556732176733,
+        "medianElapsedMs": 253.48487999999907,
+        "relativeMarginOfErrorPct": 8.457127443107842,
+        "minOperationsPerMs": 36.11875970996426,
+        "maxOperationsPerMs": 41.00581877078955,
+        "medianEventLoopHeartbeats": 25,
+        "maxEventLoopDelayMs": 0.46170400000119116
+      }
+    },
+    {
+      "id": "pool-strict-2c-point-read",
+      "group": "pool-scale",
+      "description": "2-connection strict pool, concurrent point reads",
+      "settings": {
+        "authorizer": "strict",
+        "connections": 2,
+        "operation": "get"
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 120.4394169999996,
+          "operationsPerMs": 83.02929596545651,
+          "rowsPerMs": 83.02929596545651,
+          "eventLoop": {
+            "heartbeats": 12,
+            "intervalMs": 10,
+            "maxDelayMs": 0.021108000000822358,
+            "meanDelayMs": 0.004006416666773778
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 125.91169799999989,
+          "operationsPerMs": 79.42073817478031,
+          "rowsPerMs": 79.42073817478031,
+          "eventLoop": {
+            "heartbeats": 12,
+            "intervalMs": 10,
+            "maxDelayMs": 0.054969000000710366,
+            "meanDelayMs": 0.009727583333339377
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 138.05763699999807,
+          "operationsPerMs": 72.43351557581809,
+          "rowsPerMs": 72.43351557581809,
+          "eventLoop": {
+            "heartbeats": 13,
+            "intervalMs": 10,
+            "maxDelayMs": 0.19483000000036554,
+            "meanDelayMs": 0.02196715384567282
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 129.61066199999914,
+          "operationsPerMs": 77.15414646983338,
+          "rowsPerMs": 77.15414646983338,
+          "eventLoop": {
+            "heartbeats": 12,
+            "intervalMs": 10,
+            "maxDelayMs": 0.01027800000156276,
+            "meanDelayMs": 0.0025585000000016103
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 131.26408599999922,
+          "operationsPerMs": 76.18230016091422,
+          "rowsPerMs": 76.18230016091422,
+          "eventLoop": {
+            "heartbeats": 12,
+            "intervalMs": 10,
+            "maxDelayMs": 2.836418999999296,
+            "meanDelayMs": 0.23823333333348273
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 130.6233779999966,
+          "operationsPerMs": 76.55597453619873,
+          "rowsPerMs": 76.55597453619873,
+          "eventLoop": {
+            "heartbeats": 13,
+            "intervalMs": 10,
+            "maxDelayMs": 0.01926699999603443,
+            "meanDelayMs": 0.003023692307649001
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 76.85506050301606,
+        "medianRowsPerMs": 76.85506050301606,
+        "medianElapsedMs": 130.11701999999786,
+        "relativeMarginOfErrorPct": 8.03360952685497,
+        "minOperationsPerMs": 72.43351557581809,
+        "maxOperationsPerMs": 83.02929596545651,
+        "medianEventLoopHeartbeats": 12,
+        "maxEventLoopDelayMs": 2.836418999999296
+      }
+    },
+    {
+      "id": "pool-strict-4c-point-read",
+      "group": "pool-scale",
+      "description": "4-connection strict pool, concurrent point reads",
+      "settings": {
+        "authorizer": "strict",
+        "connections": 4,
+        "operation": "get"
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 72.59081100000003,
+          "operationsPerMs": 137.75848295729875,
+          "rowsPerMs": 137.75848295729875,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.015988999999535736,
+            "meanDelayMs": 0.003430571428647714
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 72.31601699999919,
+          "operationsPerMs": 138.28195211581013,
+          "rowsPerMs": 138.28195211581013,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.49219499999890104,
+            "meanDelayMs": 0.07219842857141755
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 78.29048600000169,
+          "operationsPerMs": 127.72944084163412,
+          "rowsPerMs": 127.72944084163412,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.016557999999349704,
+            "meanDelayMs": 0.003812714285491633
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 77.38292200000069,
+          "operationsPerMs": 129.22747993413728,
+          "rowsPerMs": 129.22747993413728,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 1.1049039999998058,
+            "meanDelayMs": 0.16113428571406985
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 78.07975099999749,
+          "operationsPerMs": 128.07417892508803,
+          "rowsPerMs": 128.07417892508803,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.013297999998030718,
+            "meanDelayMs": 0.0018997142854329599
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 74.90443500000401,
+          "operationsPerMs": 133.50344342093314,
+          "rowsPerMs": 133.50344342093314,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.00842700000066543,
+            "meanDelayMs": 0.0024331428576260805
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 131.36546167753522,
+        "medianRowsPerMs": 131.36546167753522,
+        "medianElapsedMs": 76.14367850000235,
+        "relativeMarginOfErrorPct": 5.26507527165163,
+        "minOperationsPerMs": 127.72944084163412,
+        "maxOperationsPerMs": 138.28195211581013,
+        "medianEventLoopHeartbeats": 7,
+        "maxEventLoopDelayMs": 1.1049039999998058
+      }
+    },
+    {
+      "id": "pool-none-1c-batch-10",
+      "group": "batch",
+      "description": "One-connection none pool, explicit get batches of 10",
+      "settings": {
+        "authorizer": "none",
+        "connections": 1,
+        "batchSize": 10
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 95.22865499999898,
+          "operationsPerMs": 105.01040889425674,
+          "rowsPerMs": 105.01040889425674,
+          "eventLoop": {
+            "heartbeats": 9,
+            "intervalMs": 10,
+            "maxDelayMs": 0.09082799999850977,
+            "meanDelayMs": 0.019395999999687774
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 93.90302599999995,
+          "operationsPerMs": 106.49284081643977,
+          "rowsPerMs": 106.49284081643977,
+          "eventLoop": {
+            "heartbeats": 9,
+            "intervalMs": 10,
+            "maxDelayMs": 0.05886900000041351,
+            "meanDelayMs": 0.009821333333295316
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 102.5911840000008,
+          "operationsPerMs": 97.47426250583015,
+          "rowsPerMs": 97.47426250583015,
+          "eventLoop": {
+            "heartbeats": 10,
+            "intervalMs": 10,
+            "maxDelayMs": 0.05898900000102003,
+            "meanDelayMs": 0.017757800000254065
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 96.30332099999941,
+          "operationsPerMs": 103.83857894163442,
+          "rowsPerMs": 103.83857894163442,
+          "eventLoop": {
+            "heartbeats": 9,
+            "intervalMs": 10,
+            "maxDelayMs": 0.09103799999866169,
+            "meanDelayMs": 0.01330822222169243
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 96.58119499999884,
+          "operationsPerMs": 103.53982470397182,
+          "rowsPerMs": 103.53982470397182,
+          "eventLoop": {
+            "heartbeats": 9,
+            "intervalMs": 10,
+            "maxDelayMs": 0.057558000000426546,
+            "meanDelayMs": 0.01770444444466395
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 93.47407899999962,
+          "operationsPerMs": 106.98153014163468,
+          "rowsPerMs": 106.98153014163468,
+          "eventLoop": {
+            "heartbeats": 9,
+            "intervalMs": 10,
+            "maxDelayMs": 0.07470899999316316,
+            "meanDelayMs": 0.014404999999290643
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 104.42449391794558,
+        "medianRowsPerMs": 104.42449391794558,
+        "medianElapsedMs": 95.7659879999992,
+        "relativeMarginOfErrorPct": 6.655748236210524,
+        "minOperationsPerMs": 97.47426250583015,
+        "maxOperationsPerMs": 106.98153014163468,
+        "medianEventLoopHeartbeats": 9,
+        "maxEventLoopDelayMs": 0.09103799999866169
+      }
+    },
+    {
+      "id": "pool-none-1c-batch-100",
+      "group": "batch",
+      "description": "One-connection none pool, explicit get batches of 100",
+      "settings": {
+        "authorizer": "none",
+        "connections": 1,
+        "batchSize": 100
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 76.65837099999953,
+          "operationsPerMs": 130.44889774660174,
+          "rowsPerMs": 130.44889774660174,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.9618519999985438,
+            "meanDelayMs": 0.2781682857143356
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 78.15527400000065,
+          "operationsPerMs": 127.95041829166792,
+          "rowsPerMs": 127.95041829166792,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.4424140000010084,
+            "meanDelayMs": 0.12302499999974056
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 78.49306799999977,
+          "operationsPerMs": 127.39978516319466,
+          "rowsPerMs": 127.39978516319466,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 2.3578419999976177,
+            "meanDelayMs": 0.4108664285709632
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 74.92383600000176,
+          "operationsPerMs": 133.46887364389306,
+          "rowsPerMs": 133.46887364389306,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.526255000000674,
+            "meanDelayMs": 0.19650042857184807
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 79.80393800000093,
+          "operationsPerMs": 125.30709950679231,
+          "rowsPerMs": 125.30709950679231,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.5736560000004829,
+            "meanDelayMs": 0.17319128571450296
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 75.54800499999692,
+          "operationsPerMs": 132.36616903385348,
+          "rowsPerMs": 132.36616903385348,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.589535999999498,
+            "meanDelayMs": 0.08421942857135686
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 129.19965801913483,
+        "medianRowsPerMs": 129.19965801913483,
+        "medianElapsedMs": 77.40682250000009,
+        "relativeMarginOfErrorPct": 3.30435520512442,
+        "minOperationsPerMs": 125.30709950679231,
+        "maxOperationsPerMs": 133.46887364389306,
+        "medianEventLoopHeartbeats": 7,
+        "maxEventLoopDelayMs": 2.3578419999976177
+      }
+    },
+    {
+      "id": "pool-none-all-1-rows",
+      "group": "result-size",
+      "description": "One-connection none pool, all() materializing 1 rows",
+      "settings": {
+        "authorizer": "none",
+        "connections": 1,
+        "resultSize": 1,
+        "operations": 10000
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 309.52976599999965,
+          "operationsPerMs": 32.3070705904259,
+          "rowsPerMs": 32.3070705904259,
+          "eventLoop": {
+            "heartbeats": 31,
+            "intervalMs": 10,
+            "maxDelayMs": 0.04085699999995995,
+            "meanDelayMs": 0.008061064516075403
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 313.71792800000003,
+          "operationsPerMs": 31.875768349458177,
+          "rowsPerMs": 31.875768349458177,
+          "eventLoop": {
+            "heartbeats": 31,
+            "intervalMs": 10,
+            "maxDelayMs": 0.1540899999999965,
+            "meanDelayMs": 0.010439612903346348
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 307.238443000002,
+          "operationsPerMs": 32.548010276174764,
+          "rowsPerMs": 32.548010276174764,
+          "eventLoop": {
+            "heartbeats": 30,
+            "intervalMs": 10,
+            "maxDelayMs": 0.05692800000178977,
+            "meanDelayMs": 0.008520833333265424
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 330.27420300000085,
+          "operationsPerMs": 30.277871868787688,
+          "rowsPerMs": 30.277871868787688,
+          "eventLoop": {
+            "heartbeats": 32,
+            "intervalMs": 10,
+            "maxDelayMs": 1.6525130000009085,
+            "meanDelayMs": 0.057640406250357046
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 326.90340300000025,
+          "operationsPerMs": 30.590076176111243,
+          "rowsPerMs": 30.590076176111243,
+          "eventLoop": {
+            "heartbeats": 32,
+            "intervalMs": 10,
+            "maxDelayMs": 1.1888049999979557,
+            "meanDelayMs": 0.044920062500068525
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 324.8154330000034,
+          "operationsPerMs": 30.786714497029134,
+          "rowsPerMs": 30.786714497029134,
+          "eventLoop": {
+            "heartbeats": 32,
+            "intervalMs": 10,
+            "maxDelayMs": 0.04038800000125775,
+            "meanDelayMs": 0.008230031250604952
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 31.331241423243654,
+        "medianRowsPerMs": 31.331241423243654,
+        "medianElapsedMs": 319.2666805000017,
+        "relativeMarginOfErrorPct": 3.8835641285136835,
+        "minOperationsPerMs": 30.277871868787688,
+        "maxOperationsPerMs": 32.548010276174764,
+        "medianEventLoopHeartbeats": 31.5,
+        "maxEventLoopDelayMs": 1.6525130000009085
+      }
+    },
+    {
+      "id": "pool-none-all-100-rows",
+      "group": "result-size",
+      "description": "One-connection none pool, all() materializing 100 rows",
+      "settings": {
+        "authorizer": "none",
+        "connections": 1,
+        "resultSize": 100,
+        "operations": 1000
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 1000,
+          "materializedRows": 100000,
+          "elapsedMs": 146.63149300000077,
+          "operationsPerMs": 6.819817349878547,
+          "rowsPerMs": 681.9817349878547,
+          "eventLoop": {
+            "heartbeats": 14,
+            "intervalMs": 10,
+            "maxDelayMs": 0.13010899999972025,
+            "meanDelayMs": 0.02474071428579399
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 1000,
+          "materializedRows": 100000,
+          "elapsedMs": 147.6362079999999,
+          "operationsPerMs": 6.773406155216346,
+          "rowsPerMs": 677.3406155216346,
+          "eventLoop": {
+            "heartbeats": 14,
+            "intervalMs": 10,
+            "maxDelayMs": 0.08833899999990535,
+            "meanDelayMs": 0.020105642857093438
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 1000,
+          "materializedRows": 100000,
+          "elapsedMs": 154.2821060000024,
+          "operationsPerMs": 6.481633067673996,
+          "rowsPerMs": 648.1633067673995,
+          "eventLoop": {
+            "heartbeats": 15,
+            "intervalMs": 10,
+            "maxDelayMs": 0.36799299999984214,
+            "meanDelayMs": 0.044727533333207246
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 1000,
+          "materializedRows": 100000,
+          "elapsedMs": 159.2928409999986,
+          "operationsPerMs": 6.27774602877482,
+          "rowsPerMs": 627.774602877482,
+          "eventLoop": {
+            "heartbeats": 15,
+            "intervalMs": 10,
+            "maxDelayMs": 1.7376930000027642,
+            "meanDelayMs": 0.17467879999991662
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 1000,
+          "materializedRows": 100000,
+          "elapsedMs": 161.2642999999989,
+          "operationsPerMs": 6.201000469415777,
+          "rowsPerMs": 620.1000469415777,
+          "eventLoop": {
+            "heartbeats": 15,
+            "intervalMs": 10,
+            "maxDelayMs": 1.8808250000001863,
+            "meanDelayMs": 0.21456486666672087
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 1000,
+          "materializedRows": 100000,
+          "elapsedMs": 149.02381899999455,
+          "operationsPerMs": 6.710336687855493,
+          "rowsPerMs": 671.0336687855494,
+          "eventLoop": {
+            "heartbeats": 14,
+            "intervalMs": 10,
+            "maxDelayMs": 0.09377900000254158,
+            "meanDelayMs": 0.022538500000726863
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 6.595984877764744,
+        "medianRowsPerMs": 659.5984877764745,
+        "medianElapsedMs": 151.65296249999847,
+        "relativeMarginOfErrorPct": 5.9882552138721685,
+        "minOperationsPerMs": 6.201000469415777,
+        "maxOperationsPerMs": 6.819817349878547,
+        "medianEventLoopHeartbeats": 14.5,
+        "maxEventLoopDelayMs": 1.8808250000001863
+      }
+    },
+    {
+      "id": "pool-none-all-1000-rows",
+      "group": "result-size",
+      "description": "One-connection none pool, all() materializing 1000 rows",
+      "settings": {
+        "authorizer": "none",
+        "connections": 1,
+        "resultSize": 1000,
+        "operations": 100
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 100,
+          "materializedRows": 100000,
+          "elapsedMs": 114.15500400000019,
+          "operationsPerMs": 0.8760018965090645,
+          "rowsPerMs": 876.0018965090644,
+          "eventLoop": {
+            "heartbeats": 11,
+            "intervalMs": 10,
+            "maxDelayMs": 0.8944210000008752,
+            "meanDelayMs": 0.24873700000005722
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 100,
+          "materializedRows": 100000,
+          "elapsedMs": 113.54968499999995,
+          "operationsPerMs": 0.8806717517534288,
+          "rowsPerMs": 880.6717517534288,
+          "eventLoop": {
+            "heartbeats": 11,
+            "intervalMs": 10,
+            "maxDelayMs": 1.049872999999934,
+            "meanDelayMs": 0.39781981818205997
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 100,
+          "materializedRows": 100000,
+          "elapsedMs": 119.09620799999902,
+          "operationsPerMs": 0.8396572962255928,
+          "rowsPerMs": 839.6572962255929,
+          "eventLoop": {
+            "heartbeats": 11,
+            "intervalMs": 10,
+            "maxDelayMs": 1.1746950000015204,
+            "meanDelayMs": 0.2885483636362716
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 100,
+          "materializedRows": 100000,
+          "elapsedMs": 120.90042399999948,
+          "operationsPerMs": 0.8271269586283704,
+          "rowsPerMs": 827.1269586283704,
+          "eventLoop": {
+            "heartbeats": 12,
+            "intervalMs": 10,
+            "maxDelayMs": 0.8101499999975204,
+            "meanDelayMs": 0.14329191666638508
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 100,
+          "materializedRows": 100000,
+          "elapsedMs": 118.04575100000147,
+          "operationsPerMs": 0.8471291779066131,
+          "rowsPerMs": 847.1291779066131,
+          "eventLoop": {
+            "heartbeats": 11,
+            "intervalMs": 10,
+            "maxDelayMs": 1.2379649999966205,
+            "meanDelayMs": 0.33074399999995047
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 100,
+          "materializedRows": 100000,
+          "elapsedMs": 122.52011800000037,
+          "operationsPerMs": 0.8161924884858477,
+          "rowsPerMs": 816.1924884858477,
+          "eventLoop": {
+            "heartbeats": 12,
+            "intervalMs": 10,
+            "maxDelayMs": 0.4915250000049127,
+            "meanDelayMs": 0.11955083333365717
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 0.843393237066103,
+        "medianRowsPerMs": 843.393237066103,
+        "medianElapsedMs": 118.57097950000025,
+        "relativeMarginOfErrorPct": 4.420063269300795,
+        "minOperationsPerMs": 0.8161924884858477,
+        "maxOperationsPerMs": 0.8806717517534288,
+        "medianEventLoopHeartbeats": 11,
+        "maxEventLoopDelayMs": 1.2379649999966205
+      }
+    },
+    {
+      "id": "pool-strict-2c-mix-100r-0w",
+      "group": "read-write",
+      "description": "Two-connection strict pool, 100% reads and 0% writes",
+      "settings": {
+        "authorizer": "strict",
+        "connections": 2,
+        "readsPct": 100,
+        "writesPct": 0
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 2000,
+          "materializedRows": 2000,
+          "elapsedMs": 30.02809300000081,
+          "operationsPerMs": 66.60429618357537,
+          "rowsPerMs": 66.60429618357537,
+          "eventLoop": {
+            "heartbeats": 3,
+            "intervalMs": 10,
+            "maxDelayMs": 0.003897000000506523,
+            "meanDelayMs": 0.001299000000168841
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 2000,
+          "materializedRows": 2000,
+          "elapsedMs": 27.184771000000183,
+          "operationsPerMs": 73.57060318808595,
+          "rowsPerMs": 73.57060318808595,
+          "eventLoop": {
+            "heartbeats": 2,
+            "intervalMs": 10,
+            "maxDelayMs": 0,
+            "meanDelayMs": 0
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 2000,
+          "materializedRows": 2000,
+          "elapsedMs": 26.689363999998022,
+          "operationsPerMs": 74.93621803802249,
+          "rowsPerMs": 74.93621803802249,
+          "eventLoop": {
+            "heartbeats": 2,
+            "intervalMs": 10,
+            "maxDelayMs": 0,
+            "meanDelayMs": 0
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 2000,
+          "materializedRows": 2000,
+          "elapsedMs": 28.09540399999969,
+          "operationsPerMs": 71.1860203184842,
+          "rowsPerMs": 71.1860203184842,
+          "eventLoop": {
+            "heartbeats": 2,
+            "intervalMs": 10,
+            "maxDelayMs": 0.006508000002213521,
+            "meanDelayMs": 0.0032540000011067605
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 2000,
+          "materializedRows": 2000,
+          "elapsedMs": 25.790930999999546,
+          "operationsPerMs": 77.54663839006182,
+          "rowsPerMs": 77.54663839006182,
+          "eventLoop": {
+            "heartbeats": 2,
+            "intervalMs": 10,
+            "maxDelayMs": 0.0015670000029786024,
+            "meanDelayMs": 0.0007835000014893012
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 2000,
+          "materializedRows": 2000,
+          "elapsedMs": 27.178481000002648,
+          "operationsPerMs": 73.58762986054317,
+          "rowsPerMs": 73.58762986054317,
+          "eventLoop": {
+            "heartbeats": 2,
+            "intervalMs": 10,
+            "maxDelayMs": 0,
+            "meanDelayMs": 0
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 73.57911652431457,
+        "medianRowsPerMs": 73.57911652431457,
+        "medianElapsedMs": 27.181626000001415,
+        "relativeMarginOfErrorPct": 9.479347769056641,
+        "minOperationsPerMs": 66.60429618357537,
+        "maxOperationsPerMs": 77.54663839006182,
+        "medianEventLoopHeartbeats": 2,
+        "maxEventLoopDelayMs": 0.006508000002213521
+      }
+    },
+    {
+      "id": "pool-strict-2c-mix-90r-10w",
+      "group": "read-write",
+      "description": "Two-connection strict pool, 90% reads and 10% writes",
+      "settings": {
+        "authorizer": "strict",
+        "connections": 2,
+        "readsPct": 90,
+        "writesPct": 10
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 2000,
+          "materializedRows": 1800,
+          "elapsedMs": 28.39328800000112,
+          "operationsPerMs": 70.4391826688026,
+          "rowsPerMs": 63.39526440192235,
+          "eventLoop": {
+            "heartbeats": 2,
+            "intervalMs": 10,
+            "maxDelayMs": 0.019718000001375913,
+            "meanDelayMs": 0.009859000000687956
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 2000,
+          "materializedRows": 1800,
+          "elapsedMs": 30.415138000000297,
+          "operationsPerMs": 65.7567294286148,
+          "rowsPerMs": 59.181056485753324,
+          "eventLoop": {
+            "heartbeats": 3,
+            "intervalMs": 10,
+            "maxDelayMs": 0,
+            "meanDelayMs": 0
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 2000,
+          "materializedRows": 1800,
+          "elapsedMs": 29.789529999998194,
+          "operationsPerMs": 67.13768226622311,
+          "rowsPerMs": 60.423914039600795,
+          "eventLoop": {
+            "heartbeats": 3,
+            "intervalMs": 10,
+            "maxDelayMs": 0,
+            "meanDelayMs": 0
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 2000,
+          "materializedRows": 1800,
+          "elapsedMs": 27.886101000000053,
+          "operationsPerMs": 71.72031687040064,
+          "rowsPerMs": 64.54828518336058,
+          "eventLoop": {
+            "heartbeats": 2,
+            "intervalMs": 10,
+            "maxDelayMs": 0,
+            "meanDelayMs": 0
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 2000,
+          "materializedRows": 1800,
+          "elapsedMs": 29.817800000000716,
+          "operationsPerMs": 67.07402960647505,
+          "rowsPerMs": 60.36662664582755,
+          "eventLoop": {
+            "heartbeats": 3,
+            "intervalMs": 10,
+            "maxDelayMs": 0.008566999997128733,
+            "meanDelayMs": 0.0028556666657095775
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 2000,
+          "materializedRows": 1800,
+          "elapsedMs": 29.350273000003654,
+          "operationsPerMs": 68.14246668164725,
+          "rowsPerMs": 61.32822001348253,
+          "eventLoop": {
+            "heartbeats": 2,
+            "intervalMs": 10,
+            "maxDelayMs": 0,
+            "meanDelayMs": 0
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 67.64007447393519,
+        "medianRowsPerMs": 60.87606702654166,
+        "medianElapsedMs": 29.569901500000924,
+        "relativeMarginOfErrorPct": 6.032285487854918,
+        "minOperationsPerMs": 65.7567294286148,
+        "maxOperationsPerMs": 71.72031687040064,
+        "medianEventLoopHeartbeats": 2.5,
+        "maxEventLoopDelayMs": 0.019718000001375913
+      }
+    },
+    {
+      "id": "pool-strict-2c-mix-0r-100w",
+      "group": "read-write",
+      "description": "Two-connection strict pool, 0% reads and 100% writes",
+      "settings": {
+        "authorizer": "strict",
+        "connections": 2,
+        "readsPct": 0,
+        "writesPct": 100
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 2000,
+          "materializedRows": 0,
+          "elapsedMs": 76.28576600000088,
+          "operationsPerMs": 26.21721069170331,
+          "rowsPerMs": 0,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.03155799999876763,
+            "meanDelayMs": 0.008877714285647795
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 2000,
+          "materializedRows": 0,
+          "elapsedMs": 81.36634099999901,
+          "operationsPerMs": 24.58018850816979,
+          "rowsPerMs": 0,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 0.5707849999998871,
+            "meanDelayMs": 0.12582149999980174
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 2000,
+          "materializedRows": 0,
+          "elapsedMs": 75.55561500000113,
+          "operationsPerMs": 26.47056740918554,
+          "rowsPerMs": 0,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.015057000000524567,
+            "meanDelayMs": 0.00554757142890594
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 2000,
+          "materializedRows": 0,
+          "elapsedMs": 81.36883999999918,
+          "operationsPerMs": 24.579433601364112,
+          "rowsPerMs": 0,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 0.45933400000285474,
+            "meanDelayMs": 0.11518424999985655
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 2000,
+          "materializedRows": 0,
+          "elapsedMs": 89.7813750000023,
+          "operationsPerMs": 22.276335153030892,
+          "rowsPerMs": 0,
+          "eventLoop": {
+            "heartbeats": 9,
+            "intervalMs": 10,
+            "maxDelayMs": 0.8915009999982431,
+            "meanDelayMs": 0.1307531111108094
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 2000,
+          "materializedRows": 0,
+          "elapsedMs": 83.61922399999457,
+          "operationsPerMs": 23.91794499312897,
+          "rowsPerMs": 0,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 0.028297999997448642,
+            "meanDelayMs": 0.010757749999356747
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 24.57981105476695,
+        "medianRowsPerMs": 0,
+        "medianElapsedMs": 81.3675904999991,
+        "relativeMarginOfErrorPct": 9.371414192743872,
+        "minOperationsPerMs": 22.276335153030892,
+        "maxOperationsPerMs": 26.47056740918554,
+        "medianEventLoopHeartbeats": 8,
+        "maxEventLoopDelayMs": 0.8915009999982431
+      }
+    },
+    {
+      "id": "pool-none-repeated-identical-sql",
+      "group": "repeated-sql",
+      "description": "Repeated identical SQL text (prepare cost/cache baseline)",
+      "settings": {
+        "authorizer": "none",
+        "connections": 1,
+        "variants": 1
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 245.55165300000044,
+          "operationsPerMs": 40.724629127216595,
+          "rowsPerMs": 40.724629127216595,
+          "eventLoop": {
+            "heartbeats": 24,
+            "intervalMs": 10,
+            "maxDelayMs": 0.02208700000119279,
+            "meanDelayMs": 0.004486041666647604
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 248.60225700000046,
+          "operationsPerMs": 40.22489626874136,
+          "rowsPerMs": 40.22489626874136,
+          "eventLoop": {
+            "heartbeats": 24,
+            "intervalMs": 10,
+            "maxDelayMs": 0.21207999999933236,
+            "meanDelayMs": 0.013081249999989572
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 245.5300520000019,
+          "operationsPerMs": 40.72821195834685,
+          "rowsPerMs": 40.72821195834685,
+          "eventLoop": {
+            "heartbeats": 24,
+            "intervalMs": 10,
+            "maxDelayMs": 0.032327999997505685,
+            "meanDelayMs": 0.005311208333144653
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 245.50837200000024,
+          "operationsPerMs": 40.73180852667619,
+          "rowsPerMs": 40.73180852667619,
+          "eventLoop": {
+            "heartbeats": 24,
+            "intervalMs": 10,
+            "maxDelayMs": 1.4369490000026417,
+            "meanDelayMs": 0.06593095833341067
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 255.0193130000007,
+          "operationsPerMs": 39.21271641101148,
+          "rowsPerMs": 39.21271641101148,
+          "eventLoop": {
+            "heartbeats": 25,
+            "intervalMs": 10,
+            "maxDelayMs": 1.5061410000016622,
+            "meanDelayMs": 0.06539987999989534
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 254.73081799999636,
+          "operationsPerMs": 39.257126713266956,
+          "rowsPerMs": 39.257126713266956,
+          "eventLoop": {
+            "heartbeats": 25,
+            "intervalMs": 10,
+            "maxDelayMs": 0.017048000001523178,
+            "meanDelayMs": 0.004896439999865834
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 40.474762697978974,
+        "medianRowsPerMs": 40.474762697978974,
+        "medianElapsedMs": 247.07695500000045,
+        "relativeMarginOfErrorPct": 3.1181066986972463,
+        "minOperationsPerMs": 39.21271641101148,
+        "maxOperationsPerMs": 40.73180852667619,
+        "medianEventLoopHeartbeats": 24,
+        "maxEventLoopDelayMs": 1.5061410000016622
+      }
+    },
+    {
+      "id": "pool-none-rotating-sql-32",
+      "group": "repeated-sql",
+      "description": "Equivalent SQL rotated across 32 distinct texts",
+      "settings": {
+        "authorizer": "none",
+        "connections": 1,
+        "variants": 32
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 252.2777819999992,
+          "operationsPerMs": 39.63884540573625,
+          "rowsPerMs": 39.63884540573625,
+          "eventLoop": {
+            "heartbeats": 25,
+            "intervalMs": 10,
+            "maxDelayMs": 0.02224700000078883,
+            "meanDelayMs": 0.004973119999995106
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 259.71899200000007,
+          "operationsPerMs": 38.503152668943045,
+          "rowsPerMs": 38.503152668943045,
+          "eventLoop": {
+            "heartbeats": 26,
+            "intervalMs": 10,
+            "maxDelayMs": 0.021298000001479522,
+            "meanDelayMs": 0.0036085769231179324
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 255.46157000000312,
+          "operationsPerMs": 39.1448310601077,
+          "rowsPerMs": 39.1448310601077,
+          "eventLoop": {
+            "heartbeats": 25,
+            "intervalMs": 10,
+            "maxDelayMs": 0.06204799999977695,
+            "meanDelayMs": 0.007742479999869829
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 262.5326739999982,
+          "operationsPerMs": 38.09049688039999,
+          "rowsPerMs": 38.09049688039999,
+          "eventLoop": {
+            "heartbeats": 26,
+            "intervalMs": 10,
+            "maxDelayMs": 0.03990899999917019,
+            "meanDelayMs": 0.005910730769196211
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 244.52297800000088,
+          "operationsPerMs": 40.89595211784131,
+          "rowsPerMs": 40.89595211784131,
+          "eventLoop": {
+            "heartbeats": 24,
+            "intervalMs": 10,
+            "maxDelayMs": 0.29762200000186567,
+            "meanDelayMs": 0.01643204166657597
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 248.21430200000032,
+          "operationsPerMs": 40.28776714083134,
+          "rowsPerMs": 40.28776714083134,
+          "eventLoop": {
+            "heartbeats": 24,
+            "intervalMs": 10,
+            "maxDelayMs": 0.18712000000232365,
+            "meanDelayMs": 0.011996333333627263
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 39.39183823292197,
+        "medianRowsPerMs": 39.39183823292197,
+        "medianElapsedMs": 253.86967600000116,
+        "relativeMarginOfErrorPct": 3.8183389057032358,
+        "minOperationsPerMs": 38.09049688039999,
+        "maxOperationsPerMs": 40.89595211784131,
+        "medianEventLoopHeartbeats": 25,
+        "maxEventLoopDelayMs": 0.29762200000186567
+      }
+    },
+    {
+      "id": "pool-none-4c-point-read-with-crypto",
+      "group": "contention",
+      "description": "Four-connection pool competing with crypto libuv work",
+      "settings": {
+        "authorizer": "none",
+        "connections": 4,
+        "contention": "crypto",
+        "contentionWorkers": 4,
+        "cryptoIterations": 10000
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 80.38074600000073,
+          "operationsPerMs": 124.40790236009889,
+          "rowsPerMs": 124.40790236009889,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 0.020457999999052845,
+            "meanDelayMs": 0.004918124999903739
+          },
+          "competingWork": {
+            "kind": "crypto",
+            "workers": 4,
+            "completed": 214,
+            "elapsedMs": 81.46617100000003
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 77.95432000000073,
+          "operationsPerMs": 128.28025438487444,
+          "rowsPerMs": 128.28025438487444,
+          "eventLoop": {
+            "heartbeats": 7,
+            "intervalMs": 10,
+            "maxDelayMs": 0.009087000000363332,
+            "meanDelayMs": 0.004845285714379445
+          },
+          "competingWork": {
+            "kind": "crypto",
+            "workers": 4,
+            "completed": 204,
+            "elapsedMs": 79.1674579999999
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 86.85564099999829,
+          "operationsPerMs": 115.13356973555923,
+          "rowsPerMs": 115.13356973555923,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 1.54099099999803,
+            "meanDelayMs": 0.1942186249993938
+          },
+          "competingWork": {
+            "kind": "crypto",
+            "workers": 4,
+            "completed": 234,
+            "elapsedMs": 87.92921699999715
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 81.482552999998,
+          "operationsPerMs": 122.72565882907774,
+          "rowsPerMs": 122.72565882907774,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 0.009108000002015615,
+            "meanDelayMs": 0.0020893750001960143
+          },
+          "competingWork": {
+            "kind": "crypto",
+            "workers": 4,
+            "completed": 216,
+            "elapsedMs": 82.09523099999933
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 86.14773100000093,
+          "operationsPerMs": 116.07966784406536,
+          "rowsPerMs": 116.07966784406536,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 0.020838000000367174,
+            "meanDelayMs": 0.005400000000008731
+          },
+          "competingWork": {
+            "kind": "crypto",
+            "workers": 4,
+            "completed": 208,
+            "elapsedMs": 87.40676999999778
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 80.00537099999929,
+          "operationsPerMs": 124.99160837589378,
+          "rowsPerMs": 124.99160837589378,
+          "eventLoop": {
+            "heartbeats": 8,
+            "intervalMs": 10,
+            "maxDelayMs": 0.013038000004598871,
+            "meanDelayMs": 0.0034553750010672957
+          },
+          "competingWork": {
+            "kind": "crypto",
+            "workers": 4,
+            "completed": 204,
+            "elapsedMs": 81.11654700000508
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 123.56678059458832,
+        "medianRowsPerMs": 123.56678059458832,
+        "medianElapsedMs": 80.93164949999937,
+        "relativeMarginOfErrorPct": 6.824820407596204,
+        "minOperationsPerMs": 115.13356973555923,
+        "maxOperationsPerMs": 128.28025438487444,
+        "medianEventLoopHeartbeats": 8,
+        "maxEventLoopDelayMs": 1.54099099999803,
+        "competingWorkCompleted": 1280
+      }
+    },
+    {
+      "id": "pool-none-4c-point-read-with-fs",
+      "group": "contention",
+      "description": "Four-connection pool competing with fs libuv work",
+      "settings": {
+        "authorizer": "none",
+        "connections": 4,
+        "contention": "fs",
+        "contentionWorkers": 4,
+        "competingFileBytes": 1048576
+      },
+      "samples": [
+        {
+          "sample": 1,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 225.2562939999989,
+          "operationsPerMs": 44.39387607078384,
+          "rowsPerMs": 44.39387607078384,
+          "eventLoop": {
+            "heartbeats": 22,
+            "intervalMs": 10,
+            "maxDelayMs": 0.30617199999869626,
+            "meanDelayMs": 0.06841245454548202
+          },
+          "competingWork": {
+            "kind": "fs",
+            "workers": 4,
+            "completed": 1502,
+            "elapsedMs": 225.51514700000007
+          }
+        },
+        {
+          "sample": 2,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 212.03398799999923,
+          "operationsPerMs": 47.16225023320335,
+          "rowsPerMs": 47.16225023320335,
+          "eventLoop": {
+            "heartbeats": 21,
+            "intervalMs": 10,
+            "maxDelayMs": 0.18158100000073318,
+            "meanDelayMs": 0.03151242857148602
+          },
+          "competingWork": {
+            "kind": "fs",
+            "workers": 4,
+            "completed": 1396,
+            "elapsedMs": 213.29208700000163
+          }
+        },
+        {
+          "sample": 3,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 226.30506899999818,
+          "operationsPerMs": 44.18813968325244,
+          "rowsPerMs": 44.18813968325244,
+          "eventLoop": {
+            "heartbeats": 22,
+            "intervalMs": 10,
+            "maxDelayMs": 0.4200440000022354,
+            "meanDelayMs": 0.041591818182000265
+          },
+          "competingWork": {
+            "kind": "fs",
+            "workers": 4,
+            "completed": 1519,
+            "elapsedMs": 226.52463200000057
+          }
+        },
+        {
+          "sample": 4,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 225.38697500000126,
+          "operationsPerMs": 44.36813618000749,
+          "rowsPerMs": 44.36813618000749,
+          "eventLoop": {
+            "heartbeats": 22,
+            "intervalMs": 10,
+            "maxDelayMs": 0.6260179999990214,
+            "meanDelayMs": 0.06904772727268044
+          },
+          "competingWork": {
+            "kind": "fs",
+            "workers": 4,
+            "completed": 1484,
+            "elapsedMs": 225.61369899999772
+          }
+        },
+        {
+          "sample": 5,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 203.24519900000087,
+          "operationsPerMs": 49.20165420487968,
+          "rowsPerMs": 49.20165420487968,
+          "eventLoop": {
+            "heartbeats": 20,
+            "intervalMs": 10,
+            "maxDelayMs": 0.8064889999986917,
+            "meanDelayMs": 0.12243200000011711
+          },
+          "competingWork": {
+            "kind": "fs",
+            "workers": 4,
+            "completed": 1391,
+            "elapsedMs": 203.5048029999998
+          }
+        },
+        {
+          "sample": 6,
+          "logicalOperations": 10000,
+          "materializedRows": 10000,
+          "elapsedMs": 224.11574600000313,
+          "operationsPerMs": 44.61980105583416,
+          "rowsPerMs": 44.61980105583416,
+          "eventLoop": {
+            "heartbeats": 22,
+            "intervalMs": 10,
+            "maxDelayMs": 2.656046999996761,
+            "meanDelayMs": 0.2538599545451606
+          },
+          "competingWork": {
+            "kind": "fs",
+            "workers": 4,
+            "completed": 1396,
+            "elapsedMs": 224.30942000000505
+          }
+        }
+      ],
+      "summary": {
+        "medianOperationsPerMs": 44.506838563309,
+        "medianRowsPerMs": 44.506838563309,
+        "medianElapsedMs": 224.686020000001,
+        "relativeMarginOfErrorPct": 10.548526458226213,
+        "minOperationsPerMs": 44.18813968325244,
+        "maxOperationsPerMs": 49.20165420487968,
+        "medianEventLoopHeartbeats": 22,
+        "maxEventLoopDelayMs": 2.656046999996761,
+        "competingWorkCompleted": 8688
+      }
+    }
+  ]
+}

@@ -5,6 +5,7 @@
       "target_name": "phstr_sqlite",
       "sources": [
         "src/binding.cpp",
+        "src/async_pool_impl.cpp",
         "src/sqlite_impl.cpp",
         "src/user_function.cpp",
         "src/aggregate_function.cpp",
@@ -60,7 +61,11 @@
         "SQLITE_OMIT_DEPRECATED",
         "SQLITE_OMIT_SHARED_CACHE",
         "SQLITE_SOUNDEX",
-        # "SQLITE_THREADSAFE=2", # default is SQLITE_THREADSAFE=1 (serialized)
+        # Keep SQLite's SQLITE_THREADSAFE=1 serialized default. Setting =2
+        # would change every DatabaseSync connection but would not speed pool
+        # handles, which explicitly request FULLMUTEX. See the threading-mode
+        # rationale in doc/build-flags.md.
+        # "SQLITE_THREADSAFE=2",
         "SQLITE_USE_URI=1" # https://www.sqlite.org/uri.html
       ],
       # GYP flag scoping (make generator):

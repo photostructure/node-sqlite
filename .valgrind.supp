@@ -68,6 +68,18 @@
    obj:*/libcrypto.so*
 }
 
+# OpenSSL state linked into the Node executable on Node 26.
+{
+   Node_OpenSSL_Builtin_Compressions
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:CRYPTO_malloc
+   fun:ossl_load_builtin_compressions
+   fun:context_init
+   fun:default_context_do_init_ossl_
+}
+
 # pthread thread-local storage
 {
    pthread_TLS
@@ -75,6 +87,21 @@
    match-leak-kinds: reachable
    ...
    fun:pthread_*
+}
+
+# The main Node environment starts one inspector agent thread even when no
+# inspector client connects. Suppress only that TLS allocation stack.
+{
+   Node_Inspector_TLS
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create*
+   fun:_ZN4node9inspector5Agent5Start*
 }
 
 # dlopen and dynamic loading

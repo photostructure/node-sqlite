@@ -1,7 +1,7 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["src/index.ts"],
+  entry: ["src/index.ts", "src/experimental.ts"],
   format: ["cjs", "esm"],
   dts: true, // Generate .d.ts files automatically
   clean: true, // Clean dist before each build

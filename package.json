@@ -17,6 +17,16 @@
         "default": "./dist/index.mjs"
       }
     },
+    "./experimental": {
+      "require": {
+        "types": "./dist/experimental.d.cts",
+        "default": "./dist/experimental.cjs"
+      },
+      "import": {
+        "types": "./dist/experimental.d.ts",
+        "default": "./dist/experimental.mjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "//files": "Everything binding.gyp compiles must ship: node-gyp-build falls back to a source build on platforms without a prebuild.",
@@ -62,10 +72,11 @@
     "sync:sqlite": "tsx scripts/sync-from-sqlite.ts",
     "sync:tests": "tsx scripts/sync-node-tests.ts",
     "//test": "'test' is quick dev feedback, 'test:all' is comprehensive",
-    "test": "npm run build:dist && node --expose-gc node_modules/jest/bin/jest.js --no-coverage",
+    "test": "npm run build:dist && node --expose-gc node_modules/jest/bin/jest.js --no-coverage && npm run test:exports",
     "test:cjs": "node --expose-gc node_modules/jest/bin/jest.js",
     "test:esm": "cross-env TEST_ESM=1 node --expose-gc --experimental-vm-modules --no-warnings node_modules/jest/bin/jest.js",
-    "test:all": "npm run build && run-s test:cjs test:esm",
+    "test:all": "npm run build && run-s test:cjs test:esm test:exports",
+    "test:exports": "node --test test/package-exports.test.mjs && tsc -p test/fixtures/package-exports/tsconfig.json",
     "test:serial": "node --expose-gc node_modules/jest/bin/jest.js --runInBand --no-coverage",
     "test:api": "jest --config jest.config.api-compat.cjs",
     "test:node": "node --expose-gc --test test/node-compat/*.js test/node-compat/*.mjs",
@@ -93,6 +104,7 @@
     "memory:asan": "bash scripts/sanitizers-test.sh",
     "//bench": "benchmarks",
     "bench": "cd benchmark && npm install && npm run bench",
+    "bench:async": "cd benchmark && npm install && npm run bench:async",
     "bench:memory": "cd benchmark && npm install && npm run bench:memory",
     "bench:full": "cd benchmark && npm install && npm run bench && npm run bench:memory",
     "//stress": "stress tests",

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Valgrind memory leak detection script for CI/CD
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -28,6 +28,8 @@ echo -e "${GREEN}Running valgrind memory leak detection...${NC}"
 
 # Path to the dedicated valgrind test script
 VALGRIND_TEST="$SCRIPT_DIR/valgrind-test.ts"
+NODE_BIN="$(command -v node)"
+TSX_CLI="$ROOT_DIR/node_modules/tsx/dist/cli.mjs"
 
 # Ensure the test script exists
 if [ ! -f "$VALGRIND_TEST" ]; then
@@ -43,9 +45,9 @@ fi
 
 # Pre-flight check: run the test script without valgrind first
 echo "Running pre-flight check..."
-if ! npx tsx "$VALGRIND_TEST" > /dev/null 2>&1; then
+if ! "$NODE_BIN" "$TSX_CLI" "$VALGRIND_TEST" > /dev/null 2>&1; then
     echo -e "${RED}Error: Test script failed to run. Running again to show error:${NC}"
-    npx tsx "$VALGRIND_TEST"
+    "$NODE_BIN" "$TSX_CLI" "$VALGRIND_TEST"
     exit 1
 fi
 echo -e "${GREEN}✓ Pre-flight check passed${NC}"
@@ -60,10 +62,10 @@ if [ ! -f "$SUPP_FILE" ]; then
 fi
 
 # Run valgrind with appropriate options
-VALGRIND_OPTS="--leak-check=full --show-leak-kinds=definite,indirect,possible --track-origins=yes --suppressions=$SUPP_FILE --gen-suppressions=all"
+VALGRIND_OPTS="--leak-check=full --show-leak-kinds=definite,indirect,possible --track-origins=yes --error-exitcode=99 --suppressions=$SUPP_FILE --gen-suppressions=all"
 
 echo "Running valgrind tests..."
-if valgrind $VALGRIND_OPTS npx tsx "$VALGRIND_TEST" 2>&1 | tee "$ROOT_DIR/valgrind.log"; then
+if valgrind $VALGRIND_OPTS "$NODE_BIN" "$TSX_CLI" "$VALGRIND_TEST" 2>&1 | tee "$ROOT_DIR/valgrind.log"; then
     # Extract leak counts from the LEAK SUMMARY
     DEFINITELY_LOST=$(grep "definitely lost:" "$ROOT_DIR/valgrind.log" | sed -E 's/.*definitely lost: ([0-9,]+) bytes.*/\1/' | tr -d ',')
     INDIRECTLY_LOST=$(grep "indirectly lost:" "$ROOT_DIR/valgrind.log" | sed -E 's/.*indirectly lost: ([0-9,]+) bytes.*/\1/' | tr -d ',')
@@ -87,7 +89,7 @@ else
 fi
 
 # Keep log file for debugging in CI
-if [[ -n "${GITHUB_ACTIONS}" ]]; then
+if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
     echo -e "${YELLOW}Valgrind log saved to: $ROOT_DIR/valgrind.log${NC}"
 else
     # Cleanup log file only in local development

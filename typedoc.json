@@ -1,5 +1,5 @@
 {
-  "entryPoints": ["src/index.ts"],
+  "entryPoints": ["src/index.ts", "src/experimental.ts"],
   "out": "build/docs",
   "name": "@photostructure/sqlite",
   "includeVersion": false,
@@ -25,6 +25,7 @@
     "doc/working-with-data.md",
     "doc/extending-sqlite.md",
     "doc/advanced-patterns.md",
+    "doc/experimental-async-pool.md",
     "doc/api-reference.md",
     "doc/features.md",
     "doc/library-comparison.md",

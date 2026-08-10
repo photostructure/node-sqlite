@@ -3,7 +3,7 @@
 # This validates that cleanup hooks work correctly in musl libc environments
 #
 # Usage:
-#   ./test-docker-alpine.sh           # Test all versions (20, 22, 24)
+#   ./test-docker-alpine.sh           # Test all versions (22, 24, 26)
 #   ./test-docker-alpine.sh 22        # Test only Node 22
 #   NODE_VERSION=22 ./test-docker-alpine.sh  # Test only Node 22 (via env var)
 #
@@ -22,7 +22,7 @@ if [ -n "${NODE_VERSION:-}" ]; then
 elif [ $# -eq 1 ]; then
   NODE_VERSIONS=("$1")
 else
-  NODE_VERSIONS=("20" "22" "24")
+  NODE_VERSIONS=("22" "24" "26")
 fi
 
 echo "Testing @photostructure/sqlite in Alpine (musl) Docker containers..."
