@@ -10,11 +10,11 @@
  * because SQLite execution dominates, not cache lookups.
  */
 
-import chalk from "chalk";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync as PhotostructureDB } from "../src";
+import { colors } from "./colors.js";
 
 interface BenchmarkResult {
   scenario: string;
@@ -112,17 +112,19 @@ function setupDatabase(db: {
 }
 
 async function main() {
-  console.log(chalk.bold.cyan("\n🏷️  SQLTagStore Performance Benchmark\n"));
+  console.log(colors.bold.cyan("\n🏷️  SQLTagStore Performance Benchmark\n"));
 
   const nodeSqlite = await getNodeSqlite();
 
   if (nodeSqlite) {
     console.log(
-      chalk.green("✓ node:sqlite available - comparing native vs TypeScript\n"),
+      colors.green(
+        "✓ node:sqlite available - comparing native vs TypeScript\n",
+      ),
     );
   } else {
     console.log(
-      chalk.yellow(
+      colors.yellow(
         "⚠ node:sqlite not available (requires Node 23.5.0+) - benchmarking @photostructure/sqlite only\n",
       ),
     );
@@ -136,9 +138,9 @@ async function main() {
     // Scenario 1: Single Query Cache Hit
     // Same SQL pattern repeated - measures cache lookup + template parsing
     // =========================================================================
-    console.log(chalk.bold.yellow("📊 Scenario 1: Single Query Cache Hit"));
+    console.log(colors.bold.yellow("📊 Scenario 1: Single Query Cache Hit"));
     console.log(
-      chalk.gray("   Same SQL pattern repeated, varying only parameters\n"),
+      colors.gray("   Same SQL pattern repeated, varying only parameters\n"),
     );
 
     // @photostructure/sqlite
@@ -159,7 +161,7 @@ async function main() {
         ...result,
       });
       console.log(
-        chalk.green(
+        colors.green(
           `   @photostructure/sqlite: ${Math.round(result.opsPerSec).toLocaleString()} ops/sec`,
         ),
       );
@@ -184,7 +186,7 @@ async function main() {
         ...result,
       });
       console.log(
-        chalk.green(
+        colors.green(
           `   node:sqlite:            ${Math.round(result.opsPerSec).toLocaleString()} ops/sec`,
         ),
       );
@@ -195,9 +197,9 @@ async function main() {
     // Scenario 2: Manual Prepare Baseline
     // Shows the "optimal" performance - prepare once, reuse statement
     // =========================================================================
-    console.log(chalk.bold.yellow("\n📊 Scenario 2: Manual Prepare Baseline"));
+    console.log(colors.bold.yellow("\n📊 Scenario 2: Manual Prepare Baseline"));
     console.log(
-      chalk.gray("   Prepare once, reuse - shows SQLTagStore overhead\n"),
+      colors.gray("   Prepare once, reuse - shows SQLTagStore overhead\n"),
     );
 
     // @photostructure/sqlite
@@ -218,7 +220,7 @@ async function main() {
         ...result,
       });
       console.log(
-        chalk.green(
+        colors.green(
           `   @photostructure/sqlite: ${Math.round(result.opsPerSec).toLocaleString()} ops/sec`,
         ),
       );
@@ -243,7 +245,7 @@ async function main() {
         ...result,
       });
       console.log(
-        chalk.green(
+        colors.green(
           `   node:sqlite:            ${Math.round(result.opsPerSec).toLocaleString()} ops/sec`,
         ),
       );
@@ -254,9 +256,9 @@ async function main() {
     // Scenario 3: Multi-Pattern Workload
     // Rotates through 5 different query patterns - realistic usage
     // =========================================================================
-    console.log(chalk.bold.yellow("\n📊 Scenario 3: Multi-Pattern Workload"));
+    console.log(colors.bold.yellow("\n📊 Scenario 3: Multi-Pattern Workload"));
     console.log(
-      chalk.gray("   Rotates through 5 query patterns - realistic usage\n"),
+      colors.gray("   Rotates through 5 query patterns - realistic usage\n"),
     );
 
     // @photostructure/sqlite
@@ -296,7 +298,7 @@ async function main() {
         ...result,
       });
       console.log(
-        chalk.green(
+        colors.green(
           `   @photostructure/sqlite: ${Math.round(result.opsPerSec).toLocaleString()} ops/sec`,
         ),
       );
@@ -340,7 +342,7 @@ async function main() {
         ...result,
       });
       console.log(
-        chalk.green(
+        colors.green(
           `   node:sqlite:            ${Math.round(result.opsPerSec).toLocaleString()} ops/sec`,
         ),
       );
@@ -351,8 +353,8 @@ async function main() {
     // Scenario 4: Write Operations
     // INSERT/UPDATE via SQLTagStore
     // =========================================================================
-    console.log(chalk.bold.yellow("\n📊 Scenario 4: Write Operations"));
-    console.log(chalk.gray("   INSERT operations via SQLTagStore\n"));
+    console.log(colors.bold.yellow("\n📊 Scenario 4: Write Operations"));
+    console.log(colors.gray("   INSERT operations via SQLTagStore\n"));
 
     // @photostructure/sqlite
     {
@@ -373,7 +375,7 @@ async function main() {
         ...result,
       });
       console.log(
-        chalk.green(
+        colors.green(
           `   @photostructure/sqlite: ${Math.round(result.opsPerSec).toLocaleString()} ops/sec`,
         ),
       );
@@ -399,7 +401,7 @@ async function main() {
         ...result,
       });
       console.log(
-        chalk.green(
+        colors.green(
           `   node:sqlite:            ${Math.round(result.opsPerSec).toLocaleString()} ops/sec`,
         ),
       );
@@ -409,7 +411,7 @@ async function main() {
     // =========================================================================
     // Summary
     // =========================================================================
-    console.log(chalk.bold.cyan("\n\n### 📈 Summary\n"));
+    console.log(colors.bold.cyan("\n\n### 📈 Summary\n"));
 
     // Group results by scenario
     const scenarios = [...new Set(results.map((r) => r.scenario))];
@@ -441,8 +443,8 @@ async function main() {
         const diff = ((psOps - nodeOps) / nodeOps) * 100;
         const diffStr =
           diff >= 0
-            ? chalk.green(`+${diff.toFixed(1)}%`)
-            : chalk.red(`${diff.toFixed(1)}%`);
+            ? colors.green(`+${diff.toFixed(1)}%`)
+            : colors.red(`${diff.toFixed(1)}%`);
         row.push(diffStr);
       } else {
         row.push("-");
@@ -453,7 +455,7 @@ async function main() {
 
     // Analysis
     if (nodeSqlite) {
-      console.log(chalk.bold.cyan("\n### 🔍 Analysis\n"));
+      console.log(colors.bold.cyan("\n### 🔍 Analysis\n"));
 
       const psResults = results.filter(
         (r) => r.driver === "@photostructure/sqlite",
@@ -473,24 +475,24 @@ async function main() {
 
         if (Math.abs(avgDiff) < 10) {
           console.log(
-            chalk.green(
+            colors.green(
               `✓ Performance is equivalent (${avgDiff > 0 ? "+" : ""}${avgDiff.toFixed(1)}% average difference)`,
             ),
           );
           console.log(
-            chalk.gray(
+            colors.gray(
               "  This validates the TypeScript implementation decision.",
             ),
           );
         } else if (avgDiff > 0) {
           console.log(
-            chalk.green(
+            colors.green(
               `✓ TypeScript implementation is ${avgDiff.toFixed(1)}% faster on average`,
             ),
           );
         } else {
           console.log(
-            chalk.yellow(
+            colors.yellow(
               `⚠ Native implementation is ${Math.abs(avgDiff).toFixed(1)}% faster on average`,
             ),
           );
@@ -506,6 +508,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(chalk.red("Benchmark failed:"), err);
+  console.error(colors.red("Benchmark failed:"), err);
   process.exit(1);
 });

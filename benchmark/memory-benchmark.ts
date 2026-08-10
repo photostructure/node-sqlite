@@ -3,10 +3,10 @@
 import { createDriver, getAvailableDrivers, type Driver } from "./drivers.js";
 import { LEAK_MIN_R2, MemoryTracker } from "./memory-tracker.js";
 // import Table from 'cli-table3'; // Removed - using markdown tables instead
-import chalk from "chalk";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { colors } from "./colors.js";
 
 interface MemoryScenario {
   name: string;
@@ -208,23 +208,23 @@ Available scenarios: ${Object.keys(memoryScenarios).join(", ")}
   // Check if GC is exposed
   if (typeof global.gc !== "function") {
     console.log(
-      chalk.yellow(
+      colors.yellow(
         "⚠️  Warning: GC not exposed. Run with --expose-gc for accurate results.",
       ),
     );
     console.log(
-      chalk.gray("   tsx --expose-gc benchmark/memory-benchmark.ts\n"),
+      colors.gray("   tsx --expose-gc benchmark/memory-benchmark.ts\n"),
     );
   }
 
   const driversToTest = options.drivers ?? getAvailableDrivers();
   const scenariosToRun = options.scenarios ?? Object.keys(memoryScenarios);
 
-  console.log(chalk.bold.cyan("💾 SQLite Driver Memory Benchmark\n"));
-  console.log(chalk.gray(`Testing drivers: ${driversToTest.join(", ")}`));
-  console.log(chalk.gray(`Scenarios: ${scenariosToRun.length}`));
+  console.log(colors.bold.cyan("💾 SQLite Driver Memory Benchmark\n"));
+  console.log(colors.gray(`Testing drivers: ${driversToTest.join(", ")}`));
+  console.log(colors.gray(`Scenarios: ${scenariosToRun.length}`));
   console.log(
-    chalk.gray(
+    colors.gray(
       `Iterations: ${options.iterations ?? "auto-calibrated"} (with ${options.warmup} warmup)\n`,
     ),
   );
@@ -234,22 +234,22 @@ Available scenarios: ${Object.keys(memoryScenarios).join(", ")}
   // Test each driver
   for (const driverName of driversToTest) {
     if (!getAvailableDrivers().includes(driverName)) {
-      console.log(chalk.gray(`Skipping ${driverName} (not available)`));
+      console.log(colors.gray(`Skipping ${driverName} (not available)`));
       continue;
     }
 
-    console.log(chalk.bold.yellow(`\n📊 Testing ${driverName}`));
+    console.log(colors.bold.yellow(`\n📊 Testing ${driverName}`));
     results[driverName] = {};
 
     // Run each scenario
     for (const scenarioKey of scenariosToRun) {
       const scenario = memoryScenarios[scenarioKey];
       if (!scenario) {
-        console.log(chalk.gray(`  Skipping unknown scenario: ${scenarioKey}`));
+        console.log(colors.gray(`  Skipping unknown scenario: ${scenarioKey}`));
         continue;
       }
 
-      console.log(chalk.gray(`\n  ${scenario.name}: ${scenario.description}`));
+      console.log(colors.gray(`\n  ${scenario.name}: ${scenario.description}`));
 
       // Create temporary database
       const tempDir = mkdtempSync(join(tmpdir(), "sqlite-mem-"));
@@ -267,7 +267,7 @@ Available scenarios: ${Object.keys(memoryScenarios).join(", ")}
         // Calibrate iterations if not specified
         let iterations = options.iterations;
         if (!iterations) {
-          console.log(chalk.gray(`    Calibrating iterations...`));
+          console.log(colors.gray(`    Calibrating iterations...`));
           const calibrationStart = Date.now();
           let calibrationIterations = 0;
 
@@ -279,7 +279,7 @@ Available scenarios: ${Object.keys(memoryScenarios).join(", ")}
 
           // Use calibrated count, but ensure reasonable bounds
           iterations = Math.max(20, Math.min(200, calibrationIterations));
-          console.log(chalk.gray(`    Using ${iterations} iterations`));
+          console.log(colors.gray(`    Using ${iterations} iterations`));
         }
 
         // Check for memory leaks with configurable threshold
@@ -304,23 +304,23 @@ Available scenarios: ${Object.keys(memoryScenarios).join(", ")}
 
         // Display results
         if (leakTest.likelyLeak) {
-          console.log(chalk.red(`    ⚠️  Potential memory leak detected!`));
+          console.log(colors.red(`    ⚠️  Potential memory leak detected!`));
         } else {
-          console.log(chalk.green(`    ✓ No memory leak detected`));
+          console.log(colors.green(`    ✓ No memory leak detected`));
         }
 
         console.log(
-          chalk.gray(
+          colors.gray(
             `    Heap growth: ${leakTest.summary.heapGrowth} (R²=${leakTest.summary.heapR2})`,
           ),
         );
         console.log(
-          chalk.gray(
+          colors.gray(
             `    External growth: ${leakTest.summary.externalGrowth} (R²=${leakTest.summary.externalR2})`,
           ),
         );
         console.log(
-          chalk.gray(
+          colors.gray(
             `    Confidence: ${leakTest.heapTrend.r2 > 0.9 ? "High" : leakTest.heapTrend.r2 > 0.7 ? "Medium" : "Low"} (based on R² values)`,
           ),
         );
@@ -332,7 +332,7 @@ Available scenarios: ${Object.keys(memoryScenarios).join(", ")}
 
         await driver.close();
       } catch (error) {
-        console.error(chalk.red(`    ✗ Error: ${(error as Error).message}`));
+        console.error(colors.red(`    ✗ Error: ${(error as Error).message}`));
         results[driverName][scenarioKey] = { error: (error as Error).message };
       } finally {
         // Clean up
@@ -346,7 +346,7 @@ Available scenarios: ${Object.keys(memoryScenarios).join(", ")}
   }
 
   // Summary table
-  console.log(chalk.bold.cyan("\n\n📈 Summary\n"));
+  console.log(colors.bold.cyan("\n\n📈 Summary\n"));
 
   // Generate markdown table
   const availableDrivers = driversToTest.filter((d) =>
@@ -381,7 +381,7 @@ Available scenarios: ${Object.keys(memoryScenarios).join(", ")}
 
   console.log(
     "\n" +
-      chalk.gray(
+      colors.gray(
         "📋 Memory table generated above - copy/paste ready for documentation!",
       ),
   );
@@ -397,11 +397,11 @@ Available scenarios: ${Object.keys(memoryScenarios).join(", ")}
   }
 
   if (leaks.length > 0) {
-    console.log(chalk.bold.red("\n\n⚠️  Memory Leak Details\n"));
+    console.log(colors.bold.red("\n\n⚠️  Memory Leak Details\n"));
 
     for (const { driver, scenario, result } of leaks) {
       console.log(
-        chalk.yellow(`${driver} - ${memoryScenarios[scenario].name}:`),
+        colors.yellow(`${driver} - ${memoryScenarios[scenario].name}:`),
       );
       console.log(
         `  Heap growth: ${result.summary.heapGrowth} (R²=${result.summary.heapR2})`,

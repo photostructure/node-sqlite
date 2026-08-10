@@ -1,6 +1,5 @@
 #!/usr/bin/env tsx
 
-import chalk from "chalk";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +8,7 @@ import {
   parseCacheProfile,
   type CacheProfile,
 } from "./cache-profile.js";
+import { colors } from "./colors.js";
 import {
   createDriver,
   getAvailableDrivers,
@@ -109,7 +109,7 @@ for (let i = 0; i < args.length; i++) {
   } else if (args[i] === "--iterations" && i + 1 < args.length) {
     const iterations = Number(args[i + 1]);
     if (!Number.isInteger(iterations) || iterations < 1) {
-      console.error(chalk.red("--iterations must be a positive integer"));
+      console.error(colors.red("--iterations must be a positive integer"));
       process.exit(1);
     }
     options.iterations = iterations;
@@ -122,7 +122,7 @@ for (let i = 0; i < args.length; i++) {
       }
       options.cacheProfile = parseCacheProfile(profile);
     } catch (error) {
-      console.error(chalk.red((error as Error).message));
+      console.error(colors.red((error as Error).message));
       process.exit(1);
     }
     i++;
@@ -163,7 +163,7 @@ const driversToTest = options.drivers ?? getAvailableDrivers();
 const scenarios = getScenarios(options.filter);
 
 if (scenarios.length === 0) {
-  console.error(chalk.red(`No scenarios found matching: ${options.filter}`));
+  console.error(colors.red(`No scenarios found matching: ${options.filter}`));
   process.exit(1);
 }
 
@@ -268,9 +268,9 @@ async function inspectBenchmarkSettings(
 
 // Main benchmark function wrapped in async IIFE for CJS compatibility
 (async () => {
-  console.log(chalk.bold.cyan("🚀 SQLite Driver Performance Benchmark\n"));
-  console.log(chalk.gray(`Testing drivers: ${driversToTest.join(", ")}`));
-  console.log(chalk.gray(`Scenarios: ${scenarios.length}\n`));
+  console.log(colors.bold.cyan("🚀 SQLite Driver Performance Benchmark\n"));
+  console.log(colors.gray(`Testing drivers: ${driversToTest.join(", ")}`));
+  console.log(colors.gray(`Scenarios: ${scenarios.length}\n`));
 
   // Drivers actually available this run, in the order requested.
   const driverList = driversToTest.filter((d) =>
@@ -280,13 +280,13 @@ async function inspectBenchmarkSettings(
     throw new Error("No requested benchmark drivers are available");
   }
 
-  console.log(chalk.gray(`Cache profile: ${options.cacheProfile}`));
+  console.log(colors.gray(`Cache profile: ${options.cacheProfile}`));
   const benchmarkSettings: Record<string, BenchmarkSettings> = {};
   for (const driverName of driverList) {
     const settings = await inspectBenchmarkSettings(driverName);
     benchmarkSettings[driverName] = settings;
     console.log(
-      chalk.gray(
+      colors.gray(
         `  ${driverName}: cache_size=${settings.effectiveCacheSize} ` +
           `(packaged=${settings.initialCacheSize}), ` +
           `journal_mode=${settings.journalMode}, ` +
@@ -315,17 +315,17 @@ async function inspectBenchmarkSettings(
     const isWarmup = pass === 0;
 
     if (isWarmup) {
-      console.log(chalk.gray("Warmup pass...\n"));
+      console.log(colors.gray("Warmup pass...\n"));
     } else {
-      console.log(chalk.bold.cyan("\nMeasured pass:\n"));
+      console.log(colors.bold.cyan("\nMeasured pass:\n"));
     }
 
     for (const [scenarioKey, scenario] of scenarios) {
       if (isWarmup) {
-        process.stdout.write(chalk.gray(`\n  ${scenario.name}:`));
+        process.stdout.write(colors.gray(`\n  ${scenario.name}:`));
       } else {
-        console.log(chalk.bold.yellow(`\n📊 ${scenario.name}`));
-        console.log(chalk.gray(`   ${scenario.description}`));
+        console.log(colors.bold.yellow(`\n📊 ${scenario.name}`));
+        console.log(colors.gray(`   ${scenario.description}`));
       }
 
       if (!isWarmup) {
@@ -382,8 +382,8 @@ async function inspectBenchmarkSettings(
           } catch (err) {
             failed.add(driverName);
             const msg = `✗ Error in ${driverName}: ${(err as Error).message}`;
-            if (isWarmup) process.stdout.write(chalk.yellow(` [${msg}]`));
-            else console.error(chalk.red(`   ${msg}`));
+            if (isWarmup) process.stdout.write(colors.yellow(` [${msg}]`));
+            else console.error(colors.red(`   ${msg}`));
           }
         }
       }
@@ -396,13 +396,13 @@ async function inspectBenchmarkSettings(
 
         if (isWarmup) {
           process.stdout.write(
-            chalk.gray(
+            colors.gray(
               ` ${driverName}:${Math.round(opsPerSec).toLocaleString()}`,
             ),
           );
         } else {
           console.log(
-            chalk.green(
+            colors.green(
               `   ${driverName}: ${Math.round(opsPerSec).toLocaleString()} ops/sec ±${rme.toFixed(1)}% (${s.length} trials × ${iters[driverName].toLocaleString()} iters)`,
             ),
           );
@@ -425,7 +425,7 @@ async function inspectBenchmarkSettings(
   }
 
   // Summary
-  console.log(chalk.bold.cyan("\n\n### 📈 Summary\n"));
+  console.log(colors.bold.cyan("\n\n### 📈 Summary\n"));
 
   // Keep the configuration directly beside the copyable Markdown table. The
   // startup preamble is useful interactively, but is easy to omit when results
@@ -521,7 +521,7 @@ async function inspectBenchmarkSettings(
         "‡ batched write — one durable commit amortized over ~1000 rows, so " +
           "driver differences remain visible (don't read these as ties).",
       );
-    console.log("\n" + chalk.gray(notes.join("\n")));
+    console.log("\n" + colors.gray(notes.join("\n")));
   }
 
   // Memory usage report
@@ -529,7 +529,7 @@ async function inspectBenchmarkSettings(
     global.gc();
     const memoryFinal = process.memoryUsage();
 
-    console.log(chalk.bold.cyan("\n\n### 💾 Memory Usage\n"));
+    console.log(colors.bold.cyan("\n\n### 💾 Memory Usage\n"));
 
     const formatMB = (bytes: number) =>
       `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -548,7 +548,7 @@ async function inspectBenchmarkSettings(
 
     console.log(
       "\n" +
-        chalk.gray(
+        colors.gray(
           "📋 Memory table generated above - copy/paste ready for documentation!",
         ),
     );
@@ -575,8 +575,8 @@ async function inspectBenchmarkSettings(
     });
     writeCharts(charts, outDir);
     console.log(
-      chalk.bold.cyan(`\n\n### 📊 Charts\n`) +
-        chalk.gray(`Wrote ${charts.size} SVG chart(s) to ${outDir}`),
+      colors.bold.cyan(`\n\n### 📊 Charts\n`) +
+        colors.gray(`Wrote ${charts.size} SVG chart(s) to ${outDir}`),
     );
   }
 
