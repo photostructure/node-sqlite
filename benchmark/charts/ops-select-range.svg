@@ -1,23 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 196" role="img" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
   <title>SELECT Range</title>
+  <metadata id="benchmark-configuration">{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;driverSettings&quot;:{&quot;@photostructure/sqlite&quot;:{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;initialCacheSize&quot;:-2000,&quot;effectiveCacheSize&quot;:-16000,&quot;journalMode&quot;:&quot;delete&quot;,&quot;synchronous&quot;:2},&quot;better-sqlite3&quot;:{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;initialCacheSize&quot;:-16000,&quot;effectiveCacheSize&quot;:-16000,&quot;journalMode&quot;:&quot;delete&quot;,&quot;synchronous&quot;:2},&quot;node:sqlite&quot;:{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;initialCacheSize&quot;:-2000,&quot;effectiveCacheSize&quot;:-16000,&quot;journalMode&quot;:&quot;delete&quot;,&quot;synchronous&quot;:2}}}</metadata>
   <rect width="680" height="196" fill="#fff" rx="6" />
   <text x="340" y="20" text-anchor="middle" font-size="15" font-weight="600" fill="#222">SELECT Range</text>
-  <text x="340" y="36" text-anchor="middle" font-size="11" fill="#888">Fetch ~1000 rows by indexed key · higher is better</text>
+  <text x="340" y="36" text-anchor="middle" font-size="11" fill="#888">Fetch ~1000 rows by indexed key · higher is better · cache profile: controlled</text>
   <line x1="168" y1="60" x2="168" y2="170" stroke="#ececec" stroke-width="1" />
-  <line x1="302.69" y1="60" x2="302.69" y2="170" stroke="#ececec" stroke-width="1" />
-  <line x1="437.37" y1="60" x2="437.37" y2="170" stroke="#ececec" stroke-width="1" />
-  <line x1="572.06" y1="60" x2="572.06" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="302.86" y1="60" x2="302.86" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="437.73" y1="60" x2="437.73" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="572.59" y1="60" x2="572.59" y2="170" stroke="#ececec" stroke-width="1" />
   <text x="160" y="81" text-anchor="end" font-size="12" fill="#444">@photostructure/sqlite</text>
-  <rect x="168" y="64" width="112.11" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
-  <text x="286.11" y="81" font-size="11" fill="#555">420 ops/s</text>
+  <rect x="168" y="64" width="171.88" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
+  <text x="345.88" y="81" font-size="11" fill="#555">640 ops/s</text>
   <text x="160" y="119" text-anchor="end" font-size="12" fill="#444">better-sqlite3</text>
   <rect x="168" y="102" width="408" height="26" fill="#B8860B" rx="3" opacity="0.9" />
   <text x="582" y="119" font-size="11" fill="#555">1,500 ops/s</text>
   <text x="160" y="157" text-anchor="end" font-size="12" fill="#444">node:sqlite</text>
-  <rect x="168" y="140" width="156.87" height="26" fill="#43853D" rx="3" opacity="0.9" />
-  <text x="330.87" y="157" font-size="11" fill="#555">580 ops/s</text>
+  <rect x="168" y="140" width="329.56" height="26" fill="#43853D" rx="3" opacity="0.9" />
+  <text x="503.56" y="157" font-size="11" fill="#555">1,200 ops/s</text>
   <text x="168" y="184" text-anchor="middle" font-size="10" fill="#999">0</text>
-  <text x="302.69" y="184" text-anchor="middle" font-size="10" fill="#999">500</text>
-  <text x="437.37" y="184" text-anchor="middle" font-size="10" fill="#999">1,000</text>
-  <text x="572.06" y="184" text-anchor="middle" font-size="10" fill="#999">1,500</text>
+  <text x="302.86" y="184" text-anchor="middle" font-size="10" fill="#999">500</text>
+  <text x="437.73" y="184" text-anchor="middle" font-size="10" fill="#999">1,000</text>
+  <text x="572.59" y="184" text-anchor="middle" font-size="10" fill="#999">1,500</text>
 </svg>

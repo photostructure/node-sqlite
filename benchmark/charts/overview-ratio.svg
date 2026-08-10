@@ -1,51 +1,50 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 446" role="img" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
   <title>@photostructure/sqlite throughput vs node:sqlite</title>
+  <metadata id="benchmark-configuration">{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;driverSettings&quot;:{&quot;@photostructure/sqlite&quot;:{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;initialCacheSize&quot;:-2000,&quot;effectiveCacheSize&quot;:-16000,&quot;journalMode&quot;:&quot;delete&quot;,&quot;synchronous&quot;:2},&quot;better-sqlite3&quot;:{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;initialCacheSize&quot;:-16000,&quot;effectiveCacheSize&quot;:-16000,&quot;journalMode&quot;:&quot;delete&quot;,&quot;synchronous&quot;:2},&quot;node:sqlite&quot;:{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;initialCacheSize&quot;:-2000,&quot;effectiveCacheSize&quot;:-16000,&quot;journalMode&quot;:&quot;delete&quot;,&quot;synchronous&quot;:2}}}</metadata>
   <rect width="680" height="446" fill="#fff" rx="6" />
   <text x="340" y="20" text-anchor="middle" font-size="15" font-weight="600" fill="#222">@photostructure/sqlite throughput vs node:sqlite</text>
-  <text x="340" y="36" text-anchor="middle" font-size="11" fill="#888">ratio of ops/sec (1.0× = parity; higher is faster)</text>
+  <text x="340" y="36" text-anchor="middle" font-size="11" fill="#888">ratio of ops/sec (1.0× = parity; higher is faster) · cache profile: controlled</text>
   <line x1="168" y1="60" x2="168" y2="398" stroke="#ececec" stroke-width="1" />
-  <line x1="236" y1="60" x2="236" y2="398" stroke="#ececec" stroke-width="1" />
-  <line x1="304" y1="60" x2="304" y2="398" stroke="#ececec" stroke-width="1" />
-  <line x1="372" y1="60" x2="372" y2="398" stroke="#ececec" stroke-width="1" />
-  <line x1="440" y1="60" x2="440" y2="398" stroke="#ececec" stroke-width="1" />
-  <line x1="508" y1="60" x2="508" y2="398" stroke="#ececec" stroke-width="1" />
-  <line x1="576" y1="60" x2="576" y2="398" stroke="#ececec" stroke-width="1" />
+  <line x1="236.66" y1="60" x2="236.66" y2="398" stroke="#ececec" stroke-width="1" />
+  <line x1="305.32" y1="60" x2="305.32" y2="398" stroke="#ececec" stroke-width="1" />
+  <line x1="373.99" y1="60" x2="373.99" y2="398" stroke="#ececec" stroke-width="1" />
+  <line x1="442.65" y1="60" x2="442.65" y2="398" stroke="#ececec" stroke-width="1" />
+  <line x1="511.31" y1="60" x2="511.31" y2="398" stroke="#ececec" stroke-width="1" />
   <text x="160" y="81" text-anchor="end" font-size="12" fill="#444">SELECT by Primary Key</text>
-  <rect x="168" y="64" width="304.74" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
-  <text x="478.74" y="81" font-size="11" fill="#555">0.90×</text>
+  <rect x="168" y="64" width="305.72" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
+  <text x="479.72" y="81" font-size="11" fill="#555">0.89×</text>
   <text x="160" y="119" text-anchor="end" font-size="12" fill="#444">SELECT Range</text>
-  <rect x="168" y="102" width="243.02" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
-  <text x="417.02" y="119" font-size="11" fill="#555">0.71×</text>
+  <rect x="168" y="102" width="179.05" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
+  <text x="353.05" y="119" font-size="11" fill="#555">0.52×</text>
   <text x="160" y="157" text-anchor="end" font-size="12" fill="#444">SELECT with Iterator</text>
-  <rect x="168" y="140" width="152.69" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
-  <text x="326.69" y="157" font-size="11" fill="#555">0.45×</text>
+  <rect x="168" y="140" width="156.46" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
+  <text x="330.46" y="157" font-size="11" fill="#555">0.46×</text>
   <text x="160" y="195" text-anchor="end" font-size="12" fill="#444">INSERT Single Row †</text>
-  <rect x="168" y="178" width="340" height="26" fill="#6B7280" rx="3" opacity="0.9" />
-  <text x="514" y="195" font-size="11" fill="#555">1.00×</text>
+  <rect x="168" y="178" width="342.03" height="26" fill="#6B7280" rx="3" opacity="0.9" />
+  <text x="516.03" y="195" font-size="11" fill="#555">1.00×</text>
   <text x="160" y="233" text-anchor="end" font-size="12" fill="#444">INSERT in Transaction ‡</text>
-  <rect x="168" y="216" width="328.47" height="26" fill="#C2681E" rx="3" opacity="0.9" />
-  <text x="502.47" y="233" font-size="11" fill="#555">0.97×</text>
+  <rect x="168" y="216" width="265.74" height="26" fill="#C2681E" rx="3" opacity="0.9" />
+  <text x="439.74" y="233" font-size="11" fill="#555">0.77×</text>
   <text x="160" y="271" text-anchor="end" font-size="12" fill="#444">SELECT with JOIN</text>
-  <rect x="168" y="254" width="346.84" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
-  <text x="520.84" y="271" font-size="11" fill="#555">1.02×</text>
+  <rect x="168" y="254" width="350.17" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
+  <text x="524.17" y="271" font-size="11" fill="#555">1.02×</text>
   <text x="160" y="309" text-anchor="end" font-size="12" fill="#444">INSERT with BLOB †</text>
-  <rect x="168" y="292" width="343.76" height="26" fill="#6B7280" rx="3" opacity="0.9" />
-  <text x="517.76" y="309" font-size="11" fill="#555">1.01×</text>
+  <rect x="168" y="292" width="340.55" height="26" fill="#6B7280" rx="3" opacity="0.9" />
+  <text x="514.55" y="309" font-size="11" fill="#555">0.99×</text>
   <text x="160" y="347" text-anchor="end" font-size="12" fill="#444">UPDATE with Index †</text>
-  <rect x="168" y="330" width="337.27" height="26" fill="#6B7280" rx="3" opacity="0.9" />
-  <text x="511.27" y="347" font-size="11" fill="#555">0.99×</text>
+  <rect x="168" y="330" width="370.91" height="26" fill="#6B7280" rx="3" opacity="0.9" />
+  <text x="544.91" y="347" font-size="11" fill="#555">1.08×</text>
   <text x="160" y="385" text-anchor="end" font-size="12" fill="#444">DELETE Bulk ‡</text>
-  <rect x="168" y="368" width="312.95" height="26" fill="#C2681E" rx="3" opacity="0.9" />
-  <text x="486.95" y="385" font-size="11" fill="#555">0.92×</text>
-  <line x1="508" y1="60" x2="508" y2="398" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4 3" />
-  <text x="508" y="56" text-anchor="middle" font-size="10" fill="#c0392b">node:sqlite = 1.0×</text>
+  <rect x="168" y="368" width="274.17" height="26" fill="#C2681E" rx="3" opacity="0.9" />
+  <text x="448.17" y="385" font-size="11" fill="#555">0.80×</text>
+  <line x1="511.31" y1="60" x2="511.31" y2="398" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4 3" />
+  <text x="511.31" y="56" text-anchor="middle" font-size="10" fill="#c0392b">node:sqlite = 1.0×</text>
   <text x="168" y="412" text-anchor="middle" font-size="10" fill="#999">0</text>
-  <text x="236" y="412" text-anchor="middle" font-size="10" fill="#999">0.2</text>
-  <text x="304" y="412" text-anchor="middle" font-size="10" fill="#999">0.4</text>
-  <text x="372" y="412" text-anchor="middle" font-size="10" fill="#999">0.6</text>
-  <text x="440" y="412" text-anchor="middle" font-size="10" fill="#999">0.8</text>
-  <text x="508" y="412" text-anchor="middle" font-size="10" fill="#999">1</text>
-  <text x="576" y="412" text-anchor="middle" font-size="10" fill="#999">1.2</text>
+  <text x="236.66" y="412" text-anchor="middle" font-size="10" fill="#999">0.2</text>
+  <text x="305.32" y="412" text-anchor="middle" font-size="10" fill="#999">0.4</text>
+  <text x="373.99" y="412" text-anchor="middle" font-size="10" fill="#999">0.6</text>
+  <text x="442.65" y="412" text-anchor="middle" font-size="10" fill="#999">0.8</text>
+  <text x="511.31" y="412" text-anchor="middle" font-size="10" fill="#999">1</text>
   <rect x="168" y="415" width="11" height="11" fill="#1B6B8A" rx="2" />
   <text x="184" y="424" font-size="10" fill="#666">read</text>
   <rect x="228" y="415" width="11" height="11" fill="#6B7280" rx="2" />

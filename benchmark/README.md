@@ -57,17 +57,17 @@ the same settings after the full run encountered transient storage latency.
 Absolute throughput varies by machine; the relationships between drivers are
 the useful part.
 
-| Scenario                | @photostructure/sqlite |      better-sqlite3 |         node:sqlite | vs node:sqlite |
-| ----------------------- | ---------------------: | ------------------: | ------------------: | -------------: |
-| SELECT by Primary Key   |     97,000 ops/s ±0.6% | 120,000 ops/s ±0.6% | 110,000 ops/s ±0.5% |          0.90x |
-| SELECT Range            |        420 ops/s ±0.5% |   1,500 ops/s ±3.5% |     580 ops/s ±1.6% |          0.71x |
-| SELECT with Iterator    |        520 ops/s ±0.8% |   1,400 ops/s ±1.1% |   1,100 ops/s ±1.2% |          0.45x |
-| INSERT Single Row †     |         65 ops/s ±3.4% |      65 ops/s ±2.1% |      65 ops/s ±2.2% |          1.00x |
-| INSERT in Transaction ‡ |         57 ops/s ±2.7% |      58 ops/s ±2.5% |      59 ops/s ±2.9% |          0.97x |
-| SELECT with JOIN        |      1,700 ops/s ±1.4% |   1,700 ops/s ±0.4% |   1,600 ops/s ±0.7% |          1.02x |
-| INSERT with BLOB †      |        730 ops/s ±1.6% |     730 ops/s ±0.4% |     720 ops/s ±1.8% |          1.01x |
-| UPDATE with Index †     |        740 ops/s ±4.5% |     740 ops/s ±3.2% |     750 ops/s ±4.5% |          0.99x |
-| DELETE Bulk ‡           |         81 ops/s ±3.9% |      83 ops/s ±3.3% |      88 ops/s ±4.6% |          0.92x |
+| Scenario                | @photostructure/sqlite |      better-sqlite3 |         node:sqlite | @photostructure/sqlite vs node:sqlite |
+| ----------------------- | ---------------------: | ------------------: | ------------------: | ------------------------------------: |
+| SELECT by Primary Key   |    100,000 ops/s ±1.2% | 120,000 ops/s ±1.1% | 110,000 ops/s ±1.3% |                                 0.89× |
+| SELECT Range            |        640 ops/s ±1.9% |   1,500 ops/s ±2.1% |   1,200 ops/s ±2.8% |                                 0.52× |
+| SELECT with Iterator    |        520 ops/s ±1.9% |   1,400 ops/s ±1.2% |   1,100 ops/s ±2.0% |                                 0.46× |
+| INSERT Single Row †     |        720 ops/s ±2.7% |     710 ops/s ±1.1% |     720 ops/s ±2.5% |                                 1.00× |
+| INSERT in Transaction ‡ |        310 ops/s ±1.8% |     330 ops/s ±0.8% |     400 ops/s ±4.7% |                                 0.77× |
+| SELECT with JOIN        |      1,600 ops/s ±1.5% |   1,700 ops/s ±1.5% |   1,600 ops/s ±1.7% |                                 1.02× |
+| INSERT with BLOB †      |        670 ops/s ±8.9% |     670 ops/s ±3.0% |     680 ops/s ±3.7% |                                 0.99× |
+| UPDATE with Index †     |        700 ops/s ±1.4% |     700 ops/s ±1.1% |    650 ops/s ±10.1% |                                 1.08× |
+| DELETE Bulk ‡           |        270 ops/s ±0.9% |     290 ops/s ±1.2% |     340 ops/s ±1.3% |                                 0.80× |
 
 † Single-operation writes commit once per operation. With rollback journaling
 and `synchronous=FULL`, durable storage sync dominates and the drivers tie.

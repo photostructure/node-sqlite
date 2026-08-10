@@ -1,31 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 196" role="img" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
   <title>INSERT with BLOB</title>
+  <metadata id="benchmark-configuration">{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;driverSettings&quot;:{&quot;@photostructure/sqlite&quot;:{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;initialCacheSize&quot;:-2000,&quot;effectiveCacheSize&quot;:-16000,&quot;journalMode&quot;:&quot;delete&quot;,&quot;synchronous&quot;:2},&quot;better-sqlite3&quot;:{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;initialCacheSize&quot;:-16000,&quot;effectiveCacheSize&quot;:-16000,&quot;journalMode&quot;:&quot;delete&quot;,&quot;synchronous&quot;:2},&quot;node:sqlite&quot;:{&quot;cacheProfile&quot;:&quot;controlled&quot;,&quot;initialCacheSize&quot;:-2000,&quot;effectiveCacheSize&quot;:-16000,&quot;journalMode&quot;:&quot;delete&quot;,&quot;synchronous&quot;:2}}}</metadata>
   <rect width="680" height="196" fill="#fff" rx="6" />
   <text x="340" y="20" text-anchor="middle" font-size="15" font-weight="600" fill="#222">INSERT with BLOB</text>
-  <text x="340" y="36" text-anchor="middle" font-size="11" fill="#888">Insert one 10KB binary blob per operation (one durable commit per row) · higher is better</text>
+  <text x="340" y="36" text-anchor="middle" font-size="11" fill="#888">Insert one 10KB binary blob per operation (one durable commit per row) · higher is better · cache profile: controlled</text>
   <line x1="168" y1="60" x2="168" y2="170" stroke="#ececec" stroke-width="1" />
-  <line x1="223.59" y1="60" x2="223.59" y2="170" stroke="#ececec" stroke-width="1" />
-  <line x1="279.17" y1="60" x2="279.17" y2="170" stroke="#ececec" stroke-width="1" />
-  <line x1="334.76" y1="60" x2="334.76" y2="170" stroke="#ececec" stroke-width="1" />
-  <line x1="390.34" y1="60" x2="390.34" y2="170" stroke="#ececec" stroke-width="1" />
-  <line x1="445.93" y1="60" x2="445.93" y2="170" stroke="#ececec" stroke-width="1" />
-  <line x1="501.51" y1="60" x2="501.51" y2="170" stroke="#ececec" stroke-width="1" />
-  <line x1="557.1" y1="60" x2="557.1" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="228.14" y1="60" x2="228.14" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="288.28" y1="60" x2="288.28" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="348.42" y1="60" x2="348.42" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="408.56" y1="60" x2="408.56" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="468.7" y1="60" x2="468.7" y2="170" stroke="#ececec" stroke-width="1" />
+  <line x1="528.84" y1="60" x2="528.84" y2="170" stroke="#ececec" stroke-width="1" />
   <text x="160" y="81" text-anchor="end" font-size="12" fill="#444">@photostructure/sqlite</text>
-  <rect x="168" y="64" width="406.89" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
-  <text x="580.89" y="81" font-size="11" fill="#555">730 ops/s</text>
+  <rect x="168" y="64" width="404.72" height="26" fill="#1B6B8A" rx="3" opacity="0.9" />
+  <text x="578.72" y="81" font-size="11" fill="#555">670 ops/s</text>
   <text x="160" y="119" text-anchor="end" font-size="12" fill="#444">better-sqlite3</text>
-  <rect x="168" y="102" width="408" height="26" fill="#B8860B" rx="3" opacity="0.9" />
-  <text x="582" y="119" font-size="11" fill="#555">730 ops/s</text>
+  <rect x="168" y="102" width="404.58" height="26" fill="#B8860B" rx="3" opacity="0.9" />
+  <text x="578.58" y="119" font-size="11" fill="#555">670 ops/s</text>
   <text x="160" y="157" text-anchor="end" font-size="12" fill="#444">node:sqlite</text>
-  <rect x="168" y="140" width="402.44" height="26" fill="#43853D" rx="3" opacity="0.9" />
-  <text x="576.44" y="157" font-size="11" fill="#555">720 ops/s</text>
+  <rect x="168" y="140" width="408" height="26" fill="#43853D" rx="3" opacity="0.9" />
+  <text x="582" y="157" font-size="11" fill="#555">680 ops/s</text>
   <text x="168" y="184" text-anchor="middle" font-size="10" fill="#999">0</text>
-  <text x="223.59" y="184" text-anchor="middle" font-size="10" fill="#999">100</text>
-  <text x="279.17" y="184" text-anchor="middle" font-size="10" fill="#999">200</text>
-  <text x="334.76" y="184" text-anchor="middle" font-size="10" fill="#999">300</text>
-  <text x="390.34" y="184" text-anchor="middle" font-size="10" fill="#999">400</text>
-  <text x="445.93" y="184" text-anchor="middle" font-size="10" fill="#999">500</text>
-  <text x="501.51" y="184" text-anchor="middle" font-size="10" fill="#999">600</text>
-  <text x="557.1" y="184" text-anchor="middle" font-size="10" fill="#999">700</text>
+  <text x="228.14" y="184" text-anchor="middle" font-size="10" fill="#999">100</text>
+  <text x="288.28" y="184" text-anchor="middle" font-size="10" fill="#999">200</text>
+  <text x="348.42" y="184" text-anchor="middle" font-size="10" fill="#999">300</text>
+  <text x="408.56" y="184" text-anchor="middle" font-size="10" fill="#999">400</text>
+  <text x="468.7" y="184" text-anchor="middle" font-size="10" fill="#999">500</text>
+  <text x="528.84" y="184" text-anchor="middle" font-size="10" fill="#999">600</text>
 </svg>
