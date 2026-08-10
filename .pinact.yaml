@@ -2,3 +2,12 @@ version: 3
 min_age:
   value: 14 # days — skip Action versions published in the last 14 days
   always: true # also verify already-pinned versions on every run, not just updates
+
+rules:
+  # v2.5.0 fixes a SHA-pinning violation in the v2.3.8 reusable workflow.
+  # Remove this exception after its commit clears the cooldown on 2026-08-21.
+  - ignore: true
+    conditions:
+      - expr: |
+          ActionName == "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml" &&
+          ActionVersion == "8deb546fdb875b9996d27d4950be7312dac076a1"
