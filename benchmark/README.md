@@ -137,11 +137,11 @@ UV_THREADPOOL_SIZE=8 npm run bench:async -- \
   --output=results/async-pool-uv8.json
 ```
 
-The checked-in reference run used Node 26.6.0 on Linux x64 with an AMD Ryzen 9
-5950X (32 logical CPUs). Each figure below is the median of six measured
-samples after one warmup; the raw reports retain every sample. These reports
-predate the current addition of a three-connection scaling case and remain
-valid historical results for their recorded one/two/four-connection matrix.
+The reference summary below used Node 26.6.0 on Linux x64 with an AMD Ryzen 9
+5950X (32 logical CPUs). Each figure is the median of six measured samples after
+one warmup. The run predates the current addition of a three-connection scaling
+case and covers its recorded one/two/four-connection matrix. Raw benchmark
+reports are local artifacts and are not versioned.
 
 | Reference scenario                                       |             Median ops/ms |
 | -------------------------------------------------------- | ------------------------: |
@@ -161,16 +161,14 @@ also make the global-libuv tradeoff concrete: increasing the startup-time pool
 size mostly mattered when four SQLite jobs competed with four crypto jobs. It
 did not materially improve the uncontended four-connection point-read case.
 
-The canonical raw result locations are
-`benchmark/results/async-pool-default.json` and
-`benchmark/results/async-pool-uv8.json`. The versioned JSON schema records the
-package and SQLite versions, git revision and dirty state, Node/V8/N-API/libuv
-versions, CPU and platform, effective `UV_THREADPOOL_SIZE`, all CLI options, each
-scenario's settings, every raw sample, and the computed summaries. Do not
-publish only the console table: keep both raw files and the exact commands with
-any comparison. Absolute throughput is machine-specific, so compare repeated
-samples on the same otherwise-idle machine rather than treating one run as a
-performance guarantee.
+The commands above write local reports under `benchmark/results/`, which Git
+ignores. The JSON schema records the package and SQLite versions, git revision
+and dirty state, Node/V8/N-API/libuv versions, CPU and platform, effective
+`UV_THREADPOOL_SIZE`, all CLI options, each scenario's settings, every raw
+sample, and the computed summaries. When sharing a comparison, attach the raw
+files and exact commands outside the repository. Absolute throughput is
+machine-specific, so compare repeated samples on the same otherwise-idle
+machine rather than treating one run as a performance guarantee.
 
 Runtime and scope are fully controllable. List scenario IDs and groups with
 `npm run bench:async -- --list`, or see all options with

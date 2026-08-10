@@ -827,8 +827,9 @@ now covers warm/fresh sync, a worker-thread control, strict/none,
 one/two/three/four connections, explicit batch sizes, result sizes, read/write
 mixes,
 repeated and rotating SQL, competing crypto/filesystem libuv work, and event-loop
-heartbeats. Two reference reports retain their complete raw inputs and results
-for the default and eight-thread libuv pools.
+heartbeats. Two local reference reports captured their complete raw inputs and
+results for the default and eight-thread libuv pools; generated benchmark
+reports are not versioned.
 
 1. Benchmark warm sync, fresh sync, strict/none async,
    one/two/three/four connections,
@@ -986,19 +987,17 @@ PhotoStructure-specific checklist.
 - `npm run lint`, `npm run lint:native`, `npm run docs`, `npm run test:api`,
   `npm run test:node`, `npm pack --dry-run`, and `git diff --check` pass.
   clang-tidy reports advisory baseline/style warnings but no configured error.
-- Reference benchmark reports are
-  `benchmark/results/async-pool-default.json` and
-  `benchmark/results/async-pool-uv8.json`. They record Node 26.6.0, Linux x64,
-  Ryzen 9 5950X, one warmup, and six samples. Representative medians are 37.9
-  ops/ms for one `none` connection, 39.9 for one `strict` connection, 132.7 for
-  four `none` connections, and 131.6 for 100-operation batches. Under four
-  competing PBKDF2 jobs, the four-connection pool rises from 11.3 ops/ms with
-  the default libuv pool to 123.6 ops/ms with `UV_THREADPOOL_SIZE=8`.
+- Local reference benchmark reports (not versioned) recorded Node 26.6.0,
+  Linux x64, Ryzen 9 5950X, one warmup, and six samples. Representative medians
+  were 37.9 ops/ms for one `none` connection, 39.9 for one `strict` connection,
+  132.7 for four `none` connections, and 131.6 for 100-operation batches. Under
+  four competing PBKDF2 jobs, the four-connection pool rose from 11.3 ops/ms
+  with the default libuv pool to 123.6 ops/ms with `UV_THREADPOOL_SIZE=8`.
 - The configurable scaling matrix now includes pool sizes one, two, three, and
   four in both authorizer modes. `npm run typecheck:async`, the scenario list,
-  and a tiny scaling execution run passed. The checked-in reference JSON
-  remains schema-valid historical evidence for its recorded one/two/four
-  matrix; the fixed four-worker contention cases remain intentional.
+  and a tiny scaling execution run passed. The local reference reports covered
+  the recorded one/two/four matrix; the fixed four-worker contention cases
+  remain intentional.
 - A post-review run of the benchmark package's generic `npm run bench` exposed
   a configuration-specific TypeScript error in `snapshotValue()`: its
   `strictNullChecks: false` program did not narrow a compound null/`typeof`
