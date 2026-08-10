@@ -75,7 +75,7 @@ _A mature, actively maintained synchronous SQLite library with its own API._
 
 - **Mature API**: long-established synchronous database and statement interfaces
 - **Feature-rich**: user functions, aggregates, virtual tables, extensions
-- **Fast bulk reads**: cached shape-specialized row factories avoid repeated per-column Node-API property calls
+- **Fast bulk reads**: leads this benchmark when one call materializes roughly 1,000 rows
 - **Hassle-free installs**: Node-API prebuilds are bundled in the npm package
 
 **Cons:**
@@ -141,13 +141,13 @@ sync time dominates, and indexed single-row reads are within roughly 20% of the
 fastest driver in our benchmark. `@photostructure/sqlite` is slower when one
 call materializes roughly 1,000 rows.
 
-Two independent effects drive the bulk-read results: JavaScript row construction
-and, for the range fixture, SQLite page-cache policy. `better-sqlite3` 13 also
-uses Node-API, but its migration added cached JavaScript factories. Native code
-passes all values for a stable row shape through one object-literal call,
-batches result-array construction, and uses a similar factory for iterator
-records. This package creates null-prototype, `node:sqlite`-compatible rows and
-assigns each column through a separate Node-API property call.
+The bulk-read results include both binding work and SQLite configuration.
+Source inspection shows different materialization strategies:
+`better-sqlite3` 13 passes values for stable row shapes through cached
+JavaScript factories, this package assigns each column to a null-prototype row
+through Node-API property calls, and `node:sqlite` can use internal V8 APIs.
+Those architectural differences do not by themselves establish which one
+causes the measured gap.
 
 The published range result also includes a configuration difference:
 `better-sqlite3` defaults SQLite's page cache to 16 MiB, while this package and
@@ -156,14 +156,11 @@ better-sqlite3's range result from roughly 1,500 to 658 ops/s on this fixture
 (this package: 413; `node:sqlite`: 583). The default-cache result is still a
 valid out-of-box comparison, but it is not purely binding overhead.
 
-Controlled spikes confirm the distinction. Removing the safe-integer range
-check or using ordinary-prototype rows made no measurable difference. A
-shape-specialized ordinary row factory improved this package's by-id,
-1,000-row range, and iterator cases by about 13%, 40%, and 74%, respectively. A
-separate ordinary iterator-record factory improved iteration by about 17%. An
-experimental Node-API bulk null-prototype constructor improved range reads by
-about 20%, but cannot be shipped across the supported Node.js range because
-that API is still experimental. See the [full benchmark results and
+A later same-harness A/B did not reproduce the earlier row-factory result. A
+compatible factory improved range throughput by only about 2% and did not
+improve iteration; the confidence intervals overlapped. The candidate therefore
+failed its 20% acceptance gate and was reverted. The remaining binding-side gap
+has not been isolated to one mechanism. See the [full benchmark results and
 methodology](../benchmark/README.md).
 
 ### SQLTagStore performance

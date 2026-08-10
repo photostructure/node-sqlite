@@ -4,7 +4,7 @@
 
 **For most applications, yes.**
 
-In our pinned benchmark run:
+In our published packaged-default benchmark run:
 
 - Indexed single-row reads reach about 97,000 queries per second, within
   roughly 20% of the fastest driver.
@@ -22,32 +22,30 @@ a hot loop, benchmark your own workload before choosing a driver.
 
 ![Throughput relative to node:sqlite](charts/overview-ratio.svg)
 
-## Why bulk reads trail
+## What the bulk-read benchmark shows
 
-Two independent effects drive the bulk-read results: JavaScript row construction
-and, for the range fixture, SQLite page-cache policy.
-
-For equal cache settings, the remaining gap is in constructing JavaScript rows.
-`@photostructure/sqlite` uses stable Node-API and assigns each column to a
-null-prototype row through a separate property call. The built-in `node:sqlite`
-module can use V8-only bulk constructors inside Node.js.
-
-`better-sqlite3` 13 also uses Node-API, but reduces call count with cached,
-shape-specialized JavaScript row factories and a separate iterator-record
-factory. In controlled spikes, removing our safe-integer check or switching to
-ordinary-prototype allocation was flat; reproducing those factory call shapes
-accounted for most of this package's binding-side deficit to `node:sqlite`.
-
-The range row also reflects different packaged SQLite defaults:
+The published results combine binding work with each package's SQLite settings.
+The range row includes one isolated configuration difference:
 `better-sqlite3` uses a 16 MiB page cache, while this package and `node:sqlite`
 use 2 MiB. A controlled run pinning every driver to 2 MiB measured 413, 658,
 and 583 ops/s, respectively. The table below intentionally reports out-of-box
-defaults, so its range result combines cache policy and row-construction cost.
+defaults, so its range result is not a pure comparison of binding overhead.
 
-We keep the stable path because compatibility and predictable behavior matter
-more than a benchmark-only win. The cost grows with the number of rows and
-columns returned, which is why single-row queries stay close while 1,000-row
-queries show the largest difference.
+The remaining bulk-read gap is not isolated to one cause. The implementations
+materialize rows differently: this package assigns columns to null-prototype
+rows through Node-API property calls, `node:sqlite` can use internal V8 APIs,
+and `better-sqlite3` uses cached JavaScript factories. However, a later
+same-harness A/B of a compatible row factory in this package improved range
+throughput by only about 2% and did not improve iteration; the confidence
+intervals overlapped. That result did not clear the 20% acceptance gate, so it
+does not support attributing most of the gap to factory call shape. The
+[P06 closeout](../doc/done/20260809-P06-production-select-materialization.md)
+records the artifacts, measurements, and rejected design.
+
+The native materializer remains because the factory added cache, lifetime, and
+invalidation complexity without a measurable gain. The observed gap grows with
+the number of rows and columns returned, which is why single-row queries stay
+close while 1,000-row queries show the largest difference.
 
 <details>
 <summary>Full performance results</summary>

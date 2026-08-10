@@ -2,6 +2,12 @@
 
 **Status:** Completed 2026-08-07; documentation retained, all native spikes reverted.
 
+> **Correction (2026-08-09):** P06 did not reproduce the row-factory gains below when the
+> preserved native and compatible factory addons ran through the same current harness. Keep
+> the page-cache result, but treat the factory attribution as a historical hypothesis rather
+> than a demonstrated cause. See the
+> [P06 closeout](20260809-P06-production-select-materialization.md).
+
 ## Goal definition
 
 - **What success looks like**: `doc/library-comparison.md` accurately describes

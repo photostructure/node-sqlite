@@ -1,41 +1,33 @@
 # TPP: Production-compatible SELECT materialization
 
-**Status:** In progress; Tasks 0-2 completed through 2026-08-09. Task 2 retained no
-row-factory candidate.
+**Status:** Completed 2026-08-09 with no production materialization change.
 
-## Goal definition
+## Outcome
 
-- **What success looks like**: the published comparison measures every driver with the
-  same explicit SQLite page-cache policy, and this package ships only
-  `node:sqlite`-compatible row/iterator materialization changes that clear the performance,
-  lifetime, memory, and platform gates below.
-- **Core problem**: better-sqlite3 13 uses stable Node-API and still wins some bulk SELECTs.
-  The completed P05 investigation established that its 16 MiB packaged SQLite page cache
-  explains much of the published range gap. It also proposed cached JavaScript row and
-  iterator-record factories as a second cause, but Task 2 did not reproduce a material row
-  gain against the same current harness.
-- **Key constraint**: this is an optimization project, not permission to loosen observable
-  behavior, ABI stability, cleanup safety, or the package's memory default.
-- **Acceptable outcome**: ship a compatible optimization that clears every gate, or record
-  that no stable compatible candidate justifies its complexity and retain the current native
-  path. A forced optimization is not success.
+- Task 0 added controlled and packaged cache profiles without changing the package's 2 MiB
+  default.
+- Task 1 added compatibility and environment tests for every row path considered by the
+  optimization.
+- Task 2 rejected the row factory because same-harness A/B improved range throughput by about
+  2% and did not improve iteration. The production materializer remains unchanged.
+- The public benchmark documents now identify the published table as a packaged-default run
+  and no longer claim that row factories explain the remaining binding gap.
+- No controlled result table was published. A future performance project must first establish
+  a lifecycle-neutral A/B baseline and flat native/native self-control.
 
 ## Current phase
 
-Repair benchmark attribution before screening another optimization. Task 2 rejected the
-row-factory candidates after same-harness A/B failed the 20% gate. Do not start Task 4 until
-the statement-lifecycle asymmetry described below is removed and a native/native self-control
-is flat.
+Closed. This plan reached its accepted negative outcome and has no remaining implementation
+work. Start a new TPP if new evidence justifies another performance candidate.
 
 - [x] Task 0: Normalize and expose benchmark cache profiles
 - [x] Task 1: Freeze materialization compatibility and lifetime behavior
 - [x] Task 2: Screen compatible row-factory candidates — no candidate retained
-- [ ] Benchmark prerequisite: establish a lifecycle-neutral controlled baseline
-- [ ] Task 3: Implement bounded shape caching and reprepare handling — not justified by Task 2
-- [ ] Task 4: Screen and, if justified, implement iterator-record factories
-- [ ] Task 5: Decide `SQLITE_THREADSAFE=2` independently
-- [ ] Task 6: Publish controlled results and default-policy sensitivity
-- [ ] Task 7: Complete integration, platform, memory, and review gates
+- [x] Task 3 disposition: skipped because Task 2 found no winning factory
+- [x] Task 4 disposition: skipped after Task 2 invalidated the factory attribution
+- [x] Task 5 disposition: deferred as an independent project if demand warrants it
+- [x] Task 6 disposition: corrected public attribution; did not publish a controlled table
+- [x] Task 7 disposition: not applicable because no production candidate was retained
 
 ## Decisions already made
 
@@ -53,7 +45,7 @@ changes it again. Do not describe it as a process-wide 16 MiB allocation.
 
 ### Use equal cache settings for the main comparison
 
-The main apples-to-apples performance profile will execute
+The controlled performance profile executes
 `PRAGMA cache_size = -16000` for **every** driver, after opening each fresh benchmark
 database and before setup/timing. This matches better-sqlite3's packaged target and keeps the
 current range fixture from turning primarily into a comparison of unequal page-cache policy.
@@ -111,7 +103,7 @@ The handoff agent should not repeat the completed ceiling experiments.
 | Omit row property insertion                   |        +13% |            +38% |     +73% | Incompatible ceiling                  |
 | Cached outer result-array factory             |           — | flat normalized |        — | Do not repeat                         |
 | Ordinary shape-specialized row factory        |        +13% |            +40% |     +74% | Historical spike; not reproduced      |
-| Ordinary iterator-record factory              |           — |               — |     +17% | Compatible candidate worth screening  |
+| Ordinary iterator-record factory              |           — |               — |     +17% | Historical lead; not rescreened       |
 | Experimental bulk null-prototype API          |         +2% |            +20% |     +10% | Stability policy blocks shipping      |
 | C++ LTO                                       |        flat |            flat |     flat | Do not repeat                         |
 | Declare N-API 10                              |        flat |            flat |        — | Do not repeat                         |
@@ -265,9 +257,9 @@ that policy difference accurately.
   only; their throughput is deliberately not published.
 - Regression proof: `npm test`, `npm run lint`, the benchmark TypeScript check, Prettier, and
   `git diff --check` passed.
-- The existing published table/charts were not regenerated; that remains Task 6. The package
-  README labels them as packaged-default measurements. The package build still has only the
-  commented example for `SQLITE_DEFAULT_CACHE_SIZE`, so its SQLite default remains `-2000`.
+- The existing published table/charts were not regenerated. The package README labels them as
+  packaged-default measurements. The package build still has only the commented example for
+  `SQLITE_DEFAULT_CACHE_SIZE`, so its SQLite default remains `-2000`.
 
 Landed in `682bd1d` (`bench(perf): normalize SQLite page-cache policy`).
 
@@ -316,8 +308,9 @@ a substitute for traced ownership.
   passed 930 of 952 CJS tests (22 skipped). The original full-suite and lint runs included
   unrelated in-progress native and test changes. The generated Node-compat statement suite also
   passed locally on Node 26.6.0; the supported-version matrix remains a CI proof item.
-- Task 1B remains: consolidate lifetime/reentrancy/invalidation coverage, add repeated abrupt
-  worker termination, and prove import/SELECT with string code generation disabled.
+- At this point, Task 1B remained: consolidate lifetime/reentrancy/invalidation coverage, add
+  repeated abrupt worker termination, and prove import/SELECT with string code generation
+  disabled.
 
 **Task 1B implementation record (2026-08-09)**:
 
@@ -417,154 +410,34 @@ Before another performance candidate:
    resolved addon path and hash.
 3. Run a native/native self-control through both arms and require it to be flat before
    attributing a candidate effect.
-4. Only then decide whether the independent iterator-record candidate in Task 4 warrants a
-   screen.
+4. Treat an iterator-record candidate as a new project rather than reopening this completed
+   plan.
 
-### Task 3: Implement bounded shape caching and reprepare handling
+### Tasks 3 and 4: Factory productionization — skipped
 
-**Success**: the winning row factory is reusable across statements without per-wrapper N-API
-references, selects the correct post-reprepare shape, stays bounded under hostile shape churn,
-and retains the measured gain.
+Task 2 found no winning row factory, so bounded shape caching, reprepare invalidation, and an
+iterator-record factory would add complexity without a measured benefit. A future factory
+candidate needs a new TPP and must carry forward the compatibility landmines and benchmark
+prerequisites above.
 
-**Outcome**: not started and not currently justified. Reopen only if a lifecycle-neutral
-Task 2 rerun clears the row-factory gate on both bulk paths.
+### Task 5: `SQLITE_THREADSAFE=2` — deferred
 
-Preferred ownership model:
+This global build-mode decision is independent of SELECT materialization. The package retains
+`SQLITE_THREADSAFE=1`. Open a separate TPP only if a concrete performance or concurrency need
+justifies tracing synchronous statements, sessions, backup workers, extensions, callbacks,
+worker environments, and teardown paths.
 
-- `AddonData` owns the factory creator(s) and a per-environment bounded cache of persistent
-  function references.
-- The cache key is an equality-checked ordered vector of column-name byte strings. Duplicate
-  names are retained. Hashes accelerate lookup but never establish equality alone.
-- Set an explicit small bound based on measured workloads (start at 128 shapes) and use a
-  simple LRU or clock policy. A miss after eviction safely rebuilds the factory.
-- `StatementSync`/iterator may store only POD lookup state: shape hash/key, cache generation or
-  slot, and observed `SQLITE_STMTSTATUS_REPREPARE` count. They do not own N-API references.
-- `All()` and `ToArray()` resolve metadata once after the first successful step and reuse one
-  local function handle for the row loop. `Get()` resolves one handle for its row.
-  `Next()` refreshes only when its cached POD state is absent, evicted, or invalidated by
-  reprepare.
-- Array-return mode stays on its existing path unless a separately measured array-specific
-  candidate earns its own TPP.
+### Task 6: Publish results — closed without a new table
 
-Adapt the design if measurement shows that copying vector keys or LRU bookkeeping erases the
-gain. Do not remove the bound or move references onto ObjectWraps to rescue a benchmark.
+The existing table remains an explicitly labeled packaged-default result.
+`benchmark/README.md` and `doc/library-comparison.md` preserve the measured cache-policy result
+but describe the remaining binding gap as unisolated. A new performance table requires the
+lifecycle-neutral baseline and native/native self-control recorded in Task 2.
 
-Add tests/stress for one shape shared by many statements, many distinct shapes beyond the
-bound, hash-collision equality, schema reprepare, toggled return-array mode, worker isolation,
-environment teardown, and repeated open/close. Add a focused prepare-plus-one-get benchmark so
-factory creation/caching cost is visible rather than amortized away.
+### Task 7: Full integration gate — not applicable
 
-**Proof**:
-
-- [ ] Task 1 compatibility suite passes in compiled and eval-free fallback modes
-- [ ] Cache size plateaus at its documented bound under at least 10×-bound shape churn
-- [ ] Worker termination and Alpine/musl tests show no crash or JIT corruption
-- [ ] Row performance gate still passes after production caching/invalidation is included
-- [ ] Stable API surface and N-API 8 prebuild load behavior are unchanged
-
-Suggested standalone commit if retained:
-`perf(sqlite): materialize object rows through shape factories`.
-
-### Task 4: Screen and implement iterator-record factories separately
-
-**Success**: a compatible record factory reduces wrapper cost against the retained native row
-path, or is reverted as too small. Do not screen it until the corrected benchmark prerequisite
-is complete.
-
-1. Add one eval-free factory that accepts `(value, done)`, constructs the record in the current
-   key order, and sets its prototype to null before return. Use it for row, terminal, repeated
-   terminal, and `return()` records so behavior does not depend on branch.
-2. Keep row materialization fixed at the retained native path and measure only record
-   construction.
-3. Verify exceptions from row materialization propagate before any record factory call.
-4. Reuse an `AddonData` module/worker-lifetime function reference; do not add an iterator-owned
-   persistent reference.
-5. Retain only if the independent 8% iterator gate passes. Otherwise reverse the patch and
-   record the result.
-
-**Proof**:
-
-- [ ] Iterator record prototype, key order, values, `return()`, and repeated terminal tests pass
-- [ ] `select-iterate` clears the independent gate with by-id/range negative controls flat
-- [ ] Worker/Alpine teardown remains clean
-
-Suggested standalone commit if retained:
-`perf(sqlite): create iterator records through a cached factory`.
-
-### Task 5: Decide `SQLITE_THREADSAFE=2` independently
-
-**Success**: either a concurrency/resource review plus repeated measurement proves the global
-build-mode change safe and worthwhile, or the current serialized build remains with the
-decision recorded. Do not let this task block publication of row-factory work.
-
-Before changing `binding.gyp`, trace every use of the shared SQLite library and connection,
-including synchronous databases/statements, sessions, backup's async worker, extensions,
-cleanup hooks, user callbacks, worker environments, serialize/deserialize, and any path that
-can overlap a connection from another native thread. Prove that a single connection is never
-used concurrently in multi-thread mode; JavaScript's ordinary single-threaded call model is
-not sufficient proof for backup or teardown paths.
-
-If the trace is clean, run a one-variable build against the final optimized baseline and the
-same controlled cache. Require the 5% repeated gain and all concurrency, memory, sanitizer,
-backup, session, and worker tests. If the proof expands beyond a contained audit, create a
-separate TPP and leave `SQLITE_THREADSAFE=1` here.
-
-Do not switch individual connections to `SQLITE_OPEN_NOMUTEX` as a shortcut. Compile-time
-mode and per-connection flags have different scopes and need separate evidence.
-
-### Task 6: Publish controlled results and packaged-default sensitivity
-
-**Success**: readers can distinguish binding/materialization performance from packaged cache
-policy, reproduce both, and see which optimizations were retained.
-
-1. Run the complete suite under the controlled cache profile with 30 measured trials and 8
-   warmups, pinned as described above. Regenerate the main README table and charts from this
-   profile.
-2. Run at least the SELECT scenarios under the packaged-cache sensitivity profile. Publish a
-   compact secondary table or callout with each effective cache value; do not overwrite the
-   controlled chart set.
-3. Update `benchmark/README.md` methodology and commands, including the reason 16 MiB was
-   selected, the fact that package defaults remain unchanged, and the meaning of negative
-   `PRAGMA cache_size` values.
-4. Update `doc/library-comparison.md` so better-sqlite3's SELECT advantage is attributed to
-   measured cache policy and materialization strategy. State the final compatible factory
-   result, including a negative result, without implying that Node-API version alone determines
-   speed.
-5. Record the exact Node, SQLite, package, better-sqlite3, platform, CPU/governor, commands,
-   and profile in both generated artifacts and this TPP.
-
-Do not claim that the controlled profile is each library's out-of-box performance, or that the
-packaged profile isolates binding overhead.
-
-### Task 7: Full integration gate and review
-
-**Success**: retained code is compatible, bounded, stable-ABI, clean under worker teardown,
-and useful outside the one benchmark fixture.
-
-Run and record:
-
-- [ ] focused materialization/iterator tests in CJS and ESM
-- [ ] `npm test`
-- [ ] `npm run test:all`
-- [ ] `npm run test:node`
-- [ ] focused Node-compatibility tests pass against the supported Node matrix
-- [ ] `npm run lint:full`
-- [ ] `cd benchmark && npx tsc --noEmit`
-- [ ] controlled and packaged-cache benchmark profiles
-- [ ] `npm run test:memory`
-- [ ] `npm run memory:asan`
-- [ ] `npm run memory:valgrind`
-- [ ] `npm run test:docker:alpine`
-- [ ] worker initialization/termination stress
-- [ ] CJS/ESM prebuild loading on Node 22, 24, and 26
-- [ ] Linux, macOS, and Windows x64/arm64 CI where currently supported
-- [ ] `git diff --check` and formatter checks
-- [ ] no changes under `src/upstream/*`
-- [ ] stable named/enumerable API surface unchanged
-
-Before commit, get an independent native-resource review of every new persistent reference,
-cache eviction path, and environment cleanup edge. Empirically vet each finding before
-changing code.
+Tasks 0 and 1 were verified when they landed. Task 2 retained no production code, native
+reference, cache, or ABI change, so the proposed production integration gate did not apply.
 
 ## Rejected repeats and future watch list
 
@@ -587,7 +460,8 @@ matrix; do not add runtime symbol probing, `dlsym`, or Node-version forks under 
 
 ## Definition of complete
 
-This TPP is complete when the controlled benchmark no longer conflates page-cache defaults
-with binding speed, the package default remains an explicit 2 MiB policy choice, every retained
-factory is semantics-compatible and teardown-safe, all acceptance gates are recorded, and the
-published comparison explains both the controlled result and packaged-default sensitivity.
+This TPP is complete with the accepted negative outcome: the package retains its explicit
+2 MiB cache default and native materializer, the rejected candidates and benchmark confounder
+are recorded, and the public comparison no longer presents an unverified factory attribution
+as a measured cause. Controlled cache support remains available for a future project, but this
+plan does not publish a new controlled result table.
