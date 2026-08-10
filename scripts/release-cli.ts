@@ -16,7 +16,6 @@
 
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { basename, join, resolve } from "node:path";
 import { argv, env, execPath, platform } from "node:process";
 
@@ -179,67 +178,60 @@ async function install(): Promise<void> {
 }
 
 /**
- * The slice of the API the load check drives. Round-tripping a row through the
- * native binding proves the packed prebuild loaded, which module resolution alone
- * does not.
+ * Round-tripping a row through the native binding proves the packed prebuild
+ * loaded, which module resolution alone does not.
  */
-interface PackedDatabase {
-  exec(sql: string): void;
-  prepare(sql: string): {
-    run(...params: unknown[]): { lastInsertRowid: number | bigint };
-    get(...params: unknown[]): { name?: unknown } | undefined;
-  };
-  close(): void;
-}
-
-function assertRoundTrip(db: PackedDatabase): void {
+const roundTrip = `
+  const db = new DatabaseSync(":memory:");
   try {
     db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
     const { lastInsertRowid } = db
       .prepare("INSERT INTO t (name) VALUES (?)")
       .run("alpha");
-    const row = db
-      .prepare("SELECT name FROM t WHERE id = ?")
-      .get(lastInsertRowid);
+    const row = db.prepare("SELECT name FROM t WHERE id = ?").get(lastInsertRowid);
     if (row?.name !== "alpha") {
-      throw new Error(`Packed package returned ${JSON.stringify(row)}`);
+      throw new Error("The packed package returned " + JSON.stringify(row));
     }
   } finally {
     db.close();
   }
+`;
+
+/**
+ * Runs one entry-point check in a plain `node`, resolving from the install root.
+ *
+ * Never in this process: this script runs under tsx, whose tsconfig `paths`
+ * mapping redirects the package name to `src/index.ts`. A `require()` here would
+ * verify the working tree and report success no matter what the tarball holds.
+ * A subprocess also resolves the package the way a consumer's does -- no loader
+ * hooks, and the two entry points resolve independently.
+ */
+function loadEntryPoint(
+  installRoot: string,
+  inputType: "commonjs" | "module",
+  source: string,
+): void {
+  execFileSync(
+    execPath,
+    [`--input-type=${inputType}`, "--eval", `${source}\n${roundTrip}`],
+    { cwd: installRoot, stdio: "inherit" },
+  );
 }
 
 async function load(projectRoot: string): Promise<void> {
   const installRoot = resolve(option("install-root"));
   const { name } = await identity(projectRoot);
-  const requireFromInstall = createRequire(join(installRoot, "package.json"));
+  const specifier = JSON.stringify(name);
 
-  const { DatabaseSync } = requireFromInstall(name) as {
-    DatabaseSync: new (path: string) => PackedDatabase;
-  };
-  assertRoundTrip(new DatabaseSync(":memory:"));
-
-  // The ESM entry point resolves differently, so it needs its own process.
-  execFileSync(
-    execPath,
-    [
-      "--input-type=module",
-      "--eval",
-      `
-        import { DatabaseSync } from ${JSON.stringify(name)};
-        const db = new DatabaseSync(":memory:");
-        db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
-        const { lastInsertRowid } = db
-          .prepare("INSERT INTO t (name) VALUES (?)")
-          .run("alpha");
-        const row = db.prepare("SELECT name FROM t WHERE id = ?").get(lastInsertRowid);
-        db.close();
-        if (row?.name !== "alpha") {
-          throw new Error("Packed ESM export returned " + JSON.stringify(row));
-        }
-      `,
-    ],
-    { cwd: installRoot, stdio: "inherit" },
+  loadEntryPoint(
+    installRoot,
+    "commonjs",
+    `const { DatabaseSync } = require(${specifier});`,
+  );
+  loadEntryPoint(
+    installRoot,
+    "module",
+    `import { DatabaseSync } from ${specifier};`,
   );
 
   console.log("Packed CommonJS and ESM entry points loaded successfully");
