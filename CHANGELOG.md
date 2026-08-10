@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [2.3.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.3.0) (2026-08-10)
 
 API compatible with `node:sqlite` from Node.js v26.7.0, plus three APIs landed upstream but not yet in a Node.js release line. SQLite is unchanged at 3.53.4.
 
