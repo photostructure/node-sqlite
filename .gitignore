@@ -98,4 +98,8 @@ test/upstream/
 # Dynamically created by Bear and fed to clang-tidy:
 compile_commands*.json
 
+# Release working directories (see RELEASE.md)
+package-artifact/
+package-install/
+
 .codex

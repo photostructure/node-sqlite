@@ -268,7 +268,7 @@ In your final message, report:
 5. **Test results**: pass/fail summary. Call out pre-existing failures (not regressions) with evidence.
 6. **Node-compat test changes**: any new files added to `skipFiles` or new transforms added to `sync-node-tests.ts`. These are likely follow-up work items.
 7. **PR link** (if opened) or push destination.
-8. **How to release**: Tell the user to merge this branch/PR to `main`, then trigger the `Build & Release` workflow with input `version = <patch|minor|major>`. The workflow runs `npm version`, tags, publishes to npm with provenance, and creates the GitHub release. Link: https://github.com/photostructure/node-sqlite/actions/workflows/build.yml
+8. **How to release**: Tell the user to merge this branch/PR to `main`, then follow [RELEASE.md](../../../RELEASE.md): trigger the `Build & Release` workflow with input `version = <patch|minor|major>`, which signs and pushes the version commit and tag, then dispatches `Stage npm Release` at that tag. That second workflow rebuilds the prebuilds, packs one tarball, tests it, and **stages** it on npm — the maintainer must approve the staged package with 2FA before it goes public. Link: https://github.com/photostructure/node-sqlite/actions/workflows/build.yml
 
 ## Common gotchas
 
@@ -280,7 +280,7 @@ Learned from real release-prep sessions — consult this list when something sur
 - **Prettier after every sync:tests.** Upstream uses single quotes; our prettier rewrites to double. Without the formatter pass, every re-sync shows a massive noise diff.
 - **Node 22 CJS can't parse ERM `using`.** Don't assume the tests will parse just because they ran in Node 25. The rewriter at `scripts/sync-node-tests.ts` handles `using` today; extend it for future Node-only syntax (e.g. import attributes) as needed.
 - **`test:api` has a pre-existing failure on Node <25.** It compares constants against the host's `node:sqlite`, which exposes far fewer constants on Node 22 than Node 25. If you inherit this failure, confirm via `git stash` + re-run that it exists on the baseline before calling it a regression.
-- **The `Build & Release` action bumps `package.json`, tags, and publishes.** You don't. Ever. If the action's input takes `patch|minor|major`, give it that — don't pre-stage a version commit.
+- **The `Build & Release` action bumps `package.json` and tags; `Stage npm Release` publishes.** You don't. Ever. The action's input takes `patch|minor|major` — give it that, don't pre-stage a version commit.
 - **Use `AskUserQuestion` when the semver call is ambiguous.** Release decisions are cheap to pause on and expensive to get wrong.
 
 ## Things worth doing but not required

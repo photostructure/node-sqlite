@@ -108,7 +108,11 @@
     "docs": "typedoc",
     "//ci": "CI and release commands",
     "preflight": "npx --yes tsx scripts/preflight.ts",
-    "release:prepare": "npm run build:dist",
+    "//release": "driven by both build.yml and publish.yaml -- see RELEASE.md",
+    "release:verify-prebuilds": "tsx scripts/release-cli.ts verify-prebuilds",
+    "release:pack-package": "tsx scripts/release-cli.ts pack",
+    "release:install-package": "tsx scripts/release-cli.ts install",
+    "release:load-package": "tsx scripts/release-cli.ts load",
     "install:osv-scanner": "go install github.com/google/osv-scanner/cmd/osv-scanner@latest",
     "update:pinact": "tsx scripts/pinact.ts"
   },

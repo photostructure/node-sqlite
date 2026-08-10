@@ -298,6 +298,7 @@ This approach reduces test brittleness while ensuring error handling works corre
 - **Native rebuilds** use `npm run build:native:rebuild`
 - **Multi-platform prebuilds** are generated via GitHub Actions
 - **`package.json` version** is managed by the release GitHub Action — do not bump it manually
+- **Releases are staged, not published directly** — `build.yml` signs and pushes the version commit and tag, `publish.yaml` (frozen at that tag) rebuilds, packs, tests, and stages one tarball, and a maintainer approves it on npm with 2FA. See [RELEASE.md](RELEASE.md).
 - **`package.json`'s `files` allowlist governs the tarball.** Everything `binding.gyp` compiles must stay listed: `node-gyp-build` falls back to a source build wherever no prebuild matches.
 
 ### Git History Is Append-Only
