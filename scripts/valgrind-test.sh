@@ -67,8 +67,8 @@ VALGRIND_OPTS="--leak-check=full --show-leak-kinds=definite,indirect,possible --
 echo "Running valgrind tests..."
 if valgrind $VALGRIND_OPTS "$NODE_BIN" "$TSX_CLI" "$VALGRIND_TEST" 2>&1 | tee "$ROOT_DIR/valgrind.log"; then
     # Extract leak counts from the LEAK SUMMARY
-    DEFINITELY_LOST=$(grep "definitely lost:" "$ROOT_DIR/valgrind.log" | sed -E 's/.*definitely lost: ([0-9,]+) bytes.*/\1/' | tr -d ',')
-    INDIRECTLY_LOST=$(grep "indirectly lost:" "$ROOT_DIR/valgrind.log" | sed -E 's/.*indirectly lost: ([0-9,]+) bytes.*/\1/' | tr -d ',')
+    DEFINITELY_LOST=$(sed -nE 's/.*definitely lost: ([0-9,]+) bytes.*/\1/p' "$ROOT_DIR/valgrind.log" | tail -n 1 | tr -d ',')
+    INDIRECTLY_LOST=$(sed -nE 's/.*indirectly lost: ([0-9,]+) bytes.*/\1/p' "$ROOT_DIR/valgrind.log" | tail -n 1 | tr -d ',')
     
     # Debug output
     echo "Definitely lost: ${DEFINITELY_LOST:-0} bytes"
