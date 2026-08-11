@@ -44,6 +44,7 @@ const maxWorkers = getMaxWorkers();
 const config = {
   displayName: `@photostructure/sqlite (${isESM ? "ESM" : "CJS"})`,
   testEnvironment: "jest-environment-node",
+  globalSetup: "<rootDir>/test/global-setup.cjs",
   // Limit parallelism in CI to avoid resource contention
   ...(maxWorkers != null && { maxWorkers }),
   roots: ["<rootDir>/src", "<rootDir>/test", "<rootDir>/benchmark"],

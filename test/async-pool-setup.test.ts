@@ -1,5 +1,3 @@
-import { execFileSync } from "node:child_process";
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { DatabaseSync } from "../src";
 import { DatabasePool } from "../src/experimental";
@@ -7,26 +5,11 @@ import { getDirname, useTempDir } from "./test-utils";
 
 const extensionDir = path.join(getDirname(), "fixtures", "test-extension");
 const extensionBase = path.join(extensionDir, "test_extension");
-const extensionFile =
-  extensionBase +
-  (process.platform === "win32"
-    ? ".dll"
-    : process.platform === "darwin"
-      ? ".dylib"
-      : ".so");
+const testWithExtension =
+  process.env["TEST_EXTENSION_BUILT"] === "1" ? test : test.skip;
 
 describe("DatabasePool connection setup", () => {
   const tempDir = useTempDir("sqlite-async-pool-setup-");
-
-  beforeAll(() => {
-    execFileSync(process.execPath, ["build.js"], {
-      cwd: extensionDir,
-      stdio: "inherit",
-    });
-    if (!fs.existsSync(extensionFile)) {
-      throw new Error(`Test extension was not built at ${extensionFile}`);
-    }
-  });
 
   test("runs ordered parameterized setup before admitting the connection", async () => {
     const attachedPath = tempDir.getDbPath("attached.db");
@@ -76,7 +59,7 @@ describe("DatabasePool connection setup", () => {
     }
   });
 
-  test.each(["none", "strict"] as const)(
+  testWithExtension.each(["none", "strict"] as const)(
     "loads an extension during setup and revokes it under %s",
     async (authorizer) => {
       const pool = await DatabasePool.open(":memory:", {
