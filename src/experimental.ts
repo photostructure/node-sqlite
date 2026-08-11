@@ -205,11 +205,13 @@ function snapshotParams(
     throw invalidArgument(`The ${label} parameters must be a plain object.`);
   }
   const copied: Record<string, PoolValue> = Object.create(null);
-  for (const key of Object.keys(params)) {
-    copied[key] = snapshotValue(
-      (params as Record<string, unknown>)[key],
-      `${label}.${key}`,
-    );
+  for (const [key, value] of Object.entries(params)) {
+    Object.defineProperty(copied, key, {
+      configurable: true,
+      enumerable: true,
+      value: snapshotValue(value, `${label}.${key}`),
+      writable: true,
+    });
   }
   return copied;
 }
@@ -250,11 +252,10 @@ function snapshotOperation(
 }
 
 function booleanOption(
-  options: Record<string, unknown>,
+  value: unknown,
   name: string,
   defaultValue: boolean,
 ): boolean {
-  const value = options[name];
   if (value === undefined) return defaultValue;
   if (typeof value !== "boolean") {
     throw invalidArgument(`The "options.${name}" argument must be a boolean.`);
@@ -308,9 +309,13 @@ function normalizeOptions(options: unknown): NormalizedOptions {
   return {
     connections: connections as number,
     authorizer,
-    readBigInts: booleanOption(input, "readBigInts", false),
-    returnArrays: booleanOption(input, "returnArrays", false),
-    allowExtension: booleanOption(input, "allowExtension", false),
+    readBigInts: booleanOption(input["readBigInts"], "readBigInts", false),
+    returnArrays: booleanOption(input["returnArrays"], "returnArrays", false),
+    allowExtension: booleanOption(
+      input["allowExtension"],
+      "allowExtension",
+      false,
+    ),
     connectionSetup: setup.map((operation, index) =>
       snapshotOperation(operation, index, true),
     ),
@@ -364,8 +369,8 @@ export class DatabasePool {
   #rejectClose?: (reason?: unknown) => void;
   #nativeCloseStarted = false;
 
-  private constructor(token?: symbol, connections: NativeConnection[] = []) {
-    if (token !== constructorToken) throw new TypeError("Illegal constructor");
+  private constructor(guard?: symbol, connections: NativeConnection[] = []) {
+    if (guard !== constructorToken) throw new TypeError("Illegal constructor");
     this.#connections = connections;
     this.#idle = [...connections];
   }
