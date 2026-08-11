@@ -558,8 +558,8 @@ public:
     if (deferred.has_value()) {
       deferreds_.push_back(*deferred);
     }
-    napi_value resource;
-    napi_value name;
+    napi_value resource = nullptr;
+    napi_value name = nullptr;
     napi_status status = napi_create_object(env_, &resource);
     if (status == napi_ok) {
       status = napi_create_string_latin1(env_, resource_name, NAPI_AUTO_LENGTH,
@@ -741,12 +741,16 @@ bool ToJsValue(Napi::Env env, const NativeValue &native, bool read_big_ints,
     *out = Napi::String::New(env, text->data(), text->size());
     return true;
   }
-  const Blob &blob = std::get<Blob>(native.data);
-  Napi::ArrayBuffer array_buffer = Napi::ArrayBuffer::New(env, blob.size());
-  if (!blob.empty()) {
-    std::memcpy(array_buffer.Data(), blob.data(), blob.size());
+  const auto *blob = std::get_if<Blob>(&native.data);
+  if (blob == nullptr) {
+    SetPlainError(error, "Cannot convert SQLite value");
+    return false;
   }
-  *out = Napi::Uint8Array::New(env, blob.size(), array_buffer, 0);
+  Napi::ArrayBuffer array_buffer = Napi::ArrayBuffer::New(env, blob->size());
+  if (!blob->empty()) {
+    std::memcpy(array_buffer.Data(), blob->data(), blob->size());
+  }
+  *out = Napi::Uint8Array::New(env, blob->size(), array_buffer, 0);
   return true;
 }
 
@@ -1206,10 +1210,13 @@ int BindValue(sqlite3_stmt *statement, int index, const NativeValue &value) {
     return sqlite3_bind_text64(statement, index, text->data(), text->size(),
                                SQLITE_TRANSIENT, SQLITE_UTF8);
   }
-  const Blob &blob = std::get<Blob>(value.data);
-  const void *data = blob.empty() ? static_cast<const void *>("")
-                                  : static_cast<const void *>(blob.data());
-  return sqlite3_bind_blob64(statement, index, data, blob.size(),
+  const auto *blob = std::get_if<Blob>(&value.data);
+  if (blob == nullptr) {
+    return SQLITE_MISUSE;
+  }
+  const void *data = blob->empty() ? static_cast<const void *>("")
+                                   : static_cast<const void *>(blob->data());
+  return sqlite3_bind_blob64(statement, index, data, blob->size(),
                              SQLITE_TRANSIENT);
 }
 
@@ -1296,17 +1303,18 @@ bool ReadRow(sqlite3 *db, sqlite3_stmt *statement,
     case SQLITE_NULL:
       column.value.data = nullptr;
       break;
-    case SQLITE_INTEGER:
-      column.value.data =
+    case SQLITE_INTEGER: {
+      const int64_t value =
           static_cast<int64_t>(sqlite3_column_int64(statement, index));
+      column.value.data = value;
       if (!state->read_big_ints()) {
-        const int64_t value = std::get<int64_t>(column.value.data);
         if (value > kJsMaxSafeInteger || value < kJsMinSafeInteger) {
           SetRangeError(error, value);
           return false;
         }
       }
       break;
+    }
     case SQLITE_FLOAT:
       column.value.data = sqlite3_column_double(statement, index);
       break;
