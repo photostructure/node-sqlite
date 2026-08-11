@@ -1,12 +1,22 @@
 import { jest } from "@jest/globals";
+import nodeGypBuild from "node-gyp-build";
 import { AsyncLocalStorage, createHook } from "node:async_hooks";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import * as path from "node:path";
 import { Worker } from "node:worker_threads";
 import { DatabaseSync } from "../src";
 import { DatabasePool } from "../src/experimental";
 import { waitForCondition } from "./test-reliability-utils";
-import { getTestTimeout, projectRoot, useTempDir } from "./test-utils";
+import {
+  getDirname,
+  getTestTimeout,
+  projectRoot,
+  useTempDir,
+} from "./test-utils";
+
+const testWithExtension =
+  process.env["TEST_EXTENSION_BUILT"] === "1" ? test : test.skip;
 
 describe("DatabasePool lifecycle", () => {
   jest.setTimeout(getTestTimeout(30_000));
@@ -148,6 +158,164 @@ describe("DatabasePool lifecycle", () => {
         statuses: ["fulfilled", "fulfilled"],
         third: "fulfilled",
       },
+      stderr: "",
+    });
+  });
+
+  testWithExtension(
+    "native close accepts extension-owned statements without hanging teardown",
+    async () => {
+      const binding = nodeGypBuild(projectRoot()) as {
+        _openAsyncPoolConnection(
+          location: string,
+          options: {
+            readBigInts: boolean;
+            returnArrays: boolean;
+            authorizer: string;
+            allowExtension: boolean;
+            connectionSetup: Array<{
+              kind: string;
+              sql: string;
+              params?: unknown[];
+            }>;
+          },
+        ): Promise<{
+          execute(request: {
+            operations: Array<{ kind: string; sql: string }>;
+          }): Promise<unknown>;
+          close(): Promise<void>;
+        }>;
+      };
+      const extensionBase = path.join(
+        getDirname(),
+        "fixtures",
+        "test-extension",
+        "test_extension",
+      );
+      const connection = await binding._openAsyncPoolConnection(":memory:", {
+        readBigInts: false,
+        returnArrays: false,
+        authorizer: "none",
+        allowExtension: true,
+        connectionSetup: [
+          {
+            kind: "run",
+            sql: "SELECT load_extension(?, ?)",
+            params: [extensionBase, "sqlite3_testextension_init"],
+          },
+        ],
+      });
+
+      try {
+        await expect(
+          connection.execute({
+            operations: [
+              {
+                kind: "get",
+                sql: "SELECT test_extension_hold_statement() AS held",
+              },
+            ],
+          }),
+        ).resolves.toEqual([{ held: 1 }]);
+        await expect(connection.close()).resolves.toBeUndefined();
+      } finally {
+        const releaser = new DatabaseSync(":memory:", { allowExtension: true });
+        try {
+          releaser.enableLoadExtension(true);
+          releaser.loadExtension(extensionBase, "sqlite3_testextension_init");
+          expect(
+            releaser
+              .prepare("SELECT test_extension_release_statement() AS released")
+              .get(),
+          ).toEqual({ released: 1 });
+        } finally {
+          releaser.close();
+          await connection.close();
+        }
+      }
+    },
+  );
+
+  test("fatal auto-close observes its internal cleanup rejection", async () => {
+    const root = projectRoot();
+    const childScript = `
+      const Module = require('node:module');
+      const originalLoad = Module._load;
+      Module._load = function(request, parent, isMain) {
+        if (request === 'node-gyp-build') {
+          return () => ({
+            async _openAsyncPoolConnection() {
+              return {
+                execute() {
+                  return Promise.reject(
+                    Object.assign(new Error('synthetic fatal request'), {
+                      fatal: true,
+                    }),
+                  );
+                },
+                close() {
+                  return Promise.reject(
+                    new Error('synthetic native close failure'),
+                  );
+                },
+              };
+            },
+          });
+        }
+        return originalLoad.call(this, request, parent, isMain);
+      };
+      const { DatabasePool } = require('./src/experimental.ts');
+      Module._load = originalLoad;
+
+      (async () => {
+        const pool = await DatabasePool.open(':memory:', { authorizer: 'none' });
+        try {
+          await pool.get('SELECT 1');
+          throw new Error('fatal request unexpectedly resolved');
+        } catch (error) {
+          if (error?.fatal !== true) throw error;
+        }
+        setImmediate(() => {
+          pool.close().then(
+            () => {
+              process.stderr.write('fatal cleanup unexpectedly resolved');
+              process.exit(3);
+            },
+            (error) => {
+              if (error?.message !== 'synthetic native close failure') {
+                process.stderr.write(error?.stack || String(error));
+                process.exit(4);
+                return;
+              }
+              process.send('survived', () => process.exit(0));
+            },
+          );
+        });
+      })().catch((error) => {
+        process.stderr.write(error.stack || error.message);
+        process.exit(2);
+      });
+    `;
+    const child = spawn(
+      process.execPath,
+      ["--unhandled-rejections=throw", "-r", "tsx/cjs", "-e", childScript],
+      {
+        cwd: root,
+        stdio: ["ignore", "ignore", "pipe", "ipc"],
+      },
+    );
+    let stderr = "";
+    let message: unknown;
+    child.stderr!.setEncoding("utf8").on("data", (chunk) => (stderr += chunk));
+    child.once("message", (value) => (message = value));
+    const exitCode = await new Promise<number | null>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", resolve);
+    });
+
+    expect({ exitCode, message, stderr }).toEqual({
+      exitCode: 0,
+      message: "survived",
       stderr: "",
     });
   });

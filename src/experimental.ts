@@ -543,10 +543,15 @@ export class DatabasePool {
     this.#state = "failed";
     while (this.#pending.length > 0) this.#pending.shift()!.reject(error);
     if (!this.#closePromise) {
-      this.#closePromise = new Promise<void>((resolve, reject) => {
+      const closePromise = new Promise<void>((resolve, reject) => {
         this.#resolveClose = resolve;
         this.#rejectClose = reject;
       });
+      // Fatal cleanup starts without a close() caller. Mark its rejection as
+      // internally observed while preserving the original promise for a later
+      // close() caller that wants to inspect the native cleanup result.
+      void closePromise.catch(() => undefined);
+      this.#closePromise = closePromise;
     }
   }
 

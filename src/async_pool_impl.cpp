@@ -124,11 +124,7 @@ public:
     std::lock_guard<std::mutex> lock(handle_mutex_);
     // The environment coordinator and close worker must have consumed the
     // handle before the last shared owner disappears.
-    if (db_ != nullptr) {
-      if (sqlite3_close(db_) == SQLITE_OK) {
-        db_ = nullptr;
-      }
-    }
+    (void)CloseLocked();
   }
 
   AsyncConnectionState(const AsyncConnectionState &) = delete;
@@ -153,14 +149,7 @@ public:
 
   int Close() noexcept {
     std::lock_guard<std::mutex> lock(handle_mutex_);
-    if (db_ == nullptr) {
-      return SQLITE_OK;
-    }
-    const int rc = sqlite3_close(db_);
-    if (rc == SQLITE_OK) {
-      db_ = nullptr;
-    }
-    return rc;
+    return CloseLocked();
   }
 
   bool read_big_ints() const noexcept { return read_big_ints_; }
@@ -188,6 +177,23 @@ public:
   std::atomic<bool> close_requested{false};
 
 private:
+  int CloseLocked() noexcept {
+    if (db_ == nullptr) {
+      return SQLITE_OK;
+    }
+    int rc = sqlite3_close(db_);
+    if (rc != SQLITE_OK) {
+      // Extensions can retain statements, blobs, or backups that make the
+      // legacy close report SQLITE_BUSY. close_v2 safely transfers the handle
+      // to SQLite's zombie lifecycle so environment teardown can finish; the
+      // handle is finally freed when the retained resource is released.
+      rc = sqlite3_close_v2(db_);
+    }
+    if (rc == SQLITE_OK) {
+      db_ = nullptr;
+    }
+    return rc;
+  }
   mutable std::mutex handle_mutex_;
   sqlite3 *db_ = nullptr;
   const bool read_big_ints_;
@@ -1613,9 +1619,8 @@ void AsyncPoolEnvironment::QueueCloseIfIdle(
   if (shutting_down_) {
     // Cleanup hooks run without a V8 HandleScope and JavaScript execution is
     // disallowed. Do not construct new napi_async_work here. With no active
-    // worker and no persistent statements, sqlite3_close is non-blocking in
-    // the ordinary case; SQLITE_BUSY deliberately leaves the hook pending as
-    // a visible invariant failure.
+    // worker, Close() either closes immediately or transfers a handle with
+    // extension-owned resources to SQLite's close_v2 zombie lifecycle.
     (void)state->Close();
     return;
   }
@@ -1657,7 +1662,7 @@ void AsyncPoolEnvironment::BeginCleanup(
 
   // Node drains every queued napi_async_work completion before invoking
   // environment cleanup hooks. TryFinishCleanup retains the hook and all state
-  // if that ordering invariant changes or sqlite3_close reports SQLITE_BUSY.
+  // if that ordering invariant changes.
   TryFinishCleanup();
 }
 
