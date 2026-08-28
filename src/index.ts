@@ -372,7 +372,7 @@ export const constants: SqliteConstants = binding.constants;
  * Options for the backup() function.
  */
 export interface BackupOptions {
-  /** Number of pages to be transmitted in each batch of the backup. @default 100 */
+  /** Number of pages to be transmitted in each batch of the backup. Must be a positive integer. @default 100 */
   rate?: number;
   /** Name of the source database. Can be 'main' or any attached database. @default 'main' */
   source?: string;

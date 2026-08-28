@@ -4322,7 +4322,11 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
         return env.Undefined();
       }
       rate = rate_value.As<Napi::Number>().Int32Value();
-      // Note: Node.js allows negative values for rate
+      if (rate <= 0) {
+        node::THROW_ERR_OUT_OF_RANGE(
+            env, "The \"options.rate\" argument must be a positive integer.");
+        return env.Undefined();
+      }
     }
 
     // Get source database option

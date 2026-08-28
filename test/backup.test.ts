@@ -694,12 +694,12 @@ describe("Backup functionality", () => {
           .run(content, extraData);
       }
 
-      // Test 1: Backup with rate = -1 (all at once)
+      // Test 1: Backup with a rate larger than the database (all at once)
       const backup1Path = getDbPath("all_at_once.db");
       let callbackCount1 = 0;
 
       await backup(sourceDb, backup1Path, {
-        rate: -1, // Negative value to copy all pages at once
+        rate: 100_000, // More pages than the database has, so one step copies it all
         progress: () => {
           callbackCount1++;
         },
@@ -736,7 +736,7 @@ describe("Backup functionality", () => {
         `Callbacks - All at once: ${callbackCount1}, One page: ${callbackCount2}, Five pages: ${callbackCount3}`,
       );
 
-      // With rate=-1, we should get 0 or very few callbacks (maybe just 1)
+      // Copying everything in one step gives 0 or very few callbacks (maybe just 1)
       expect(callbackCount1).toBeLessThanOrEqual(1);
 
       // With smaller rates, we generally expect more callbacks, but AsyncWorker
@@ -745,7 +745,7 @@ describe("Backup functionality", () => {
       expect(callbackCount2).toBeGreaterThan(0);
       expect(callbackCount3).toBeGreaterThan(0);
 
-      // The key difference: rate=-1 should have minimal callbacks compared to others
+      // The key difference: the single-step backup should have minimal callbacks
       // Note: On small databases or fast platforms, all rates may result in just 1 callback
       // due to AsyncWorker coalescing, so we use toBeLessThanOrEqual
       if (callbackCount2 > 0 && callbackCount3 > 0) {
@@ -920,6 +920,23 @@ describe("Standalone backup() function", () => {
       /rate/i,
     );
   });
+
+  it.each([0, -1])(
+    "throws if options.rate is %p rather than hanging",
+    (rate) => {
+      const database = makeSourceDb();
+      const destDb = getDbPath("backup.db");
+
+      // A non-positive rate makes sqlite3_backup_step copy nothing, so without
+      // this check the returned promise never settles.
+      expect(() => backup(database, destDb, { rate })).toThrow(
+        expect.objectContaining({
+          code: "ERR_OUT_OF_RANGE",
+          message: 'The "options.rate" argument must be a positive integer.',
+        }),
+      );
+    },
+  );
 
   it("throws if options.progress is invalid", async () => {
     const database = makeSourceDb();
