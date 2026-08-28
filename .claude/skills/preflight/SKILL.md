@@ -122,9 +122,9 @@ For non-trivial upstream code deltas, also check whether `src/sqlite_impl.cpp` �
 
 `npm run sync:tests` copies every `test-sqlite-*.{js,mjs}` file from Node.js and lightly adapts them. Upstream Node.js moves fast; expect at least one failure class per major sync. Diagnose before skipping:
 
-**A. SyntaxError at parse time** (e.g. `Unexpected identifier 'session'` pointing at a `using` declaration): Node.js has started using ERM (`using`/`await using`) and other newish syntax in tests. Our CI runs on Node 22+, which can't parse these in CJS. The fix is a **post-sync text transform** in `scripts/adapt-node-test.ts`, not a skip — adding to `skipTests` only renames `test()` → `test.skip()`; the body is still parsed and still fails.
+**A. SyntaxError at parse time** (e.g. `Unexpected identifier 'session'` pointing at a `using` declaration): a synced test uses syntax newer than the Node version the `test:node` job pins (`node-version: [24]` in `build.yml`). The fix is a **post-sync text transform** in `scripts/adapt-node-test.ts`, not a skip — adding to `skipTests` only renames `test()` → `test.skip()`; the body is still parsed and still fails.
 
-Pattern to follow (already present in the script for `using` → `const`):
+The script carries no such transform today: ERM (`using`/`await using`) is all over the synced tests and parses fine on 24. Write one like this when upstream outpaces the pin:
 
 ```ts
 // Rewrite ERM `using` declarations so the file parses in Node.js < 24 CJS.
@@ -278,7 +278,7 @@ Learned from real release-prep sessions — consult this list when something sur
 - **Sync scripts honor `.sync-cache.json`.** If you change the script's transform/skip logic, pass `--force` to re-apply against unchanged upstream.
 - **Rate limits.** Unauthenticated GitHub API gives you 60 req/hour across `update:pinact`, `sync:node`, `sync:tests`, and compare URLs — `pinact`'s `always: true` config re-verifies every pinned action on each run, so it burns that budget fast. `npm run preflight` pulls a token from `gh auth token` automatically; when running sub-steps by hand, export `GITHUB_TOKEN="$(gh auth token)"` first.
 - **Prettier after every sync:tests.** Upstream uses single quotes; our prettier rewrites to double. Without the formatter pass, every re-sync shows a massive noise diff.
-- **Node 22 CJS can't parse ERM `using`.** Don't assume the tests will parse just because they ran in Node 25. The rewriter at `scripts/adapt-node-test.ts` handles `using` today; extend it for future Node-only syntax (e.g. import attributes) as needed.
+- **The node-compat tests only have to parse on the Node `test:node` pins** (24 today, in `build.yml`), not on every Node the package supports (>=22, which can't parse ERM `using`). `scripts/adapt-node-test.ts` rewrites no syntax at all right now; add a transform (§3.5) when upstream adopts something that pin can't parse.
 - **`test:api` has a pre-existing failure on Node <25.** It compares constants against the host's `node:sqlite`, which exposes far fewer constants on Node 22 than Node 25. If you inherit this failure, confirm via `git stash` + re-run that it exists on the baseline before calling it a regression.
 - **The `Build & Release` action bumps `package.json` and tags; `Stage npm Release` publishes.** You don't. Ever. The action's input takes `patch|minor|major` — give it that, don't pre-stage a version commit.
 - **Use `AskUserQuestion` when the semver call is ambiguous.** Release decisions are cheap to pause on and expensive to get wrong.
