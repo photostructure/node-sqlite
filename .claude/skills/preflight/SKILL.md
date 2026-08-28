@@ -122,7 +122,7 @@ For non-trivial upstream code deltas, also check whether `src/sqlite_impl.cpp` �
 
 `npm run sync:tests` copies every `test-sqlite-*.{js,mjs}` file from Node.js and lightly adapts them. Upstream Node.js moves fast; expect at least one failure class per major sync. Diagnose before skipping:
 
-**A. SyntaxError at parse time** (e.g. `Unexpected identifier 'session'` pointing at a `using` declaration): Node.js has started using ERM (`using`/`await using`) and other newish syntax in tests. Our CI runs on Node 22+, which can't parse these in CJS. The fix is a **post-sync text transform** in `scripts/sync-node-tests.ts`, not a skip — adding to `skipTests` only renames `test()` → `test.skip()`; the body is still parsed and still fails.
+**A. SyntaxError at parse time** (e.g. `Unexpected identifier 'session'` pointing at a `using` declaration): Node.js has started using ERM (`using`/`await using`) and other newish syntax in tests. Our CI runs on Node 22+, which can't parse these in CJS. The fix is a **post-sync text transform** in `scripts/adapt-node-test.ts`, not a skip — adding to `skipTests` only renames `test()` → `test.skip()`; the body is still parsed and still fails.
 
 Pattern to follow (already present in the script for `using` → `const`):
 
@@ -138,7 +138,7 @@ After adding a transform, re-run with `--force` (the SHA cache will otherwise sk
 **B. `TypeError: db.X is not a function`**: upstream added a test file for a node:sqlite API we haven't ported yet (recent example: `test-sqlite-serialize.js` for `serialize()`/`deserialize()`). Options:
 
 1. **Implement the API** — best, but usually out-of-scope for a release-prep session.
-2. **Skip the whole file** via `skipFiles` in `scripts/sync-node-tests.ts`. Add a comment with the feature name and a TODO referencing an issue to port it. Example:
+2. **Skip the whole file** via `skipFiles` in `scripts/adapt-node-test.ts`. Add a comment with the feature name and a TODO referencing an issue to port it. Example:
    ```ts
    // Tests DatabaseSync.prototype.serialize() / deserialize(), which are
    // Node.js-internal SQLite APIs we have not yet ported. Remove this entry
@@ -266,7 +266,7 @@ In your final message, report:
 3. **Dep updates**: list of major/minor bumps (skip patch bumps unless notable). Flag any that were pinned back in `.ncurc.js` and why.
 4. **CHANGELOG entry**: quote the new section verbatim for the user to review.
 5. **Test results**: pass/fail summary. Call out pre-existing failures (not regressions) with evidence.
-6. **Node-compat test changes**: any new files added to `skipFiles` or new transforms added to `sync-node-tests.ts`. These are likely follow-up work items.
+6. **Node-compat test changes**: any new files added to `skipFiles` or new transforms added to `adapt-node-test.ts`. These are likely follow-up work items.
 7. **PR link** (if opened) or push destination.
 8. **How to release**: Tell the user to merge this branch/PR to `main`, then follow [RELEASE.md](../../../RELEASE.md): trigger the `Build & Release` workflow with input `version = <patch|minor|major>`, which signs and pushes the version commit and tag, then dispatches `Stage npm Release` at that tag. That second workflow rebuilds the prebuilds, packs one tarball, tests it, and **stages** it on npm — the maintainer must approve the staged package with 2FA before it goes public. Link: https://github.com/photostructure/node-sqlite/actions/workflows/build.yml
 
@@ -278,7 +278,7 @@ Learned from real release-prep sessions — consult this list when something sur
 - **Sync scripts honor `.sync-cache.json`.** If you change the script's transform/skip logic, pass `--force` to re-apply against unchanged upstream.
 - **Rate limits.** Unauthenticated GitHub API gives you 60 req/hour across `update:pinact`, `sync:node`, `sync:tests`, and compare URLs — `pinact`'s `always: true` config re-verifies every pinned action on each run, so it burns that budget fast. `npm run preflight` pulls a token from `gh auth token` automatically; when running sub-steps by hand, export `GITHUB_TOKEN="$(gh auth token)"` first.
 - **Prettier after every sync:tests.** Upstream uses single quotes; our prettier rewrites to double. Without the formatter pass, every re-sync shows a massive noise diff.
-- **Node 22 CJS can't parse ERM `using`.** Don't assume the tests will parse just because they ran in Node 25. The rewriter at `scripts/sync-node-tests.ts` handles `using` today; extend it for future Node-only syntax (e.g. import attributes) as needed.
+- **Node 22 CJS can't parse ERM `using`.** Don't assume the tests will parse just because they ran in Node 25. The rewriter at `scripts/adapt-node-test.ts` handles `using` today; extend it for future Node-only syntax (e.g. import attributes) as needed.
 - **`test:api` has a pre-existing failure on Node <25.** It compares constants against the host's `node:sqlite`, which exposes far fewer constants on Node 22 than Node 25. If you inherit this failure, confirm via `git stash` + re-run that it exists on the baseline before calling it a regression.
 - **The `Build & Release` action bumps `package.json` and tags; `Stage npm Release` publishes.** You don't. Ever. The action's input takes `patch|minor|major` — give it that, don't pre-stage a version commit.
 - **Use `AskUserQuestion` when the semver call is ambiguous.** Release decisions are cheap to pause on and expensive to get wrong.

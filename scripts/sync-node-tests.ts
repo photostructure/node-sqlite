@@ -16,72 +16,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { adaptTest, skipFiles, toTestFileName } from "./adapt-node-test";
 import { githubFetch } from "./github-api";
 import { resolveLatestStagingBranch } from "./sync-from-node";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const packageRoot = path.join(__dirname, "..");
-
-// Files that cannot be adapted for our package
-const skipFiles = new Set([
-  // Uses Node.js --permission flag which is a runtime security feature.
-  // As a userland package, we cannot integrate with Node.js's internal
-  // permission model. See doc/migrating-from-node-sqlite.md for details.
-  "test-permission-sqlite-load-extension.js",
-
-  // Tests webstorage behavior when sqlite is unavailable - not relevant for us
-  "test-webstorage-without-sqlite.js",
-]);
-
-// Individual tests within files that cannot pass in our standalone package.
-// These get transformed to test.skip() with the reason as a comment.
-// Keys are original Node.js filenames (without .test. suffix).
-const skipTests: Record<string, Array<{ name: string; reason: string }>> = {
-  "test-sqlite.js": [
-    {
-      name: "accessing the node:sqlite module",
-      reason: "Tests Node.js built-in module loading",
-    },
-    {
-      name: "can be disabled with --no-experimental-sqlite flag",
-      reason: "Tests Node.js CLI flag",
-    },
-  ],
-  "test-sqlite-statement-sync.js": [
-    {
-      name: "iterator keeps the prepared statement from being collected",
-      reason: "Requires --expose-gc flag",
-    },
-  ],
-  "test-sqlite-session.js": [
-    {
-      name: "concurrent applyChangeset with workers",
-      reason: "Worker thread changeset serialization issue",
-    },
-    {
-      name: "session - keeps its database alive after the db handle is dropped",
-      reason:
-        "Intentional divergence: upstream keeps the database alive via a " +
-        "strong reference from Session. We cannot -- commit 4da0638 removed " +
-        "Session::database_ref_ because Napi::Reference teardown during GC " +
-        "finalization corrupts V8 JIT pages on Alpine/musl (SIGSEGV). We " +
-        "detach instead, so an orphaned session reports 'database is not " +
-        "open'. Also needs Node's internal ../common/gc helper.",
-    },
-  ],
-  "test-sqlite-template-tag.js": [
-    {
-      name: "a tag store keeps the database alive by itself",
-      reason: "Requires --expose-gc flag",
-    },
-    {
-      name: "tag store prevents circular reference leaks",
-      reason:
-        "Requires --expose-gc flag and Node.js internal GC test utilities",
-    },
-  ],
-};
 
 /**
  * Discover SQLite test files dynamically from GitHub API.
@@ -132,124 +73,6 @@ async function discoverTestFiles(repo: string, ref: string): Promise<string[]> {
 
   console.log(`Found ${sqliteTests.length} SQLite test files`);
   return sqliteTests;
-}
-
-/**
- * Transform Node.js test to use our package instead of node:sqlite
- */
-function adaptTest(content: string, fileName: string): string {
-  let adapted = content;
-
-  // Remove CJS require('../common') with any destructured imports
-  // Handles: const { skipIfSQLiteMissing, mustCall, ... } = require('../common');
-  adapted = adapted.replace(
-    /const\s*\{[^}]+\}\s*=\s*require\(['"]\.\.\/common['"]\);\s*/g,
-    "",
-  );
-
-  // Remove bare require('../common'); (no assignment)
-  adapted = adapted.replace(/require\(['"]\.\.\/common['"]\);\s*/g, "");
-
-  // Remove ESM import from '../common/index.mjs' with any imports
-  // Handles: import { skipIfSQLiteMissing, isWindows, ... } from '../common/index.mjs';
-  adapted = adapted.replace(
-    /import\s*\{[^}]+\}\s*from\s*['"]\.\.\/common\/index\.mjs['"]\s*;?\s*/g,
-    "",
-  );
-
-  // Replace tmpdir import with our test utilities
-  // Note: Only import tmpdir and isWindows - tests that use tmpdir have their own nextDb
-  // Handles ESM: import tmpdir from '../common/tmpdir.js';
-  adapted = adapted.replace(
-    /import\s+tmpdir\s+from\s*['"]\.\.\/common\/tmpdir\.js['"]\s*;?\s*/g,
-    `import { tmpdir, isWindows } from "../common/test-utils.mjs";\n`,
-  );
-
-  // Handles CJS: const tmpdir = require('../common/tmpdir');
-  adapted = adapted.replace(
-    /const\s+tmpdir\s*=\s*require\(['"]\.\.\/common\/tmpdir['"]\);\s*/g,
-    `const { tmpdir, isWindows } = require("../common/test-utils.cjs");\n`,
-  );
-
-  // Replace require('../sqlite/next-db.js') with our shim
-  adapted = adapted.replace(
-    /const\s*\{\s*nextDb\s*\}\s*=\s*require\(['"]\.\.\/sqlite\/next-db\.js['"]\);\s*/g,
-    `const { nextDb } = require("../common/test-utils.cjs");\n`,
-  );
-
-  // Remove skipIfSQLiteMissing() call
-  adapted = adapted.replace(/skipIfSQLiteMissing\(\);\s*/g, "");
-
-  // Add mustCall shim if the test uses it - it's a Node.js test helper
-  // that verifies a callback is called; we just use an identity function
-  if (content.includes("mustCall")) {
-    adapted =
-      "// Shim for Node.js test helper\nconst mustCall = (fn) => fn;\n\n" +
-      adapted;
-  }
-
-  // Transform node:sqlite imports to our package
-  // Handle CJS: const { DatabaseSync, ... } = require('node:sqlite');
-  adapted = adapted.replace(
-    /require\(['"]node:sqlite['"]\)/g,
-    `require("@photostructure/sqlite")`,
-  );
-
-  // Handle ESM: const { DatabaseSync } = await import('node:sqlite');
-  adapted = adapted.replace(
-    /await import\(['"]node:sqlite['"]\)/g,
-    `await import("@photostructure/sqlite")`,
-  );
-
-  // Handle ESM: import { DatabaseSync, ... } from 'node:sqlite';
-  adapted = adapted.replace(
-    /from ['"]node:sqlite['"]/g,
-    `from "@photostructure/sqlite"`,
-  );
-
-  // Note: We no longer strip __proto__: null since our implementation now
-  // correctly returns row objects with null prototype (matching Node.js)
-
-  // Skip known-failing tests for this file by transforming test()/suite() to test.skip()/suite.skip()
-  const testsToSkip = skipTests[fileName] ?? [];
-  for (const { name, reason } of testsToSkip) {
-    // Escape special regex characters in test name
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // Match test('name', ...) or suite('name', ...) with any quote style
-    // and transform to test.skip('name', /* reason */ ...) or suite.skip(...)
-    adapted = adapted.replace(
-      // eslint-disable-next-line security/detect-non-literal-regexp -- `escaped` is sanitized above
-      new RegExp(`(test|suite)\\((['"\`])${escaped}\\2`, "g"),
-      `$1.skip($2${name}$2 /* ${reason} */`,
-    );
-  }
-
-  // Clean up multiple blank lines
-  adapted = adapted.replace(/\n{3,}/g, "\n\n");
-
-  // Add header comment
-  const header = `/**
- * Node.js SQLite compatibility test
- * Adapted from: ${fileName}
- * Source: https://github.com/nodejs/node
- *
- * Run with: node --test ${fileName.replace(/\.(m?js)$/, ".test.$1")}
- *
- * AUTO-GENERATED - Do not edit. Run 'npm run sync:tests' to regenerate.
- */
-
-`;
-
-  return header + adapted;
-}
-
-/**
- * Convert Node.js test filename
- */
-function toTestFileName(nodeFileName: string): string {
-  // test-sqlite-foo.js -> test-sqlite-foo.test.js
-  // test-sqlite-foo.mjs -> test-sqlite-foo.test.mjs
-  return nodeFileName.replace(/\.(m?js)$/, ".test.$1");
 }
 
 function parseArgs() {
