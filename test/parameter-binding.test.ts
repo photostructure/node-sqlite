@@ -633,7 +633,10 @@ describe("Parameter Binding Tests", () => {
       // Test each type
       const testCases = [
         { value: null, expectedType: "null" },
-        { value: 42, expectedType: "integer" },
+        // node:sqlite binds every JavaScript Number with sqlite3_bind_double,
+        // even when its value is integral. BigInt is the INTEGER binding.
+        { value: 42, expectedType: "real" },
+        { value: 42n, expectedType: "integer" },
         { value: 3.14, expectedType: "real" },
         { value: "text", expectedType: "text" },
         { value: Buffer.from([1, 2, 3]), expectedType: "blob" },

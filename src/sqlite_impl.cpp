@@ -3204,16 +3204,11 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
         return;
       }
     } else if (param.IsNumber()) {
-      double val = param.As<Napi::Number>().DoubleValue();
-      if (std::abs(val - std::floor(val)) <
-              std::numeric_limits<double>::epsilon() &&
-          val >= INT32_MIN && val <= INT32_MAX) {
-        rc = sqlite3_bind_int(statement_, param_index,
-                              param.As<Napi::Number>().Int32Value());
-      } else {
-        rc = sqlite3_bind_double(statement_, param_index,
-                                 param.As<Napi::Number>().DoubleValue());
-      }
+      // JavaScript has one Number type. Match node:sqlite by binding every
+      // Number as a double; callers who need SQLite INTEGER semantics use a
+      // BigInt, which is handled above.
+      rc = sqlite3_bind_double(statement_, param_index,
+                               param.As<Napi::Number>().DoubleValue());
     } else if (param.IsString()) {
       std::string str = param.As<Napi::String>().Utf8Value();
       rc = sqlite3_bind_text(statement_, param_index, str.c_str(), -1,
