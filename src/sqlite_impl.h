@@ -171,6 +171,11 @@ public:
   Napi::Value IsOpenGetter(const Napi::CallbackInfo &info);
   Napi::Value IsTransactionGetter(const Napi::CallbackInfo &info);
 
+  // Internal, Symbol-keyed: lets the TypeScript SQLTagStore apply the same
+  // authorizer-callback guard the native methods use. Not part of the
+  // node:sqlite API surface.
+  Napi::Value IsInAuthorizerCallbackGetter(const Napi::CallbackInfo &info);
+
   // SQLite handle access
   sqlite3 *connection() const { return connection_; }
   bool IsOpen() const { return connection_ != nullptr; }
@@ -419,6 +424,12 @@ public:
   // Per-statement SQLite counters (sqlite3_stmt_status)
   Napi::Value Stat(const Napi::CallbackInfo &info);
   Napi::Value ResetStats(const Napi::CallbackInfo &info);
+
+  // Internal, Symbol-keyed accessors for the TypeScript SQLTagStore.
+  // node:sqlite implements its tag store natively and reads these fields
+  // directly; neither is part of the public API surface.
+  Napi::Value ParameterCountGetter(const Napi::CallbackInfo &info);
+  Napi::Value IsFinalizedGetter(const Napi::CallbackInfo &info);
 
 private:
   // Finalizes the underlying sqlite3_stmt and stops the database tracking it.

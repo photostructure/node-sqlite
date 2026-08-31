@@ -346,7 +346,13 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("location", &DatabaseSync::LocationMethod),
        InstanceAccessor("isOpen", &DatabaseSync::IsOpenGetter, nullptr),
        InstanceAccessor("isTransaction", &DatabaseSync::IsTransactionGetter,
-                        nullptr)});
+                        nullptr),
+       // Symbol-keyed so it stays out of the node:sqlite API surface; the
+       // TypeScript SQLTagStore reads it to apply the same authorizer guard
+       // the native methods use.
+       InstanceAccessor(
+           Napi::Symbol::For(env, "photostructure.sqlite.inAuthorizerCallback"),
+           &DatabaseSync::IsInAuthorizerCallbackGetter, nullptr)});
 
   // Store constructor in per-instance addon data instead of static variable
   AddonData *addon_data = GetAddonData(env);
@@ -1236,6 +1242,11 @@ Napi::Value DatabaseSync::Deserialize(const Napi::CallbackInfo &info) {
 
 Napi::Value DatabaseSync::IsOpenGetter(const Napi::CallbackInfo &info) {
   return Napi::Boolean::New(info.Env(), IsOpen());
+}
+
+Napi::Value
+DatabaseSync::IsInAuthorizerCallbackGetter(const Napi::CallbackInfo &info) {
+  return Napi::Boolean::New(info.Env(), IsInAuthorizerCallback());
 }
 
 Napi::Value DatabaseSync::IsTransactionGetter(const Napi::CallbackInfo &info) {
@@ -2421,6 +2432,15 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("resetStats", &StatementSync::ResetStats),
        InstanceMethod("close", &StatementSync::Close),
        InstanceAccessor("sourceSQL", &StatementSync::SourceSQLGetter, nullptr),
+       // Symbol-keyed so they stay out of the node:sqlite API surface; the
+       // TypeScript SQLTagStore reads what node:sqlite's native tag store
+       // reads directly off the statement.
+       InstanceAccessor(
+           Napi::Symbol::For(env, "photostructure.sqlite.parameterCount"),
+           &StatementSync::ParameterCountGetter, nullptr),
+       InstanceAccessor(
+           Napi::Symbol::For(env, "photostructure.sqlite.finalized"),
+           &StatementSync::IsFinalizedGetter, nullptr),
        InstanceAccessor("expandedSQL", &StatementSync::ExpandedSQLGetter,
                         nullptr)});
 
@@ -3202,6 +3222,20 @@ constexpr StatusInfo kStatusMapping[] = {
     {"memused", SQLITE_STMTSTATUS_MEMUSED},
 };
 } // namespace
+
+Napi::Value
+StatementSync::ParameterCountGetter(const Napi::CallbackInfo &info) {
+  if (finalized_ || !statement_) {
+    return Napi::Number::New(info.Env(), 0);
+  }
+  return Napi::Number::New(info.Env(),
+                           sqlite3_bind_parameter_count(statement_));
+}
+
+Napi::Value StatementSync::IsFinalizedGetter(const Napi::CallbackInfo &info) {
+  return Napi::Boolean::New(info.Env(), finalized_ || !statement_ ||
+                                            !database_ || !database_->IsOpen());
+}
 
 Napi::Value StatementSync::Stat(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
