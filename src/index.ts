@@ -134,6 +134,10 @@ export interface Session {
    * Close the session and release its resources.
    */
   close(): void;
+  /**
+   * Close the session and release its resources. Repeated disposal is a no-op.
+   */
+  [Symbol.dispose](): void;
 }
 
 /**

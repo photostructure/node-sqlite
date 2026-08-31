@@ -111,6 +111,38 @@ describe("operations forbidden inside a user-defined function callback", () => {
     db.close();
   });
 
+  test("statement reentry takes precedence over stale iterator state", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+    db.prepare("INSERT INTO t VALUES (1), (2)").run();
+
+    let staleIterator: ReturnType<
+      ReturnType<typeof db.prepare>["iterate"]
+    > | null = null;
+    let reentryError: unknown;
+    db.function("reenter_stale", (x: unknown) => {
+      try {
+        staleIterator!.next();
+      } catch (error) {
+        reentryError = error;
+      }
+      return x;
+    });
+
+    const statement = db.prepare("SELECT reenter_stale(id) FROM t");
+    staleIterator = statement.iterate();
+    statement.all();
+
+    expect(reentryError).toEqual(
+      expect.objectContaining({
+        code: "ERR_INVALID_STATE",
+        message: expect.stringContaining("already being executed"),
+      }),
+    );
+
+    db.close();
+  });
+
   test("recursive iter.return() on the same statement throws", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");

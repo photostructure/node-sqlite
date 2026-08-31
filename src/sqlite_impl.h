@@ -196,12 +196,12 @@ public:
   bool AreTraceEventsSuppressed() const { return trace_suppression_depth_ > 0; }
 
   // node:sqlite's IsInCallback(): true whenever JavaScript is running inside a
-  // callback SQLite invoked on this connection. An authorizer counts even
-  // though it can fire outside any step scope (sqlite3session_changeset() runs
-  // its own SAVEPOINT/SELECT), which is why this is not just
-  // IsExecutingStatement(). close()/deserialize() report against this.
+  // callback SQLite invoked on this connection. Statement execution remains
+  // included because it protects the whole sqlite3_step()/sqlite3_exec() call,
+  // including native work before and after the JavaScript callback.
   bool IsInCallback() const {
-    return IsExecutingStatement() || IsInAuthorizerCallback();
+    return callback_depth_ > 0 || IsExecutingStatement() ||
+           IsInAuthorizerCallback();
   }
 
   // User-defined functions
@@ -275,6 +275,23 @@ public:
   }
   bool ShouldIgnoreSQLiteError() const { return ignore_next_sqlite_error_; }
 
+  // Guards a window in which SQLite can hand control back to JavaScript.
+  // Construct this before allocating on the JavaScript heap: a collection in
+  // the callback must not finalize a Session that SQLite is still walking.
+  class CallbackGuard {
+  public:
+    explicit CallbackGuard(DatabaseSync *database);
+    ~CallbackGuard() noexcept;
+    CallbackGuard(const CallbackGuard &) = delete;
+    CallbackGuard &operator=(const CallbackGuard &) = delete;
+
+  private:
+    DatabaseSync *database_;
+    std::vector<Session *> pinned_sessions_;
+  };
+
+  CallbackGuard EnterCallback() { return CallbackGuard(this); }
+
   // SQLite forbids an authorizer callback from modifying the connection that
   // invoked it; prepare and step explicitly count as modification. Track the
   // callback itself (rather than whichever SQLite entry point happened to
@@ -344,6 +361,11 @@ private:
   // stack for this connection. Raised by StatementSync::StepGuard and around
   // Exec()'s sqlite3_exec(); see EnterStatementStep()/IsExecutingStatement().
   int statements_in_progress_ = 0;
+
+  // Depth of nested SQLite callbacks that can execute JavaScript. This is
+  // separate from statements_in_progress_ because changeset, authorizer, and
+  // diagnostics callbacks can run outside a StatementSync step scope.
+  int callback_depth_ = 0;
 
   // sqlite3_finalize() may deliver a final SQLITE_TRACE_PROFILE callback for
   // unfinished work. Suppress those callbacks: finalization is cleanup, not a

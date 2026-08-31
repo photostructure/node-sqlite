@@ -729,6 +729,40 @@ bool DatabaseSync::ThrowIfInAuthorizerCallback(Napi::Env env) const {
   return true;
 }
 
+DatabaseSync::CallbackGuard::CallbackGuard(DatabaseSync *database)
+    : database_(database) {
+  std::lock_guard<std::mutex> lock(database_->sessions_mutex_);
+  pinned_sessions_.reserve(database_->sessions_.size());
+  for (Session *session : database_->sessions_) {
+    // This implementation retains closed wrappers so their methods can still
+    // distinguish "session is not open" from "database is not open". Node's
+    // active-session set does not contain those wrappers, and SQLite cannot be
+    // walking them, so they must not participate in callback pinning.
+    if (session->GetSession() == nullptr) {
+      continue;
+    }
+    session->Ref();
+    pinned_sessions_.push_back(session);
+  }
+  ++database_->callback_depth_;
+}
+
+DatabaseSync::CallbackGuard::~CallbackGuard() noexcept {
+  --database_->callback_depth_;
+  // Do not hold sessions_mutex_ while unpinning. If a future Node-API version
+  // can finalize synchronously here, ~Session() must be free to remove itself.
+  for (auto it = pinned_sessions_.rbegin(); it != pinned_sessions_.rend();
+       ++it) {
+    try {
+      (*it)->Unref();
+    } catch (...) {
+      // Destructors must not propagate a Node-API teardown error across the
+      // SQLite C callback boundary. A failed unref leaves the wrapper pinned,
+      // which is safer than finalizing native state that SQLite may still own.
+    }
+  }
+}
+
 void DatabaseSync::RethrowDeferredAuthorizerException() {
   Napi::Error error = GetDeferredAuthorizerException();
   ClearDeferredAuthorizerException();
@@ -1415,6 +1449,7 @@ int DatabaseSync::QueryTraceCallback(unsigned int type, void *user_data,
     return 0;
   }
 
+  auto callback_guard = database->EnterCallback();
   Napi::HandleScope scope(env);
   Napi::Object channel = addon_data->queryDiagnosticsChannel.Value();
   Napi::Value has_subscribers = channel.Get("hasSubscribers");
@@ -1450,17 +1485,11 @@ int DatabaseSync::QueryTraceCallback(unsigned int type, void *user_data,
     return 0;
   }
 
-  // Publication is a synchronous SQLite callback. Raise the connection-level
-  // callback depth even for SQLite operations that do not have a JS statement
-  // wrapper, so a subscriber cannot close or deserialize the live connection.
-  database->EnterStatementStep();
   try {
     publish_value.As<Napi::Function>().Call(channel, {payload});
   } catch (...) {
-    database->LeaveStatementStep();
     return 0;
   }
-  database->LeaveStatementStep();
   return 0;
 }
 
@@ -2383,8 +2412,12 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
   SetIgnoreNextSQLiteError(false);
 
   // Apply the changeset with context instead of global state
-  int r = sqlite3changeset_apply(connection(), static_cast<int>(byte_length),
-                                 data, xFilter, xConflict, &callbacks);
+  int r;
+  {
+    auto callback_guard = EnterCallback();
+    r = sqlite3changeset_apply(connection(), static_cast<int>(byte_length),
+                               data, xFilter, xConflict, &callbacks);
+  }
 
   // SQLite cleanup SQL runs after filter/conflict callbacks. Match Node's
   // last-exception-wins behavior by surfacing a later authorizer exception
@@ -4231,22 +4264,21 @@ Napi::Value Session::Close(const Napi::CallbackInfo &info) {
 }
 
 Napi::Value Session::Dispose(const Napi::CallbackInfo &info) {
-  // Mirrors Close()'s only in-flight guard. node:sqlite runs Dispose's close
-  // under a TryCatch and swallows, so this is tested without throwing.
-  if (is_generating_changeset_) {
-    return info.Env().Undefined();
+  Napi::Env env = info.Env();
+
+  // Explicit disposal is idempotent once the session is closed, including
+  // after its database has closed and deleted the native sqlite3_session.
+  if (session_ == nullptr) {
+    return env.Undefined();
   }
 
-  // Try to close, but ignore errors during disposal (matches Node.js v25
-  // behavior)
-  try {
-    if (session_ != nullptr) {
-      Delete();
-    }
-  } catch (...) {
-    // Ignore errors during disposal
+  if (is_generating_changeset_) {
+    node::THROW_ERR_INVALID_STATE(env, "session is currently in use");
+    return env.Undefined();
   }
-  return info.Env().Undefined();
+
+  Delete();
+  return env.Undefined();
 }
 
 // Static members for tracking active jobs
@@ -4750,6 +4782,7 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     return SQLITE_OK;
   }
 
+  auto callback_guard = db->EnterCallback();
   Napi::Env env(db->env_);
   Napi::HandleScope scope(env);
   auto authorizer_guard = db->EnterAuthorizerCallback();

@@ -72,6 +72,7 @@ void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
 
   UserDefinedFunction *self = static_cast<UserDefinedFunction *>(user_data);
 
+  auto callback_guard = self->db_->EnterCallback();
   Napi::HandleScope scope(self->env_);
   Napi::CallbackScope callback_scope(self->env_, self->async_context_);
 

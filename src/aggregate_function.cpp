@@ -185,6 +185,7 @@ void CustomAggregate::xStepBase(
     return;
   }
 
+  auto callback_guard = self->db_->EnterCallback();
   // Create HandleScope for N-API operations
   Napi::HandleScope scope(self->env_);
 
@@ -438,6 +439,7 @@ void CustomAggregate::xValueBase(sqlite3_context *ctx, bool is_final) {
     return;
   }
 
+  auto callback_guard = self->db_->EnterCallback();
   Napi::HandleScope scope(self->env_);
 
   // Get the same AggregateValue struct used in xStepBase

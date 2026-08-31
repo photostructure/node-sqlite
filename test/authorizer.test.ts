@@ -777,10 +777,9 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
       db.close();
     });
 
-    // node:sqlite runs Dispose's close under a v8::TryCatch and swallows the
-    // error (src/upstream/node_sqlite.cc:1587 and :4338), so Symbol.dispose
-    // must never leave an exception pending.
-    it("disposal inside an authorizer is a silent no-op", () => {
+    // Database disposal remains a no-op while SQLite is in the callback. An
+    // idle session has no in-flight work, so its disposal succeeds.
+    it("disposal inside an authorizer preserves the active database", () => {
       const db = new DatabaseSync(":memory:");
       db.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
       const session = db.createSession({ table: "data" });
@@ -797,9 +796,7 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
             dbDisposeError = error;
           }
           try {
-            // Cast: the Session type does not yet declare [Symbol.dispose],
-            // though the native class registers it.
-            (session as unknown as Disposable)[Symbol.dispose]();
+            session[Symbol.dispose]();
           } catch (error) {
             sessionDisposeError = error;
           }
