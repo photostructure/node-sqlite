@@ -633,11 +633,9 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
       db.close();
     });
 
-    it("rejects statement.close() on the invoking connection", () => {
-      // sqlite3_finalize() modifies the connection, which SQLite forbids from
-      // inside an authorizer callback, so close() must reject there like every
-      // other SQLite-backed statement method. Symbol.dispose cannot throw, so
-      // it no-ops instead and leaves the statement usable.
+    it("allows finalizing an idle statement on the invoking connection", () => {
+      // An idle statement has no virtual machine or locks to release, so
+      // finalizing it from the callback disturbs nothing.
       const db = new DatabaseSync(":memory:");
       const closeTarget = db.prepare("SELECT 42 AS value");
       const disposeTarget = db.prepare("SELECT 43 AS value");
@@ -649,28 +647,176 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
           checked = true;
           try {
             closeTarget.close();
+            disposeTarget[Symbol.dispose]();
           } catch (error) {
             closeError = error;
           }
-          disposeTarget[Symbol.dispose]();
         }
         return constants.SQLITE_OK;
       });
 
       db.prepare("SELECT 1");
+      db.setAuthorizer(null);
+
+      expect(closeError).toBeUndefined();
+      // Both were finalized, so both now reject.
+      expect(() => closeTarget.get()).toThrow(/statement has been finalized/);
+      expect(() => disposeTarget.get()).toThrow(/statement has been finalized/);
+
+      db.close();
+    });
+
+    it("rejects finalizing a busy statement on the invoking connection", () => {
+      // A paused iterator holds a live virtual machine and its locks;
+      // finalizing it from the callback would change the outer statement's
+      // outcome, so close() and dispose() both reject.
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE t (x INTEGER)");
+      db.exec("INSERT INTO t VALUES (1), (2), (3)");
+      const stmt = db.prepare("SELECT x FROM t");
+      const iter = stmt.iterate();
+      iter.next();
+
+      let closeError: unknown;
+      let checked = false;
+
+      db.setAuthorizer(() => {
+        if (!checked) {
+          checked = true;
+          try {
+            stmt.close();
+          } catch (error) {
+            closeError = error;
+          }
+        }
+        return constants.SQLITE_OK;
+      });
+
+      db.prepare("SELECT 1");
+      db.setAuthorizer(null);
 
       expect(closeError).toEqual(
         expect.objectContaining({
           code: "ERR_INVALID_STATE",
-          message: expect.stringContaining("authorizer callback"),
+          message: "database cannot be accessed from an authorizer callback",
         }),
       );
 
+      // Not finalized, so the iterator still works.
+      iter.return?.();
+      db.close();
+    });
+
+    // node:sqlite raises its callback depth from the authorizer callback
+    // itself, so close()/deserialize() report the callback reason there rather
+    // than the generic authorizer one. Our step-scope counter is not raised by
+    // sqlite3session_changeset(), which runs its own SAVEPOINT/SELECT, so this
+    // pins the case where an authorizer fires outside any step scope.
+    // Expected strings from src/upstream/node_sqlite.cc:1579 and :2020.
+    it("reports the callback reason for close() during changeset generation", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE data(key INTEGER PRIMARY KEY, value TEXT)");
+      const session = db.createSession({ table: "data" });
+      db.exec("INSERT INTO data VALUES (1, 'a')");
+
+      let closeError: unknown;
+      db.setAuthorizer(() => {
+        try {
+          db.close();
+        } catch (error) {
+          closeError = error;
+        }
+        return constants.SQLITE_OK;
+      });
+
+      session.changeset();
       db.setAuthorizer(null);
 
-      // Neither statement was finalized, so both still work.
-      expect(closeTarget.get()).toEqual({ value: 42 });
-      expect(disposeTarget.get()).toEqual({ value: 43 });
+      expect(closeError).toEqual(
+        expect.objectContaining({
+          code: "ERR_INVALID_STATE",
+          message: "database cannot be closed while in a callback",
+        }),
+      );
+
+      session.close();
+      db.close();
+    });
+
+    // node:sqlite's Session::Close guards only on database-open, session-open,
+    // and is_generating_changeset_ (src/upstream/node_sqlite.cc:4324) -- it has
+    // no authorizer guard, so an idle session can be closed from an unrelated
+    // authorizer callback.
+    it("allows closing an idle session from an unrelated authorizer", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
+      const session = db.createSession({ table: "data" });
+      let outcome = "authorizer callback did not run";
+      let checked = false;
+
+      db.setAuthorizer(() => {
+        if (!checked) {
+          checked = true;
+          try {
+            session.close();
+            outcome = "closed";
+          } catch (error) {
+            outcome = `${(error as NodeJS.ErrnoException).code}`;
+          }
+        }
+        return constants.SQLITE_OK;
+      });
+
+      db.exec("SELECT 1");
+      db.setAuthorizer(null);
+
+      expect(outcome).toBe("closed");
+      // Already closed, so a second close reports that rather than succeeding.
+      expect(() => session.close()).toThrow(/session is not open/);
+
+      db.close();
+    });
+
+    // node:sqlite runs Dispose's close under a v8::TryCatch and swallows the
+    // error (src/upstream/node_sqlite.cc:1587 and :4338), so Symbol.dispose
+    // must never leave an exception pending.
+    it("disposal inside an authorizer is a silent no-op", () => {
+      const db = new DatabaseSync(":memory:");
+      db.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
+      const session = db.createSession({ table: "data" });
+      let dbDisposeError: unknown;
+      let sessionDisposeError: unknown;
+      let checked = false;
+
+      db.setAuthorizer(() => {
+        if (!checked) {
+          checked = true;
+          try {
+            db[Symbol.dispose]();
+          } catch (error) {
+            dbDisposeError = error;
+          }
+          try {
+            // Cast: the Session type does not yet declare [Symbol.dispose],
+            // though the native class registers it.
+            (session as unknown as Disposable)[Symbol.dispose]();
+          } catch (error) {
+            sessionDisposeError = error;
+          }
+        }
+        return constants.SQLITE_OK;
+      });
+
+      db.exec("SELECT 1");
+      db.setAuthorizer(null);
+
+      expect(dbDisposeError).toBeUndefined();
+      expect(sessionDisposeError).toBeUndefined();
+      // The database is still executing the statement that fired the
+      // authorizer, so its disposal was skipped rather than performed.
+      expect(db.isOpen).toBe(true);
+      // The idle session had nothing in flight, so its disposal went through.
+      expect(() => session.close()).toThrow(/session is not open/);
 
       db.close();
     });

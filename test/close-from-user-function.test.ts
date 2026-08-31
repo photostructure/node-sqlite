@@ -73,7 +73,7 @@ describe("operations forbidden inside a user-defined function callback", () => {
     expect(recurseError).toEqual(
       expect.objectContaining({
         code: "ERR_INVALID_STATE",
-        message: expect.stringContaining("currently being executed"),
+        message: expect.stringContaining("already being executed"),
       }),
     );
 
@@ -104,7 +104,7 @@ describe("operations forbidden inside a user-defined function callback", () => {
     expect(recurseError).toEqual(
       expect.objectContaining({
         code: "ERR_INVALID_STATE",
-        message: expect.stringContaining("currently being executed"),
+        message: expect.stringContaining("already being executed"),
       }),
     );
 
@@ -135,7 +135,7 @@ describe("operations forbidden inside a user-defined function callback", () => {
     expect(recurseError).toEqual(
       expect.objectContaining({
         code: "ERR_INVALID_STATE",
-        message: expect.stringContaining("currently being executed"),
+        message: expect.stringContaining("already being executed"),
       }),
     );
 
@@ -182,7 +182,7 @@ describe("operations forbidden inside a user-defined function callback", () => {
     expect(flipError).toEqual(
       expect.objectContaining({
         code: "ERR_INVALID_STATE",
-        message: expect.stringContaining("currently being executed"),
+        message: expect.stringContaining("already being executed"),
       }),
     );
 
@@ -243,9 +243,7 @@ describe("operations forbidden inside a user-defined function callback", () => {
     expect(deserializeError).toEqual(
       expect.objectContaining({
         code: "ERR_INVALID_STATE",
-        message: expect.stringContaining(
-          "not allowed inside a user-defined function callback",
-        ),
+        message: "database cannot be deserialized while in a callback",
       }),
     );
 

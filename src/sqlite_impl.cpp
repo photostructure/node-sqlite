@@ -696,20 +696,17 @@ void DatabaseSync::CleanupHook(void *arg) {
 // violating that contract is unspecified, so reject SQLite-backed operations
 // on the invoking connection with a clear ERR_INVALID_STATE instead.
 //
-// This is an INTENTIONAL divergence from node:sqlite, which has no such guard:
-// upstream currently passes these calls through to SQLite. We also deliberately
-// guard SQLite-backed read-only getters (columns/expandedSQL/location/getLimit/
-// isTransaction) for one consistent callback contract.
-bool DatabaseSync::ThrowIfInAuthorizerCallback(Napi::Env env,
-                                               const char *action) const {
+// node:sqlite now carries the same guard (THROW_AND_RETURN_IF_IN_AUTHORIZER),
+// so the message matches it verbatim. We additionally guard SQLite-backed
+// read-only getters (columns/expandedSQL/location/getLimit/isTransaction) for
+// one consistent callback contract.
+bool DatabaseSync::ThrowIfInAuthorizerCallback(Napi::Env env) const {
   if (!IsInAuthorizerCallback()) {
     return false;
   }
 
-  std::string message = "Cannot ";
-  message += action;
-  message += " while an authorizer callback is on the stack";
-  node::THROW_ERR_INVALID_STATE(env, message.c_str());
+  node::THROW_ERR_INVALID_STATE(
+      env, "database cannot be accessed from an authorizer callback");
   return true;
 }
 
@@ -751,16 +748,13 @@ Napi::Value DatabaseSync::Close(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "close database")) {
-    return env.Undefined();
-  }
-
   // SQLite forbids closing a connection while a statement is executing on it.
   // The only way close() is reachable in that state is from inside a user
-  // callback invoked by sqlite3_step()/sqlite3_exec(); reject it rather than
-  // finalize a statement whose VM is still on the stack (undefined behavior).
-  if (IsExecutingStatement()) {
-    // Wording matches node:sqlite so the upstream compatibility tests pass.
+  // callback invoked by sqlite3_step()/sqlite3_exec(), or from an authorizer;
+  // reject it rather than finalize a statement whose VM is still on the stack
+  // (undefined behavior). node:sqlite guards close() on IsInCallback() alone,
+  // so an authorizer reports this reason rather than the generic one.
+  if (IsInCallback()) {
     node::THROW_ERR_INVALID_STATE(
         env, "database cannot be closed while in a callback");
     return env.Undefined();
@@ -782,15 +776,11 @@ Napi::Value DatabaseSync::Dispose(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (IsOpen() && ThrowIfInAuthorizerCallback(env, "close database")) {
-    return env.Undefined();
-  }
-
-  // Symbol.dispose is a no-op while a statement is executing on this
-  // connection (i.e. inside a user-defined function callback). Disposal
-  // deliberately swallows errors, and closing here would finalize a
-  // statement whose sqlite3_step is still on the stack (undefined behavior).
-  if (IsExecutingStatement()) {
+  // Symbol.dispose is a no-op inside any callback SQLite invoked on this
+  // connection: closing there would finalize a statement whose sqlite3_step is
+  // still on the stack (undefined behavior). Tested without throwing, because
+  // node:sqlite runs Dispose's close under a TryCatch and swallows the error.
+  if (IsInCallback()) {
     return env.Undefined();
   }
 
@@ -819,7 +809,7 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "prepare statement")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -998,7 +988,7 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "exec")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -1051,7 +1041,7 @@ Napi::Value DatabaseSync::LocationMethod(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "read database location")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -1086,7 +1076,7 @@ Napi::Value DatabaseSync::Serialize(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "serialize database")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -1149,18 +1139,13 @@ Napi::Value DatabaseSync::Deserialize(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "deserialize database")) {
-    return env.Undefined();
-  }
-
   // deserialize() finalizes every open statement and replaces the database
   // contents; doing so while a statement is executing (i.e. from inside a
   // user-defined function callback) would pull the rug from under the running
-  // VM. Reject it the same way SQLite would.
-  if (IsExecutingStatement()) {
+  // VM. Reject it against the same IsInCallback() contract as close().
+  if (IsInCallback()) {
     node::THROW_ERR_INVALID_STATE(
-        env, "database operation is not allowed inside a user-defined "
-             "function callback");
+        env, "database cannot be deserialized while in a callback");
     return env.Undefined();
   }
 
@@ -1257,7 +1242,7 @@ Napi::Value DatabaseSync::IsTransactionGetter(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "read transaction state")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -1505,7 +1490,7 @@ Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "create function")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -1632,7 +1617,7 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "create aggregate")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -1799,7 +1784,7 @@ Napi::Value DatabaseSync::EnableLoadExtension(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "configure extension loading")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -1843,7 +1828,7 @@ Napi::Value DatabaseSync::LoadExtension(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "load extension")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -1920,7 +1905,7 @@ Napi::Value DatabaseSync::EnableDefensive(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "configure defensive mode")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -1950,7 +1935,7 @@ Napi::Value DatabaseSync::CreateSession(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "create session")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -2197,7 +2182,7 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "apply changeset")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -2590,7 +2575,7 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
+  if (database_->ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -2600,7 +2585,7 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
   }
 
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
     return env.Undefined();
   }
 
@@ -2682,7 +2667,7 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
+  if (database_->ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -2692,11 +2677,15 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
   }
 
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
     return env.Undefined();
   }
 
   try {
+    // Held across reset, binding, and stepping: binding a named parameter runs
+    // JavaScript getters, and re-entering this statement there would reset the
+    // virtual machine a second time behind the outer call's back.
+    StepGuard guard(this);
     Reset();
     BindParameters(info);
 
@@ -2705,11 +2694,7 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
       return env.Undefined();
     }
 
-    int result;
-    {
-      StepGuard guard(this);
-      result = sqlite3_step(statement_);
-    }
+    int result = sqlite3_step(statement_);
 
     if (result == SQLITE_ROW) {
       Napi::Value value = CreateResult();
@@ -2750,7 +2735,7 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
+  if (database_->ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -2760,11 +2745,15 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
   }
 
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
     return env.Undefined();
   }
 
   try {
+    // Held across reset, binding, and the whole row loop: binding a named
+    // parameter runs JavaScript getters, and a user function invoked by any
+    // step must not be able to re-enter this statement until the loop unwinds.
+    StepGuard guard(this);
     Reset();
     BindParameters(info);
 
@@ -2784,9 +2773,6 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
     std::vector<napi_value> keys;
     bool row_meta_ready = false;
 
-    // Held across the whole row loop: a user function invoked by any step
-    // must not be able to re-enter this statement until the loop unwinds.
-    StepGuard guard(this);
     while (true) {
       int result = sqlite3_step(statement_);
 
@@ -2841,7 +2827,7 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
     return info.Env().Undefined();
   }
 
-  if (database_->ThrowIfInAuthorizerCallback(info.Env(), "step statement")) {
+  if (database_->ThrowIfInAuthorizerCallback(info.Env())) {
     return info.Env().Undefined();
   }
 
@@ -2853,24 +2839,33 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
 
   if (stepping_) {
     node::THROW_ERR_INVALID_STATE(info.Env(),
-                                  "statement is currently being executed");
+                                  "statement is already being executed");
     return info.Env().Undefined();
   }
 
-  // Reset the statement first
-  int r = ResetStatement();
-  if (r != SQLITE_OK) {
-    node::THROW_ERR_SQLITE_ERROR(info.Env(),
-                                 sqlite3_errmsg(database_->connection()));
-    return info.Env().Undefined();
-  }
+  {
+    // Held across reset and binding: binding a named parameter runs JavaScript
+    // getters, and re-entering this statement there would reset the virtual
+    // machine again and hand out a second iterator over the same VM. The guard
+    // is released before the iterator is returned; stepping is then guarded
+    // per-call by the iterator itself.
+    StepGuard guard(this);
 
-  // Bind parameters if provided
-  BindParameters(info, 0);
+    // Reset the statement first
+    int r = ResetStatement();
+    if (r != SQLITE_OK) {
+      node::THROW_ERR_SQLITE_ERROR(info.Env(),
+                                   sqlite3_errmsg(database_->connection()));
+      return info.Env().Undefined();
+    }
 
-  // Check if BindParameters set a pending exception
-  if (info.Env().IsExceptionPending()) {
-    return info.Env().Undefined();
+    // Bind parameters if provided
+    BindParameters(info, 0);
+
+    // Check if BindParameters set a pending exception
+    if (info.Env().IsExceptionPending()) {
+      return info.Env().Undefined();
+    }
   }
 
   // Create and return iterator
@@ -2924,15 +2919,14 @@ Napi::Value StatementSync::Close(const Napi::CallbackInfo &info) {
   // undefined behavior. That is reachable by calling close() on the executing
   // statement from inside a user-defined function callback.
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
     return env.Undefined();
   }
 
-  // sqlite3_finalize() modifies the connection, which SQLite forbids from
-  // inside an authorizer callback, so this joins the same guard every other
-  // SQLite-backed statement method uses.
-  if (database_ &&
-      database_->ThrowIfInAuthorizerCallback(env, "close statement")) {
+  // Finalizing a *busy* statement from an authorizer can release its locks and
+  // change the outer statement's outcome. An idle statement holds no such
+  // state, so finalizing it from the callback is allowed.
+  if (ThrowIfBusyInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -2940,30 +2934,49 @@ Napi::Value StatementSync::Close(const Napi::CallbackInfo &info) {
   return env.Undefined();
 }
 
+// True (with ERR_INVALID_STATE pending) when finalizing this statement from
+// inside an authorizer callback would disturb SQLite state the outer statement
+// still depends on. Mirrors node:sqlite's
+// THROW_AND_RETURN_IF_BUSY_IN_AUTHORIZER.
+bool StatementSync::ThrowIfBusyInAuthorizerCallback(Napi::Env env) const {
+  if (!database_ || !database_->IsInAuthorizerCallback() || !statement_ ||
+      !sqlite3_stmt_busy(statement_)) {
+    return false;
+  }
+  node::THROW_ERR_INVALID_STATE(
+      env, "database cannot be accessed from an authorizer callback");
+  return true;
+}
+
 Napi::Value StatementSync::Dispose(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  // Disposal is idempotent, including inside a callback.
+  // Disposal is idempotent, so an already-finalized statement is a no-op even
+  // inside a callback.
   if (finalized_) {
     return env.Undefined();
   }
 
-  // Match close(): finalizing the statement while SQLite or a diagnostics
-  // subscriber is using it would free its live virtual machine.
+  // Everything past this point would free or disturb live SQLite state, so
+  // dispose() reports it rather than silently skipping the finalize.
   if (stepping_) {
     node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
     return env.Undefined();
   }
 
-  // Preserve the existing authorizer behavior: unsafe disposal remains a
-  // no-op until the broader authorizer compatibility changes are reviewed.
-  if (!(database_ && database_->IsInAuthorizerCallback())) {
-    CloseStatement();
+  if (ThrowIfBusyInAuthorizerCallback(env)) {
+    return env.Undefined();
   }
+
+  CloseStatement();
   return env.Undefined();
 }
 
 Napi::Value StatementSync::SourceSQLGetter(const Napi::CallbackInfo &info) {
+  if (finalized_ || !statement_) {
+    node::THROW_ERR_INVALID_STATE(info.Env(), "statement has been finalized");
+    return info.Env().Undefined();
+  }
   return Napi::String::New(info.Env(), source_sql_);
 }
 
@@ -2978,8 +2991,7 @@ Napi::Value StatementSync::ExpandedSQLGetter(const Napi::CallbackInfo &info) {
     return info.Env().Undefined();
   }
 
-  if (database_->ThrowIfInAuthorizerCallback(info.Env(),
-                                             "expand statement SQL")) {
+  if (database_->ThrowIfInAuthorizerCallback(info.Env())) {
     return info.Env().Undefined();
   }
 
@@ -3012,7 +3024,7 @@ Napi::Value StatementSync::SetReadBigInts(const Napi::CallbackInfo &info) {
   // (an object-mode BuildRow would index a key vector that was never built),
   // so reject re-entrant mutation exactly like the stepping operations do.
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
     return env.Undefined();
   }
 
@@ -3054,7 +3066,7 @@ Napi::Value StatementSync::SetReturnArrays(const Napi::CallbackInfo &info) {
   // one consistent contract. The remaining setters guard for consistency, not
   // memory safety.
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
     return env.Undefined();
   }
 
@@ -3085,7 +3097,7 @@ StatementSync::SetAllowBareNamedParameters(const Napi::CallbackInfo &info) {
   // No statement mutation is allowed while a step is on the stack (see the
   // matching guard in SetReturnArrays); keep all config setters consistent.
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
     return env.Undefined();
   }
 
@@ -3116,7 +3128,7 @@ StatementSync::SetAllowUnknownNamedParameters(const Napi::CallbackInfo &info) {
   // No statement mutation is allowed while a step is on the stack (see the
   // matching guard in SetReturnArrays); keep all config setters consistent.
   if (stepping_) {
-    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
     return env.Undefined();
   }
 
@@ -3139,7 +3151,7 @@ Napi::Value StatementSync::Columns(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (database_->ThrowIfInAuthorizerCallback(env, "read statement columns")) {
+  if (database_->ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -3823,25 +3835,27 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (stmt_->database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
+  // A drained iterator touches no SQLite state, so it stays usable from a
+  // callback and is checked before the guards below.
+  if (done_) {
+    Napi::Object result = CreateObjectWithNullPrototype(env);
+    result.Set("done", true);
+    result.Set("value", env.Null());
+    return result;
+  }
+
+  if (stmt_->database_->ThrowIfInAuthorizerCallback(env)) {
+    return env.Undefined();
+  }
+
+  if (stmt_->stepping_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
     return env.Undefined();
   }
 
   if (statement_reset_generation_ != stmt_->reset_generation_) {
     node::THROW_ERR_INVALID_STATE(env, "iterator was invalidated");
     return env.Undefined();
-  }
-
-  if (stmt_->stepping_) {
-    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
-    return env.Undefined();
-  }
-
-  if (done_) {
-    Napi::Object result = CreateObjectWithNullPrototype(env);
-    result.Set("done", true);
-    result.Set("value", env.Null());
-    return result;
   }
 
   int r;
@@ -3895,18 +3909,23 @@ Napi::Value StatementSyncIterator::Return(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (stmt_->database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
-    return env.Undefined();
-  }
+  // A drained iterator holds no SQLite state, so return() stays available and
+  // idempotent from inside a callback. A live one is reset here, which these
+  // guards reject: a language-invoked return() cannot be reached mid-step, so
+  // they only fire for an explicit call from inside a callback.
+  if (!done_) {
+    if (stmt_->database_->ThrowIfInAuthorizerCallback(env)) {
+      return env.Undefined();
+    }
 
-  if (stmt_->stepping_) {
-    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
-    return env.Undefined();
-  }
+    if (stmt_->stepping_) {
+      node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
+      return env.Undefined();
+    }
 
-  // Reset the statement and mark as done
-  sqlite3_reset(stmt_->statement_);
-  done_ = true;
+    sqlite3_reset(stmt_->statement_);
+    done_ = true;
+  }
 
   Napi::Object result = CreateObjectWithNullPrototype(env);
   result.Set("done", true);
@@ -3927,12 +3946,12 @@ Napi::Value StatementSyncIterator::ToArray(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (stmt_->database_->ThrowIfInAuthorizerCallback(env, "step statement")) {
+  if (stmt_->database_->ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
   if (stmt_->stepping_) {
-    node::THROW_ERR_INVALID_STATE(env, "statement is currently being executed");
+    node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
     return env.Undefined();
   }
 
@@ -4098,7 +4117,7 @@ Napi::Value Session::GenericChangeset(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (database_->ThrowIfInAuthorizerCallback(env, "create changeset")) {
+  if (database_->ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -4110,7 +4129,11 @@ Napi::Value Session::GenericChangeset(const Napi::CallbackInfo &info) {
   database_->ClearDeferredAuthorizerException();
   database_->SetIgnoreNextSQLiteError(false);
 
-  int r = sqliteChangesetFunc(session_, &nChangeset, &pChangeset);
+  int r;
+  {
+    ChangesetGuard generating(this);
+    r = sqliteChangesetFunc(session_, &nChangeset, &pChangeset);
+  }
 
   if (database_->HasDeferredAuthorizerException()) {
     // A RELEASE failure can be ignored by SQLite after it has already produced
@@ -4180,7 +4203,12 @@ Napi::Value Session::Close(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (database_->ThrowIfInAuthorizerCallback(env, "close session")) {
+  // Generating a changeset is the only in-flight state that blocks close():
+  // sqlite3session_delete() would free the object SQLite is still reading.
+  // node:sqlite has no authorizer guard here, so deleting an idle session from
+  // an unrelated authorizer callback stays allowed.
+  if (is_generating_changeset_) {
+    node::THROW_ERR_INVALID_STATE(env, "session is currently in use");
     return env.Undefined();
   }
 
@@ -4189,8 +4217,9 @@ Napi::Value Session::Close(const Napi::CallbackInfo &info) {
 }
 
 Napi::Value Session::Dispose(const Napi::CallbackInfo &info) {
-  if (database_ && database_->IsOpen() && session_ != nullptr &&
-      database_->ThrowIfInAuthorizerCallback(info.Env(), "close session")) {
+  // Mirrors Close()'s only in-flight guard. node:sqlite runs Dispose's close
+  // under a TryCatch and swallows, so this is tested without throwing.
+  if (is_generating_changeset_) {
     return info.Env().Undefined();
   }
 
@@ -4540,7 +4569,7 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "backup database")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -4660,7 +4689,7 @@ Napi::Value DatabaseSync::SetAuthorizer(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "set authorizer")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -4808,7 +4837,7 @@ Napi::Value DatabaseSync::GetLimit(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "read database limits")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 
@@ -4831,7 +4860,7 @@ Napi::Value DatabaseSync::SetLimit(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  if (ThrowIfInAuthorizerCallback(env, "set database limits")) {
+  if (ThrowIfInAuthorizerCallback(env)) {
     return env.Undefined();
   }
 

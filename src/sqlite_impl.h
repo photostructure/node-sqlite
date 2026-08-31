@@ -195,6 +195,15 @@ public:
   void LeaveTraceSuppression() { --trace_suppression_depth_; }
   bool AreTraceEventsSuppressed() const { return trace_suppression_depth_ > 0; }
 
+  // node:sqlite's IsInCallback(): true whenever JavaScript is running inside a
+  // callback SQLite invoked on this connection. An authorizer counts even
+  // though it can fire outside any step scope (sqlite3session_changeset() runs
+  // its own SAVEPOINT/SELECT), which is why this is not just
+  // IsExecutingStatement(). close()/deserialize() report against this.
+  bool IsInCallback() const {
+    return IsExecutingStatement() || IsInAuthorizerCallback();
+  }
+
   // User-defined functions
   Napi::Value CustomFunction(const Napi::CallbackInfo &info);
 
@@ -290,7 +299,7 @@ public:
   bool IsInAuthorizerCallback() const {
     return in_authorizer_callback_depth_ > 0;
   }
-  bool ThrowIfInAuthorizerCallback(Napi::Env env, const char *action) const;
+  bool ThrowIfInAuthorizerCallback(Napi::Env env) const;
 
   // Deferred exception handling for authorizer callbacks
   void SetDeferredAuthorizerException(const Napi::Error &error) {
@@ -407,6 +416,11 @@ public:
   // already finalized. Symbol.dispose maps to Dispose(), which is idempotent.
   Napi::Value Close(const Napi::CallbackInfo &info);
   Napi::Value Dispose(const Napi::CallbackInfo &info);
+
+  // True (with ERR_INVALID_STATE pending) when finalizing this statement from
+  // inside an authorizer callback would disturb SQLite state the outer
+  // statement still depends on.
+  bool ThrowIfBusyInAuthorizerCallback(Napi::Env env) const;
 
   // Properties
   Napi::Value SourceSQLGetter(const Napi::CallbackInfo &info);
@@ -572,6 +586,25 @@ private:
 
   template <int (*sqliteChangesetFunc)(sqlite3_session *, int *, void **)>
   Napi::Value GenericChangeset(const Napi::CallbackInfo &info);
+
+  // True while sqlite3session_changeset()/_patchset() is on the stack. Closing
+  // the session there would free the object SQLite is still reading, and the
+  // internal SAVEPOINT/SELECT it runs can reach JavaScript via the authorizer.
+  bool is_generating_changeset_ = false;
+
+  // RAII setter for is_generating_changeset_.
+  class ChangesetGuard {
+  public:
+    explicit ChangesetGuard(Session *session) : session_(session) {
+      session_->is_generating_changeset_ = true;
+    }
+    ~ChangesetGuard() { session_->is_generating_changeset_ = false; }
+    ChangesetGuard(const ChangesetGuard &) = delete;
+    ChangesetGuard &operator=(const ChangesetGuard &) = delete;
+
+  private:
+    Session *session_;
+  };
 
   sqlite3_session *session_ = nullptr;
   DatabaseSync *database_ = nullptr; // Direct pointer to database

@@ -698,6 +698,28 @@ test("session.close() - closing twice", (t) => {
   );
 });
 
+test("session.close() - while generating changes throws exception", (t) => {
+  for (const method of ["changeset", "patchset"]) {
+    const database = new DatabaseSync(":memory:");
+    database.exec("CREATE TABLE data(key INTEGER PRIMARY KEY, value TEXT)");
+
+    const session = database.createSession({ table: "data" });
+    database.exec("INSERT INTO data VALUES (1, 'a'), (2, 'b'), (3, 'c')");
+    database.setAuthorizer(() => {
+      session.close();
+      return constants.SQLITE_OK;
+    });
+
+    t.assert.throws(() => session[method](), {
+      code: "ERR_INVALID_STATE",
+      message: "session is currently in use",
+    });
+
+    database.setAuthorizer(null);
+    t.assert.notStrictEqual(session[method]().length, 0);
+  }
+});
+
 test.skip("session - keeps its database alive after the db handle is dropped" /* Intentional divergence: upstream keeps the database alive via a strong reference from Session. We cannot -- commit 4da0638 removed Session::database_ref_ because Napi::Reference teardown during GC finalization corrupts V8 JIT pages on Alpine/musl (SIGSEGV). We detach instead, so an orphaned session reports 'database is not open'. Also needs Node's internal ../common/gc helper. */, async (t) => {
   const { gcUntil, onGC } = require("../common/gc");
 

@@ -515,14 +515,21 @@ suite("StatementSync.prototype.sourceSQL", () => {
     const stmt = db.prepare(sql);
     t.assert.strictEqual(stmt.sourceSQL, sql);
   });
+
+  test("throws if the statement is already finalized", (t) => {
+    using db = new DatabaseSync(":memory:");
+    const stmt = db.prepare("CREATE TABLE storage(key TEXT, val TEXT)");
+    stmt.close();
+    t.assert.throws(() => stmt.sourceSQL, {
+      code: "ERR_INVALID_STATE",
+      message: /statement has been finalized/,
+    });
+  });
 });
 
 suite("StatementSync.prototype.expandedSQL", () => {
   test("equals expanded SQL", (t) => {
-    const db = new DatabaseSync(nextDb());
-    t.after(() => {
-      db.close();
-    });
+    using db = new DatabaseSync(":memory:");
     const setup = db.exec(
       "CREATE TABLE types(key INTEGER PRIMARY KEY, val INTEGER) STRICT;",
     );
