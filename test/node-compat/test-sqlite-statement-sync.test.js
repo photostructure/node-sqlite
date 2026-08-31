@@ -836,14 +836,49 @@ suite("StatementSync.prototype.setReadBigInts()", () => {
       [`${Number.MAX_SAFE_INTEGER} + 1`]: 2n ** 53n,
     });
   });
+
+  test("BigInt is required for reading large last insert row IDs", (t) => {
+    using db = new DatabaseSync(":memory:");
+    db.exec("CREATE TABLE data(key INTEGER PRIMARY KEY) STRICT");
+    const insert = db.prepare("INSERT INTO data VALUES (?)");
+
+    t.assert.throws(
+      () => {
+        insert.run(9007199254740993n);
+      },
+      {
+        code: "ERR_OUT_OF_RANGE",
+        message:
+          /^Value is too large to be represented as a JavaScript number: 9007199254740993$/,
+      },
+    );
+
+    insert.setReadBigInts(true);
+    t.assert.deepStrictEqual(insert.run(9007199254740995n), {
+      changes: 1n,
+      lastInsertRowid: 9007199254740995n,
+    });
+  });
+
+  test("throws if the statement is already finalized", (t) => {
+    using db = new DatabaseSync(":memory:");
+    const stmt = db.prepare("CREATE TABLE storage(key TEXT, val TEXT)");
+    stmt.close();
+    t.assert.throws(
+      () => {
+        stmt.setReadBigInts(true);
+      },
+      {
+        code: "ERR_INVALID_STATE",
+        message: /statement has been finalized/,
+      },
+    );
+  });
 });
 
 suite("StatementSync.prototype.setReturnArrays()", () => {
   test("throws when input is not a boolean", (t) => {
-    const db = new DatabaseSync(nextDb());
-    t.after(() => {
-      db.close();
-    });
+    using db = new DatabaseSync(":memory:");
     const setup = db.exec(
       "CREATE TABLE data(key INTEGER PRIMARY KEY, val INTEGER) STRICT;",
     );

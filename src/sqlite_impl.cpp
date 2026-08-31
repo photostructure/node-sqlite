@@ -80,6 +80,25 @@ namespace photostructure::sqlite {
 constexpr int64_t JS_MAX_SAFE_INTEGER = 9007199254740991LL;
 constexpr int64_t JS_MIN_SAFE_INTEGER = -9007199254740991LL;
 
+Napi::Value IntegerToValue(Napi::Env env, sqlite3_int64 value,
+                           bool use_big_ints) {
+  if (use_big_ints) {
+    return Napi::BigInt::New(env, static_cast<int64_t>(value));
+  }
+
+  if (value > JS_MAX_SAFE_INTEGER || value < JS_MIN_SAFE_INTEGER) {
+    char error_msg[128];
+    snprintf(error_msg, sizeof(error_msg),
+             "Value is too large to be represented as a JavaScript "
+             "number: %" PRId64,
+             static_cast<int64_t>(value));
+    node::THROW_ERR_OUT_OF_RANGE(env, error_msg);
+    return env.Undefined();
+  }
+
+  return Napi::Number::New(env, static_cast<double>(value));
+}
+
 // Path validation function implementation
 std::optional<std::string> ValidateDatabasePath(Napi::Env env, Napi::Value path,
                                                 const std::string &field_name) {
@@ -2621,27 +2640,22 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
     Napi::Object result_obj = Napi::Object::New(env);
 
     // Get changes and lastInsertRowid
-    int changes = sqlite3_changes(database_->connection());
+    sqlite3_int64 changes = sqlite3_changes64(database_->connection());
     sqlite3_int64 last_rowid =
         sqlite3_last_insert_rowid(database_->connection());
 
-    // When readBigInts is true, return BigInt for both (matches Node.js)
-    if (use_big_ints_) {
-      result_obj.Set("changes",
-                     Napi::BigInt::New(env, static_cast<int64_t>(changes)));
-      result_obj.Set("lastInsertRowid",
-                     Napi::BigInt::New(env, static_cast<int64_t>(last_rowid)));
-    } else if (last_rowid > JS_MAX_SAFE_INTEGER ||
-               last_rowid < JS_MIN_SAFE_INTEGER) {
-      // Use JavaScript's safe integer limits (2^53 - 1)
-      result_obj.Set("changes", Napi::Number::New(env, changes));
-      result_obj.Set("lastInsertRowid",
-                     Napi::BigInt::New(env, static_cast<int64_t>(last_rowid)));
-    } else {
-      result_obj.Set("changes", Napi::Number::New(env, changes));
-      result_obj.Set("lastInsertRowid",
-                     Napi::Number::New(env, static_cast<double>(last_rowid)));
+    Napi::Value last_rowid_value =
+        IntegerToValue(env, last_rowid, use_big_ints_);
+    if (env.IsExceptionPending()) {
+      return env.Undefined();
     }
+    Napi::Value changes_value = IntegerToValue(env, changes, use_big_ints_);
+    if (env.IsExceptionPending()) {
+      return env.Undefined();
+    }
+
+    result_obj.Set("changes", changes_value);
+    result_obj.Set("lastInsertRowid", last_rowid_value);
 
     return result_obj;
   } catch (const std::exception &e) {
