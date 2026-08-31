@@ -442,6 +442,16 @@ test("filter handler throws", (t) => {
       message: "Error filtering table data1",
     },
   );
+
+  t.assert.throws(
+    () => {
+      database2.exec("CREATE TABLEEEE");
+    },
+    {
+      code: "ERR_SQLITE_ERROR",
+      message: /syntax error/,
+    },
+  );
 });
 
 test("database.createSession() - filter changes", (t) => {
@@ -698,26 +708,44 @@ test("session.close() - closing twice", (t) => {
   );
 });
 
-test("session.close() - while generating changes throws exception", (t) => {
-  for (const method of ["changeset", "patchset"]) {
-    const database = new DatabaseSync(":memory:");
-    database.exec("CREATE TABLE data(key INTEGER PRIMARY KEY, value TEXT)");
+test("session close and dispose - while generating changes throws exception", (t) => {
+  for (const close of ["close", Symbol.dispose]) {
+    for (const method of ["changeset", "patchset"]) {
+      const database = new DatabaseSync(":memory:");
+      database.exec("CREATE TABLE data(key INTEGER PRIMARY KEY, value TEXT)");
 
-    const session = database.createSession({ table: "data" });
-    database.exec("INSERT INTO data VALUES (1, 'a'), (2, 'b'), (3, 'c')");
-    database.setAuthorizer(() => {
-      session.close();
-      return constants.SQLITE_OK;
-    });
+      const session = database.createSession({ table: "data" });
+      database.exec("INSERT INTO data VALUES (1, 'a'), (2, 'b'), (3, 'c')");
+      database.setAuthorizer(() => {
+        session[close]();
+        return constants.SQLITE_OK;
+      });
 
-    t.assert.throws(() => session[method](), {
-      code: "ERR_INVALID_STATE",
-      message: "session is currently in use",
-    });
+      t.assert.throws(() => session[method](), {
+        code: "ERR_INVALID_STATE",
+        message: "session is currently in use",
+      });
 
-    database.setAuthorizer(null);
-    t.assert.notStrictEqual(session[method]().length, 0);
+      database.setAuthorizer(null);
+      t.assert.notStrictEqual(session[method]().length, 0);
+    }
   }
+});
+
+test("session[Symbol.dispose]() - closed session is a no-op", () => {
+  const database = new DatabaseSync(":memory:");
+  const session = database.createSession();
+  session.close();
+
+  session[Symbol.dispose]();
+});
+
+test("session[Symbol.dispose]() - after closing database is a no-op", () => {
+  const database = new DatabaseSync(":memory:");
+  const session = database.createSession();
+  database.close();
+
+  session[Symbol.dispose]();
 });
 
 test.skip("session - keeps its database alive after the db handle is dropped" /* Intentional divergence: upstream keeps the database alive via a strong reference from Session. We cannot -- commit 4da0638 removed Session::database_ref_ because Napi::Reference teardown during GC finalization corrupts V8 JIT pages on Alpine/musl (SIGSEGV). We detach instead, so an orphaned session reports 'database is not open'. Also needs Node's internal ../common/gc helper. */, async (t) => {
@@ -754,6 +782,50 @@ test.skip("session - keeps its database alive after the db handle is dropped" /*
   const changeset = session.changeset();
   t.assert.ok(changeset.byteLength > 0);
   session.close();
+});
+
+// SQLite runs "PRAGMA table_xinfo" from inside its pre-update hook, while it is
+// still walking the connection's session list. Session objects are weak, so a
+// GC during a callback that the PRAGMA triggers could collect a session that
+// JavaScript no longer references and free memory the walk is still using.
+test("session - survives GC during an authorizer callback", (t) => {
+  const database = new DatabaseSync(":memory:");
+  database.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
+  database.createSession(); // Never referenced again, so it is collectable.
+
+  let ran = false;
+  database.setAuthorizer((actionCode, param1) => {
+    if (actionCode === constants.SQLITE_PRAGMA && param1 === "table_xinfo") {
+      ran = true;
+      globalThis.gc();
+      globalThis.gc();
+    }
+    return constants.SQLITE_OK;
+  });
+
+  database.exec("INSERT INTO data VALUES (1)");
+  t.assert.ok(ran, "the authorizer callback never ran");
+});
+
+test("session - survives GC during a 'sqlite.db.query' subscriber", (t) => {
+  const dc = require("node:diagnostics_channel");
+  const database = new DatabaseSync(":memory:");
+  database.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
+  database.createSession(); // Never referenced again, so it is collectable.
+
+  let ran = false;
+  const handler = ({ sql }) => {
+    if (sql.includes("table_xinfo")) {
+      ran = true;
+      globalThis.gc();
+      globalThis.gc();
+    }
+  };
+  dc.subscribe("sqlite.db.query", handler);
+  t.after(() => dc.unsubscribe("sqlite.db.query", handler));
+
+  database.exec("INSERT INTO data VALUES (1)");
+  t.assert.ok(ran, "the subscriber never ran");
 });
 
 test("session supports ERM", (t) => {

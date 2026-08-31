@@ -9,21 +9,12 @@
  */
 
 "use strict";
-const { tmpdir, isWindows } = require("../common/test-utils.cjs");
-const { join } = require("node:path");
 const { DatabaseSync } = require("@photostructure/sqlite");
 const { suite, test } = require("node:test");
-let cnt = 0;
-
-tmpdir.refresh();
-
-function nextDb() {
-  return join(tmpdir.path, `database-${cnt++}.db`);
-}
 
 suite("manual transactions", () => {
   test("a transaction is committed", (t) => {
-    const db = new DatabaseSync(nextDb());
+    const db = new DatabaseSync(":memory:");
     t.after(() => {
       db.close();
     });
@@ -51,7 +42,7 @@ suite("manual transactions", () => {
   });
 
   test("a transaction is rolled back", (t) => {
-    const db = new DatabaseSync(nextDb());
+    const db = new DatabaseSync(":memory:");
     t.after(() => {
       db.close();
     });

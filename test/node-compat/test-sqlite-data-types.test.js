@@ -9,22 +9,13 @@
  */
 
 "use strict";
-const { tmpdir, isWindows } = require("../common/test-utils.cjs");
-const { join } = require("node:path");
 const { DatabaseSync } = require("@photostructure/sqlite");
 const { suite, test } = require("node:test");
-let cnt = 0;
-
-tmpdir.refresh();
-
-function nextDb() {
-  return join(tmpdir.path, `database-${cnt++}.db`);
-}
 
 suite("data binding and mapping", () => {
   test("supported data types", (t) => {
     const u8a = new TextEncoder().encode("a☃b☃c");
-    const db = new DatabaseSync(nextDb());
+    const db = new DatabaseSync(":memory:");
     t.after(() => {
       db.close();
     });
@@ -92,10 +83,23 @@ suite("data binding and mapping", () => {
       text: "",
       buf: new Uint8Array(),
     });
+
+    t.assert.deepStrictEqual(stmt.run(5, true, false, true, null), {
+      changes: 1,
+      lastInsertRowid: 5,
+    });
+    t.assert.deepStrictEqual(query.get(5), {
+      __proto__: null,
+      key: 5,
+      int: 1,
+      double: 0,
+      text: "1",
+      buf: null,
+    });
   });
 
   test("large strings are bound correctly", (t) => {
-    const db = new DatabaseSync(nextDb());
+    const db = new DatabaseSync(":memory:");
     t.after(() => {
       db.close();
     });
@@ -132,7 +136,7 @@ suite("data binding and mapping", () => {
   });
 
   test("unsupported data types", (t) => {
-    const db = new DatabaseSync(nextDb());
+    const db = new DatabaseSync(":memory:");
     t.after(() => {
       db.close();
     });
@@ -175,7 +179,7 @@ suite("data binding and mapping", () => {
 
   test("throws when binding a BigInt that is too large", (t) => {
     const max = 9223372036854775807n; // Largest 64-bit signed integer value.
-    const db = new DatabaseSync(nextDb());
+    const db = new DatabaseSync(":memory:");
     t.after(() => {
       db.close();
     });
@@ -200,7 +204,7 @@ suite("data binding and mapping", () => {
   });
 
   test("statements are unbound on each call", (t) => {
-    const db = new DatabaseSync(nextDb());
+    const db = new DatabaseSync(":memory:");
     t.after(() => {
       db.close();
     });

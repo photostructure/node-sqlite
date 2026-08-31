@@ -261,37 +261,3 @@ for (const op of ["next", "return"]) {
     db.close();
   });
 }
-
-test("statement reentry takes precedence over stale iterator state", () => {
-  const db = new DatabaseSync(":memory:");
-  db.exec(`
-    CREATE TABLE data (value INTEGER);
-    INSERT INTO data VALUES (1), (2), (3);
-  `);
-
-  let staleIterator;
-  let reentryError;
-  db.function("reenter_stale_iterator", (value) => {
-    try {
-      staleIterator.next();
-    } catch (err) {
-      reentryError = err;
-    }
-    return value;
-  });
-
-  const statement = db.prepare(
-    "SELECT reenter_stale_iterator(value) AS value FROM data",
-  );
-  staleIterator = statement.iterate();
-  statement.all();
-
-  assert.ok(reentryError);
-  assert.strictEqual(reentryError.code, "ERR_INVALID_STATE");
-  assert.strictEqual(
-    reentryError.message,
-    "statement is already being executed",
-  );
-
-  db.close();
-});

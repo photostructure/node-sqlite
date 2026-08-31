@@ -165,6 +165,18 @@ describe("backup()", () => {
       },
     );
 
+    for (const rate of [0, -1]) {
+      t.assert.throws(
+        () => {
+          backup(database, "hello.db", { rate });
+        },
+        {
+          code: "ERR_OUT_OF_RANGE",
+          message: 'The "options.rate" argument must be a positive integer.',
+        },
+      );
+    }
+
     t.assert.throws(
       () => {
         backup(database, "hello.db", {

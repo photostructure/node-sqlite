@@ -43,7 +43,7 @@ suite.skip(
 );
 
 test("ERR_SQLITE_ERROR is thrown for errors originating from SQLite", (t) => {
-  const db = new DatabaseSync(nextDb());
+  const db = new DatabaseSync(":memory:");
   t.after(() => {
     db.close();
   });
@@ -96,6 +96,7 @@ test("sqlite constants are defined", (t) => {
 });
 
 test("PRAGMAs are supported", (t) => {
+  // WAL journal mode requires an on-disk database.
   const db = new DatabaseSync(nextDb());
   t.after(() => {
     db.close();
@@ -244,7 +245,7 @@ suite("SQL APIs enabled at build time", () => {
   });
 
   test("dbstat is enabled", (t) => {
-    const db = new DatabaseSync(nextDb());
+    const db = new DatabaseSync(":memory:");
     t.after(() => {
       db.close();
     });

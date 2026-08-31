@@ -19,7 +19,6 @@ const dc = require("node:diagnostics_channel");
 const { DatabaseSync } = require("@photostructure/sqlite");
 const { suite, it } = require("node:test");
 const { gcUntil } = require("../common/test-utils.cjs");
-
 suite("sqlite.db.query diagnostics channel", () => {
   it("subscriber receives SQL string for exec() statements", (t) => {
     const calls = [];
