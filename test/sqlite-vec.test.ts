@@ -30,6 +30,9 @@ const describeWithSqliteVec = sqliteVecPath ? describe : describe.skip;
 describeWithSqliteVec("sqlite-vec Integration Tests", () => {
   const { getDbPath, closeDatabases } = useTempDir("sqlite-vec-test-");
 
+  // node:sqlite binds JavaScript Number values as REAL. vec0 requires INTEGER
+  // primary keys, so rowid and integer-metadata bindings use BigInt below.
+
   // Helper to create a database with extension loading enabled and sqlite-vec loaded
   function createVecDb(dbPath?: string): InstanceType<typeof DatabaseSync> {
     const db = new DatabaseSync(dbPath ?? ":memory:", { allowExtension: true });
@@ -143,7 +146,7 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
       );
 
       expect(() => {
-        stmt.run(1, new Float32Array([0.1, 0.2, 0.3, 0.4]));
+        stmt.run(1n, new Float32Array([0.1, 0.2, 0.3, 0.4]));
       }).not.toThrow();
 
       const count = db.prepare("SELECT COUNT(*) as cnt FROM items").get() as {
@@ -166,7 +169,7 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
       ] as const;
 
       for (const [id, vec] of vectors) {
-        stmt.run(id, vec);
+        stmt.run(BigInt(id), vec);
       }
 
       const count = db.prepare("SELECT COUNT(*) as cnt FROM items").get() as {
@@ -185,7 +188,7 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
       const buffer = Buffer.from(floats.buffer);
 
       expect(() => {
-        stmt.run(1, buffer);
+        stmt.run(1n, buffer);
       }).not.toThrow();
 
       const count = db.prepare("SELECT COUNT(*) as cnt FROM items").get() as {
@@ -215,7 +218,7 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
       ] as const;
 
       for (const [id, vec] of vectors) {
-        stmt.run(id, vec);
+        stmt.run(BigInt(id), vec);
       }
     });
 
@@ -380,7 +383,7 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
 
       db.exec("CREATE VIRTUAL TABLE items USING vec0(embedding float[4])");
       db.prepare("INSERT INTO items(rowid, embedding) VALUES (?, ?)").run(
-        1,
+        1n,
         new Float32Array([0.1, 0.2, 0.3, 0.4]),
       );
       db.close();
@@ -411,8 +414,8 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
       const stmt = db.prepare(
         "INSERT INTO items(rowid, embedding) VALUES (?, ?)",
       );
-      stmt.run(1, new Float32Array([0.1, 0.1, 0.1, 0.1]));
-      stmt.run(2, new Float32Array([0.9, 0.9, 0.9, 0.9]));
+      stmt.run(1n, new Float32Array([0.1, 0.1, 0.1, 0.1]));
+      stmt.run(2n, new Float32Array([0.9, 0.9, 0.9, 0.9]));
       db.close();
       db = undefined;
 
@@ -460,7 +463,7 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
 
       // Try to insert 3-dimensional vector into 4-dimensional column
       expect(() => {
-        stmt.run(1, new Float32Array([0.1, 0.2, 0.3]));
+        stmt.run(1n, new Float32Array([0.1, 0.2, 0.3]));
       }).toThrow();
     });
 
@@ -470,7 +473,7 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
       const stmt = db.prepare(
         "INSERT INTO items(rowid, embedding) VALUES (?, ?)",
       );
-      stmt.run(1, new Float32Array([0.1, 0.2, 0.3, 0.4]));
+      stmt.run(1n, new Float32Array([0.1, 0.2, 0.3, 0.4]));
 
       // Try to query with 3-dimensional vector
       expect(() => {
@@ -538,7 +541,13 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
           "VALUES (?, ?, vec_bit(?), ?, ?)",
       );
       for (const r of rowids) {
-        ins.run(r, r * 7, bitVec(r), 1_700_000_000 + r, longName(r));
+        ins.run(
+          BigInt(r),
+          BigInt(r * 7),
+          bitVec(r),
+          BigInt(1_700_000_000 + r),
+          longName(r),
+        );
       }
     }
 
@@ -553,7 +562,7 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
 
       // Scattered deletes (~40%) fragment the chunks so optimize compacts.
       const del = db.prepare("DELETE FROM t WHERE rowid = ?");
-      for (let r = 1; r <= 40; r++) if (r % 5 < 2) del.run(r);
+      for (let r = 1; r <= 40; r++) if (r % 5 < 2) del.run(BigInt(r));
 
       // The operation that used to abort the process.
       expect(() => {
@@ -596,7 +605,8 @@ describeWithSqliteVec("sqlite-vec Integration Tests", () => {
       const del = db.prepare("DELETE FROM t WHERE rowid = ?");
       for (let round = 0; round < 5; round++) {
         // Delete a scattered subset, then grow with fresh rowids.
-        for (let r = 1; r < next; r++) if ((r + round) % 3 === 0) del.run(r);
+        for (let r = 1; r < next; r++)
+          if ((r + round) % 3 === 0) del.run(BigInt(r));
         insertRows(
           db,
           Array.from({ length: 12 }, () => next++),

@@ -55,7 +55,7 @@ describe("STRICT Tables", () => {
       // STRICT table accepts proper integers
       const result = db
         .prepare("INSERT INTO strict_table (int_col) VALUES (?)")
-        .run(42);
+        .run(42n);
       expect(result.changes).toBe(1);
 
       // STRICT table rejects real numbers in INTEGER column
@@ -113,10 +113,10 @@ describe("STRICT Tables", () => {
         .run("hello");
       expect(result.changes).toBe(1);
 
-      // STRICT table converts numbers to text
+      // STRICT table converts integer values to text
       const result2 = db
         .prepare("INSERT INTO strict_table (text_col) VALUES (?)")
-        .run(42);
+        .run(42n);
       expect(result2.changes).toBe(1);
 
       const value = db
@@ -140,7 +140,7 @@ describe("STRICT Tables", () => {
       }).toThrow(/cannot store TEXT value in BLOB column/);
 
       expect(() => {
-        db.prepare("INSERT INTO strict_table (blob_col) VALUES (?)").run(42);
+        db.prepare("INSERT INTO strict_table (blob_col) VALUES (?)").run(42n);
       }).toThrow(/cannot store INT value in BLOB column/);
     });
 
@@ -474,7 +474,7 @@ describe("STRICT Tables", () => {
       `);
 
       // Regular table accepts any value
-      db.prepare("INSERT INTO regular (data) VALUES (?)").run(42);
+      db.prepare("INSERT INTO regular (data) VALUES (?)").run(42n);
       db.prepare("INSERT INTO regular (data) VALUES (?)").run("text");
 
       // STRICT table with proper types
