@@ -383,7 +383,8 @@ public:
   virtual ~StatementSync();
 
   // Internal constructor for DatabaseSync to use
-  void InitStatement(DatabaseSync *database, const std::string &sql);
+  void InitStatement(DatabaseSync *database, const std::string &sql,
+                     bool persistent = false);
 
   // Called by DatabaseSync::FinalizeStatements() to finalize the underlying
   // sqlite3_stmt and detach from the database before the database is torn

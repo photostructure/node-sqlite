@@ -110,6 +110,12 @@ export interface StatementOptions {
    * @default database default
    */
   readonly allowUnknownNamedParameters?: boolean;
+  /**
+   * If true, prepare with `SQLITE_PREPARE_PERSISTENT`, telling SQLite the
+   * statement will be retained and reused many times.
+   * @default false
+   */
+  readonly persistent?: boolean;
 }
 
 export interface Session {

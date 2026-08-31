@@ -831,6 +831,7 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
   std::optional<bool> opt_return_arrays;
   std::optional<bool> opt_allow_bare_named_params;
   std::optional<bool> opt_allow_unknown_named_params;
+  bool persistent = false;
 
   if (info.Length() > 1 && !info[1].IsUndefined()) {
     if (!info[1].IsObject()) {
@@ -887,6 +888,17 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
       opt_allow_unknown_named_params =
           allow_unknown_val.As<Napi::Boolean>().Value();
     }
+
+    // Parse persistent option (SQLITE_PREPARE_PERSISTENT)
+    Napi::Value persistent_val = options.Get("persistent");
+    if (!persistent_val.IsUndefined()) {
+      if (!persistent_val.IsBoolean()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.persistent\" argument must be a boolean.");
+        return env.Undefined();
+      }
+      persistent = persistent_val.As<Napi::Boolean>().Value();
+    }
   }
 
   // Clear any stale deferred exception from a previous operation
@@ -906,7 +918,20 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
 
     // Initialize the statement (applies database-level defaults)
     StatementSync *stmt = StatementSync::Unwrap(stmt_obj);
-    stmt->InitStatement(this, sql);
+    stmt->InitStatement(this, sql, persistent);
+
+    // sqlite3_prepare_v3() reports success without producing a statement when
+    // the input holds no SQL, such as a comment or an empty string. Such a
+    // statement can never be stepped, so reject it here rather than handing
+    // back an object whose every method fails. Untrack it first: leaving it in
+    // statements_ would dangle once the unreachable wrapper is collected.
+    if (stmt->statement_ == nullptr) {
+      UntrackStatement(stmt);
+      stmt->database_ = nullptr;
+      node::THROW_ERR_INVALID_ARG_VALUE(
+          env, "The SQL query contains no statements.");
+      return env.Undefined();
+    }
 
     // Apply per-statement option overrides (if explicitly provided)
     if (opt_read_big_ints.has_value()) {
@@ -2431,7 +2456,7 @@ StatementSync::StatementSync(const Napi::CallbackInfo &info)
 }
 
 void StatementSync::InitStatement(DatabaseSync *database,
-                                  const std::string &sql) {
+                                  const std::string &sql, bool persistent) {
   if (!database || !database->IsOpen()) {
     throw std::runtime_error("database is not open");
   }
@@ -2452,7 +2477,8 @@ void StatementSync::InitStatement(DatabaseSync *database,
   int result;
   {
     database->EnterStatementStep();
-    result = sqlite3_prepare_v2(database->connection(), sql.c_str(), -1,
+    result = sqlite3_prepare_v3(database->connection(), sql.c_str(), -1,
+                                persistent ? SQLITE_PREPARE_PERSISTENT : 0,
                                 &statement_, &tail);
     database->LeaveStatementStep();
   }

@@ -1,11 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import {
-  DatabaseSync,
-  StatementSync,
-  type StatementSyncInstance,
-} from "../src";
+import { DatabaseSync, type StatementSyncInstance } from "../src";
 import { rm } from "./test-utils";
 
 /**
@@ -60,9 +56,17 @@ describe("Invalid Operations Tests", () => {
         }).toThrow(/syntax|incomplete|near/i);
       });
 
-      // Empty SQL is actually allowed by SQLite
-      const emptyStmt = db.prepare("");
-      expect(emptyStmt).toBeInstanceOf(StatementSync);
+      // SQLite prepares empty input without producing a statement; such a
+      // statement could never be stepped, so prepare() rejects it.
+      expect(() => db.prepare("")).toThrow(
+        expect.objectContaining({
+          code: "ERR_INVALID_ARG_VALUE",
+          message: "The SQL query contains no statements.",
+        }),
+      );
+      expect(() => db.prepare("-- just a comment")).toThrow(
+        expect.objectContaining({ code: "ERR_INVALID_ARG_VALUE" }),
+      );
 
       // Multiple statements in prepare is actually allowed by SQLite
       // Only the first statement is prepared
