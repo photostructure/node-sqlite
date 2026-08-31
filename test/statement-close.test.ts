@@ -189,17 +189,34 @@ describe("StatementSync.close() and [Symbol.dispose]()", () => {
       expect(() => stmt.close()).not.toThrow();
     });
 
-    it("dispose is a no-op mid-execution rather than throwing", () => {
+    it("dispose mid-execution throws rather than freeing the live VM", () => {
       const held: { stmt?: ReturnType<typeof db.prepare> } = {};
+      let disposeError: unknown;
 
       db.function("probe2", (id: number) => {
-        held.stmt![Symbol.dispose]();
+        try {
+          held.stmt![Symbol.dispose]();
+        } catch (err) {
+          disposeError = err;
+        }
         return id;
       });
 
       const stmt = db.prepare("SELECT probe2(id) AS v FROM test");
       held.stmt = stmt;
+
+      // Disposal is idempotent for an already-finalized statement, but
+      // finalizing the statement whose sqlite3_step() is on the stack would
+      // free the running VM, so it reports instead of silently skipping.
       expect(() => stmt.all()).not.toThrow();
+      expect(disposeError).toEqual(
+        expect.objectContaining({
+          code: "ERR_INVALID_STATE",
+          message: "statement is already being executed",
+        }),
+      );
+
+      // Once the query unwinds, the statement can be finalized.
       expect(() => stmt.close()).not.toThrow();
     });
   });

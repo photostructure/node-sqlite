@@ -120,6 +120,20 @@ function adaptTest(content: string, fileName: string): string {
     `const { tmpdir, isWindows } = require("../common/test-utils.cjs");\n`,
   );
 
+  // Replace the GC helper import when gcUntil is the only requested helper.
+  // Other exports, such as onGC, need their own compatibility implementation.
+  // Handles ESM: import { gcUntil } from '../common/gc.mjs';
+  adapted = adapted.replace(
+    /import\s*\{\s*gcUntil\s*\}\s*from\s*['"]\.\.\/common\/gc\.mjs['"]\s*;?\s*/g,
+    `import { gcUntil } from "../common/test-utils.mjs";\n`,
+  );
+
+  // Handles CJS: const { gcUntil } = require('../common/gc');
+  adapted = adapted.replace(
+    /const\s*\{\s*gcUntil\s*\}\s*=\s*require\(['"]\.\.\/common\/gc['"]\);\s*/g,
+    `const { gcUntil } = require("../common/test-utils.cjs");\n`,
+  );
+
   // Replace require('../sqlite/next-db.js') with our shim
   adapted = adapted.replace(
     /const\s*\{\s*nextDb\s*\}\s*=\s*require\(['"]\.\.\/sqlite\/next-db\.js['"]\);\s*/g,

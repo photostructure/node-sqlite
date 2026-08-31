@@ -1,5 +1,6 @@
 // Load the native binding with support for both CJS and ESM
 import nodeGypBuild from "node-gyp-build";
+import { channel as getDiagnosticsChannel } from "node:diagnostics_channel";
 import { join } from "node:path";
 import { _dirname } from "./dirname";
 import { SQLTagStore } from "./sql-tag-store";
@@ -50,6 +51,7 @@ export {
 
 // Use _dirname() helper that works in both CJS/ESM and Jest
 const binding = nodeGypBuild(join(_dirname(), ".."));
+binding.setQueryDiagnosticsChannel(getDiagnosticsChannel("sqlite.db.query"));
 
 /**
  * All SQLite constants exported by this module.

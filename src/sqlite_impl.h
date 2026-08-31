@@ -48,6 +48,11 @@ struct AddonData {
   Napi::FunctionReference statementSyncIteratorConstructor;
   Napi::FunctionReference sessionConstructor;
 
+  // Public diagnostics_channel Channel supplied by the TypeScript entrypoint.
+  // Keeping the JS object here makes it available to SQLite's native profile
+  // callback without relying on Node-internal diagnostics_channel APIs.
+  Napi::ObjectReference queryDiagnosticsChannel;
+
   // Cached Object.create function for creating objects with null prototype
   Napi::FunctionReference objectCreateFn;
 
@@ -181,6 +186,10 @@ public:
   void LeaveStatementStep() { --statements_in_progress_; }
   bool IsExecutingStatement() const { return statements_in_progress_ > 0; }
 
+  void EnterTraceSuppression() { ++trace_suppression_depth_; }
+  void LeaveTraceSuppression() { --trace_suppression_depth_; }
+  bool AreTraceEventsSuppressed() const { return trace_suppression_depth_ > 0; }
+
   // User-defined functions
   Napi::Value CustomFunction(const Napi::CallbackInfo &info);
 
@@ -216,6 +225,10 @@ public:
   static int AuthorizerCallback(void *user_data, int action_code,
                                 const char *param1, const char *param2,
                                 const char *param3, const char *param4);
+
+  // SQLite profile callback used to publish sqlite.db.query diagnostics.
+  static int QueryTraceCallback(unsigned int type, void *user_data,
+                                void *statement, void *duration);
 
   // Session management
   void AddSession(Session *session);
@@ -317,6 +330,11 @@ private:
   // stack for this connection. Raised by StatementSync::StepGuard and around
   // Exec()'s sqlite3_exec(); see EnterStatementStep()/IsExecutingStatement().
   int statements_in_progress_ = 0;
+
+  // sqlite3_finalize() may deliver a final SQLITE_TRACE_PROFILE callback for
+  // unfinished work. Suppress those callbacks: finalization is cleanup, not a
+  // completed query, and may run while V8 is collecting the JS wrapper.
+  int trace_suppression_depth_ = 0;
 
   // Depth of authorizer callbacks currently on this connection's stack. This
   // is separate from statements_in_progress_: authorizers forbid all

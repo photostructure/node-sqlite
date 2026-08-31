@@ -1335,10 +1335,103 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
       sqlite3_limit(connection_, static_cast<int>(i), *limit);
     }
   }
+
+  // The callback is always registered once the public package entrypoint has
+  // supplied its Channel. It checks hasSubscribers before doing expansion or
+  // allocating the payload, so subscription changes take effect immediately.
+  AddonData *addon_data = GetAddonData(env_);
+  if (addon_data != nullptr && !addon_data->queryDiagnosticsChannel.IsEmpty()) {
+    sqlite3_trace_v2(connection_, SQLITE_TRACE_PROFILE, QueryTraceCallback,
+                     this);
+  }
+}
+
+int DatabaseSync::QueryTraceCallback(unsigned int type, void *user_data,
+                                     void *statement, void *duration) {
+  if (type != SQLITE_TRACE_PROFILE || user_data == nullptr ||
+      statement == nullptr || duration == nullptr) {
+    return 0;
+  }
+
+  auto *database = static_cast<DatabaseSync *>(user_data);
+  if (database->AreTraceEventsSuppressed()) {
+    return 0;
+  }
+
+  // Result materialization may already have raised a JavaScript exception
+  // before sqlite3_reset() delivers the profile event. Any N-API call made
+  // with that exception pending can replace its structured error object, so
+  // leave the original failure untouched and skip diagnostics publication.
+  bool exception_pending = false;
+  if (napi_is_exception_pending(database->env_, &exception_pending) !=
+          napi_ok ||
+      exception_pending) {
+    return 0;
+  }
+
+  Napi::Env env(database->env_);
+  AddonData *addon_data = GetAddonData(env);
+  if (addon_data == nullptr || addon_data->queryDiagnosticsChannel.IsEmpty()) {
+    return 0;
+  }
+
+  Napi::HandleScope scope(env);
+  Napi::Object channel = addon_data->queryDiagnosticsChannel.Value();
+  Napi::Value has_subscribers = channel.Get("hasSubscribers");
+  if (!has_subscribers.IsBoolean() ||
+      !has_subscribers.As<Napi::Boolean>().Value()) {
+    return 0;
+  }
+
+  auto *sqlite_statement = static_cast<sqlite3_stmt *>(statement);
+  char *expanded = sqlite3_expanded_sql(sqlite_statement);
+  Napi::String sql;
+  if (expanded != nullptr) {
+    sql = Napi::String::New(env, expanded);
+    sqlite3_free(expanded);
+  } else {
+    const char *source = sqlite3_sql(sqlite_statement);
+    if (source == nullptr) {
+      return 0;
+    }
+    sql = Napi::String::New(env, source);
+  }
+
+  Napi::Object payload = CreateObjectWithNullPrototype(env);
+  payload.Set("sql", sql);
+  payload.Set("database", database->Value());
+  payload.Set(
+      "duration",
+      Napi::Number::New(
+          env, static_cast<double>(*static_cast<sqlite3_int64 *>(duration))));
+
+  Napi::Value publish_value = channel.Get("publish");
+  if (!publish_value.IsFunction()) {
+    return 0;
+  }
+
+  // Publication is a synchronous SQLite callback. Raise the connection-level
+  // callback depth even for SQLite operations that do not have a JS statement
+  // wrapper, so a subscriber cannot close or deserialize the live connection.
+  database->EnterStatementStep();
+  try {
+    publish_value.As<Napi::Function>().Call(channel, {payload});
+  } catch (...) {
+    database->LeaveStatementStep();
+    return 0;
+  }
+  database->LeaveStatementStep();
+  return 0;
 }
 
 void DatabaseSync::InternalClose() {
   if (connection_) {
+    // Clear the callback before teardown. Unlike Node's internal diagnostics
+    // binding, our stable Node-API bridge cannot unregister tracing as soon as
+    // the final subscriber leaves, so a no-subscriber callback may still be
+    // installed when GC closes the wrapper. Teardown must not call into N-API.
+    sqlite3_trace_v2(connection_, 0, nullptr, nullptr);
+
     // Finalize any active backup jobs first
     // This prevents use-after-free if backup is running on worker thread
     FinalizeBackups();
@@ -2398,17 +2491,26 @@ StatementSync::~StatementSync() {
   // call back into a freed DatabaseSync. This pattern avoids N-API Reset()
   // calls during GC, which caused JIT corruption on Alpine/musl.
   // See: commit 4da0638, nodejs/node-addon-api#660
-  if (database_) {
-    database_->UntrackStatement(this);
+  DatabaseSync *database = database_;
+  if (database) {
+    database->UntrackStatement(this);
   }
   if (statement_ && !finalized_) {
+    if (database) {
+      database->EnterTraceSuppression();
+    }
     sqlite3_finalize(statement_);
+    if (database) {
+      database->LeaveTraceSuppression();
+    }
   }
 }
 
 void StatementSync::FinalizeFromDatabase() {
   if (statement_ && !finalized_) {
+    database_->EnterTraceSuppression();
     sqlite3_finalize(statement_);
+    database_->LeaveTraceSuppression();
   }
   statement_ = nullptr;
   finalized_ = true;
@@ -2455,6 +2557,10 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
   }
 
   try {
+    // Held across reset, binding, and stepping: binding a named parameter runs
+    // JavaScript getters, and re-entering this statement there would reset the
+    // virtual machine a second time behind the outer call's back.
+    StepGuard guard(this);
     Reset();
     BindParameters(info);
 
@@ -2464,10 +2570,7 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
     }
 
     // Execute the statement
-    {
-      StepGuard guard(this);
-      sqlite3_step(statement_);
-    }
+    sqlite3_step(statement_);
     // Reset immediately after step to ensure sqlite3_changes() returns
     // correct value. This fixes an issue where RETURNING queries would
     // report changes: 0 on the first call.
@@ -2732,8 +2835,9 @@ void StatementSync::CloseStatement() {
   }
   // Stop the database from tracking us first, so a later close()/deserialize()
   // does not walk a statement we have already finalized.
-  if (database_) {
-    database_->UntrackStatement(this);
+  DatabaseSync *database = database_;
+  if (database) {
+    database->UntrackStatement(this);
     // Drop the back-pointer for the same reason FinalizeFromDatabase() does.
     // Once we are untracked, FinalizeStatements() will never visit us again,
     // so nothing else would ever clear it -- and ~StatementSync must not call
@@ -2744,7 +2848,13 @@ void StatementSync::CloseStatement() {
   if (statement_) {
     // Safe to finalize even if the database is already closed; SQLite handles
     // that gracefully.
+    if (database) {
+      database->EnterTraceSuppression();
+    }
     sqlite3_finalize(statement_);
+    if (database) {
+      database->LeaveTraceSuppression();
+    }
     statement_ = nullptr;
   }
   finalized_ = true;
@@ -2783,14 +2893,26 @@ Napi::Value StatementSync::Close(const Napi::CallbackInfo &info) {
 }
 
 Napi::Value StatementSync::Dispose(const Napi::CallbackInfo &info) {
-  // Unlike close(), disposal is idempotent and never throws, so the conditions
-  // close() rejects become no-ops here: mid-step and inside an authorizer
-  // callback, finalizing is unsafe for the reasons given above. The statement
-  // stays live and is finalized later by GC or database close.
-  if (!stepping_ && !(database_ && database_->IsInAuthorizerCallback())) {
+  Napi::Env env = info.Env();
+
+  // Disposal is idempotent, including inside a callback.
+  if (finalized_) {
+    return env.Undefined();
+  }
+
+  // Match close(): finalizing the statement while SQLite or a diagnostics
+  // subscriber is using it would free its live virtual machine.
+  if (stepping_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement is already being executed");
+    return env.Undefined();
+  }
+
+  // Preserve the existing authorizer behavior: unsafe disposal remains a
+  // no-op until the broader authorizer compatibility changes are reviewed.
+  if (!(database_ && database_->IsInAuthorizerCallback())) {
     CloseStatement();
   }
-  return info.Env().Undefined();
+  return env.Undefined();
 }
 
 Napi::Value StatementSync::SourceSQLGetter(const Napi::CallbackInfo &info) {

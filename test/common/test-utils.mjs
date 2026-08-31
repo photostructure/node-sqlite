@@ -82,4 +82,34 @@ export function mustCall(fn) {
   return fn;
 }
 
-export default { tmpdir, nextDb, isWindows, spawnPromisified, mustCall };
+/**
+ * Runs the garbage collector until `condition` holds, or fails the calling test.
+ * Stands in for Node.js's internal test/common/gc.js helper.
+ *
+ * @param {string} name - What is being waited for, used in the failure message
+ * @param {() => boolean} condition - Polled after each collection
+ * @param {number} [maxAttempts] - Collections to attempt before giving up
+ * @returns {Promise<void>}
+ */
+export async function gcUntil(name, condition, maxAttempts = 100) {
+  if (typeof global.gc !== "function") {
+    throw new Error(`gcUntil("${name}") requires --expose-gc`);
+  }
+  for (let i = 0; i < maxAttempts; i++) {
+    if (condition()) {
+      return;
+    }
+    global.gc();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error(`Test timed out waiting for ${name}`);
+}
+
+export default {
+  tmpdir,
+  nextDb,
+  isWindows,
+  spawnPromisified,
+  mustCall,
+  gcUntil,
+};

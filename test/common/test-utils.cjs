@@ -88,4 +88,40 @@ function mustCall(fn) {
   return fn;
 }
 
-module.exports = { tmpdir, nextDb, isWindows, spawnPromisified, mustCall };
+/**
+ * Runs the garbage collector until `condition` holds, or fails the calling test.
+ * Stands in for Node.js's internal test/common/gc.js helper.
+ *
+ * Requires --expose-gc, which the node-compat runner passes. A FinalizationRegistry
+ * callback runs in a later microtask than the collection itself, so each attempt
+ * yields to the event loop before re-checking.
+ *
+ * @param {string} name - What is being waited for, used in the failure message
+ * @param {() => boolean} condition - Polled after each collection
+ * @param {number} [maxAttempts] - Collections to attempt before giving up
+ * @returns {Promise<void>}
+ */
+async function gcUntil(name, condition, maxAttempts = 100) {
+  if (typeof global.gc !== "function") {
+    throw new Error(`gcUntil("${name}") requires --expose-gc`);
+  }
+  for (let i = 0; i < maxAttempts; i++) {
+    if (condition()) {
+      return;
+    }
+    global.gc();
+    // Let FinalizationRegistry callbacks, which are scheduled as a separate
+    // task, actually run before the next check.
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error(`Test timed out waiting for ${name}`);
+}
+
+module.exports = {
+  tmpdir,
+  nextDb,
+  isWindows,
+  spawnPromisified,
+  mustCall,
+  gcUntil,
+};

@@ -48,6 +48,24 @@ AddonData *GetAddonData(napi_env env) {
   return static_cast<AddonData *>(data);
 }
 
+// The package entrypoint owns the public diagnostics_channel dependency and
+// passes the sqlite.db.query Channel to the native binding. This keeps the
+// addon on stable Node-API instead of depending on Node's internal channel
+// registry.
+Napi::Value SetQueryDiagnosticsChannel(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  AddonData *addon_data = GetAddonData(env);
+  if (addon_data == nullptr || info.Length() < 1 || !info[0].IsObject()) {
+    Napi::TypeError::New(env, "A diagnostics channel object is required")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  addon_data->queryDiagnosticsChannel =
+      Napi::Reference<Napi::Object>::New(info[0].As<Napi::Object>(), 1);
+  return env.Undefined();
+}
+
 // Register a database instance for cleanup tracking
 void RegisterDatabaseInstance(Napi::Env env, DatabaseSync *database) {
   AddonData *addon_data = GetAddonData(env);
@@ -90,6 +108,11 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   StatementSync::Init(env, exports);
   StatementSyncIterator::Init(env, exports);
   Session::Init(env, exports);
+
+  // Internal bridge used by src/index.ts; it is not re-exported by the public
+  // package API.
+  exports.Set("setQueryDiagnosticsChannel",
+              Napi::Function::New(env, SetQueryDiagnosticsChannel));
 
   // Add SQLite constants
   Napi::Object constants = Napi::Object::New(env);
