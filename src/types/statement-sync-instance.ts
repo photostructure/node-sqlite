@@ -35,6 +35,20 @@ export interface StatementColumnMetadata {
 }
 
 /**
+ * Counter names accepted by {@link StatementSyncInstance.stat}.
+ */
+export type StatementStatCounter =
+  | "fullscanStep"
+  | "sort"
+  | "autoindex"
+  | "vmStep"
+  | "reprepare"
+  | "run"
+  | "filterMiss"
+  | "filterHit"
+  | "memused";
+
+/**
  * A prepared SQL statement that can be executed multiple times with different parameters.
  * This interface represents an instance of the StatementSync class.
  */
@@ -96,6 +110,24 @@ export interface StatementSyncInstance {
    * @returns Array of column metadata objects with name, column, database, table, and type.
    */
   columns(): StatementColumnMetadata[];
+  /**
+   * Read one of SQLite's per-statement counters (`sqlite3_stmt_status`).
+   *
+   * Reading a counter does not reset it; use {@link resetStats} for that.
+   *
+   * @param counter One of `"fullscanStep"`, `"sort"`, `"autoindex"`,
+   * `"vmStep"`, `"reprepare"`, `"run"`, `"filterMiss"`, `"filterHit"`, or
+   * `"memused"`.
+   * @throws {Error} `ERR_INVALID_ARG_VALUE` if the counter name is unknown.
+   */
+  stat(counter: StatementStatCounter): number;
+  /**
+   * Zero every accumulated counter reported by {@link stat}.
+   *
+   * `"memused"` is unaffected: it reports current memory usage rather than an
+   * accumulated count.
+   */
+  resetStats(): void;
   /**
    * Finalize the prepared statement and release its resources.
    *

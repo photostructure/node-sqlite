@@ -2417,6 +2417,8 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("setAllowUnknownNamedParameters",
                       &StatementSync::SetAllowUnknownNamedParameters),
        InstanceMethod("columns", &StatementSync::Columns),
+       InstanceMethod("stat", &StatementSync::Stat),
+       InstanceMethod("resetStats", &StatementSync::ResetStats),
        InstanceMethod("close", &StatementSync::Close),
        InstanceAccessor("sourceSQL", &StatementSync::SourceSQLGetter, nullptr),
        InstanceAccessor("expandedSQL", &StatementSync::ExpandedSQLGetter,
@@ -3176,6 +3178,90 @@ Napi::Value StatementSync::Columns(const Napi::CallbackInfo &info) {
   }
 
   return columns;
+}
+
+namespace {
+// Maps the JavaScript counter names accepted by StatementSync.prototype.stat()
+// to their SQLITE_STMTSTATUS_* constants, mirroring kStatusMapping in
+// node_sqlite.h. The bundled SQLite is far newer than 3.38.0, so the filter
+// counters are always present.
+struct StatusInfo {
+  const char *js_name;
+  int sqlite_status_id;
+};
+
+constexpr StatusInfo kStatusMapping[] = {
+    {"fullscanStep", SQLITE_STMTSTATUS_FULLSCAN_STEP},
+    {"sort", SQLITE_STMTSTATUS_SORT},
+    {"autoindex", SQLITE_STMTSTATUS_AUTOINDEX},
+    {"vmStep", SQLITE_STMTSTATUS_VM_STEP},
+    {"reprepare", SQLITE_STMTSTATUS_REPREPARE},
+    {"run", SQLITE_STMTSTATUS_RUN},
+    {"filterMiss", SQLITE_STMTSTATUS_FILTER_MISS},
+    {"filterHit", SQLITE_STMTSTATUS_FILTER_HIT},
+    {"memused", SQLITE_STMTSTATUS_MEMUSED},
+};
+} // namespace
+
+Napi::Value StatementSync::Stat(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
+
+  // A closed database implicitly finalizes its statements.
+  if (finalized_ || !database_ || !database_->IsOpen() || !statement_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
+    return env.Undefined();
+  }
+
+  if (info.Length() < 1 || !info[0].IsString()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The \"counter\" argument must be a string.");
+    return env.Undefined();
+  }
+
+  std::string counter = info[0].As<Napi::String>().Utf8Value();
+  for (const auto &status : kStatusMapping) {
+    if (counter == status.js_name) {
+      // The reset flag is always false; the counter is read without clearing.
+      int value =
+          sqlite3_stmt_status(statement_, status.sqlite_status_id, false);
+      return Napi::Number::New(env, value);
+    }
+  }
+
+  node::THROW_ERR_INVALID_ARG_VALUE(
+      env, "The \"counter\" argument is not a valid statistic name.");
+  return env.Undefined();
+}
+
+Napi::Value StatementSync::ResetStats(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!ValidateThread(env)) {
+    return env.Undefined();
+  }
+
+  if (finalized_ || !database_ || !database_->IsOpen() || !statement_) {
+    node::THROW_ERR_INVALID_STATE(env, "statement has been finalized");
+    return env.Undefined();
+  }
+
+  // sqlite3_stmt_status() resets a single counter per call, so every exposed
+  // counter is visited. The returned value is the pre-reset one and is unused.
+  // SQLITE_STMTSTATUS_MEMUSED is skipped: it reports current memory usage
+  // rather than an accumulated counter, and SQLite ignores the reset flag for
+  // it.
+  for (const auto &status : kStatusMapping) {
+    if (status.sqlite_status_id == SQLITE_STMTSTATUS_MEMUSED) {
+      continue;
+    }
+    sqlite3_stmt_status(statement_, status.sqlite_status_id, true);
+  }
+
+  return env.Undefined();
 }
 
 void StatementSync::BindParameters(const Napi::CallbackInfo &info,

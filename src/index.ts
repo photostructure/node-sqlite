@@ -34,6 +34,7 @@ export type { SqliteChangesetResolution } from "./types/sqlite-changeset-resolut
 export type { SqliteOpenFlags } from "./types/sqlite-open-flags";
 export type {
   StatementColumnMetadata,
+  StatementStatCounter,
   StatementSyncInstance,
 } from "./types/statement-sync-instance";
 export type { TransactionFunction, TransactionMode } from "./types/transaction";

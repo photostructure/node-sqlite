@@ -416,6 +416,10 @@ public:
   // Metadata methods
   Napi::Value Columns(const Napi::CallbackInfo &info);
 
+  // Per-statement SQLite counters (sqlite3_stmt_status)
+  Napi::Value Stat(const Napi::CallbackInfo &info);
+  Napi::Value ResetStats(const Napi::CallbackInfo &info);
+
 private:
   // Finalizes the underlying sqlite3_stmt and stops the database tracking it.
   // Idempotent; shared by close() and Symbol.dispose().
