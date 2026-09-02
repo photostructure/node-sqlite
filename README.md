@@ -27,12 +27,38 @@ console.log(users); // [{ id: 1, name: 'Alice' }]
 db.close();
 ```
 
+## Experimental async pool
+
+Server workloads that must keep SQLite execution off the event loop can use the
+experimental fixed-size connection pool:
+
+```typescript
+import { DatabasePool } from "@photostructure/sqlite/experimental";
+
+await using pool = await DatabasePool.open("app.db", {
+  connections: 2,
+  connectionSetup: [
+    { sql: "PRAGMA journal_mode=WAL" },
+    { sql: "PRAGMA busy_timeout=5000" },
+  ],
+});
+
+const user = await pool.get("SELECT * FROM users WHERE id = ?", [1]);
+```
+
+The experimental entry point deliberately offers only connection-independent
+`run`, `get`, `all`, and `batch` operations. Review its authorizer, setup,
+ordering, memory, and libuv tradeoffs in the
+[async pool guide](./doc/experimental-async-pool.md) before using it in
+production.
+
 ## Features
 
 - API-compatible with Node.js v26.7.0 built-in `node:sqlite` module\*
 - Zero dependencies - native SQLite implementation
-- Synchronous API - no async overhead
+- Stable synchronous API with no async overhead on the root entry point
 - Native SQLite performance ([benchmarks and tradeoffs](./benchmark/README.md))
+- Experimental async connection pool for off-event-loop SQLite execution
 - Full SQLite feature set ([details](./doc/features.md))
 - TypeScript support with complete type definitions
 - Cross-platform prebuilt binaries (Windows/macOS/Linux, x64/ARM64)
@@ -75,6 +101,7 @@ in your application, [review the results and run the benchmark](./benchmark/READ
 - [Working with Data](./doc/working-with-data.md)
 - [Extending SQLite](./doc/extending-sqlite.md)
 - [Advanced Patterns](./doc/advanced-patterns.md)
+- [Experimental Async Pool](./doc/experimental-async-pool.md)
 
 **Reference**
 

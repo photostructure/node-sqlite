@@ -15,6 +15,7 @@
 // Import from the built dist directory (we assume build has been done)
 // We use any type here since this is a test script and dist doesn't have types
 const { DatabaseSync } = require("../dist/index.cjs") as any;
+const { DatabasePool } = require("../dist/experimental.cjs") as any;
 
 async function runTests() {
   console.log("Starting valgrind memory leak tests...");
@@ -133,6 +134,39 @@ async function runTests() {
     }
 
     db.close();
+  }
+
+  // Test 5: Exercise async pool workers, transport, rollback, and close.
+  console.log("Test 5: Experimental async pool lifecycle");
+  for (let i = 0; i < 10; i++) {
+    const pool = await DatabasePool.open(":memory:", {
+      authorizer: "strict",
+      connectionSetup: [{ sql: "PRAGMA foreign_keys=ON" }],
+    });
+    await pool.run("CREATE TABLE pool_test(id INTEGER PRIMARY KEY, data BLOB)");
+    const results = await pool.batch(
+      [
+        {
+          kind: "run",
+          sql: "INSERT INTO pool_test(data) VALUES (?)",
+          params: [new Uint8Array([1, 2, 3])],
+        },
+        { kind: "get", sql: "SELECT id, data FROM pool_test" },
+      ],
+      { transaction: "immediate" },
+    );
+    if (results.length !== 2) {
+      throw new Error("Async pool batch returned the wrong result count");
+    }
+    try {
+      await pool.run("INSERT INTO missing_pool_table VALUES (1)");
+      throw new Error("Async pool error path unexpectedly succeeded");
+    } catch (error) {
+      if (!/missing_pool_table|no such table/i.test((error as Error).message)) {
+        throw error;
+      }
+    }
+    await pool.close();
   }
 
   console.log("Valgrind tests completed successfully");

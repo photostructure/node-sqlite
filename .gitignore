@@ -72,6 +72,7 @@ coverage/
 test/*.db
 stress-test-results.json
 stress-test-results.md
+benchmark/results/
 
 # Generated documentation is now in build/docs/ (covered by build/ ignore)
 

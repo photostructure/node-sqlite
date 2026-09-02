@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- **Experimental `DatabasePool`** (`@photostructure/sqlite/experimental`): a fixed-size pool of warm SQLite connections whose open, prepare, bind, step, finalize, and close work runs on libuv worker threads. It exposes only the connection-independent `run`, `get`, `all`, and `batch` operations; a strict authorizer (the default) rejects SQL that depends on which physical connection the pool leases. The stable root export is unchanged. Its compatibility policy is separate from the stable API — see the [async pool guide](doc/experimental-async-pool.md) for authorizer policy, connection setup, ordering, memory, and libuv sizing tradeoffs.
+
 ## [2.3.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.3.0) (2026-08-10)
 
 API compatible with `node:sqlite` from Node.js v26.7.0, plus three APIs landed upstream but not yet in a Node.js release line. SQLite is unchanged at 3.53.4.

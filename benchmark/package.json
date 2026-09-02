@@ -12,7 +12,10 @@
     "bench:insert": "tsx index.ts insert",
     "bench:transaction": "tsx index.ts transaction",
     "bench:memory": "tsx --expose-gc memory-benchmark.ts",
-    "bench:tagstore": "tsx tagstore-benchmark.ts"
+    "prebench:async": "npm run typecheck:async && cd .. && npm run build:dist",
+    "bench:async": "tsx async-pool.ts",
+    "bench:tagstore": "tsx tagstore-benchmark.ts",
+    "typecheck:async": "tsc --noEmit --ignoreConfig --target es2022 --module esnext --moduleResolution bundler --esModuleInterop --skipLibCheck --types node --strict async-pool.ts ../src/types/node-gyp-build.d.ts"
   },
   "dependencies": {
     "@photostructure/sqlite": "file:..",

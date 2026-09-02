@@ -21,6 +21,16 @@ export default [
       },
     },
   },
+  // Additional configuration for CommonJS maintenance scripts
+  {
+    files: ["scripts/*.cjs"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.commonjs,
+      },
+    },
+  },
   // Additional configuration for CommonJS test files
   {
     files: ["test/**/*.js", "test/**/*.cjs"],

@@ -59,6 +59,53 @@ These include the majority of [SQLite's recommended compile options](https://sql
 | `SQLITE_LIKE_DOESNT_MATCH_BLOBS`   | [LIKE doesn't match BLOB data](https://sqlite.org/compile.html#:~:text=SQLITE_LIKE_DOESNT_MATCH_BLOBS) |           ✅           |   ❌    | LIKE and GLOB operators always return FALSE if either operand is a BLOB                                                                  |
 | `SQLITE_ENABLE_API_ARMOR`          | [Validate C-API arguments](https://sqlite.org/compile.html#enable_api_armor)                           |           ✅           |   ❌    | Misused API calls return `SQLITE_MISUSE` instead of risking undefined behavior; defense-in-depth for hosted extensions (e.g. sqlite-vec) |
 
+## SQLite threading modes and process concurrency
+
+This build keeps SQLite's default `SQLITE_THREADSAFE=1` configuration. SQLite
+therefore includes its mutex code and, unless an open flag overrides it, opens
+connections in serialized mode.
+
+Threading mode answers a narrow question: **may two threads call the same
+`sqlite3*` connection at the same time?** It does not control whether separate
+connections or separate processes may access the same database file. SQLite's
+file locks, journal mode, and transaction state govern that concurrency.
+
+| Setting                 | Effect                                                         | Tradeoff                                                                                                                 |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `SQLITE_THREADSAFE=1`   | Includes mutexes and defaults connections to serialized mode   | Safest global default; a connection mutex guards accidental same-handle concurrency                                      |
+| `SQLITE_THREADSAFE=2`   | Includes mutexes but defaults connections to multi-thread mode | Avoids the connection mutex unless `SQLITE_OPEN_FULLMUTEX` overrides it; every caller must serialize each handle         |
+| `SQLITE_THREADSAFE=0`   | Omits mutex code                                               | Smallest overhead, but serialized mode cannot be restored at runtime or per connection                                   |
+| `SQLITE_OPEN_FULLMUTEX` | Selects serialized mode for one connection                     | Multiple threads may safely enter that handle; the mutex adds work at SQLite API boundaries                              |
+| `SQLITE_OPEN_NOMUTEX`   | Selects multi-thread mode for one connection                   | Different handles remain concurrent, but the application must prevent simultaneous use of this handle and its statements |
+
+The stable `DatabaseSync` API does not pass either mutex open flag, so it
+inherits the serialized default. Keep that behavior: asynchronous backup uses a
+`DatabaseSync` source handle on a worker thread while the JavaScript object is
+still alive. Changing the global default to `SQLITE_THREADSAFE=2` would remove
+SQLite's same-handle protection from this and every other stable connection.
+
+The experimental pool currently passes `SQLITE_OPEN_FULLMUTEX` explicitly. Its
+scheduler also ensures that only one native worker owns a pooled handle at a
+time, so `SQLITE_OPEN_NOMUTEX` may eventually be a valid targeted optimization.
+We retain `FULLMUTEX` as defense in depth until application benchmarks show that
+its cost matters and concurrency/lifetime tests validate the weaker setting.
+Setting `SQLITE_THREADSAFE=2` alone would not make the pool faster because its
+`FULLMUTEX` open flag overrides the compile-time default.
+
+### PhotoStructure's two-process workload
+
+PhotoStructure's web and sync processes open independent SQLite connections;
+they cannot share a `sqlite3*` pointer. `FULLMUTEX` therefore does not serialize
+the two processes, nor does it serialize two different handles in one pool.
+
+For the read-heavy web process, a two-connection pool can execute two independent
+reads concurrently. For the sync process, extra connections do not create a
+second writer: SQLite still permits only one writer at a time. In WAL mode, web
+readers can normally overlap the sync writer. Configure `busy_timeout` on every
+connection so lock contention waits on a libuv worker instead of immediately
+failing. Whether a second connection helps incremental sync reads is a workload
+question; measure it against the extra cache, libuv-thread, and lock contention.
+
 ### Platform-specific build settings
 
 #### Standard build flags (all platforms)
@@ -181,7 +228,8 @@ so its absence on ARM64 is correct.
 
 - **STAT4**: Better query optimization with column statistics
 - **16MB Cache**: Larger default cache for better performance
-- **Multi-thread Mode**: Optimized for Node.js worker threads
+- **Serialized Threading Default**: Protects a connection used across threads;
+  independent handles and processes remain concurrent
 
 ## Features intentionally omitted
 
@@ -215,7 +263,9 @@ These SQLite features are available but not enabled in our build:
 
 1. **Larger Cache**: 16MB default vs 2MB improves read performance
 2. **STAT4**: Better query optimization with advanced statistics
-3. **Multi-thread Mode**: Optimized for concurrent access patterns
+3. **Independent Connection Concurrency**: Separate pool handles and processes
+   can run concurrently; WAL and file locks, not connection mutex mode, govern
+   database-level overlap
 4. **JSON Functions**: Faster than external JSON parsing
 
 ### Performance considerations

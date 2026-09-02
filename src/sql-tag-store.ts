@@ -188,9 +188,9 @@ export class SQLTagStore {
     // the ones cached here. Re-prepare rather than hand back a dead statement.
     const cached = this.cache.get(sql);
     if (cached != null) {
-      if (!(cached as unknown as Record<symbol, boolean>)[
-        STATEMENT_FINALIZED
-      ]) {
+      if (
+        !(cached as unknown as Record<symbol, boolean>)[STATEMENT_FINALIZED]
+      ) {
         checkPlaceholders(cached, valueCount);
         return cached;
       }

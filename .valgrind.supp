@@ -24,6 +24,23 @@
    fun:_ZN2v88internal8compiler*
 }
 
+# Node 26 can finish with one V8 background memory-pool map allocation still
+# owned by its platform worker. Keep this exact Node/V8-only stack narrow so it
+# cannot hide allocations made by the addon or through Node-API references.
+{
+   Node26_V8_MemoryPool_Background_Release
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:_Znwm
+   fun:_ZN4absl18container_internal12_GLOBAL__N_117AllocBackingArrayERNS0_12CommonFieldsERKNS0_15PolicyFunctionsEmbPv
+   fun:_ZN4absl18container_internal24PrepareInsertSmallNonSooERNS0_12CommonFieldsERKNS0_15PolicyFunctionsENS_11FunctionRefIFmmEEE
+   fun:_ZN2v88internal10MemoryPool8PoolImplINS0_10PooledPageEE11ReleaseUpToEm
+   fun:_ZN2v88internal10MemoryPool23ReleasePooledChunksTask11RunInternalEv
+   fun:_ZN4node12_GLOBAL__N_120PlatformWorkerThreadEPv
+   fun:start_thread
+   fun:clone
+}
+
 # Node.js platform reachable memory
 {
    Node_Platform_Reachable
@@ -68,6 +85,18 @@
    obj:*/libcrypto.so*
 }
 
+# OpenSSL state linked into the Node executable on Node 26.
+{
+   Node_OpenSSL_Builtin_Compressions
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:CRYPTO_malloc
+   fun:ossl_load_builtin_compressions
+   fun:context_init
+   fun:default_context_do_init_ossl_
+}
+
 # pthread thread-local storage
 {
    pthread_TLS
@@ -75,6 +104,21 @@
    match-leak-kinds: reachable
    ...
    fun:pthread_*
+}
+
+# The main Node environment starts one inspector agent thread even when no
+# inspector client connects. Suppress only that TLS allocation stack.
+{
+   Node_Inspector_TLS
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create*
+   fun:_ZN4node9inspector5Agent5Start*
 }
 
 # dlopen and dynamic loading

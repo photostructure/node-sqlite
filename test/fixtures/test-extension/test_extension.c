@@ -10,6 +10,8 @@ SQLITE_EXTENSION_INIT1
 
 #include <string.h>
 
+static sqlite3_stmt *held_statement = 0;
+
 /* Custom function that returns the extension version */
 static void test_extension_version(sqlite3_context *context, int argc,
                                    sqlite3_value **argv) {
@@ -80,6 +82,46 @@ static void test_extension_reverse(sqlite3_context *context, int argc,
   sqlite3_result_text(context, (const char *)output, byte_len, sqlite3_free);
 }
 
+/* Retain a statement so close tests can exercise SQLite's busy/zombie path. */
+static void test_extension_hold_statement(sqlite3_context *context, int argc,
+                                          sqlite3_value **argv) {
+  sqlite3 *db;
+  int rc;
+  (void)argc;
+  (void)argv;
+  if (held_statement != 0) {
+    sqlite3_result_error(context, "a test statement is already held", -1);
+    return;
+  }
+  db = sqlite3_context_db_handle(context);
+  rc = sqlite3_prepare_v2(db, "SELECT 1", -1, &held_statement, 0);
+  if (rc != SQLITE_OK) {
+    held_statement = 0;
+    sqlite3_result_error_code(context, rc);
+    return;
+  }
+  sqlite3_result_int(context, 1);
+}
+
+/* Release a statement retained by another connection in this process. */
+static void test_extension_release_statement(sqlite3_context *context, int argc,
+                                             sqlite3_value **argv) {
+  int rc;
+  (void)argc;
+  (void)argv;
+  if (held_statement == 0) {
+    sqlite3_result_int(context, 0);
+    return;
+  }
+  rc = sqlite3_finalize(held_statement);
+  held_statement = 0;
+  if (rc != SQLITE_OK) {
+    sqlite3_result_error_code(context, rc);
+    return;
+  }
+  sqlite3_result_int(context, 1);
+}
+
 /* Extension entry point */
 #ifdef _WIN32
 __declspec(dllexport)
@@ -105,6 +147,18 @@ int sqlite3_testextension_init(sqlite3 *db, char **pzErrMsg,
   rc = sqlite3_create_function(db, "test_extension_reverse", 1,
                                SQLITE_UTF8 | SQLITE_DETERMINISTIC, 0,
                                test_extension_reverse, 0, 0);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  rc = sqlite3_create_function(db, "test_extension_hold_statement", 0,
+                               SQLITE_UTF8, 0, test_extension_hold_statement, 0,
+                               0);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  rc = sqlite3_create_function(db, "test_extension_release_statement", 0,
+                               SQLITE_UTF8, 0, test_extension_release_statement,
+                               0, 0);
 
   return rc;
 }

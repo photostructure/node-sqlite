@@ -146,6 +146,7 @@ async function getSourceFiles(): Promise<string[]> {
   // For node-sqlite, we'll check specific files rather than scanning
   const files = [
     "src/binding.cpp",
+    "src/async_pool_impl.cpp",
     "src/sqlite_impl.cpp",
     "src/user_function.cpp",
     "src/aggregate_function.cpp",
