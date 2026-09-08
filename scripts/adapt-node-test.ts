@@ -7,6 +7,24 @@
  * compile under the CommonJS test config.
  */
 
+// Named exports of test/common/test-utils.mjs that stand in for Node's
+// ../common helpers. An ESM test importing anything else from
+// '../common/index.mjs' fails at sync time (see adaptTest) rather than with a
+// ReferenceError from a generated file.
+const testUtilsExports = new Set([
+  "tmpdir",
+  "nextDb",
+  "isWindows",
+  "spawnPromisified",
+  "mustCall",
+  "gcUntil",
+]);
+
+// Names the tmpdir rewrite in adaptTest() imports on its own. A file that has
+// a tmpdir import must not import them a second time from the index.mjs
+// rewrite: a duplicate import binding is a SyntaxError in ESM.
+const tmpdirRewriteNames = new Set(["tmpdir", "isWindows"]);
+
 // Files that cannot be adapted for our package
 const skipFiles = new Set([
   // Uses Node.js --permission flag which is a runtime security feature.
@@ -99,11 +117,37 @@ function adaptTest(content: string, fileName: string): string {
     "$1",
   );
 
-  // Remove ESM import from '../common/index.mjs' with any imports
+  // Rewrite the ESM import from '../common/index.mjs' to import the helpers
+  // test-utils.mjs provides. skipIfSQLiteMissing goes away (its call is removed
+  // below) and so does mustCall (the shim below defines it). tmpdir and
+  // isWindows are left to the tmpdir rewrite when the file has one.
   // Handles: import { skipIfSQLiteMissing, isWindows, ... } from '../common/index.mjs';
+  const hasTmpdirImport =
+    /import\s+tmpdir\s+from\s*['"]\.\.\/common\/tmpdir\.js['"]/.test(adapted);
   adapted = adapted.replace(
-    /import\s*\{[^}]+\}\s*from\s*['"]\.\.\/common\/index\.mjs['"]\s*;?\s*/g,
-    "",
+    /import\s*\{([^}]+)\}\s*from\s*['"]\.\.\/common\/index\.mjs['"]\s*;?\s*/g,
+    (_match: string, names: string) => {
+      const kept = names
+        .split(",")
+        .map((name) => name.trim())
+        .filter(
+          (name) =>
+            name !== "" &&
+            name !== "skipIfSQLiteMissing" &&
+            name !== "mustCall" &&
+            !(hasTmpdirImport && tmpdirRewriteNames.has(name)),
+        );
+      const unknown = kept.filter((name) => !testUtilsExports.has(name));
+      if (unknown.length > 0) {
+        throw new Error(
+          `${fileName}: cannot adapt \`${unknown.join(", ")}\` from ` +
+            `../common/index.mjs -- add it to test/common/test-utils.mjs.`,
+        );
+      }
+      return kept.length === 0
+        ? ""
+        : `import { ${kept.join(", ")} } from "../common/test-utils.mjs";\n`;
+    },
   );
 
   // Replace tmpdir import with our test utilities
@@ -118,6 +162,13 @@ function adaptTest(content: string, fileName: string): string {
   adapted = adapted.replace(
     /const\s+tmpdir\s*=\s*require\(['"]\.\.\/common\/tmpdir['"]\);\s*/g,
     `const { tmpdir, isWindows } = require("../common/test-utils.cjs");\n`,
+  );
+
+  // Replace the fixtures helper with our stand-in, which provides path().
+  // Handles ESM: import fixtures from '../common/fixtures.js';
+  adapted = adapted.replace(
+    /import\s+fixtures\s+from\s*['"]\.\.\/common\/fixtures\.js['"]\s*;?\s*/g,
+    `import fixtures from "../common/fixtures.mjs";\n`,
   );
 
   // Replace the GC helper import when gcUntil is the only requested helper.
@@ -151,24 +202,7 @@ function adaptTest(content: string, fileName: string): string {
       adapted;
   }
 
-  // Transform node:sqlite imports to our package
-  // Handle CJS: const { DatabaseSync, ... } = require('node:sqlite');
-  adapted = adapted.replace(
-    /require\(['"]node:sqlite['"]\)/g,
-    `require("@photostructure/sqlite")`,
-  );
-
-  // Handle ESM: const { DatabaseSync } = await import('node:sqlite');
-  adapted = adapted.replace(
-    /await import\(['"]node:sqlite['"]\)/g,
-    `await import("@photostructure/sqlite")`,
-  );
-
-  // Handle ESM: import { DatabaseSync, ... } from 'node:sqlite';
-  adapted = adapted.replace(
-    /from ['"]node:sqlite['"]/g,
-    `from "@photostructure/sqlite"`,
-  );
+  adapted = pointAtThisPackage(adapted);
 
   // Note: We no longer strip __proto__: null since our implementation now
   // correctly returns row objects with null prototype (matching Node.js)
@@ -189,11 +223,21 @@ function adaptTest(content: string, fileName: string): string {
 
   // Every ../common binding has been removed or rewritten by now, so a
   // surviving reference is a helper we have no shim for. Fail here, naming the
-  // source file -- left in place it becomes a ReferenceError raised by a
-  // generated file that tells the reader not to edit it.
+  // source file -- left in place it becomes a ReferenceError (or, for a module
+  // path, ERR_MODULE_NOT_FOUND) raised by a generated file that tells the
+  // reader not to edit it. Our own stand-ins under test/common/ are the only
+  // ../common/ paths allowed through; test-sqlite-config.js reaches
+  // skipIfSQLiteMissing via require('../common/index.mjs'), which index.mjs
+  // serves. ../common/gc is also let through: the gcUntil rewrites above cover
+  // the shapes we can serve, and the remaining references sit inside tests
+  // that skipTests disables for needing Node's GC helpers, so the require
+  // never runs.
   const unadapted =
     /(?<![\w./])common\.[\w$]+/.exec(adapted) ??
-    /require\(['"]\.\.\/common['"]\)/.exec(adapted);
+    /require\(['"]\.\.\/common['"]\)/.exec(adapted) ??
+    /(?:from|require\()\s*['"]\.\.\/common\/(?!(?:test-utils|index)\.[cm]js['"]|fixtures\.mjs['"]|gc(?:\.mjs)?['"])[^'"]*['"]/.exec(
+      adapted,
+    );
   if (unadapted) {
     throw new Error(
       `${fileName}: cannot adapt \`${unadapted[0]}\` -- Node's ../common test ` +
@@ -222,6 +266,41 @@ function adaptTest(content: string, fileName: string): string {
 }
 
 /**
+ * Point node:sqlite imports at this package.
+ */
+function pointAtThisPackage(content: string): string {
+  return (
+    content
+      // CJS: const { DatabaseSync, ... } = require('node:sqlite');
+      .replace(
+        /require\(['"]node:sqlite['"]\)/g,
+        `require("@photostructure/sqlite")`,
+      )
+      // ESM: const { DatabaseSync } = await import('node:sqlite');
+      .replace(
+        /await import\(['"]node:sqlite['"]\)/g,
+        `await import("@photostructure/sqlite")`,
+      )
+      // ESM: import { DatabaseSync, ... } from 'node:sqlite';
+      .replace(/from ['"]node:sqlite['"]/g, `from "@photostructure/sqlite"`)
+  );
+}
+
+/**
+ * Adapt a script from Node's test/fixtures/sqlite/. The tests spawn these as
+ * standalone processes, so only the module specifier has to change.
+ */
+function adaptFixture(content: string, fileName: string): string {
+  const header = `// Node.js SQLite test fixture, adapted from test/fixtures/sqlite/${fileName}
+// Source: https://github.com/nodejs/node
+//
+// AUTO-GENERATED - Do not edit. Run 'npm run sync:tests' to regenerate.
+
+`;
+  return header + pointAtThisPackage(content);
+}
+
+/**
  * Convert Node.js test filename
  */
 function toTestFileName(nodeFileName: string): string {
@@ -230,4 +309,4 @@ function toTestFileName(nodeFileName: string): string {
   return nodeFileName.replace(/\.(m?js)$/, ".test.$1");
 }
 
-export { adaptTest, skipFiles, skipTests, toTestFileName };
+export { adaptFixture, adaptTest, skipFiles, skipTests, toTestFileName };

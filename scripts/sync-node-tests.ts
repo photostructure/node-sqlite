@@ -2,9 +2,11 @@
  * Sync Node.js SQLite test files from GitHub and adapt them for our package.
  *
  * This script:
- * 1. Downloads SQLite test files from the Node.js repository
+ * 1. Downloads SQLite test files, and the test/fixtures/sqlite/ scripts they
+ *    spawn, from the Node.js repository
  * 2. Saves originals to test/upstream/ (reference only, gitignored)
- * 3. Creates adapted versions in test/node-compat/ that use our package
+ * 3. Creates adapted versions in test/node-compat/ and test/fixtures/sqlite/
+ *    that use our package
  *
  * The adapted tests use node:test (not Jest) so they can run with minimal changes.
  * Run them with: node --test 'test/node-compat/*.test.{js,mjs}'
@@ -16,7 +18,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { adaptTest, skipFiles, toTestFileName } from "./adapt-node-test";
+import {
+  adaptFixture,
+  adaptTest,
+  skipFiles,
+  toTestFileName,
+} from "./adapt-node-test";
 import { githubFetch } from "./github-api";
 import { resolveLatestStagingBranch } from "./sync-from-node";
 
@@ -24,11 +31,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const packageRoot = path.join(__dirname, "..");
 
+type UpstreamFiles = {
+  /** File names under test/parallel/ */
+  tests: string[];
+  /** File names under test/fixtures/sqlite/ */
+  fixtures: string[];
+};
+
 /**
- * Discover SQLite test files dynamically from GitHub API.
+ * Discover SQLite test files, and the fixtures they spawn, from the GitHub API.
  * Uses the Git Tree API to get all files (Contents API is limited to 1000 items).
  */
-async function discoverTestFiles(repo: string, ref: string): Promise<string[]> {
+async function discoverUpstreamFiles(
+  repo: string,
+  ref: string,
+): Promise<UpstreamFiles> {
   console.log("Discovering test files from GitHub API...");
 
   // First, get the tree SHA for the ref
@@ -71,8 +88,17 @@ async function discoverTestFiles(repo: string, ref: string): Promise<string[]> {
     )
     .sort();
 
-  console.log(`Found ${sqliteTests.length} SQLite test files`);
-  return sqliteTests;
+  const fixtures = tree.tree
+    .filter(
+      (f) => f.type === "blob" && f.path.startsWith("test/fixtures/sqlite/"),
+    )
+    .map((f) => f.path.replace("test/fixtures/sqlite/", ""))
+    .sort();
+
+  console.log(
+    `Found ${sqliteTests.length} SQLite test files and ${fixtures.length} fixtures`,
+  );
+  return { tests: sqliteTests, fixtures };
 }
 
 function parseArgs() {
@@ -132,8 +158,9 @@ Options:
   --force, -f       Force sync even if unchanged
 
 Output:
-  test/upstream/    - Original Node.js tests (reference, gitignored)
-  test/node-compat/ - Adapted tests using our package
+  test/upstream/         - Original Node.js tests and fixtures (reference, gitignored)
+  test/node-compat/      - Adapted tests using our package
+  test/fixtures/sqlite/  - Adapted fixtures the tests spawn
 
 Run adapted tests with:
   node --test 'test/node-compat/*.test.{js,mjs}'
@@ -192,6 +219,7 @@ async function downloadAndAdapt(
   adaptedPath: string,
   fileName: string,
   dryRun: boolean,
+  adapt: (content: string, fileName: string) => string,
 ): Promise<boolean> {
   if (dryRun) {
     console.log(`  Would download: ${fileName}`);
@@ -216,7 +244,7 @@ async function downloadAndAdapt(
   fs.writeFileSync(upstreamPath, content, "utf8");
 
   // Save adapted version
-  const adapted = adaptTest(content, fileName);
+  const adapted = adapt(content, fileName);
   ensureDir(adaptedPath);
   fs.writeFileSync(adaptedPath, adapted, "utf8");
 
@@ -258,7 +286,10 @@ async function main() {
   console.log(sha ? `Commit: ${sha.substring(0, 7)}` : "");
 
   // Dynamically discover test files from the Node.js repo
-  const testFiles = await discoverTestFiles(args.repo, ref);
+  const { tests: testFiles, fixtures } = await discoverUpstreamFiles(
+    args.repo,
+    ref,
+  );
   const filesToSync = testFiles.filter((f) => !skipFiles.has(f));
 
   if (filesToSync.length === 0) {
@@ -286,6 +317,7 @@ async function main() {
         adaptedPath,
         fileName,
         args.dryRun,
+        adaptTest,
       )
     ) {
       successCount++;
@@ -293,6 +325,27 @@ async function main() {
   }
 
   console.log(`\nSynced ${successCount}/${filesToSync.length} tests`);
+
+  // Fixtures are scripts the tests spawn via fixtures.path("sqlite", ...).
+  // They keep their upstream names: the tests reference them by name.
+  const fixturesDir = path.join(packageRoot, "test", "fixtures", "sqlite");
+  let fixtureCount = 0;
+  for (const fileName of fixtures) {
+    const url = `https://raw.githubusercontent.com/${args.repo}/${ref}/test/fixtures/sqlite/${fileName}`;
+    if (
+      await downloadAndAdapt(
+        url,
+        path.join(upstreamDir, "fixtures", "sqlite", fileName),
+        path.join(fixturesDir, fileName),
+        fileName,
+        args.dryRun,
+        adaptFixture,
+      )
+    ) {
+      fixtureCount++;
+    }
+  }
+  console.log(`Synced ${fixtureCount}/${fixtures.length} fixtures`);
 
   if (!args.dryRun) {
     if (sha) updateSyncCache(args.repo, branch, sha);
@@ -304,6 +357,8 @@ async function main() {
 
 These tests are adapted from Node.js's SQLite test suite.
 They verify our implementation matches node:sqlite behavior.
+The scripts they spawn live in \`test/fixtures/sqlite/\`, synced from the
+same commit.
 
 **Auto-generated** - Run \`npm run sync:tests\` to regenerate.
 
@@ -339,4 +394,4 @@ if (
   main().catch(console.error);
 }
 
-export { adaptTest, discoverTestFiles, skipFiles, toTestFileName };
+export { adaptTest, discoverUpstreamFiles, skipFiles, toTestFileName };
