@@ -241,6 +241,50 @@ describe("Invalid Operations Tests", () => {
   });
 
   describe("Function and Aggregate Invalid Operations", () => {
+    // sqlite3_create_function_v2() and sqlite3_create_window_function() invoke
+    // xDestroy on the user data when they fail (createFunctionApi() in
+    // src/upstream/sqlite3.c: `if( pArg && pArg->nRef==0 ) xDestroy(p)`), so
+    // the port must not free it a second time. A `length` above
+    // SQLITE_MAX_FUNCTION_ARG (1000 in this amalgamation) is a deterministic
+    // way to make registration fail. Before the fix this crashed the process:
+    //   node -e 'const {DatabaseSync}=require("@photostructure/sqlite");
+    //     const db=new DatabaseSync(":memory:"); const fn=()=>1;
+    //     Object.defineProperty(fn,"length",{value:1001}); db.function("f",fn)'
+    //   -> exit 139 (SIGSEGV)
+    test("registration failure does not free the callback twice", () => {
+      const db = new DatabaseSync(":memory:");
+
+      const fn = () => 1;
+      Object.defineProperty(fn, "length", { configurable: true, value: 1001 });
+      expect(() => db.function("too_wide", fn)).toThrow(
+        /Failed to create function/,
+      );
+
+      const step = (acc: number) => acc;
+      Object.defineProperty(step, "length", {
+        configurable: true,
+        value: 1002,
+      });
+      expect(() => db.aggregate("too_wide_agg", { start: 0, step })).toThrow(
+        /Failed to create aggregate function/,
+      );
+
+      // The connection is still usable and later registrations work.
+      db.function("narrow", () => 42);
+      db.aggregate("count_rows", {
+        start: 0,
+        step: (acc: number, _value: unknown) => acc + 1,
+      });
+      expect(db.prepare("SELECT narrow() AS v").get()).toEqual({ v: 42 });
+      expect(
+        db
+          .prepare("SELECT count_rows(column1) AS n FROM (VALUES (1), (2))")
+          .get(),
+      ).toEqual({ n: 2 });
+
+      db.close();
+    });
+
     test("handles invalid function definitions", () => {
       const db = new DatabaseSync(":memory:");
 

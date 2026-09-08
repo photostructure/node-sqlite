@@ -1697,7 +1697,9 @@ Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo &info) {
                                  UserDefinedFunction::xDestroy);
 
   if (result != SQLITE_OK) {
-    delete user_data; // Clean up on failure
+    // SQLite has already invoked xDestroy on user_data: createFunctionApi()
+    // destroys the user data of a registration it did not keep. Deleting it
+    // here again was a double free.
     std::string error = "Failed to create function: ";
     error += sqlite3_errmsg(connection());
     ThrowErrSqliteErrorWithDb(env, this, error.c_str());
@@ -1873,7 +1875,8 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo &info) {
       CustomAggregate::xDestroy);
 
   if (result != SQLITE_OK) {
-    delete user_data; // Clean up on failure
+    // As in CustomFunction(): SQLite has already invoked xDestroy on
+    // user_data, so it must not be deleted here.
     std::string error = "Failed to create aggregate function '";
     error += name;
     error += "': ";
