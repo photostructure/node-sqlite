@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/@photostructure/sqlite.svg)](https://www.npmjs.com/package/@photostructure/sqlite)
 [![CI](https://github.com/photostructure/node-sqlite/actions/workflows/build.yml/badge.svg)](https://github.com/photostructure/node-sqlite/actions/workflows/build.yml)
 
-Native SQLite for Node.js 22+. Drop-in replacement for `node:sqlite`. Synced with Node.js v26.7.0 for the latest features including native `Symbol.dispose` resource management.
+Native SQLite for Node.js 22+. Drop-in replacement for `node:sqlite`. Synced with Node.js v26.8.1 for the latest features including native `Symbol.dispose` resource management.
 
 ## Installation
 
@@ -54,7 +54,7 @@ production.
 
 ## Features
 
-- API-compatible with Node.js v26.7.0 built-in `node:sqlite` module\*
+- API-compatible with Node.js v26.8.1 built-in `node:sqlite` module\*
 - Zero dependencies - native SQLite implementation
 - Stable synchronous API with no async overhead on the root entry point
 - Native SQLite performance ([benchmarks and tradeoffs](./benchmark/README.md))
