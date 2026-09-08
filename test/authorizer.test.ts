@@ -743,11 +743,13 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
       db.close();
     });
 
-    // node:sqlite's Session::Close guards only on database-open, session-open,
-    // and is_generating_changeset_ (src/upstream/node_sqlite.cc:4324) -- it has
-    // no authorizer guard, so an idle session can be closed from an unrelated
-    // authorizer callback.
-    it("allows closing an idle session from an unrelated authorizer", () => {
+    // node:sqlite's Session::Close rejects a close from any SQLite callback
+    // (Node.js PR #65454): the session module runs PRAGMA table_xinfo from
+    // inside the pre-update hook while still walking the connection's session
+    // list, and Node cannot tell whether that hook is on the stack, so every
+    // callback is rejected -- even an authorizer fired by an unrelated
+    // statement while the session is idle.
+    it("rejects closing an idle session from an unrelated authorizer", () => {
       const db = new DatabaseSync(":memory:");
       db.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
       const session = db.createSession({ table: "data" });
@@ -761,7 +763,8 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
             session.close();
             outcome = "closed";
           } catch (error) {
-            outcome = `${(error as NodeJS.ErrnoException).code}`;
+            const err = error as NodeJS.ErrnoException;
+            outcome = `${err.code}: ${err.message}`;
           }
         }
         return constants.SQLITE_OK;
@@ -770,15 +773,19 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
       db.exec("SELECT 1");
       db.setAuthorizer(null);
 
-      expect(outcome).toBe("closed");
-      // Already closed, so a second close reports that rather than succeeding.
+      expect(outcome).toBe(
+        "ERR_INVALID_STATE: session cannot be closed while in a callback",
+      );
+      // Still open, and closable once the callback is off the stack.
+      session.close();
       expect(() => session.close()).toThrow(/session is not open/);
 
       db.close();
     });
 
-    // Database disposal remains a no-op while SQLite is in the callback. An
-    // idle session has no in-flight work, so its disposal succeeds.
+    // Database disposal remains a no-op while SQLite is in the callback.
+    // Session disposal is rejected there instead (see the test above), so the
+    // session also survives.
     it("disposal inside an authorizer preserves the active database", () => {
       const db = new DatabaseSync(":memory:");
       db.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
@@ -808,11 +815,17 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
       db.setAuthorizer(null);
 
       expect(dbDisposeError).toBeUndefined();
-      expect(sessionDisposeError).toBeUndefined();
+      expect(sessionDisposeError).toEqual(
+        expect.objectContaining({
+          code: "ERR_INVALID_STATE",
+          message: "session cannot be closed while in a callback",
+        }),
+      );
       // The database is still executing the statement that fired the
       // authorizer, so its disposal was skipped rather than performed.
       expect(db.isOpen).toBe(true);
-      // The idle session had nothing in flight, so its disposal went through.
+      // The session is still open too: its disposal was rejected, not skipped.
+      session.close();
       expect(() => session.close()).toThrow(/session is not open/);
 
       db.close();

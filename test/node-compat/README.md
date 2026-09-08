@@ -2,6 +2,8 @@
 
 These tests are adapted from Node.js's SQLite test suite.
 They verify our implementation matches node:sqlite behavior.
+The scripts they spawn live in `test/fixtures/sqlite/`, synced from the
+same commit.
 
 **Auto-generated** - Run `npm run sync:tests` to regenerate.
 
@@ -18,4 +20,4 @@ node --test test/node-compat/test-sqlite-statement-sync-columns.test.js
 ```
 
 Source: https://github.com/nodejs/node/tree/v26.x-staging/test/parallel
-Commit: 90b584abb9b834c1143d40b32b165bf63dfb2f9d
+Commit: b4f5d354636245edec81da3a6d72f3113075cf8c

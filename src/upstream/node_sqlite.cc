@@ -25,6 +25,7 @@ namespace sqlite {
 
 using v8::Array;
 using v8::ArrayBuffer;
+using v8::BackingStore;
 using v8::BackingStoreInitializationMode;
 using v8::BackingStoreOnFailureMode;
 using v8::BigInt;
@@ -168,6 +169,16 @@ inline MaybeLocal<Value> IntegerToValue(Isolate* isolate,
       (stmt)->db_->IsInAuthorizerCallback() &&                                 \
           sqlite3_stmt_busy((stmt)->statement_.get()),                         \
       "database cannot be accessed from an authorizer callback")
+
+// SQLite's session module reaches back into JavaScript from inside the
+// pre-update hook, while it is still walking the connection's session list and
+// reading the table it found there. Deleting a session frees memory that walk
+// is still using, so no callback may close one.
+#define THROW_AND_RETURN_IF_SESSION_IN_CALLBACK(env, session)                  \
+  THROW_AND_RETURN_ON_BAD_STATE(                                               \
+      (env),                                                                   \
+      (session)->database_->IsInCallback(),                                    \
+      "session cannot be closed while in a callback")
 
 // A statement's virtual machine cannot be reentered while sqlite3_step() is
 // running it. Finalizing it frees the VM outright, and re-running it resets the
@@ -624,9 +635,13 @@ class BackupJob : public ThreadPoolWork {
   }
 
   void AfterThreadPoolWork(int status) override {
-    HandleScope handle_scope(env()->isolate());
+    Isolate* isolate = env()->isolate();
+    HandleScope handle_scope(isolate);
+    Context::Scope context_scope(env()->context());
+    InternalCallbackScope callback_scope(
+        env(), Object::New(isolate), {0, 0}, InternalCallbackScope::kNoFlags);
     Local<Promise::Resolver> resolver =
-        Local<Promise::Resolver>::New(env()->isolate(), resolver_);
+        Local<Promise::Resolver>::New(isolate, resolver_);
 
     if (!(backup_status_ == SQLITE_OK || backup_status_ == SQLITE_DONE ||
           backup_status_ == SQLITE_BUSY || backup_status_ == SQLITE_LOCKED)) {
@@ -1727,6 +1742,10 @@ void DatabaseSync::Prepare(const FunctionCallbackInfo<Value>& args) {
     }
   }
 
+  // Reading the options bag above can run user JavaScript through a property
+  // getter, which may have closed the database since it was checked.
+  THROW_AND_RETURN_ON_BAD_STATE(env, !db->IsOpen(), "database is not open");
+
   Utf8Value sql(env->isolate(), args[0].As<String>());
   sqlite3_stmt* s = nullptr;
 
@@ -1914,8 +1933,21 @@ void DatabaseSync::CustomFunction(const FunctionCallbackInfo<Value>& args) {
     if (!fn->Get(env->context(), env->length_string()).ToLocal(&js_len)) {
       return;
     }
+
+    if (!js_len->IsInt32()) {
+      THROW_ERR_INVALID_ARG_TYPE(
+          env->isolate(),
+          "The \"function.length\" property must be an integer.");
+      return;
+    }
+
     argc = js_len.As<Int32>()->Value();
   }
+
+  // Reading the options bag and "function.length" above can run user
+  // JavaScript through a property getter, which may have closed the database
+  // since it was checked.
+  THROW_AND_RETURN_ON_BAD_STATE(env, !db->IsOpen(), "database is not open");
 
   UserDefinedFunction* user_data = new UserDefinedFunction(
       env, fn, BaseObjectWeakPtr<DatabaseSync>(db), use_bigint_args);
@@ -2079,6 +2111,10 @@ void DatabaseSync::Deserialize(const FunctionCallbackInfo<Value>& args) {
     }
   }
 
+  // Reading the options bag above can run user JavaScript through a property
+  // getter, which may have closed the database since it was checked.
+  THROW_AND_RETURN_ON_BAD_STATE(env, !db->IsOpen(), "database is not open");
+
   // sqlite3_malloc64 is required because SQLITE_DESERIALIZE_FREEONCLOSE
   // transfers ownership to SQLite, which calls sqlite3_free() on close.
   // See: https://www.sqlite.org/c3ref/deserialize.html
@@ -2089,7 +2125,16 @@ void DatabaseSync::Deserialize(const FunctionCallbackInfo<Value>& args) {
     return;
   }
 
-  input->CopyContents(buf, byte_length);
+  // The same user JavaScript may also have shrunk or detached the backing
+  // store, in which case byte_length is stale and CopyContents() leaves the
+  // remainder of buf uninitialized. Handing that to SQLite would disclose it
+  // through serialize().
+  if (input->CopyContents(buf, byte_length) != byte_length) {
+    sqlite3_free(buf);
+    THROW_ERR_INVALID_STATE(
+        env, "The \"buffer\" argument was resized while reading \"options\"");
+    return;
+  }
 
   db->FinalizeStatements();
 
@@ -2227,16 +2272,36 @@ void DatabaseSync::AggregateFunction(const FunctionCallbackInfo<Value>& args) {
       return;
     }
 
+    if (!js_len->IsInt32()) {
+      THROW_ERR_INVALID_ARG_TYPE(
+          env->isolate(),
+          "The \"options.step.length\" property must be an integer.");
+      return;
+    }
+
     // Subtract 1 because the first argument is the aggregate value.
     argc = js_len.As<Int32>()->Value() - 1;
-    if (!inverseFunc.IsEmpty() &&
-        !inverseFunc->Get(env->context(), env->length_string())
-             .ToLocal(&js_len)) {
-      return;
+    if (!inverseFunc.IsEmpty()) {
+      if (!inverseFunc->Get(env->context(), env->length_string())
+               .ToLocal(&js_len)) {
+        return;
+      }
+
+      if (!js_len->IsInt32()) {
+        THROW_ERR_INVALID_ARG_TYPE(
+            env->isolate(),
+            "The \"options.inverse.length\" property must be an integer.");
+        return;
+      }
     }
 
     argc = std::max({argc, js_len.As<Int32>()->Value() - 1, 0});
   }
+
+  // Reading the options bag and the step/inverse "length" properties above can
+  // run user JavaScript through a property getter, which may have closed the
+  // database since it was checked.
+  THROW_AND_RETURN_ON_BAD_STATE(env, !db->IsOpen(), "database is not open");
 
   int text_rep = SQLITE_UTF8;
   if (direct_only) {
@@ -2266,10 +2331,15 @@ void DatabaseSync::AggregateFunction(const FunctionCallbackInfo<Value>& args) {
 }
 
 void DatabaseSync::CreateSession(const FunctionCallbackInfo<Value>& args) {
+  DatabaseSync* db;
+  ASSIGN_OR_RETURN_UNWRAP(&db, args.This());
+  Environment* env = Environment::GetCurrent(args);
+  THROW_AND_RETURN_ON_BAD_STATE(env, !db->IsOpen(), "database is not open");
+  THROW_AND_RETURN_IF_IN_AUTHORIZER(env, db);
+
   std::string table;
   std::string db_name = "main";
 
-  Environment* env = Environment::GetCurrent(args);
   if (args.Length() > 0) {
     if (!args[0]->IsObject()) {
       THROW_ERR_INVALID_ARG_TYPE(env->isolate(),
@@ -2320,10 +2390,9 @@ void DatabaseSync::CreateSession(const FunctionCallbackInfo<Value>& args) {
     }
   }
 
-  DatabaseSync* db;
-  ASSIGN_OR_RETURN_UNWRAP(&db, args.This());
+  // Reading the options bag above can run user JavaScript through a property
+  // getter, which may have closed the database since it was checked.
   THROW_AND_RETURN_ON_BAD_STATE(env, !db->IsOpen(), "database is not open");
-  THROW_AND_RETURN_IF_IN_AUTHORIZER(env, db);
 
   sqlite3_session* pSession;
   int r =
@@ -2449,6 +2518,11 @@ void Backup(const FunctionCallbackInfo<Value>& args) {
       progressFunc = progress_v.As<Function>();
     }
   }
+
+  // Reading the destination path and the options bag above can run user
+  // JavaScript through a property getter, which may have closed the database
+  // since it was checked.
+  THROW_AND_RETURN_ON_BAD_STATE(env, !db->IsOpen(), "database is not open");
 
   Local<Promise::Resolver> resolver;
   if (!Promise::Resolver::New(env->context()).ToLocal(&resolver)) {
@@ -2593,21 +2667,46 @@ void DatabaseSync::ApplyChangeset(const FunctionCallbackInfo<Value>& args) {
     }
   }
 
-  // Keep the database alive during sqlite3changeset_apply(), which may
-  // call conflict or filter callbacks that trigger JavaScript execution.
-  // If the JavaScript callback drops all references to the database,
-  // the DatabaseSync could otherwise be garbage-collected while the
-  // callback is still executing, causing a use-after-free.
+  // Reading the options bag above can run user JavaScript through a property
+  // getter, which may have closed the database since it was checked.
+  THROW_AND_RETURN_ON_BAD_STATE(env, !db->IsOpen(), "database is not open");
+
+  // Keep the database alive in case a callback drops all references to it,
+  // which could otherwise let it be garbage-collected mid-callback.
   BaseObjectPtr<DatabaseSync> guard(db);
 
   ArrayBufferViewContents<uint8_t> buf(args[0]);
+  if (buf.length() > std::numeric_limits<int>::max()) {
+    THROW_ERR_OUT_OF_RANGE(env, "The changeset is too large.");
+    return;
+  }
+
+  // A callback may detach/modify the input buffer mid-apply, so copy it.
+  // With no callbacks, no JS runs during sqlite3changeset_apply(), so no
+  // copy is needed.
+  std::unique_ptr<BackingStore> changeset;
+  if (buf.length() > 0 &&
+      (context.filterCallback || context.conflictCallback)) {
+    changeset = ArrayBuffer::NewBackingStore(
+        env->isolate(),
+        buf.length(),
+        BackingStoreInitializationMode::kUninitialized,
+        BackingStoreOnFailureMode::kReturnNull);
+    if (!changeset) {
+      THROW_ERR_MEMORY_ALLOCATION_FAILED(env);
+      return;
+    }
+    std::memcpy(changeset->Data(), buf.data(), buf.length());
+  }
+
   int r;
   {
     CallbackDepthGuard guard(db);
     r = sqlite3changeset_apply(
         db->connection_.get(),
-        buf.length(),
-        const_cast<void*>(static_cast<const void*>(buf.data())),
+        static_cast<int>(buf.length()),
+        changeset ? changeset->Data()
+                  : const_cast<void*>(static_cast<const void*>(buf.data())),
         context.filterCallback ? xFilter : nullptr,
         xConflict,
         static_cast<void*>(&context));
@@ -4358,6 +4457,9 @@ void Session::Close(const FunctionCallbackInfo<Value>& args) {
       env, session->session_ == nullptr, "session is not open");
   THROW_AND_RETURN_ON_BAD_STATE(
       env, session->is_generating_changeset_, "session is currently in use");
+  // Checked last: changeset generation runs the authorizer, so both conditions
+  // hold in that case and the more specific message above has to win.
+  THROW_AND_RETURN_IF_SESSION_IN_CALLBACK(env, session);
 
   session->Delete();
 }
@@ -4371,6 +4473,7 @@ void Session::Dispose(const FunctionCallbackInfo<Value>& args) {
   }
   THROW_AND_RETURN_ON_BAD_STATE(
       env, session->is_generating_changeset_, "session is currently in use");
+  THROW_AND_RETURN_IF_SESSION_IN_CALLBACK(env, session);
 
   session->Delete();
 }

@@ -950,6 +950,13 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
     }
   }
 
+  // Reading the options bag above can run user JavaScript through a property
+  // getter, which may have closed the database since it was checked.
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
   // Clear any stale deferred exception from a previous operation
   ClearDeferredAuthorizerException();
   SetIgnoreNextSQLiteError(false);
@@ -1235,6 +1242,25 @@ Napi::Value DatabaseSync::Deserialize(const Napi::CallbackInfo &info) {
       }
       db_name = db_name_value.As<Napi::String>().Utf8Value();
     }
+  }
+
+  // Reading the options bag above can run user JavaScript through a property
+  // getter, which may have closed the database since it was checked.
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  // The same user JavaScript may also have shrunk or detached the backing
+  // store, in which case byte_length is stale and the copy below would read
+  // past the end of it. Handing that to SQLite would disclose it through
+  // serialize(). Re-read the view: a length-tracking view of a resized
+  // ArrayBuffer reports its new length, and a detached one reports 0.
+  input = info[0].As<Napi::Uint8Array>();
+  if (input.ByteLength() < byte_length) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "The \"buffer\" argument was resized while reading \"options\"");
+    return env.Undefined();
   }
 
   // SQLITE_DESERIALIZE_FREEONCLOSE transfers buffer ownership to SQLite, which
@@ -1530,6 +1556,19 @@ void DatabaseSync::InternalClose() {
   enable_load_extension_ = false;
 }
 
+// V8's Value::IsInt32(): a Number holding an integer in int32 range, and not
+// -0. A function's `length` is configurable, so node:sqlite validates it with
+// this check instead of casting it blindly.
+static bool IsInt32Number(const Napi::Value &value) {
+  if (!value.IsNumber()) {
+    return false;
+  }
+  const double d = value.As<Napi::Number>().DoubleValue();
+  return d >= std::numeric_limits<int32_t>::min() &&
+         d <= std::numeric_limits<int32_t>::max() && d == std::trunc(d) &&
+         !(d == 0 && std::signbit(d));
+}
+
 Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
@@ -1619,11 +1658,21 @@ Napi::Value DatabaseSync::CustomFunction(const Napi::CallbackInfo &info) {
   // Determine argument count
   int argc = -1; // Default to varargs
   if (!varargs) {
-    // Try to get function.length
     Napi::Value length_prop = fn.Get("length");
-    if (length_prop.IsNumber()) {
-      argc = length_prop.As<Napi::Number>().Int32Value();
+    if (!IsInt32Number(length_prop)) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"function.length\" property must be an integer.");
+      return env.Undefined();
     }
+    argc = length_prop.As<Napi::Number>().Int32Value();
+  }
+
+  // Reading the options bag and "function.length" above can run user
+  // JavaScript through a property getter, which may have closed the database
+  // since it was checked.
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
   }
 
   // Create UserDefinedFunction wrapper
@@ -1761,22 +1810,36 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo &info) {
   int argc = -1; // Default to varargs
   if (!varargs) {
     Napi::Value length_prop = step_fn.Get("length");
-    if (length_prop.IsNumber()) {
-      // Subtract 1 because the first argument is the aggregate value
-      argc = length_prop.As<Napi::Number>().Int32Value() - 1;
+    if (!IsInt32Number(length_prop)) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"options.step.length\" property must be an integer.");
+      return env.Undefined();
     }
+    // Subtract 1 because the first argument is the aggregate value
+    argc = length_prop.As<Napi::Number>().Int32Value() - 1;
 
     // Also check inverse function length if provided
     if (!inverse_fn.IsEmpty()) {
       Napi::Value inverse_length = inverse_fn.Get("length");
-      if (inverse_length.IsNumber()) {
-        int inverse_argc = inverse_length.As<Napi::Number>().Int32Value() - 1;
-        argc = std::max({argc, inverse_argc, 0});
+      if (!IsInt32Number(inverse_length)) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The \"options.inverse.length\" property must be an integer.");
+        return env.Undefined();
       }
+      int inverse_argc = inverse_length.As<Napi::Number>().Int32Value() - 1;
+      argc = std::max({argc, inverse_argc, 0});
     }
 
     // Ensure argc is non-negative
     argc = std::max(argc, 0);
+  }
+
+  // Reading the options bag and the step/inverse "length" properties above can
+  // run user JavaScript through a property getter, which may have closed the
+  // database since it was checked.
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
   }
 
   // Set SQLite flags
@@ -2023,6 +2086,13 @@ Napi::Value DatabaseSync::CreateSession(const Napi::CallbackInfo &info) {
         return env.Undefined();
       }
     }
+  }
+
+  // Reading the options bag above can run user JavaScript through a property
+  // getter, which may have closed the database since it was checked.
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
   }
 
   // Create the session
@@ -2399,12 +2469,34 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
     }
   }
 
+  // Reading the options bag above can run user JavaScript through a property
+  // getter, which may have closed the database since it was checked.
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
   // Get the changeset data from TypedArray (Uint8Array or Buffer)
   Napi::TypedArray typed_array = info[0].As<Napi::TypedArray>();
   Napi::ArrayBuffer array_buffer = typed_array.ArrayBuffer();
   size_t byte_offset = typed_array.ByteOffset();
   size_t byte_length = typed_array.ByteLength();
   uint8_t *data = static_cast<uint8_t *>(array_buffer.Data()) + byte_offset;
+
+  if (byte_length > static_cast<size_t>(std::numeric_limits<int>::max())) {
+    node::THROW_ERR_OUT_OF_RANGE(env, "The changeset is too large.");
+    return env.Undefined();
+  }
+
+  // A filter or conflict callback may detach or overwrite the input buffer
+  // mid-apply, so SQLite has to read a private copy. With no callbacks, no
+  // JavaScript runs during sqlite3changeset_apply(), so no copy is needed.
+  std::vector<uint8_t> changeset_copy;
+  if (byte_length > 0 &&
+      (callbacks.filterCallback || callbacks.conflictCallback)) {
+    changeset_copy.assign(data, data + byte_length);
+    data = changeset_copy.data();
+  }
 
   // sqlite3changeset_apply runs internal SQL that can invoke the authorizer.
   // Start a fresh deferred-error scope for this outer SQLite call.
@@ -4250,12 +4342,22 @@ Napi::Value Session::Close(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  // Generating a changeset is the only in-flight state that blocks close():
-  // sqlite3session_delete() would free the object SQLite is still reading.
-  // node:sqlite has no authorizer guard here, so deleting an idle session from
-  // an unrelated authorizer callback stays allowed.
+  // sqlite3session_delete() would free the object SQLite is still reading
+  // while a changeset is being generated.
   if (is_generating_changeset_) {
     node::THROW_ERR_INVALID_STATE(env, "session is currently in use");
+    return env.Undefined();
+  }
+
+  // SQLite's session module reaches back into JavaScript from inside the
+  // pre-update hook, while it is still walking the connection's session list
+  // and reading the table it found there. Deleting a session frees memory that
+  // walk is still using, so no callback may close one. Checked last: changeset
+  // generation runs the authorizer, so both conditions hold in that case and
+  // the more specific message above has to win.
+  if (database_->IsInCallback()) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "session cannot be closed while in a callback");
     return env.Undefined();
   }
 
@@ -4274,6 +4376,15 @@ Napi::Value Session::Dispose(const Napi::CallbackInfo &info) {
 
   if (is_generating_changeset_) {
     node::THROW_ERR_INVALID_STATE(env, "session is currently in use");
+    return env.Undefined();
+  }
+
+  // See Close(). An open session_ implies a live database_: InternalClose()
+  // nulls session_ (DeleteAllSessions) before ~DatabaseSync nulls database_
+  // (DetachAllSessions).
+  if (database_->IsInCallback()) {
+    node::THROW_ERR_INVALID_STATE(
+        env, "session cannot be closed while in a callback");
     return env.Undefined();
   }
 
@@ -4699,6 +4810,14 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
       }
       progress_func = progress_value.As<Napi::Function>();
     }
+  }
+
+  // Reading the destination path and the options bag above can run user
+  // JavaScript through a property getter, which may have closed the database
+  // since it was checked.
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
   }
 
   // Create promise for async backup operation

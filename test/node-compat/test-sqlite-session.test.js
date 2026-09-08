@@ -11,7 +11,8 @@
 // Flags: --expose-gc --experimental-sqlite
 "use strict";
 const { DatabaseSync, constants } = require("@photostructure/sqlite");
-const { test, suite } = require("node:test");
+const { it, test, suite } = require("node:test");
+const dc = require("node:diagnostics_channel");
 const { nextDb } = require("../common/test-utils.cjs");
 const { Worker } = require("worker_threads");
 const { once } = require("events");
@@ -306,6 +307,29 @@ suite("conflict resolution", () => {
     ]); // unchanged
   });
 
+  test("database.applyChangeset() - changeset detached by onConflict", (t) => {
+    const { database2, changeset } = prepareConflict();
+    const result = database2.applyChangeset(changeset, {
+      onConflict: () => {
+        const transferred = structuredClone(changeset.buffer, {
+          transfer: [changeset.buffer],
+        });
+        new Uint8Array(transferred).fill(0);
+        return constants.SQLITE_CHANGESET_REPLACE;
+      },
+    });
+
+    t.assert.strictEqual(result, true);
+    t.assert.strictEqual(changeset.byteLength, 0);
+    deepStrictEqual(t)(
+      database2.prepare("SELECT * FROM data ORDER BY key").all(),
+      [
+        { key: 1, value: "hello" },
+        { key: 2, value: "foo" },
+      ],
+    );
+  });
+
   test("database.applyChangeset() - SQLITE_CHANGESET_DATA conflict handled with SQLITE_CHANGESET_REPLACE", (t) => {
     const { database2, changeset } = prepareDataConflict();
     let conflictType = null;
@@ -452,6 +476,35 @@ test("filter handler throws", (t) => {
       message: /syntax error/,
     },
   );
+});
+
+test("database.applyChangeset() - changeset detached by filter", (t) => {
+  const database1 = new DatabaseSync(":memory:");
+  const database2 = new DatabaseSync(":memory:");
+  database1.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
+  database2.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
+
+  const session = database1.createSession();
+  database1.exec("INSERT INTO data VALUES (1), (2), (3)");
+  const changeset = session.changeset();
+
+  const result = database2.applyChangeset(changeset, {
+    filter: () => {
+      const transferred = structuredClone(changeset.buffer, {
+        transfer: [changeset.buffer],
+      });
+      new Uint8Array(transferred).fill(0);
+      return true;
+    },
+  });
+
+  t.assert.strictEqual(result, true);
+  t.assert.strictEqual(changeset.byteLength, 0);
+  deepStrictEqual(t)(database2.prepare("SELECT * FROM data").all(), [
+    { key: 1 },
+    { key: 2 },
+    { key: 3 },
+  ]);
 });
 
 test("database.createSession() - filter changes", (t) => {
@@ -746,6 +799,162 @@ test("session[Symbol.dispose]() - after closing database is a no-op", () => {
   database.close();
 
   session[Symbol.dispose]();
+});
+
+// SQLite runs "PRAGMA table_xinfo" from inside its pre-update hook, while it is
+// still walking the connection's session list. Deleting a session from a
+// callback that PRAGMA triggers frees memory the walk is still using, so the
+// close has to be rejected instead.
+suite("session.close() - from a callback", () => {
+  const expectedError =
+    "ERR_INVALID_STATE: session cannot be closed while in a callback";
+
+  for (const method of ["close", "dispose"]) {
+    const closeSession = (session) => {
+      if (method === "close") {
+        session.close();
+      } else {
+        session[Symbol.dispose]();
+      }
+    };
+
+    it(`rejects ${method} from an authorizer callback`, (t) => {
+      const database = new DatabaseSync(":memory:");
+      database.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
+      const session = database.createSession();
+      let outcome = "callback did not run";
+
+      database.setAuthorizer((actionCode, param1) => {
+        if (
+          actionCode === constants.SQLITE_PRAGMA &&
+          param1 === "table_xinfo"
+        ) {
+          try {
+            closeSession(session);
+            outcome = "did not throw";
+          } catch (err) {
+            outcome = `${err.code}: ${err.message}`;
+          }
+        }
+        return constants.SQLITE_OK;
+      });
+
+      database.exec("INSERT INTO data VALUES (1)");
+      t.assert.strictEqual(outcome, expectedError);
+
+      // The session survived and kept recording the insert.
+      database.setAuthorizer(null);
+      t.assert.notStrictEqual(session.changeset().length, 0);
+      session.close();
+    });
+
+    it(`rejects ${method} from a 'sqlite.db.query' subscriber`, (t) => {
+      const database = new DatabaseSync(":memory:");
+      database.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
+      const session = database.createSession();
+      let outcome = "callback did not run";
+
+      const handler = ({ sql }) => {
+        if (sql.includes("table_xinfo")) {
+          try {
+            closeSession(session);
+            outcome = "did not throw";
+          } catch (err) {
+            outcome = `${err.code}: ${err.message}`;
+          }
+        }
+      };
+      dc.subscribe("sqlite.db.query", handler);
+      t.after(() => dc.unsubscribe("sqlite.db.query", handler));
+
+      database.exec("INSERT INTO data VALUES (1)");
+      t.assert.strictEqual(outcome, expectedError);
+
+      dc.unsubscribe("sqlite.db.query", handler);
+      t.assert.notStrictEqual(session.changeset().length, 0);
+      session.close();
+    });
+
+    // Deliberately broader than the crash: the pre-update hook is not on the
+    // stack here, so this close is safe today. Node cannot tell whether SQLite
+    // is inside that hook, so every callback is rejected. This pins the
+    // trade-off rather than leaving it to be discovered as a regression.
+    it(`rejects ${method} from a user-defined function`, (t) => {
+      const database = new DatabaseSync(":memory:");
+      database.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
+      const session = database.createSession();
+      let outcome = "callback did not run";
+
+      database.function("f", (x) => {
+        try {
+          closeSession(session);
+          outcome = "did not throw";
+        } catch (err) {
+          outcome = `${err.code}: ${err.message}`;
+        }
+        return x;
+      });
+
+      database.exec("SELECT f(1)");
+      t.assert.strictEqual(outcome, expectedError);
+
+      // Still closable once the callback is off the stack.
+      session.close();
+      t.assert.throws(() => session.close(), {
+        message: "session is not open",
+      });
+    });
+  }
+
+  // Rejecting disposal has a cost: a `using` declaration inside a callback
+  // demotes the block's own error to SuppressedError. Accepted for symmetry
+  // with StatementSync's disposal, which throws for a busy statement the same
+  // way. Pinned here so the trade-off is visible rather than surprising.
+  it("demotes a callback error when disposal is rejected", (t) => {
+    const database = new DatabaseSync(":memory:");
+    database.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
+    let caught;
+
+    database.function("f", (x) => {
+      try {
+        using session = database.createSession();
+        t.assert.ok(session);
+        throw new Error("callback error");
+      } catch (err) {
+        caught = err;
+      }
+      return x;
+    });
+
+    database.exec("SELECT f(1)");
+    t.assert.ok(caught instanceof SuppressedError);
+    t.assert.strictEqual(caught.suppressed.message, "callback error");
+    t.assert.strictEqual(
+      caught.error.message,
+      "session cannot be closed while in a callback",
+    );
+  });
+
+  it("leaves an already closed session disposable from a callback", (t) => {
+    const database = new DatabaseSync(":memory:");
+    database.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
+    const session = database.createSession();
+    session.close();
+    let outcome = "callback did not run";
+
+    database.setAuthorizer(() => {
+      try {
+        session[Symbol.dispose]();
+        outcome = "no-op";
+      } catch (err) {
+        outcome = `${err.code}: ${err.message}`;
+      }
+      return constants.SQLITE_OK;
+    });
+
+    database.exec("INSERT INTO data VALUES (1)");
+    t.assert.strictEqual(outcome, "no-op");
+  });
 });
 
 test.skip("session - keeps its database alive after the db handle is dropped" /* Intentional divergence: upstream keeps the database alive via a strong reference from Session. We cannot -- commit 4da0638 removed Session::database_ref_ because Napi::Reference teardown during GC finalization corrupts V8 JIT pages on Alpine/musl (SIGSEGV). We detach instead, so an orphaned session reports 'database is not open'. Also needs Node's internal ../common/gc helper. */, async (t) => {

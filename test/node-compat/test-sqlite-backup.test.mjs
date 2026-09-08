@@ -13,7 +13,8 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { pathToFileURL } from "node:url";
-import { isWindows, tmpdir } from "../common/test-utils.mjs";
+import fixtures from "../common/fixtures.mjs";
+import { isWindows, spawnPromisified, tmpdir } from "../common/test-utils.mjs";
 const { backup, DatabaseSync } = await import("@photostructure/sqlite");
 
 const isRoot = !isWindows && process.getuid() === 0;
@@ -448,4 +449,14 @@ test("source database is kept alive while a backup is in flight", async (t) => {
   });
   const rows = backupDb.prepare("SELECT COUNT(*) AS n FROM data").get();
   t.assert.strictEqual(rows.n, 500);
+});
+
+test("backup promise settles when the backup is the last active request", async (t) => {
+  const { code, signal, stderr } = await spawnPromisified(process.execPath, [
+    fixtures.path("sqlite", "backup-last-request.mjs"),
+    nextDb(),
+  ]);
+
+  t.assert.strictEqual(signal, null);
+  t.assert.strictEqual(code, 0, stderr);
 });
