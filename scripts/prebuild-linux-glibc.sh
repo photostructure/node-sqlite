@@ -72,6 +72,10 @@ echo "Target architecture: $TARGET_ARCH (Docker platform: linux/$DOCKER_ARCH)"
 
 # Create a container, build inside it, then copy artifacts out
 CONTAINER_NAME="node-sqlite-build-$$"
+# Remove the container on every exit path. With set -e a failed step ends
+# the script immediately, and without this trap each failed build leaked a
+# `sleep 3600` container.
+trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true' EXIT
 
 # Start container in background
 docker run -d \
@@ -83,12 +87,13 @@ docker run -d \
 # Copy project files into container
 docker cp . "$CONTAINER_NAME:/tmp/project"
 
-# Run build inside container
-# Debian 11 has Python 3.9 and GCC 10.2 which support our requirements
+# Run build inside container.
+# The node:*-bullseye image already ships GCC 10.2, make, and Python 3.9, so
+# nothing is installed with apt. Bullseye LTS ended on 2026-08-31 and the
+# bullseye-security Release file expired on 2026-09-07, so `apt-get update`
+# now fails in this image.
 docker exec "$CONTAINER_NAME" sh -c "
   cd /tmp/project && \
-  apt-get update -qq && \
-  apt-get install -y -qq build-essential python3 && \
   # Verify versions
   echo 'Python version:' && python3 --version && \
   echo 'GCC version:' && gcc --version | head -1 && \
@@ -103,8 +108,5 @@ docker exec "$CONTAINER_NAME" tar -cf - -C /tmp/project \
   build \
   config.gypi \
   2>/dev/null | tar -xf - --owner="$(id -u)" --group="$(id -g)" || true
-
-# Clean up container
-docker rm -f "$CONTAINER_NAME" >/dev/null
 
 echo "Portable build complete!"
