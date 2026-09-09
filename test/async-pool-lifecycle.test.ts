@@ -446,7 +446,15 @@ describe("DatabasePool lifecycle", () => {
               returnArrays: false,
               authorizer: 'none',
               allowExtension: false,
-              connectionSetup: [],
+              // The probe below takes RESERVED for a few microseconds on every
+              // poll. A pool connection has no busy handler, so an INSERT that
+              // asked for RESERVED inside that window failed at once with
+              // SQLITE_BUSY and the poll then ran out reporting a bare false
+              // (seen on macos-14 / Node 24 in CI). Waiting a moment instead
+              // keeps the INSERT alive, which is what the test terminates.
+              connectionSetup: [
+                { kind: 'run', sql: 'PRAGMA busy_timeout = 10000' },
+              ],
             },
           );
           const pending = connection.execute({
@@ -465,17 +473,25 @@ describe("DatabasePool lifecycle", () => {
       },
     );
 
+    // Keep listening after the handshake. If the INSERT fails inside the
+    // worker, its { error } message has to reach the poll below; a one-shot
+    // listener dropped it and the failure surfaced only as the poll's `false`.
+    let workerError: Error | undefined;
     await new Promise<void>((resolve, reject) => {
-      worker.once("message", (message) => {
-        if (message === "submitted") resolve();
-        else
-          reject(
-            new Error(
-              `worker failed before execution: ${JSON.stringify(message)}`,
-            ),
-          );
+      worker.on("message", (message) => {
+        if (message === "submitted") {
+          resolve();
+          return;
+        }
+        workerError = new Error(
+          `worker INSERT failed: ${JSON.stringify(message)}`,
+        );
+        reject(workerError);
       });
-      worker.once("error", reject);
+      worker.on("error", (error) => {
+        workerError = error instanceof Error ? error : new Error(String(error));
+        reject(workerError);
+      });
     });
 
     const probe = new DatabaseSync(dbPath, { timeout: 0 });
@@ -484,6 +500,7 @@ describe("DatabasePool lifecycle", () => {
       expect(
         await waitForCondition(
           () => {
+            if (workerError) throw workerError;
             try {
               probe.exec("BEGIN IMMEDIATE; ROLLBACK");
               return false;
