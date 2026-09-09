@@ -168,7 +168,7 @@ async function install(): Promise<void> {
       // proves the *packed prebuild* resolves rather than a local source build.
       "--ignore-scripts",
       // Reject a tarball whose dependencies are too fresh to have been vetted.
-      "--min-release-age=14",
+      "--min-release-age=12",
       "--no-audit",
       "--no-fund",
     ],
