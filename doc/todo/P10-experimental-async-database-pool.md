@@ -66,7 +66,7 @@ both plans.
 
 Study these before continuing:
 
-- `CLAUDE.md`
+- `AGENTS.md`
 - `doc/reference/TPP-GUIDE.md`
 - `doc/reference/SIMPLE-DESIGN.md`
 - `doc/reference/TDD.md`

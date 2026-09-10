@@ -223,7 +223,7 @@ The heavy tests (`test:all`, `memory:check`) already ran in step 2 — no need t
 
 ### 8. Commit, push, and open PR
 
-Use Conventional Commits (see CLAUDE.md §"Git Commit Messages"). Typical release-prep commits:
+Use Conventional Commits (see AGENTS.md §"Git Commit Messages"). Typical release-prep commits:
 
 ```
 chore(release): prep vX.Y.Z
@@ -247,7 +247,7 @@ git push -u origin <branch>    # retry up to 4x with 2s/4s/8s/16s backoff on net
 
 Where and how you land the commit depends on the environment (`echo $USER`, per Critical constraints):
 
-- **Local hardware** (`$USER` is `mrm`): commit on `main` and push `origin main` — that's the maintainer's normal flow. Always ask before committing/pushing (see CLAUDE.md). Do NOT open a PR.
+- **Local hardware** (`$USER` is `mrm`): commit on `main` and push `origin main` — that's the maintainer's normal flow. Always ask before committing/pushing (see AGENTS.md). Do NOT open a PR.
 - **Anthropic cloud VM** (`$USER` is anything else): **do NOT push to `main` directly.** Push to the session's `claude/*` development branch, then open a PR with `mcp__github__create_pull_request` (`base: main`, the branch as `head`). Include in the PR body:
   - Version bump chosen + one-line justification
   - Upstream sync deltas (Node SHA old → new, SQLite old → new)

@@ -269,7 +269,7 @@ class DatabaseSync {
 
 - `README.md` - Add worker thread examples
 - `docs/WORKER-THREADS.md` - Create detailed usage guide
-- `CLAUDE.md` - Update with worker thread implementation notes
+- `AGENTS.md` - Update with worker thread implementation notes
 
 ### Build configuration
 
