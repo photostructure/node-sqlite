@@ -79,7 +79,9 @@
       "Bash(git -C /home/mrm/src/node log v25.6.1..HEAD -p -- deps/sqlite)",
       "WebFetch(domain:photostructure.com)",
       "Bash(git -C /home/mrm/src/node log origin/v25.x-staging --oneline -20 -- src/node_sqlite.cc src/node_sqlite.h)",
-      "Bash(npm pack --dry-run)"
+      "Bash(npm pack --dry-run)",
+      "Bash(git apply *)",
+      "Bash(npm audit *)"
     ],
     "additionalDirectories": [
       "/home/mrm/src/node-addon-examples",
