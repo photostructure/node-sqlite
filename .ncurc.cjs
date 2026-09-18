@@ -4,10 +4,9 @@ module.exports = {
   cooldown: 12,
   peer: true,
 
-  // Jest is held at 30.4.2: 30.5.1 prepends the checkout directory to absolute
-  // source paths in mapped stack traces on Windows, so every mapped frame
-  // reads C:\repro\C:\repro\foo.test.js and the Windows CI job fails.
-  // See https://github.com/jestjs/jest/issues/16438 — re-check before removing.
+  // Jest is held at 30.4.2: 30.5.1 is broken, and 30.5.2 is addressed. See
+  // https://github.com/jestjs/jest/issues/16438 for details. This can be
+  // removed in 13 days.
   reject: ["jest"],
 
   // TypeScript is held on the 6.x line: TypeScript 7 is not yet supported by
