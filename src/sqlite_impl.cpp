@@ -3603,15 +3603,11 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
   int rc = SQLITE_OK;
 
   try {
-    if (param.IsNull()) {
+    if (param.IsNull() || param.IsUndefined()) {
+      // undefined binds to NULL so that passing it explicitly matches omitting
+      // the parameter altogether. Ports
+      // https://github.com/nodejs/node/pull/65709.
       rc = sqlite3_bind_null(statement_, param_index);
-    } else if (param.IsUndefined()) {
-      // Node.js throws for undefined (unlike null which binds as SQL NULL)
-      node::THROW_ERR_INVALID_ARG_TYPE(
-          Env(), ("Provided value cannot be bound to SQLite parameter " +
-                  std::to_string(param_index) + ".")
-                     .c_str());
-      return;
     } else if (param.IsBigInt()) {
       // Handle BigInt before IsNumber since BigInt values should bind as int64
       bool lossless;

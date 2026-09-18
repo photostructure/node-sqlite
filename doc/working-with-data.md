@@ -373,11 +373,11 @@ try {
 
 ## NULL Handling
 
-Use `null` (not `undefined`) to bind SQL NULL values. Passing `undefined` as a binding throws an error, matching `node:sqlite` behavior:
+Both `null` and `undefined` bind SQL NULL, matching `node:sqlite` behavior. Passing `undefined` for a parameter is equivalent to omitting it:
 
 ```javascript
-stmt.run("Alice", null); // Correct: binds SQL NULL
-stmt.run("Alice", undefined); // Error: "Provided value cannot be bound to SQLite parameter"
+stmt.run("Alice", null); // binds SQL NULL
+stmt.run("Alice", undefined); // also binds SQL NULL
 ```
 
 ```javascript

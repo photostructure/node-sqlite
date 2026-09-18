@@ -114,16 +114,15 @@ describe("DatabaseSync Tests", () => {
     const stmt = db.prepare("INSERT INTO null_test VALUES (?, ?)");
     stmt.run(1, null);
 
-    // Node.js sqlite throws TypeError for undefined parameter values
-    expect(() => stmt.run(2, undefined)).toThrow(
-      /cannot be bound to SQLite parameter/i,
-    );
+    // undefined binds as SQL NULL, the same as an omitted parameter
+    stmt.run(2, undefined);
 
     const selectStmt = db.prepare("SELECT * FROM null_test ORDER BY id");
     const rows = selectStmt.all();
 
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(2);
     expect(rows[0]).toEqual({ id: 1, value: null });
+    expect(rows[1]).toEqual({ id: 2, value: null });
 
     db.close();
   });

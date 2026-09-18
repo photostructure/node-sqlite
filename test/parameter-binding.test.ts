@@ -36,14 +36,17 @@ describe("Parameter Binding Tests", () => {
       expect(row.value_null).toBeNull();
     });
 
-    test("undefined binding throws error (Node.js behavior)", () => {
+    test("undefined binding - SQL NULL", () => {
       const stmt = db.prepare(
         "INSERT INTO test_params (value_null) VALUES (?)",
       );
-      // Node.js throws ERR_INVALID_ARG_TYPE for undefined (unlike null which binds as SQL NULL)
-      expect(() => stmt.run(undefined)).toThrow(
-        /Provided value cannot be bound to SQLite parameter/,
-      );
+      // undefined binds as SQL NULL so passing it explicitly matches omitting
+      // the parameter altogether (Node.js behavior).
+      const result = stmt.run(undefined);
+      const row = db
+        .prepare("SELECT value_null FROM test_params WHERE id = ?")
+        .get(result.lastInsertRowid);
+      expect(row.value_null).toBeNull();
     });
 
     test("number binding - integer", () => {

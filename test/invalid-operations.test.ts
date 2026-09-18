@@ -100,10 +100,10 @@ describe("Invalid Operations Tests", () => {
         stmt.run(1, 2, Buffer.from("test"), 4); // Extra param
       }).toThrow(/column index out of range/i);
 
-      // undefined throws TypeError in Node.js sqlite
+      // undefined binds as SQL NULL in Node.js sqlite
       expect(() => {
         stmt.run(undefined, null, Buffer.from("test"));
-      }).toThrow(/cannot be bound to SQLite parameter/i);
+      }).not.toThrow();
 
       // null is valid
       expect(() => {
