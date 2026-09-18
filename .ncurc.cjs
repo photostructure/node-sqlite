@@ -4,9 +4,9 @@ module.exports = {
   cooldown: 12,
   peer: true,
 
-  // Jest is held at 30.4.2: 30.5.1 is broken, and 30.5.2 is addressed. See
+  // Jest is held at 30.4.2: 30.5.1 is broken, 30.5.2 is fixed. See
   // https://github.com/jestjs/jest/issues/16438 for details. This can be
-  // removed in 13 days.
+  // removed in 15 days: 2026-10-03
   reject: ["jest"],
 
   // TypeScript is held on the 6.x line: TypeScript 7 is not yet supported by
