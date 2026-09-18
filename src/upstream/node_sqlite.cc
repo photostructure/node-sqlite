@@ -404,7 +404,13 @@ class CustomAggregate {
         start_(env->isolate(), start),
         step_fn_(env->isolate(), step_fn),
         inverse_fn_(env->isolate(), inverse_fn),
-        result_fn_(env->isolate(), result_fn) {}
+        result_fn_(env->isolate(), result_fn) {
+    db_->user_defined_functions_.insert(this);
+  }
+
+  ~CustomAggregate() {
+    if (db_) db_->user_defined_functions_.erase(this);
+  }
 
   static void xStep(sqlite3_context* ctx, int argc, sqlite3_value** argv) {
     xStepBase(ctx, argc, argv, &CustomAggregate::step_fn_);
@@ -772,9 +778,13 @@ UserDefinedFunction::UserDefinedFunction(Environment* env,
     : env_(env),
       fn_(env->isolate(), fn),
       db_(std::move(db)),
-      use_bigint_args_(use_bigint_args) {}
+      use_bigint_args_(use_bigint_args) {
+  db_->user_defined_functions_.insert(this);
+}
 
-UserDefinedFunction::~UserDefinedFunction() {}
+UserDefinedFunction::~UserDefinedFunction() {
+  if (db_) db_->user_defined_functions_.erase(this);
+}
 
 void UserDefinedFunction::xFunc(sqlite3_context* ctx,
                                 int argc,
@@ -1071,6 +1081,8 @@ DatabaseSync::~DatabaseSync() {
 }
 
 void DatabaseSync::MemoryInfo(MemoryTracker* tracker) const {
+  tracker->TrackFieldWithSize("user_defined_functions",
+                              user_defined_functions_.size() * sizeof(void*));
   // TODO(tniessen): more accurately track the size of all fields
   tracker->TrackFieldWithSize(
       "open_config", sizeof(open_config_), "DatabaseOpenConfiguration");
@@ -1615,6 +1627,8 @@ void DatabaseSync::Close(const FunctionCallbackInfo<Value>& args) {
   int r = sqlite3_close_v2(db->connection_.get());
   CHECK_ERROR_OR_THROW(env->isolate(), db, r, SQLITE_OK, void());
   db->connection_.release();
+  // Backups can defer SQLite destruction until after the connection is closed.
+  db->user_defined_functions_.clear();
 }
 
 void DatabaseSync::Dispose(const v8::FunctionCallbackInfo<v8::Value>& args) {
@@ -2034,27 +2048,17 @@ void DatabaseSync::Serialize(const FunctionCallbackInfo<Value>& args) {
     return;
   }
 
-  // V8 sandbox forbids external backing stores so allocate inside the
-  // sandbox and copy. Without sandbox wrap the output directly using
-  // sqlite3_free as the destructor to avoid the copy.
-#ifdef V8_ENABLE_SANDBOX
-  auto free_data = OnScopeLeave([&] { sqlite3_free(data); });
-  auto store = ArrayBuffer::NewBackingStore(
+  auto store = AdoptIntoBackingStore(
       env->isolate(),
+      data,
       size,
-      BackingStoreInitializationMode::kUninitialized,
-      BackingStoreOnFailureMode::kReturnNull);
+      [](void* ptr, size_t, void*) { sqlite3_free(ptr); },
+      nullptr);
   if (!store) {
     THROW_ERR_MEMORY_ALLOCATION_FAILED(env);
     return;
   }
-  memcpy(store->Data(), data, size);
   Local<ArrayBuffer> ab = ArrayBuffer::New(env->isolate(), std::move(store));
-#else
-  auto store = ArrayBuffer::NewBackingStore(
-      data, size, [](void* ptr, size_t, void*) { sqlite3_free(ptr); }, nullptr);
-  Local<ArrayBuffer> ab = ArrayBuffer::New(env->isolate(), std::move(store));
-#endif
 
   args.GetReturnValue().Set(Uint8Array::New(ab, 0, size));
 }
@@ -2681,12 +2685,11 @@ void DatabaseSync::ApplyChangeset(const FunctionCallbackInfo<Value>& args) {
     return;
   }
 
-  // A callback may detach/modify the input buffer mid-apply, so copy it.
-  // With no callbacks, no JS runs during sqlite3changeset_apply(), so no
-  // copy is needed.
+  // SQLite may invoke JavaScript through explicit callbacks or user-defined
+  // SQL functions while applying the changeset. Copy the input so JavaScript
+  // cannot detach or modify the memory while SQLite is still reading it.
   std::unique_ptr<BackingStore> changeset;
-  if (buf.length() > 0 &&
-      (context.filterCallback || context.conflictCallback)) {
+  if (buf.length() > 0) {
     changeset = ArrayBuffer::NewBackingStore(
         env->isolate(),
         buf.length(),
@@ -3168,7 +3171,8 @@ bool StatementSync::BindValue(const Local<Value>& value, const int index) {
   // Dates could be supported by converting them to numbers. However, there
   // would not be a good way to read the values back from SQLite with the
   // original type. JS Boolean binds to 1 and 0 because SQLite maps true and
-  // false keywords to 1 and 0.
+  // false keywords to 1 and 0. JS undefined binds to NULL so that passing it
+  // explicitly matches omitting the parameter altogether.
   Isolate* isolate = env()->isolate();
   int r;
   if (value->IsNumber()) {
@@ -3192,7 +3196,7 @@ bool StatementSync::BindValue(const Local<Value>& value, const int index) {
                               SQLITE_TRANSIENT,
                               SQLITE_UTF8);
     }
-  } else if (value->IsNull()) {
+  } else if (value->IsNullOrUndefined()) {
     r = sqlite3_bind_null(statement_.get(), index);
   } else if (value->IsArrayBufferView() || value->IsArrayBuffer() ||
              value->IsSharedArrayBuffer()) {
