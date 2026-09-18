@@ -56,7 +56,7 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           languages: javascript-typescript
           queries: security-and-quality
@@ -74,10 +74,10 @@ jobs:
               - '**/test-directory/**'
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/autobuild@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
 
   codeql-cpp:
     name: CodeQL C++ Analysis
@@ -106,7 +106,7 @@ jobs:
         run: npm ci
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           languages: cpp
           queries: security-and-quality
@@ -115,7 +115,7 @@ jobs:
         run: npm run build:native:rebuild
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           upload: false
           output: sarif-results
@@ -137,7 +137,7 @@ jobs:
           output: sarif-results/cpp.sarif
 
       - name: Upload filtered SARIF
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: sarif-results/cpp.sarif
 
@@ -166,7 +166,7 @@ jobs:
           persist-credentials: false
 
       - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@20652fbbdefffcdaa493a5bf57ab2ac6b1db715b # v3.97.1
+        uses: trufflesecurity/trufflehog@363923b901c911a9164f50b6c423f47c15372b1c # v3.97.4
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
