@@ -2491,12 +2491,13 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  // A filter or conflict callback may detach or overwrite the input buffer
-  // mid-apply, so SQLite has to read a private copy. With no callbacks, no
-  // JavaScript runs during sqlite3changeset_apply(), so no copy is needed.
+  // SQLite can invoke JavaScript through a filter or conflict callback, and
+  // also through a user-defined SQL function reached from a CHECK constraint
+  // or trigger, so JavaScript can run even with no callbacks supplied. Give
+  // SQLite a private copy it cannot detach or overwrite mid-apply. Ports
+  // https://github.com/nodejs/node/pull/65870.
   std::vector<uint8_t> changeset_copy;
-  if (byte_length > 0 &&
-      (callbacks.filterCallback || callbacks.conflictCallback)) {
+  if (byte_length > 0) {
     changeset_copy.assign(data, data + byte_length);
     data = changeset_copy.data();
   }
