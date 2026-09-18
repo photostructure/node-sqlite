@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.6.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.6.0) (2026-09-17)
+
+API compatible with `node:sqlite` from Node.js v26.9.0, plus the changes below that landed on `v26.x-staging` but are not yet in a Node.js release. Binding `undefined` now succeeds where it previously threw, so this is a minor release. SQLite is unchanged at 3.53.4.
+
+### Changed
+
+- **`undefined` binds as SQL NULL**: passing `undefined` for a parameter binds NULL instead of throwing `ERR_INVALID_ARG_TYPE`, so an explicit `undefined` and an omitted named parameter now agree. `undefined` is not an object, so it is still bound as an anonymous parameter rather than being treated as the named-parameter bag. This also removes a better-sqlite3 migration gotcha that surfaced with query builders like Knex, which emit `undefined` for columns missing from a multi-row insert. Ports [Node.js PR #65709](https://github.com/nodejs/node/pull/65709).
+
+### Fixed
+
+- **Changeset detached by a user-defined SQL function**: `applyChangeset()` copies every non-empty changeset before applying it, not just when a `filter` or `onConflict` callback is supplied. SQLite reaches JavaScript through a user-defined SQL function in a `CHECK` constraint or trigger too, so a changeset could previously be detached or zeroed while SQLite was still reading it. Ports [Node.js PR #65870](https://github.com/nodejs/node/pull/65870).
+
 ## [2.5.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.5.0) (2026-09-08)
 
 API compatible with `node:sqlite` from Node.js v26.8.1, plus four changes landed on `v26.x-staging` but not yet in a Node.js release. Two of them make calls throw that previously succeeded, so this is a minor release. SQLite is unchanged at 3.53.4.
