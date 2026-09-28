@@ -1,7 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { platform } from "node:os";
 import { createInterface } from "node:readline";
-import { ensureGitHubToken } from "./github-api";
 
 const isWin = platform() === "win32";
 const isLinux = platform() === "linux";
@@ -126,9 +125,9 @@ function run({
   // Check for root-owned files first (common Docker/sudo issue)
   await checkRootOwnedFiles();
 
-  // Authenticate GitHub API calls before any step that makes them
-  console.log("\n▶ Resolving GitHub API token");
-  ensureGitHubToken();
+  // No GITHUB_TOKEN export here: every step below would inherit it, including
+  // the freshly synced upstream tests. update:pinact and the sync:* scripts
+  // each borrow `gh auth token` in their own process (see ensureGitHubToken).
 
   // Always run these
   run({ cmd: "npm install", desc: "Installing dependencies" });
