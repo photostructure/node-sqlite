@@ -71,6 +71,22 @@ Napi::Value SetQueryDiagnosticsChannel(const Napi::CallbackInfo &info) {
   return env.Undefined();
 }
 
+// The package entrypoint passes setTimeout() from node:timers, which backup
+// retries use (see BackupJob::ScheduleRetry).
+Napi::Value SetTimeoutFunction(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  AddonData *addon_data = GetAddonData(env);
+  if (addon_data == nullptr || info.Length() < 1 || !info[0].IsFunction()) {
+    Napi::TypeError::New(env, "A setTimeout function is required")
+        .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  addon_data->setTimeoutFunction =
+      Napi::Reference<Napi::Function>::New(info[0].As<Napi::Function>(), 1);
+  return env.Undefined();
+}
+
 // Register a database instance for cleanup tracking
 void RegisterDatabaseInstance(Napi::Env env, DatabaseSync *database) {
   AddonData *addon_data = GetAddonData(env);
@@ -119,6 +135,11 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   addon_data->objectCreateFn =
       Napi::Reference<Napi::Function>::New(object_create);
 
+  // For a binding loaded without src/index.ts, which replaces it with
+  // setTimeout() from node:timers.
+  addon_data->setTimeoutFunction = Napi::Reference<Napi::Function>::New(
+      env.Global().Get("setTimeout").As<Napi::Function>());
+
   DatabaseSync::Init(env, exports);
   StatementSync::Init(env, exports);
   StatementSyncIterator::Init(env, exports);
@@ -128,6 +149,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   // package API.
   exports.Set("setQueryDiagnosticsChannel",
               Napi::Function::New(env, SetQueryDiagnosticsChannel));
+  exports.Set("setTimeoutFunction",
+              Napi::Function::New(env, SetTimeoutFunction));
 
   // Add SQLite constants
   Napi::Object constants = Napi::Object::New(env);

@@ -4450,6 +4450,11 @@ void BackupJob::CleanupHook(void *arg) {
   if (!self->source_ref_.IsEmpty()) {
     self->source_ref_.Reset();
   }
+  // No step is queued while a retry waits, and the retry timer cannot fire
+  // once JavaScript is disallowed, so nothing else would finish the job.
+  if (self->retry_pending_) {
+    self->Finish();
+  }
 }
 
 BackupStep::BackupStep(Napi::Env env, BackupJob *job)
@@ -4551,12 +4556,12 @@ void BackupJob::Step() {
   }
 
   backup_status_ = sqlite3_backup_step(backup_, pages_);
+  first_step_ = false;
 
-  // SQLite knows the actual page count only after the first step
-  if (first_step_) {
-    total_pages_ = sqlite3_backup_pagecount(backup_);
-    first_step_ = false;
-  }
+  // Read after every step, as node:sqlite does: SQLite knows the page count
+  // only after a step that read the source, and a step that returned
+  // SQLITE_BUSY may not have.
+  total_pages_ = sqlite3_backup_pagecount(backup_);
 }
 
 // Node's FreeEnvironment() disallows JavaScript, then runs pending async work
@@ -4582,20 +4587,47 @@ void BackupJob::OnStepComplete() {
   // Queue another step unless the backup is done or failed, the env is
   // shutting down, or the source was closed (Abandon() nulls backup_).
   if (backup_ != nullptr && !shutting_down_.load(std::memory_order_acquire)) {
-    if (backup_status_ == SQLITE_OK) {
-      ReportProgress();
-    } else if (backup_status_ == SQLITE_BUSY ||
-               backup_status_ == SQLITE_LOCKED) {
-      // These are retryable errors - continue
+    if (backup_status_ == SQLITE_BUSY || backup_status_ == SQLITE_LOCKED) {
+      // Another connection holds a lock: retry later.
       backup_status_ = SQLITE_OK;
-    }
-    // The progress callback may have closed the source database.
-    if (backup_status_ == SQLITE_OK && backup_ != nullptr) {
-      QueueStep();
+      ScheduleRetry();
       return;
+    }
+    if (backup_status_ == SQLITE_OK) {
+      retry_delay_ms_ = 0;
+      ReportProgress();
+      // The progress callback may have closed the source database.
+      if (backup_ != nullptr) {
+        QueueStep();
+        return;
+      }
     }
   }
   Finish();
+}
+
+void BackupJob::ScheduleRetry() {
+  retry_delay_ms_ = retry_delay_ms_ == 0 ? 1 : std::min(retry_delay_ms_ * 2, 100);
+  Napi::Env env(env_);
+  Napi::Function retry = Napi::Function::New(
+      env,
+      [](const Napi::CallbackInfo &info) {
+        static_cast<BackupJob *>(info.Data())->OnRetryTimer();
+      },
+      "backupRetry", this);
+  GetAddonData(env)->setTimeoutFunction.Call(
+      {retry, Napi::Number::New(env, retry_delay_ms_)});
+  retry_pending_ = true;
+}
+
+void BackupJob::OnRetryTimer() {
+  retry_pending_ = false;
+  // close() abandoned the backup while the retry waited.
+  if (backup_ == nullptr) {
+    Finish();
+    return;
+  }
+  QueueStep();
 }
 
 // Clears the exception the progress callback threw and returns its message.

@@ -914,6 +914,42 @@ describe("Backup functionality", () => {
   }
 
   it(
+    "should let a worker thread terminate while a backup waits to retry",
+    async () => {
+      // While another connection holds the destination, no step is queued
+      // between retries, and the retry timer never fires once JavaScript is
+      // disallowed, so the environment cleanup hook has to finish the job.
+      // Six steps in, the retry delay is at least 16 ms, so the worker is
+      // almost always terminated between steps.
+      const result = await runBackupWorker(`
+        const { parentPort, workerData } = require("node:worker_threads");
+        const { backup, DatabaseSync } = require("node-gyp-build")(workerData.root);
+        const holder = new DatabaseSync(workerData.dest);
+        holder.exec("CREATE TABLE x (a); BEGIN EXCLUSIVE; INSERT INTO x VALUES (1);");
+        let steps = 0;
+        require("node:async_hooks").createHook({
+          init(_asyncId, type) {
+            if (type === "BackupStep") steps++;
+          },
+        }).enable();
+        backup(new DatabaseSync(workerData.source), workerData.dest);
+        const poll = () =>
+          steps >= 6 ? parentPort.postMessage("waiting") : setImmediate(poll);
+        poll();
+      `);
+
+      // A terminated worker exits with code 1.
+      expect(result).toEqual({
+        code: 0,
+        signal: null,
+        stdout: "1",
+        stderr: "",
+      });
+    },
+    getTestTimeout(30000),
+  );
+
+  it(
     "should let a worker thread terminate mid-backup",
     async () => {
       // Worker teardown runs pending async work to completion with JavaScript
@@ -1048,6 +1084,85 @@ describe("Backup functionality", () => {
           });
           holder.exec("ROLLBACK");
         }
+      } finally {
+        hook.disable();
+      }
+    },
+    getTestTimeout(30000),
+  );
+
+  it(
+    "should resolve with the page count when its first step finds the destination locked",
+    async () => {
+      // The page count was read only after the first step, and a step that
+      // returns SQLITE_BUSY has not read the source yet, so the backup
+      // resolved with 0 although it copied every page.
+      let steps = 0;
+      const hook = createHook({
+        init(_asyncId, type) {
+          if (type === "BackupStep") steps++;
+        },
+      }).enable();
+      try {
+        const destination = getDbPath("first-step-locked.db");
+        const holder = new DatabaseSync(destination);
+        testDatabases.add(holder);
+        holder.exec(
+          "CREATE TABLE x (a); BEGIN EXCLUSIVE; INSERT INTO x VALUES (1);",
+        );
+        const db = new DatabaseSync(sourcePath);
+        testDatabases.add(db);
+        const result = backup(db, destination);
+        while (steps < 2) {
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+        holder.exec("ROLLBACK");
+        const pages = await result;
+
+        const copy = new DatabaseSync(destination);
+        testDatabases.add(copy);
+        expect(pages).toBeGreaterThan(0);
+        expect(pages).toBe(
+          (copy.prepare("PRAGMA page_count").get() as { page_count: number })
+            .page_count,
+        );
+      } finally {
+        hook.disable();
+      }
+    },
+    getTestTimeout(30000),
+  );
+
+  it(
+    "should back off between retries while the destination is locked",
+    async () => {
+      // A step that returned SQLITE_BUSY queued the next one at once, so a
+      // backup spun a CPU core for as long as another connection held the
+      // lock. Retries now wait 1 ms, doubling up to 100 ms.
+      const starts: number[] = [];
+      const hook = createHook({
+        init(_asyncId, type) {
+          if (type === "BackupStep") starts.push(performance.now());
+        },
+      }).enable();
+      try {
+        const destination = getDbPath("backoff.db");
+        const holder = new DatabaseSync(destination);
+        testDatabases.add(holder);
+        holder.exec(
+          "CREATE TABLE x (a); BEGIN EXCLUSIVE; INSERT INTO x VALUES (1);",
+        );
+        const db = new DatabaseSync(sourcePath);
+        testDatabases.add(db);
+        const result = backup(db, destination);
+        while (starts.length < 8) {
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+        holder.exec("ROLLBACK");
+        await result;
+        // The seven retries wait 1 + 2 + ... + 64 = 127 ms in total; the bound
+        // leaves room for libuv's millisecond timer granularity.
+        expect(starts[7]! - starts[0]!).toBeGreaterThanOrEqual(100);
       } finally {
         hook.disable();
       }

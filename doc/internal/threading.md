@@ -211,6 +211,15 @@ steps back into one worker loop:
   a step that runs afterwards returns without touching SQLite. Without the
   lock, a step used a `sqlite3_backup` that `close()` had finished, or attached
   to a source connection that `close()` had freed.
+- A step that returns `SQLITE_BUSY` or `SQLITE_LOCKED` is retried from a
+  timer, 1 ms at first and doubling to 100 ms, rather than queued at once,
+  which kept one CPU core busy for as long as another connection held the
+  lock (`node:sqlite` still does). The timer is `setTimeout()` from
+  `node:timers`, passed in by `src/index.ts`: a raw `uv_timer_t` callback runs
+  without an entered V8 context, and the global `setTimeout` is replaced by
+  fake timers. No step is queued while a retry waits, and the timer cannot fire
+  once teardown disallows JavaScript, so `BackupJob::CleanupHook` finishes a
+  job whose retry is pending.
 
 ### Why detached threads are problematic
 
