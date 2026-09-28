@@ -179,6 +179,8 @@ db.function("json_contains", (jsonStr, value) => {
 
 Aggregate functions process multiple rows and return a single result.
 
+> **Accumulator size limit:** between steps, the accumulator is stored in a fixed-size buffer. A string or Buffer must fit in 4095 bytes, as must the `JSON.stringify()` of an object or array, and a BigInt must fit in a signed 64-bit integer. A `start` or `step` value that does not fit throws `ERR_OUT_OF_RANGE`. `node:sqlite` keeps the JavaScript value itself and has no such limit.
+
 ### Basic Aggregates
 
 ```javascript

@@ -218,53 +218,12 @@ void CustomAggregate::xStepBase(
       start_val = self->GetStartValue();
     }
 
-    // Store the start value in the appropriate type
-    if (start_val.IsNumber()) {
-      state->type = AggregateValue::NUMBER;
-      state->number_value = start_val.As<Napi::Number>().DoubleValue();
-    } else if (start_val.IsString()) {
-      state->type = AggregateValue::STRING;
-      std::string str_val = start_val.As<Napi::String>().Utf8Value();
-      size_t copy_len =
-          std::min(str_val.length(), sizeof(state->string_buffer) - 1);
-      memcpy(state->string_buffer, str_val.c_str(), copy_len);
-      state->string_buffer[copy_len] = '\0';
-      state->string_length = copy_len;
-    } else if (start_val.IsBigInt()) {
-      state->type = AggregateValue::BIGINT;
-      bool lossless;
-      state->bigint_value = start_val.As<Napi::BigInt>().Int64Value(&lossless);
-    } else if (start_val.IsBoolean()) {
-      state->type = AggregateValue::BOOLEAN;
-      state->bool_value = start_val.As<Napi::Boolean>().Value();
-    } else if (start_val.IsBuffer()) {
-      state->type = AggregateValue::BUFFER;
-      Napi::Buffer<uint8_t> buffer = start_val.As<Napi::Buffer<uint8_t>>();
-      size_t copy_len =
-          std::min(buffer.Length(), sizeof(state->string_buffer) - 1);
-      memcpy(state->string_buffer, buffer.Data(), copy_len);
-      state->string_length = copy_len;
-    } else if ((start_val.IsObject() || start_val.IsArray()) &&
-               !start_val.IsBuffer()) {
-      // Store objects and arrays as JSON strings
-      state->type = AggregateValue::OBJECT_JSON;
-      // Use JSON.stringify to serialize the object
-      std::string json_str = SafeJsonStringify(self->env_, start_val);
-
-      // If JSON is too long, use a simpler representation
-      if (json_str.length() >= sizeof(state->string_buffer) - 1) {
-        const char *fallback = "{\"_truncated\":true}";
-        size_t fallback_len = strlen(fallback);
-        memcpy(state->string_buffer, fallback, fallback_len);
-        state->string_buffer[fallback_len] = '\0';
-        state->string_length = fallback_len;
-      } else {
-        memcpy(state->string_buffer, json_str.c_str(), json_str.length());
-        state->string_buffer[json_str.length()] = '\0';
-        state->string_length = json_str.length();
-      }
-    } else {
-      state->type = AggregateValue::NULL_VAL;
+    // A start value of a type StoreValue() does not store is kept as null.
+    state->type = AggregateValue::NULL_VAL;
+    if (!StoreValue(self->env_, state, start_val)) {
+      self->db_->SetIgnoreNextSQLiteError(true);
+      sqlite3_result_error(ctx, "", 0);
+      return;
     }
 
     state->is_initialized = true;
@@ -381,53 +340,72 @@ void CustomAggregate::xStepBase(
     }
   }
 
-  if (result_val.IsNumber()) {
-    state->type = AggregateValue::NUMBER;
-    state->number_value = result_val.As<Napi::Number>().DoubleValue();
-  } else if (result_val.IsString()) {
-    state->type = AggregateValue::STRING;
-    std::string str_val = result_val.As<Napi::String>().Utf8Value();
-    size_t copy_len =
-        std::min(str_val.length(), sizeof(state->string_buffer) - 1);
-    memcpy(state->string_buffer, str_val.c_str(), copy_len);
-    state->string_buffer[copy_len] = '\0';
-    state->string_length = copy_len;
-  } else if (result_val.IsBigInt()) {
-    state->type = AggregateValue::BIGINT;
-    bool lossless;
-    state->bigint_value = result_val.As<Napi::BigInt>().Int64Value(&lossless);
-  } else if (result_val.IsBoolean()) {
-    state->type = AggregateValue::BOOLEAN;
-    state->bool_value = result_val.As<Napi::Boolean>().Value();
-  } else if (result_val.IsBuffer()) {
-    state->type = AggregateValue::BUFFER;
-    Napi::Buffer<uint8_t> buffer = result_val.As<Napi::Buffer<uint8_t>>();
-    size_t copy_len =
-        std::min(buffer.Length(), sizeof(state->string_buffer) - 1);
-    memcpy(state->string_buffer, buffer.Data(), copy_len);
-    state->string_length = copy_len;
-  } else if ((result_val.IsObject() || result_val.IsArray()) &&
-             !result_val.IsBuffer()) {
-    // Store objects and arrays as JSON strings
-    state->type = AggregateValue::OBJECT_JSON;
-    // Use JSON.stringify to serialize the object/array
-    std::string json_str = SafeJsonStringify(self->env_, result_val);
+  if (!StoreValue(self->env_, state, result_val)) {
+    self->db_->SetIgnoreNextSQLiteError(true);
+    sqlite3_result_error(ctx, "", 0);
+    return;
+  }
+}
 
-    // If JSON is too long, use a simpler representation
-    if (json_str.length() >= sizeof(state->string_buffer) - 1) {
-      const char *fallback = "{\"_truncated\":true}";
-      size_t fallback_len = strlen(fallback);
-      memcpy(state->string_buffer, fallback, fallback_len);
-      state->string_buffer[fallback_len] = '\0';
-      state->string_length = fallback_len;
-    } else {
-      memcpy(state->string_buffer, json_str.c_str(), json_str.length());
-      state->string_buffer[json_str.length()] = '\0';
-      state->string_length = json_str.length();
+// AggregateValue lives in SQLite's aggregate context, so it holds only POD
+// (see AGENTS.md): strings, Buffers and object JSON are copied into
+// string_buffer, and BigInts are stored as int64. A value that does not fit
+// throws instead of being truncated, replaced with {"_truncated":true}, or
+// wrapped, as it was before. node:sqlite keeps the JavaScript value itself and
+// has neither limit. A value of any other type leaves `state` unchanged.
+bool CustomAggregate::StoreValue(Napi::Env env, AggregateValue *state,
+                                 Napi::Value value) {
+  constexpr size_t kMaxBytes = sizeof(AggregateValue::string_buffer) - 1;
+  auto store_bytes = [&](AggregateValue::Type type, const char *kind,
+                         const void *data, size_t size) {
+    if (size > kMaxBytes) {
+      std::string message = std::string("Aggregate ") + kind +
+                            " is too large: " + std::to_string(size) +
+                            " bytes, and the limit is " +
+                            std::to_string(kMaxBytes);
+      node::THROW_ERR_OUT_OF_RANGE(env, message.c_str());
+      return false;
     }
-  } else if (result_val.IsNull() || result_val.IsUndefined()) {
+    state->type = type;
+    memcpy(state->string_buffer, data, size);
+    state->string_buffer[size] = '\0';
+    state->string_length = size;
+    return true;
+  };
+
+  if (value.IsNumber()) {
+    state->type = AggregateValue::NUMBER;
+    state->number_value = value.As<Napi::Number>().DoubleValue();
+  } else if (value.IsString()) {
+    std::string str = value.As<Napi::String>().Utf8Value();
+    return store_bytes(AggregateValue::STRING, "string", str.data(),
+                       str.size());
+  } else if (value.IsBigInt()) {
+    bool lossless;
+    int64_t bigint_value = value.As<Napi::BigInt>().Int64Value(&lossless);
+    if (!lossless) {
+      node::THROW_ERR_OUT_OF_RANGE(
+          env,
+          "BigInt value is too large to be represented as a SQLite integer");
+      return false;
+    }
+    state->type = AggregateValue::BIGINT;
+    state->bigint_value = bigint_value;
+  } else if (value.IsBoolean()) {
+    state->type = AggregateValue::BOOLEAN;
+    state->bool_value = value.As<Napi::Boolean>().Value();
+  } else if (value.IsBuffer()) {
+    Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
+    return store_bytes(AggregateValue::BUFFER, "Buffer", buffer.Data(),
+                       buffer.Length());
+  } else if (value.IsObject() || value.IsArray()) {
+    std::string json = SafeJsonStringify(env, value);
+    return store_bytes(AggregateValue::OBJECT_JSON, "object's JSON",
+                       json.data(), json.size());
+  } else if (value.IsNull() || value.IsUndefined()) {
     state->type = AggregateValue::NULL_VAL;
   }
+  return true;
 }
 
 void CustomAggregate::xValueBase(sqlite3_context *ctx, bool is_final) {

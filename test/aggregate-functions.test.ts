@@ -176,4 +176,69 @@ describe("Aggregate Functions Tests", () => {
     // Should sum values (150) and ids (1+2+3+4+5 = 15) = 165
     expect(result.total).toBe(165);
   });
+
+  describe("values that do not fit the aggregate state", () => {
+    // The state lives in SQLite's aggregate context: strings, Buffers and
+    // object JSON in a 4096-byte buffer, BigInts as int64. Values that did not
+    // fit used to be truncated, replaced with {"_truncated":true}, or wrapped
+    // without an error.
+    const expectOutOfRange = (fn: () => unknown) => {
+      let error: unknown;
+      try {
+        fn();
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toEqual(
+        expect.objectContaining({
+          name: "RangeError",
+          code: "ERR_OUT_OF_RANGE",
+        }),
+      );
+    };
+
+    test.each([
+      ["a string", () => "x".repeat(4096)],
+      ["a Buffer", () => Buffer.alloc(4096)],
+      ["an object", () => ({ text: "x".repeat(4096) })],
+      ["a BigInt", () => 2n ** 64n],
+    ])("a step returning %s that does not fit throws", (_type, step) => {
+      db.aggregate("too_large", { start: null, step });
+      expectOutOfRange(() =>
+        db.prepare("SELECT too_large() FROM test_data").get(),
+      );
+    });
+
+    test.each([
+      ["an object", {}],
+      ["a Buffer", Buffer.alloc(1)],
+    ])("a value that does not fit throws after %s accumulator", (_type, start) => {
+      db.aggregate("outgrows", { start, step: () => "x".repeat(4096) });
+      expectOutOfRange(() =>
+        db.prepare("SELECT outgrows() FROM test_data").get(),
+      );
+    });
+
+    test("a start value that does not fit throws", () => {
+      db.aggregate("long_start", {
+        start: "x".repeat(4096),
+        step: (acc: string) => acc,
+      });
+      expectOutOfRange(() =>
+        db.prepare("SELECT long_start() FROM test_data").get(),
+      );
+      expectOutOfRange(() =>
+        db.aggregate("big_start", {
+          start: 2n ** 64n,
+          step: (acc: bigint) => acc,
+        }),
+      );
+    });
+
+    test("a 4095-byte string fits", () => {
+      db.aggregate("longest", { start: "", step: () => "x".repeat(4095) });
+      const row = db.prepare("SELECT longest() AS value FROM test_data").get();
+      expect(row.value).toHaveLength(4095);
+    });
+  });
 });

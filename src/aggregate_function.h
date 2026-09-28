@@ -82,6 +82,11 @@ private:
                         Napi::Reference<Napi::Function> CustomAggregate::*mptr);
   static void xValueBase(sqlite3_context *ctx, bool is_final);
 
+  // Stores `value` in `state`. Returns false with ERR_OUT_OF_RANGE pending if
+  // the value does not fit.
+  static bool StoreValue(Napi::Env env, AggregateValue *state,
+                         Napi::Value value);
+
   // Helper method for safe JSON serialization with circular reference handling
   static std::string SafeJsonStringify(Napi::Env env, Napi::Value value);
   static void DestroyAggregateData(sqlite3_context *ctx);

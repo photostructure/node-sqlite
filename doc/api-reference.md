@@ -398,7 +398,7 @@ db.function("concat", { varargs: true }, (...args) => args.join(""));
 aggregate(name: string, options: AggregateOptions): void
 ```
 
-Registers a custom aggregate SQL function.
+Registers a custom aggregate SQL function. The accumulator must fit the stored state between steps: 4095 bytes for a string, Buffer, or the JSON of an object, and int64 for a BigInt. A larger value throws `ERR_OUT_OF_RANGE` (see [Custom Aggregate Functions](./extending-sqlite.md#custom-aggregate-functions)).
 
 **Options:**
 

@@ -1740,6 +1740,18 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo &info) {
              "value.");
     return env.Undefined();
   }
+  // CustomAggregate keeps a BigInt start value as int64, as it does the
+  // aggregate state (see CustomAggregate::StoreValue).
+  if (start.IsBigInt()) {
+    bool lossless;
+    start.As<Napi::BigInt>().Int64Value(&lossless);
+    if (!lossless) {
+      node::THROW_ERR_OUT_OF_RANGE(
+          env,
+          "BigInt value is too large to be represented as a SQLite integer");
+      return env.Undefined();
+    }
+  }
 
   // Parse step function
   Napi::Value step_v = options.Get("step");
