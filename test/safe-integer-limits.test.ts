@@ -87,6 +87,37 @@ describe("JavaScript Safe Integer Limits", () => {
       });
     });
 
+    test("throws ERR_OUT_OF_RANGE for INT64_MIN passed to user and aggregate functions", () => {
+      // The range check was std::abs(value) <= MAX_SAFE_INTEGER, and
+      // std::abs(INT64_MIN) is undefined behavior: in practice it stayed
+      // negative, so the function received the Number -9223372036854776000.
+      db.function("identity", (value: unknown) => value);
+      db.aggregate("first", {
+        start: null,
+        step: (first: unknown, value: unknown) => first ?? value,
+      });
+      db.aggregate("collect", {
+        start: [],
+        step: (list: unknown[], value: unknown) => [...list, value],
+      });
+
+      for (const fn of ["identity", "first", "collect"]) {
+        let error: unknown;
+        try {
+          db.prepare(`SELECT ${fn}(-9223372036854775808) AS value`).get();
+        } catch (e) {
+          error = e;
+        }
+        expect(error).toEqual(
+          expect.objectContaining({
+            name: "RangeError",
+            code: "ERR_OUT_OF_RANGE",
+            message: expect.stringContaining("too large"),
+          }),
+        );
+      }
+    });
+
     test("throws ERR_OUT_OF_RANGE from all() and iterate(), not just get()", () => {
       // Regression guard for the row-materialization refactor: multi-row and
       // iterator consumption paths, in object and array mode, must surface

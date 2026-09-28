@@ -1,7 +1,6 @@
 #include "aggregate_function.h"
 
 #include <cinttypes>
-#include <cmath>
 #include <cstring>
 #include <limits>
 #include <unordered_map>
@@ -622,7 +621,8 @@ Napi::Value CustomAggregate::SqliteValueToJS(sqlite3_value *value) {
     sqlite3_int64 int_val = sqlite3_value_int64(value);
     if (use_bigint_args_) {
       return Napi::BigInt::New(env_, static_cast<int64_t>(int_val));
-    } else if (std::abs(int_val) <= kMaxSafeJsInteger) {
+    } else if (int_val >= -kMaxSafeJsInteger && int_val <= kMaxSafeJsInteger) {
+      // Compare both bounds, as node:sqlite does: std::abs(INT64_MIN) is UB.
       return Napi::Number::New(env_, static_cast<double>(int_val));
     } else {
       // Value is outside safe integer range for JavaScript numbers

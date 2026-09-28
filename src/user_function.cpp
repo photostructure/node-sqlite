@@ -2,7 +2,6 @@
 
 #include <cinttypes>
 #include <climits>
-#include <cmath>
 #include <limits>
 #include <stdexcept>
 
@@ -161,7 +160,8 @@ Napi::Value UserDefinedFunction::SqliteValueToJS(sqlite3_value *value) {
 
     if (use_bigint_args_) {
       return Napi::BigInt::New(env_, static_cast<int64_t>(int_val));
-    } else if (std::abs(int_val) <= kMaxSafeJsInteger) {
+    } else if (int_val >= -kMaxSafeJsInteger && int_val <= kMaxSafeJsInteger) {
+      // Compare both bounds, as node:sqlite does: std::abs(INT64_MIN) is UB.
       return Napi::Number::New(env_, static_cast<double>(int_val));
     } else {
       // Value is outside safe integer range for JavaScript numbers
