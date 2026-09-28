@@ -58,7 +58,7 @@ export interface DatabaseSyncOptions {
    * database file are disabled. The defensive flag can also be set using
    * `enableDefensive()`.
    * @see https://sqlite.org/c3ref/c_dbconfig_defensive.html
-   * @default false
+   * @default true
    */
   readonly defensive?: boolean;
   /**

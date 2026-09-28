@@ -249,7 +249,7 @@ interface DatabaseSyncOptions {
   returnArrays?: boolean; // Return rows as arrays instead of objects (default: false)
   allowBareNamedParameters?: boolean; // Allow $name without : prefix (default: true)
   allowUnknownNamedParameters?: boolean; // Allow unbound named parameters (default: false)
-  defensive?: boolean; // Enable defensive mode (default: false)
+  defensive?: boolean; // Enable defensive mode (default: true)
 }
 ```
 
@@ -898,7 +898,7 @@ interface DatabaseSyncOptions {
   returnArrays?: boolean; // Return rows as arrays instead of objects (default: false)
   allowBareNamedParameters?: boolean; // Allow $name without : prefix (default: true)
   allowUnknownNamedParameters?: boolean; // Allow unbound named parameters (default: false)
-  defensive?: boolean; // Enable defensive mode (default: false)
+  defensive?: boolean; // Enable defensive mode (default: true)
 }
 ```
 
