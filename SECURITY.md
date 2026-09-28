@@ -66,13 +66,14 @@ reach the compiler.
 ## Security Configuration
 
 ```javascript
-// Read-only mode
-const db = new DatabaseSync("database.db", { readonly: true });
+// Read-only mode. The option is `readOnly`; an unknown option such as
+// `readonly` is ignored, and the database opens read-write.
+const db = new DatabaseSync("database.db", { readOnly: true });
 
 // Extension loading (disabled by default)
-db.allowExtension();
-db.enableLoadExtension(true);
-db.loadExtension("path/to/extension");
+const extDb = new DatabaseSync("database.db", { allowExtension: true });
+extDb.enableLoadExtension(true);
+extDb.loadExtension("path/to/extension");
 ```
 
 ### Best Practices
