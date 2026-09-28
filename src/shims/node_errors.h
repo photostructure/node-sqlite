@@ -67,6 +67,12 @@ inline void THROW_ERR_ILLEGAL_CONSTRUCTOR(Napi::Env env) {
   error.ThrowAsJavaScriptException();
 }
 
+inline void THROW_ERR_INVALID_URL(Napi::Env env, const char *message) {
+  Napi::TypeError error = Napi::TypeError::New(env, message);
+  error.Set("code", Napi::String::New(env, "ERR_INVALID_URL"));
+  error.ThrowAsJavaScriptException();
+}
+
 inline void THROW_ERR_INVALID_URL_SCHEME(Napi::Env env,
                                          const char * /*scheme*/ = nullptr) {
   // Message must match Node.js exactly

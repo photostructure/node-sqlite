@@ -129,6 +129,19 @@ std::optional<std::string> ValidateDatabasePath(Napi::Env env, Napi::Value path,
       if (href.IsString()) {
         std::string location = href.As<Napi::String>().Utf8Value();
         if (!has_null_bytes(location)) {
+          // node:sqlite rejects an href that does not parse as a URL before
+          // checking its scheme (ada::can_parse). URL.canParse() runs the
+          // same WHATWG URL parser.
+          Napi::Object url_class = env.Global().Get("URL").As<Napi::Object>();
+          if (!url_class.Get("canParse")
+                   .As<Napi::Function>()
+                   .Call(url_class, {href})
+                   .ToBoolean()
+                   .Value()) {
+            node::THROW_ERR_INVALID_URL(env, "Invalid URL");
+            return std::nullopt;
+          }
+
           // Check if it's a file:// URL
           if (location.compare(0, 7, "file://") == 0) {
             // Check if URL has query parameters - if so, return full URI
