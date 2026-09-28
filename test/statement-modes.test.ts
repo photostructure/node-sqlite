@@ -467,6 +467,17 @@ describe("expand() Tests", () => {
         delete (Object as unknown as Record<string, unknown>)["ctorProp"];
       }
     });
+
+    test("expand() stores a column named __proto__ as an own property", () => {
+      // Assigning to "__proto__" set the table object's prototype (or, for a
+      // string, did nothing), so the column's value was lost.
+      const row = db
+        .prepare(`SELECT name AS "__proto__" FROM users WHERE id = 1`)
+        .expand()
+        .get() as Record<string, Record<string, unknown>>;
+      expect(Object.keys(row["users"]!)).toEqual(["__proto__"]);
+      expect(row["users"]!["__proto__"]).toBe("Alice");
+    });
   });
 
   describe("duplicate column names", () => {
