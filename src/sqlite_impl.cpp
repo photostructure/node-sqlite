@@ -4400,10 +4400,10 @@ std::set<BackupJob *> BackupJob::active_job_instances_;
 void BackupJob::CleanupHook(void *arg) {
   // Called before environment teardown - safe to Reset() references here
   auto *self = static_cast<BackupJob *>(arg);
-  // Signal Execute() on the worker thread to break out of sqlite3_backup_step
-  // so we don't drag teardown out, and so OnOK/OnError can short-circuit
-  // touching the deferred (which can throw a C++ exception if the env is
-  // already torn down).
+  // Signal Step() on the worker thread to skip sqlite3_backup_step so we don't
+  // drag teardown out, and so OnStepComplete/Finish can short-circuit touching
+  // the deferred (which can throw a C++ exception if the env is already torn
+  // down).
   self->shutting_down_.store(true, std::memory_order_release);
   if (!self->progress_func_.IsEmpty()) {
     self->progress_func_.Reset();
@@ -4415,17 +4415,20 @@ void BackupJob::CleanupHook(void *arg) {
   }
 }
 
+BackupStep::BackupStep(Napi::Env env, BackupJob *job)
+    : Napi::AsyncWorker(env, "BackupStep"), job_(job) {}
+
+void BackupStep::Execute() { job_->Step(); }
+
+void BackupStep::OnOK() { job_->OnStepComplete(); }
+
 // BackupJob Implementation
 BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
                      Napi::Object source_object, std::string destination_path,
                      std::string source_db, std::string dest_db, int pages,
                      Napi::Function progress_func,
                      Napi::Promise::Deferred deferred)
-    : Napi::AsyncProgressWorker<BackupProgress>(
-          !progress_func.IsEmpty() && !progress_func.IsUndefined()
-              ? progress_func
-              : Napi::Function::New(env, [](const Napi::CallbackInfo &) {})),
-      source_(source),
+    : source_(source),
       // Strong reference keeps the source database (and thus its connection,
       // captured below) alive for the whole backup, even if the caller drops
       // its last JS reference and the GC runs mid-backup.
@@ -4435,11 +4438,9 @@ BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
       source_connection_(source->connection()),
       destination_path_(std::move(destination_path)),
       source_db_(std::move(source_db)), dest_db_(std::move(dest_db)),
-      pages_(pages), has_progress_callback_(!progress_func.IsEmpty() &&
-                                            !progress_func.IsUndefined()),
-      deferred_(deferred), env_(env) {
-  if (has_progress_callback_) {
-    progress_func_ = Napi::Reference<Napi::Function>::New(progress_func);
+      pages_(pages), deferred_(deferred), env_(env) {
+  if (!progress_func.IsEmpty() && !progress_func.IsUndefined()) {
+    progress_func_ = Napi::Persistent(progress_func);
   }
 
   // Register cleanup hook to Reset() reference before environment teardown.
@@ -4468,122 +4469,127 @@ BackupJob::~BackupJob() {
   }
 }
 
-void BackupJob::Execute(const ExecutionProgress &progress) {
+void BackupJob::QueueStep() {
+  // BackupStep deletes itself after OnOK().
+  (new BackupStep(Napi::Env(env_), this))->Queue();
+}
+
+void BackupJob::Step() {
   // This method is executed on a worker thread, not the main thread
   // Note: SQLite backup operations are thread-safe when the source database
   // is only being read. The backup API creates its own read transaction
   // and can safely operate across threads.
-
-  backup_status_ = sqlite3_open_v2(
-      destination_path_.c_str(), &dest_,
-      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, nullptr);
-
-  if (backup_status_ != SQLITE_OK) {
-    // Let OnOK reject after its shutdown guard. SetError() would route through
-    // node-addon-api's Error::New(env, ...) path before BackupJob sees
-    // teardown.
+  if (shutting_down_.load(std::memory_order_acquire)) {
+    // Env is tearing down; skip the step so FreeEnvironment can finish.
+    // OnStepComplete sees the flag and doesn't queue another step.
     return;
   }
 
-  // Initialize backup using the connection pointer captured at construction
-  // This prevents use-after-free if database is closed during backup
-  backup_ = sqlite3_backup_init(dest_, dest_db_.c_str(), source_connection_,
-                                source_db_.c_str());
+  if (first_step_) {
+    backup_status_ = sqlite3_open_v2(
+        destination_path_.c_str(), &dest_,
+        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI, nullptr);
 
-  if (!backup_) {
-    // Let OnOK reject after its shutdown guard. sqlite3_backup_init errors are
-    // stored on dest_ and will be read before Cleanup().
-    return;
+    if (backup_status_ != SQLITE_OK) {
+      // Let Finish reject after its shutdown guard.
+      return;
+    }
+
+    // Initialize backup using the connection pointer captured at construction
+    // This prevents use-after-free if database is closed during backup
+    backup_ = sqlite3_backup_init(dest_, dest_db_.c_str(), source_connection_,
+                                  source_db_.c_str());
+
+    if (!backup_) {
+      // Let Finish reject after its shutdown guard. sqlite3_backup_init errors
+      // are stored on dest_ and will be read before Cleanup().
+      return;
+    }
   }
 
-  // Initial page count may be 0 until first step
-  total_pages_ = 0; // Will be updated after first step
-  bool is_first_step = true;
+  backup_status_ = sqlite3_backup_step(backup_, pages_);
 
-  while (backup_status_ == SQLITE_OK) {
-    if (shutting_down_.load(std::memory_order_acquire)) {
-      // Env is tearing down; abandon the backup so FreeEnvironment can finish.
-      // Don't SetError - that would route through the parent's OnWorkComplete
-      // -> Error::New(env, ...) -> WrapCallback path, which still touches the
-      // env. Returning with empty _error sends us through OnOK, where our
-      // shutting_down_ guard skips deferred_ before it can throw.
-      return;
-    }
-    // If pages_ is negative, use -1 to copy all remaining pages
-    int pages_to_copy = pages_ < 0 ? -1 : pages_;
-    backup_status_ = sqlite3_backup_step(backup_, pages_to_copy);
-    // Re-check after the long-running step; CleanupHook may have flipped the
-    // flag and called progress_func_.Reset() while we were inside SQLite.
-    if (shutting_down_.load(std::memory_order_acquire)) {
-      return;
-    }
+  // SQLite knows the actual page count only after the first step
+  if (first_step_) {
+    total_pages_ = sqlite3_backup_pagecount(backup_);
+    first_step_ = false;
+  }
+}
 
-    // Update total pages after first step (when SQLite knows the actual count)
-    if (is_first_step) {
-      total_pages_ = sqlite3_backup_pagecount(backup_);
-      is_first_step = false;
-    }
+// Node's FreeEnvironment() disallows JavaScript, then runs pending async work
+// to completion, and only then runs env cleanup hooks. A step that completes
+// in that window runs before CleanupHook has set shutting_down_, and queuing
+// another step there creates a new async resource, whose async_hooks init
+// callbacks now fail as fatal exceptions. Node-API calls that may run
+// JavaScript, such as napi_has_named_property, fail once JavaScript is
+// disallowed.
+static bool CanRunJavaScript(napi_env env) {
+  napi_value object;
+  bool has_property;
+  return napi_create_object(env, &object) == napi_ok &&
+         napi_has_named_property(env, object, "", &has_property) == napi_ok;
+}
 
+void BackupJob::OnStepComplete() {
+  // This runs on the main thread after each Step().
+  if (!CanRunJavaScript(env_)) {
+    // The env is being torn down: stop as CleanupHook would.
+    shutting_down_.store(true, std::memory_order_release);
+  }
+  // Queue another step unless the backup is done or failed, the env is
+  // shutting down, or the source was closed (FinalizeBackups already ran
+  // Cleanup(), which nulls backup_).
+  if (backup_ != nullptr && !shutting_down_.load(std::memory_order_acquire)) {
     if (backup_status_ == SQLITE_OK) {
-      // More steps remaining - send progress update
-      int remaining_pages = sqlite3_backup_remaining(backup_);
-      int current_page = total_pages_ - remaining_pages;
-
-      // Send progress update to main thread
-      // Node.js only calls progress when there are still pages remaining.
-      // Use the plain bool snapshot (not progress_func_.IsEmpty()) - the
-      // FunctionReference is owned by the main thread and may be Reset() by
-      // CleanupHook concurrently.
-      if (has_progress_callback_ && total_pages_ > 0 && remaining_pages > 0) {
-        BackupProgress prog = {current_page, total_pages_};
-        progress.Send(&prog, 1);
-      }
-    } else if (backup_status_ == SQLITE_DONE) {
-      // Backup complete - don't send progress for remaining:0
-      break;
+      ReportProgress();
     } else if (backup_status_ == SQLITE_BUSY ||
                backup_status_ == SQLITE_LOCKED) {
       // These are retryable errors - continue
       backup_status_ = SQLITE_OK;
-    } else {
-      // Fatal error
-      break;
+    }
+    // The progress callback may have closed the source database.
+    if (backup_status_ == SQLITE_OK && backup_ != nullptr) {
+      QueueStep();
+      return;
     }
   }
-
-  // OnOK handles SQLITE_DONE and expected SQLite failures. Avoid SetError() for
-  // expected failures so teardown cannot reach node-addon-api's OnError path.
+  Finish();
 }
 
-void BackupJob::OnProgress(const BackupProgress *data, size_t count) {
-  // This runs on the main thread
-  if (!progress_func_.IsEmpty() && count > 0 && !progress_error_.has_value()) {
-    Napi::HandleScope scope(Env());
-    Napi::Function progress_fn = progress_func_.Value();
-    Napi::Object progress_info = Napi::Object::New(Env());
-    progress_info.Set("totalPages", Napi::Number::New(Env(), data->total));
+void BackupJob::ReportProgress() {
+  // Node.js only calls progress when there are still pages remaining. Once the
+  // callback throws, stop calling it; Finish rejects with its error.
+  int remaining_pages = sqlite3_backup_remaining(backup_);
+  if (progress_func_.IsEmpty() || progress_error_.has_value() ||
+      total_pages_ <= 0 || remaining_pages <= 0) {
+    return;
+  }
+
+  Napi::Env env(env_);
+  Napi::HandleScope scope(env);
+  try {
+    Napi::Object progress_info = Napi::Object::New(env);
+    progress_info.Set("totalPages", Napi::Number::New(env, total_pages_));
     progress_info.Set("remainingPages",
-                      Napi::Number::New(Env(), data->total - data->current));
-
-    try {
-      progress_fn.Call(Env().Null(), {progress_info});
-    } catch (const Napi::Error &e) {
-      // Capture error from progress callback - backup should fail with this
-      progress_error_ = e.Message();
-    } catch (...) {
-      // Unknown error
-      progress_error_ = "Unknown error in progress callback";
-    }
+                      Napi::Number::New(env, remaining_pages));
+    progress_func_.Value().Call(env.Null(), {progress_info});
+  } catch (const Napi::Error &e) {
+    // Capture error from progress callback - backup should fail with this
+    progress_error_ = e.Message();
+  } catch (...) {
+    // Unknown error
+    progress_error_ = "Unknown error in progress callback";
   }
 }
 
-void BackupJob::OnOK() {
-  // This runs on the main thread after Execute completes successfully
-  Napi::HandleScope scope(Env());
+void BackupJob::Finish() {
+  // This runs on the main thread once the backup is done, failed, or was
+  // abandoned.
+  Napi::Env env(env_);
+  Napi::HandleScope scope(env);
 
-  // Save error info BEFORE cleanup nulls the pointers. Normal SQLite backup
-  // failures are handled here instead of via AsyncWorker::SetError() so the
-  // shutdown guard below runs before any JS Error construction.
+  // Save error info BEFORE cleanup nulls the pointers. The shutdown guard below
+  // runs before any JS Error construction.
   int saved_status = backup_status_;
   std::string saved_errmsg;
   if (dest_) {
@@ -4606,20 +4612,18 @@ void BackupJob::OnOK() {
     // Env teardown already started; deferred_ rejection can throw a C++
     // Napi::Error out of this libuv cleanup-hook frame. The JS-side promise
     // is going away with the env anyway.
+    delete this;
     return;
   }
 
   // If progress callback threw an error, reject with that error
   if (progress_error_.has_value()) {
-    Napi::Error error = Napi::Error::New(Env(), *progress_error_);
+    Napi::Error error = Napi::Error::New(env, *progress_error_);
     try {
       deferred_.Reject(error.Value());
     } catch (...) {
     }
-    return;
-  }
-
-  if (backup_failed) {
+  } else if (backup_failed) {
     std::string err_message;
     if (!saved_errmsg.empty() && saved_errmsg != "not an error") {
       err_message = saved_errmsg;
@@ -4627,79 +4631,24 @@ void BackupJob::OnOK() {
       err_message = sqlite3_errstr(saved_status);
     }
 
-    Napi::Error detailed_error = Napi::Error::New(Env(), err_message);
-    detailed_error.Set("code", Napi::String::New(Env(), "ERR_SQLITE_ERROR"));
-    detailed_error.Set("errcode", Napi::Number::New(Env(), saved_status));
+    Napi::Error detailed_error = Napi::Error::New(env, err_message);
+    detailed_error.Set("code", Napi::String::New(env, "ERR_SQLITE_ERROR"));
+    detailed_error.Set("errcode", Napi::Number::New(env, saved_status));
     detailed_error.Set("errstr",
-                       Napi::String::New(Env(), sqlite3_errstr(saved_status)));
-    try {
-      deferred_.Reject(detailed_error.Value());
-    } catch (...) {
-    }
-    return;
-  }
-
-  // Resolve the promise with the total number of pages
-  try {
-    deferred_.Resolve(Napi::Number::New(Env(), total_pages_));
-  } catch (...) {
-  }
-}
-
-void BackupJob::OnError(const Napi::Error &error) {
-  // This runs on the main thread if Execute encounters an error
-  Napi::HandleScope scope(Env());
-
-  // Save error info BEFORE cleanup nulls the pointers
-  int saved_status = backup_status_;
-  std::string saved_errmsg;
-  if (dest_) {
-    saved_errmsg = sqlite3_errmsg(dest_);
-    // Capture any final error code from dest
-    int dest_err = sqlite3_errcode(dest_);
-    if (dest_err != SQLITE_OK && saved_status == SQLITE_OK) {
-      saved_status = dest_err;
-    }
-  }
-
-  // Now safe to cleanup
-  Cleanup();
-
-  if (shutting_down_.load(std::memory_order_acquire)) {
-    return;
-  }
-
-  // Use saved values for error details (matching node:sqlite property names)
-  if (saved_status != SQLITE_OK && saved_status != SQLITE_DONE) {
-    // Prefer the detailed error message from sqlite3_errmsg(dest_) if it's
-    // useful, otherwise fall back to sqlite3_errstr(status) which is the
-    // generic message. sqlite3_errmsg can return "not an error" if the error
-    // wasn't stored in dest.
-    std::string err_message;
-    if (!saved_errmsg.empty() && saved_errmsg != "not an error") {
-      err_message = saved_errmsg;
-    } else {
-      err_message = sqlite3_errstr(saved_status);
-    }
-
-    Napi::Error detailed_error = Napi::Error::New(Env(), err_message);
-    detailed_error.Set("code", Napi::String::New(Env(), "ERR_SQLITE_ERROR"));
-    detailed_error.Set("errcode", Napi::Number::New(Env(), saved_status));
-    detailed_error.Set("errstr",
-                       Napi::String::New(Env(), sqlite3_errstr(saved_status)));
+                       Napi::String::New(env, sqlite3_errstr(saved_status)));
     try {
       deferred_.Reject(detailed_error.Value());
     } catch (...) {
     }
   } else {
+    // Resolve the promise with the total number of pages
     try {
-      deferred_.Reject(error.Value());
+      deferred_.Resolve(Napi::Number::New(env, total_pages_));
     } catch (...) {
     }
   }
+  delete this;
 }
-
-// HandleBackupError method removed - error handling now done in OnError
 
 void BackupJob::Cleanup() {
   if (backup_) {
@@ -4831,8 +4780,8 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
                     std::move(*dest_path), std::move(source_db),
                     std::move(target_db), rate, progress_func, deferred);
 
-  // Queue the async work - AsyncWorker will delete itself when complete
-  job->Queue();
+  // The job deletes itself once the backup settles the promise
+  job->QueueStep();
 
   return deferred.Promise();
 }

@@ -73,7 +73,7 @@ Show what already works similarly:
 
 ```bash
 # Find existing patterns
-grep -r "AsyncProgressWorker" src/*.cpp
+grep -r "AsyncWorker" src/*.cpp
 grep -r "BindValue" src/sqlite_impl.cpp
 
 # Check if this is synced code (don't modify!)

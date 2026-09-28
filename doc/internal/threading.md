@@ -182,23 +182,33 @@ private:
 };
 ```
 
-## Recommendations for SQLite backup implementation
+## SQLite backup implementation
 
-Based on this analysis, the current BackupJob implementation has several issues:
+`BackupJob` runs each `sqlite3_backup_step()` in its own `BackupStep`
+(`Napi::AsyncWorker`) and queues the next step from the main thread after the
+previous one completes, as `node:sqlite`'s `BackupJob` does. Do not fold the
+steps back into one worker loop:
 
-1. **Missing Finalizer**: ThreadSafeFunction should have a finalizer to ensure cleanup
-2. **Detached Threads**: Using detached threads makes it impossible to join them during shutdown
-3. **Promise Lifecycle**: Unresolved promises during shutdown can cause hangs
-
-### Proposed fixes:
-
-1. Replace ThreadPoolWork with AsyncProgressWorker for automatic thread management
-2. Use AsyncProgressWorker's built-in progress reporting instead of manual ThreadSafeFunction
-3. Let AsyncWorker handle thread lifecycle and promise resolution
+- Each step holds the source connection's mutex (serialized mode). A loop of
+  steps in one threadpool job re-acquires it immediately, and glibc mutexes are
+  not fair, so a statement on the same `DatabaseSync` waited for most of the
+  backup: 204 ms of a 208 ms backup of a 128 MB WAL database. Returning to the
+  main thread between steps bounds that wait to one step (under 1 ms at the
+  default `rate: 100`). `std::this_thread::yield()` or a sleep between steps
+  does not guarantee the waiting thread gets the mutex.
+- The cost is one main-thread round trip per step. On tmpfs, backing up
+  128 MB took 132–150 ms at `rate: 100` (124–132 ms as one loop) and
+  580–690 ms at `rate: 1` (195–210 ms as one loop), the same as `node:sqlite`.
+- Node-API does not allow re-queuing a `napi_async_work`, so every step creates
+  a new async resource. `FreeEnvironment()` disallows JavaScript and then runs
+  pending async work to completion before it runs env cleanup hooks, so
+  `OnStepComplete()` checks whether JavaScript can still run and stops instead
+  of queuing another step. Creating an async resource there makes any
+  `async_hooks` init callback fail as a fatal exception.
 
 ### Why detached threads are problematic
 
-The current implementation uses `std::thread(...).detach()` which means:
+A thread started with `std::thread(...).detach()` has these problems:
 
 - The thread cannot be joined
 - The process cannot wait for the thread to complete

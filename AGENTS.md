@@ -18,7 +18,7 @@ this file, so Claude Code and Codex read the same rules.
 - **C++ exceptions cannot cross a C callback boundary.** Any JavaScript callback invoked from C (SQLite, libuv) must be wrapped: `try` around the call, catch `Napi::Error` before `std::exception`, then `catch (...)`; store the message, return a safe error code, and rethrow after the C call returns. glibc tolerates the omission; musl segfaults, often later and intermittently. `DatabaseSync::ApplyChangeset` in `src/sqlite_impl.cpp` is the working pattern.
 - **Check `IsDataView()` before `IsBuffer()`.** N-API's `IsBuffer()` is `IsArrayBufferView()`, so a DataView passes it and `Buffer::As()` then returns length 0 and a null pointer. The parameter-binding code in `sqlite_impl.cpp` has the comment.
 - Aggregate callbacks can't hold a `Napi::Reference` across SQLite calls: convert values immediately, keep only POD in SQLite's aggregate context, and return right after setting an error.
-- Async native work uses `Napi::AsyncProgressWorker` (see `BackupJob`), not ad hoc threads.
+- Async native work uses `Napi::AsyncWorker` (see `BackupStep`), not ad hoc threads.
 
 ## Tests
 

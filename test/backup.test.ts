@@ -1,8 +1,15 @@
 import { describe, expect, it } from "@jest/globals";
+import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import { backup, DatabaseSync } from "../src";
-import { createTestDb, getTestTimeout, rm, useTempDir } from "./test-utils";
+import {
+  createTestDb,
+  getTestTimeout,
+  projectRoot,
+  rm,
+  useTempDir,
+} from "./test-utils";
 
 describe("Backup functionality", () => {
   const { getDbPath, closeDatabases } = useTempDir("sqlite-backup-test-");
@@ -815,6 +822,121 @@ describe("Backup functionality", () => {
       expect(count1).toBe(expectedCount);
       expect(count2).toBe(expectedCount);
       expect(count3).toBe(expectedCount);
+    },
+    getTestTimeout(30000),
+  );
+
+  it(
+    "should not make statements on the source connection wait for the whole backup",
+    async () => {
+      // Each backup step holds the source connection's mutex. A statement on
+      // the same connection must wait for at most one step, not for the rest
+      // of the backup. ~128 MB of 4 KB pages takes 100+ ms to back up.
+      sourceDb.exec(`
+        PRAGMA journal_mode = WAL;
+        CREATE TABLE blobs (id INTEGER PRIMARY KEY, data BLOB);
+        WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 32768)
+        INSERT INTO blobs (id, data) SELECT i, zeroblob(4000) FROM n;
+      `);
+
+      let settled = false;
+      const start = performance.now();
+      const backupPromise = backup(sourceDb, destPath, { rate: 100 }).finally(
+        () => {
+          settled = true;
+        },
+      );
+
+      // A non-empty destination file means the backup has copied pages.
+      while (
+        !settled &&
+        (fs.statSync(destPath, { throwIfNoEntry: false })?.size ?? 0) === 0
+      ) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      expect(settled).toBe(false);
+
+      const selectStart = performance.now();
+      sourceDb.prepare("SELECT count(*) AS n FROM sqlite_master").get();
+      const selectMs = performance.now() - selectStart;
+
+      await backupPromise;
+      const backupMs = performance.now() - start;
+
+      expect(selectMs).toBeLessThan(backupMs / 2);
+    },
+    getTestTimeout(30000),
+  );
+
+  // Backs up 2000 pages at rate 1 inside a worker thread. workerCode gets
+  // { root, source, dest } as workerData; the first message it posts makes the
+  // child terminate the worker, and the child prints the worker's exit code. A
+  // native abort would kill the Jest worker, so the worker runs in a child
+  // process.
+  async function runBackupWorker(workerCode: string) {
+    sourceDb.exec(`
+      CREATE TABLE blobs (id INTEGER PRIMARY KEY, data BLOB);
+      WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000)
+      INSERT INTO blobs (id, data) SELECT i, zeroblob(4000) FROM n;
+    `);
+    const workerData = {
+      root: projectRoot(),
+      source: sourcePath,
+      dest: destPath,
+    };
+    const childScript = `
+      const { Worker } = require("node:worker_threads");
+      const worker = new Worker(${JSON.stringify(workerCode)}, {
+        eval: true,
+        workerData: ${JSON.stringify(workerData)},
+      });
+      worker.once("message", () => worker.terminate());
+      worker.once("exit", (code) => process.stdout.write(String(code)));
+    `;
+
+    const child = spawn(process.execPath, ["-e", childScript], {
+      cwd: projectRoot(),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8").on("data", (data) => (stdout += data));
+    child.stderr.setEncoding("utf8").on("data", (data) => (stderr += data));
+    const exit = await new Promise<{
+      code: number | null;
+      signal: NodeJS.Signals | null;
+    }>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code, signal) => resolve({ code, signal }));
+    });
+    return { ...exit, stdout, stderr };
+  }
+
+  it(
+    "should let a worker thread terminate mid-backup",
+    async () => {
+      // Worker teardown runs pending async work to completion with JavaScript
+      // disallowed. The backup must stop there instead of calling its progress
+      // callback or queuing another step, whose new async resource runs the
+      // async_hooks init callback.
+      const result = await runBackupWorker(`
+        const { parentPort, workerData } = require("node:worker_threads");
+        require("node:async_hooks").createHook({ init() {} }).enable();
+        const { backup, DatabaseSync } = require("node-gyp-build")(workerData.root);
+        const db = new DatabaseSync(workerData.source);
+        backup(db, workerData.dest, {
+          rate: 1,
+          progress: () => parentPort.postMessage("progress"),
+        });
+      `);
+
+      // A terminated worker exits with code 1.
+      expect(result).toEqual({
+        code: 0,
+        signal: null,
+        stdout: "1",
+        stderr: "",
+      });
     },
     getTestTimeout(30000),
   );

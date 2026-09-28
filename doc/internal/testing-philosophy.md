@@ -119,8 +119,8 @@ up until the optimizer uses the `nonnull` promise to delete a null check.
 
 ### Race detection: why there is no ThreadSanitizer job
 
-`BackupJob` (a `Napi::AsyncProgressWorker`) runs `sqlite3_backup_step` on a libuv
-worker thread while the main thread can set `shutting_down_`, so a race detector
+`BackupJob` runs each `sqlite3_backup_step` in a `BackupStep` (`Napi::AsyncWorker`)
+on a libuv worker thread while the main thread can set `shutting_down_`, so a race detector
 is genuinely applicable. We nonetheless do **not** ship a TSan job, and this is a
 considered tradeoff rather than an oversight:
 

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Changed
+
+- **`backup()` runs one step per threadpool job**: each `sqlite3_backup_step()` now returns to the main thread before the next one is queued, as in `node:sqlite`. The `progress` callback is therefore called after every step that leaves pages remaining; previously calls could be coalesced. Small `rate` values cost more: on tmpfs, a 128 MB backup took 580–690 ms at `rate: 1` (was 195–210 ms; `node:sqlite` 580–670 ms) and 132–150 ms at the default `rate: 100` (was 124–132 ms).
+
+### Fixed
+
+- **Statements starved during `backup()`**: every backup step holds the source connection's mutex, and the whole backup ran as one threadpool loop, so a synchronous statement on the same `DatabaseSync` waited for most of the backup (204 ms of a 208 ms backup of a 128 MB WAL database). It now waits for at most one step (under 1 ms at `rate: 100`).
+- **Worker terminated during `backup()`**: terminating a worker thread while it ran a backup with a `progress` callback aborted the process (`terminate called after throwing an instance of 'Napi::Error'`). The backup now stops at the next step without settling its promise, and the worker exits.
+
 ## [2.6.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.6.0) (2026-09-17)
 
 API compatible with `node:sqlite` from Node.js v26.9.0, plus the changes below that landed on `v26.x-staging` but are not yet in a Node.js release. Binding `undefined` now succeeds where it previously threw, so this is a minor release. SQLite is unchanged at 3.53.4.

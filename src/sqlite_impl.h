@@ -641,14 +641,24 @@ private:
   friend class DatabaseSync;
 };
 
-// Progress data structure for backup progress updates
-struct BackupProgress {
-  int current;
-  int total;
+// Runs one sqlite3_backup_step() for a BackupJob on the libuv threadpool.
+class BackupStep : public Napi::AsyncWorker {
+public:
+  BackupStep(Napi::Env env, BackupJob *job);
+
+  void Execute() override;
+  void OnOK() override;
+
+private:
+  BackupJob *job_;
 };
 
-// Backup job for asynchronous database backup
-class BackupJob : public Napi::AsyncProgressWorker<BackupProgress> {
+// Asynchronous database backup. Each sqlite3_backup_step() holds the source
+// connection's mutex, so the job runs one step per BackupStep and queues the
+// next step from the main thread, as node:sqlite's BackupJob does. A statement
+// on the source connection then waits for at most one step, not the whole
+// backup. The job deletes itself in Finish() once the promise settles.
+class BackupJob {
 public:
   BackupJob(Napi::Env env, DatabaseSync *source, Napi::Object source_object,
             std::string destination_path, std::string source_db,
@@ -656,20 +666,28 @@ public:
             Napi::Promise::Deferred deferred);
   ~BackupJob();
 
-  void Execute(const ExecutionProgress &progress) override;
-  void OnOK() override;
-  void OnError(const Napi::Error &error) override;
-  void OnProgress(const BackupProgress *data, size_t count) override;
-
   Napi::Promise GetPromise() { return deferred_.Promise(); }
 
-public:
+  // Queues the next step. Called by Backup() and after each step completes.
+  void QueueStep();
+
   // Cleanup is called by FinalizeBackups when database is closing
   void Cleanup();
   // Called by FinalizeBackups to prevent double-unregistration in destructor
   void ClearSource() { source_ = nullptr; }
 
 private:
+  friend class BackupStep;
+
+  // Runs on the worker thread: opens the destination on the first step, then
+  // copies up to pages_ pages.
+  void Step();
+  // Run on the main thread after each Step().
+  void OnStepComplete();
+  void ReportProgress();
+  // Settles the promise and deletes this job.
+  void Finish();
+
   DatabaseSync *source_;
   // Strong reference to the source DatabaseSync's JS object, held for the
   // lifetime of the job so the source cannot be garbage-collected (and its
@@ -685,31 +703,29 @@ private:
   std::string dest_db_;
   int pages_;
 
-  // These are only accessed in Execute() on worker thread
+  // Written by Step() on a worker thread and read on the main thread after
+  // that step completes. Only one step is queued at a time, and libuv orders
+  // each step's work before its completion callback.
   int backup_status_ = SQLITE_OK;
   sqlite3 *dest_ = nullptr;
   sqlite3_backup *backup_ = nullptr;
   int total_pages_ = 0;
+  bool first_step_ = true;
 
+  // Main thread only.
   Napi::FunctionReference progress_func_;
-  // Snapshot of "is there a progress callback?" captured at construction.
-  // Read on the worker thread to decide whether to call progress.Send(),
-  // avoiding a data race with CleanupHook's progress_func_.Reset() on the
-  // main thread. progress_func_ itself must only be touched on the main
-  // thread.
-  const bool has_progress_callback_;
   Napi::Promise::Deferred deferred_;
 
-  // Error from progress callback (set on main thread, checked in OnOK)
+  // Error from progress callback (set on main thread, checked in Finish)
   std::optional<std::string> progress_error_;
 
   // Environment cleanup hook - called before environment teardown
   static void CleanupHook(void *arg);
   napi_env env_;
 
-  // Set from CleanupHook on the main thread; observed from Execute() on the
-  // worker thread to break out of the backup loop, and from OnOK/OnError to
-  // avoid touching deferred_ once the env is going away.
+  // Set from CleanupHook on the main thread; observed from Step() on the
+  // worker thread to skip the step, and from OnStepComplete/Finish to stop
+  // queuing steps and avoid touching deferred_ once the env is going away.
   std::atomic<bool> shutting_down_{false};
 
   static std::atomic<int> active_jobs_;
