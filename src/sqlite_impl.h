@@ -671,13 +671,19 @@ public:
   // Queues the next step. Called by Backup() and after each step completes.
   void QueueStep();
 
-  // Cleanup is called by FinalizeBackups when database is closing
-  void Cleanup();
+  // Called by FinalizeBackups when the source database is closing. Waits for a
+  // running step, then finishes the backup and closes the destination so the
+  // source connection can close. A step that has not started yet does nothing,
+  // and the promise rejects when it completes.
+  void Abandon();
   // Called by FinalizeBackups to prevent double-unregistration in destructor
   void ClearSource() { source_ = nullptr; }
 
 private:
   friend class BackupStep;
+
+  // Finishes the backup and closes the destination.
+  void Cleanup();
 
   // Runs on the worker thread: opens the destination on the first step, then
   // copies up to pages_ pages.
@@ -705,12 +711,16 @@ private:
 
   // Written by Step() on a worker thread and read on the main thread after
   // that step completes. Only one step is queued at a time, and libuv orders
-  // each step's work before its completion callback.
+  // each step's work before its completion callback. Abandon() writes them on
+  // the main thread while a step may be queued or running, so both hold
+  // step_mutex_.
   int backup_status_ = SQLITE_OK;
   sqlite3 *dest_ = nullptr;
   sqlite3_backup *backup_ = nullptr;
   int total_pages_ = 0;
   bool first_step_ = true;
+  std::mutex step_mutex_;
+  bool abandoned_ = false; // Guarded by step_mutex_
 
   // Main thread only.
   Napi::FunctionReference progress_func_;

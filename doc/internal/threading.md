@@ -205,6 +205,12 @@ steps back into one worker loop:
   `OnStepComplete()` checks whether JavaScript can still run and stops instead
   of queuing another step. Creating an async resource there makes any
   `async_hooks` init callback fail as a fatal exception.
+- `close()` releases the backup through `Abandon()`, which takes the lock that
+  `Step()` holds for a whole step. It waits for a running step (which also
+  holds the source connection's mutex, so `close()` waited for it anyway), and
+  a step that runs afterwards returns without touching SQLite. Without the
+  lock, a step used a `sqlite3_backup` that `close()` had finished, or attached
+  to a source connection that `close()` had freed.
 
 ### Why detached threads are problematic
 

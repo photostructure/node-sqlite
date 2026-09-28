@@ -2186,7 +2186,7 @@ void DatabaseSync::FinalizeBackups() {
   // RemoveBackup (the set is already empty anyway)
   for (auto *backup : backups_copy) {
     backup->ClearSource(); // Prevent RemoveBackup call in destructor
-    backup->Cleanup();
+    backup->Abandon();
   }
 }
 
@@ -4433,8 +4433,8 @@ BackupJob::BackupJob(Napi::Env env, DatabaseSync *source,
       // captured below) alive for the whole backup, even if the caller drops
       // its last JS reference and the GC runs mid-backup.
       source_ref_(Napi::Persistent(source_object)),
-      // Capture connection pointer now while we know it's valid
-      // This prevents use-after-free if database is closed during backup
+      // Step() reads this on a worker thread. It stays valid there because
+      // closing the source runs Abandon(), which stops further steps first.
       source_connection_(source->connection()),
       destination_path_(std::move(destination_path)),
       source_db_(std::move(source_db)), dest_db_(std::move(dest_db)),
@@ -4485,6 +4485,13 @@ void BackupJob::Step() {
     return;
   }
 
+  // Held for the whole step so Abandon() cannot release backup_ and dest_, or
+  // let the source connection close, while this step uses them.
+  std::lock_guard<std::mutex> lock(step_mutex_);
+  if (abandoned_) {
+    return;
+  }
+
   if (first_step_) {
     backup_status_ = sqlite3_open_v2(
         destination_path_.c_str(), &dest_,
@@ -4496,7 +4503,6 @@ void BackupJob::Step() {
     }
 
     // Initialize backup using the connection pointer captured at construction
-    // This prevents use-after-free if database is closed during backup
     backup_ = sqlite3_backup_init(dest_, dest_db_.c_str(), source_connection_,
                                   source_db_.c_str());
 
@@ -4537,8 +4543,7 @@ void BackupJob::OnStepComplete() {
     shutting_down_.store(true, std::memory_order_release);
   }
   // Queue another step unless the backup is done or failed, the env is
-  // shutting down, or the source was closed (FinalizeBackups already ran
-  // Cleanup(), which nulls backup_).
+  // shutting down, or the source was closed (Abandon() nulls backup_).
   if (backup_ != nullptr && !shutting_down_.load(std::memory_order_acquire)) {
     if (backup_status_ == SQLITE_OK) {
       ReportProgress();
@@ -4675,6 +4680,12 @@ void BackupJob::Finish() {
     }
   }
   delete this;
+}
+
+void BackupJob::Abandon() {
+  std::lock_guard<std::mutex> lock(step_mutex_);
+  abandoned_ = true;
+  Cleanup();
 }
 
 void BackupJob::Cleanup() {

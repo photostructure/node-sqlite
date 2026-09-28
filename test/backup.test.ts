@@ -966,6 +966,50 @@ describe("Backup functionality", () => {
     },
     getTestTimeout(30000),
   );
+
+  it(
+    "should reject a backup whose source is closed mid-backup",
+    async () => {
+      // close() releases the backup from the main thread. Close before the
+      // first step has attached the backup to the source (synchronously), while
+      // the first step runs on a worker thread (setImmediate), while a later
+      // step runs (setImmediate from the first progress callback), and from the
+      // progress callback, when no step is in flight.
+      sourceDb.exec(`
+        CREATE TABLE blobs (id INTEGER PRIMARY KEY, data BLOB);
+        WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000)
+        INSERT INTO blobs (id, data) SELECT i, zeroblob(4000) FROM n;
+      `);
+      const modes = ["sync", "immediate", "laterStep", "progress"] as const;
+      for (let i = 0; i < 40; i++) {
+        const mode = modes[i % modes.length];
+        const db = new DatabaseSync(sourcePath);
+        testDatabases.add(db);
+        let progressCalls = 0;
+        const result = backup(db, getDbPath(`closed-mid-backup-${i}.db`), {
+          rate: 1,
+          progress: () => {
+            progressCalls++;
+            if (mode === "laterStep" && progressCalls === 1) {
+              setImmediate(() => db.close());
+            } else if (mode === "progress" && db.isOpen) {
+              db.close();
+            }
+          },
+        });
+        if (mode === "sync") {
+          db.close();
+        } else if (mode === "immediate") {
+          setImmediate(() => db.close());
+        }
+        await expect(result).rejects.toMatchObject({
+          code: "ERR_SQLITE_ERROR",
+          errcode: 1,
+        });
+      }
+    },
+    getTestTimeout(30000),
+  );
 });
 
 /**
