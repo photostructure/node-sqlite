@@ -330,6 +330,21 @@ test("throws if URL is not file: scheme", (t) => {
   );
 });
 
+test("throws if the URL-like path has an unparsable href", (t) => {
+  const database = new DatabaseSync(":memory:");
+
+  t.after(() => {
+    database.close();
+  });
+
+  t.assert.throws(
+    () => {
+      backup(database, { href: "not a url" });
+    },
+    { code: "ERR_INVALID_URL" },
+  );
+});
+
 test(
   "database backup fails when dest file is not writable",
   { skip: isRoot },
