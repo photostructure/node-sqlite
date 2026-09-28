@@ -429,7 +429,7 @@ test("rejects SQL that contains no statements", () => {
   );
 });
 
-test.skip("a tag store keeps the database alive by itself" /* Requires --expose-gc flag */, () => {
+test("a tag store keeps the database alive by itself", () => {
   const sql = new DatabaseSync(":memory:").createTagStore();
 
   sql.db.exec("CREATE TABLE test (data INTEGER)");
@@ -440,7 +440,7 @@ test.skip("a tag store keeps the database alive by itself" /* Requires --expose-
   sql.run`INSERT INTO test (data) VALUES (1)`;
 });
 
-test.skip("tag store prevents circular reference leaks" /* Requires --expose-gc flag and Node.js internal GC test utilities */, async () => {
+test("tag store prevents circular reference leaks", async () => {
   const { gcUntil } = require("../common/test-utils.cjs");
   const before = process.memoryUsage().heapUsed;
 

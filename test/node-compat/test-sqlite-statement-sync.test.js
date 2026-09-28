@@ -300,7 +300,7 @@ suite("StatementSync.prototype.iterate()", () => {
     ]);
   });
 
-  test.skip("iterator keeps the prepared statement from being collected" /* Requires --expose-gc flag */, (t) => {
+  test("iterator keeps the prepared statement from being collected", (t) => {
     const db = new DatabaseSync(":memory:");
     db.exec(`
       CREATE TABLE test(key TEXT, val TEXT);

@@ -34,6 +34,11 @@ const skipFiles = new Set([
 
   // Tests webstorage behavior when sqlite is unavailable - not relevant for us
   "test-webstorage-without-sqlite.js",
+
+  // Tests DatabaseSync.prototype.createModule() (virtual tables), which
+  // Node.js added on v26.x-staging and we have not ported yet. Remove this
+  // entry once createModule() is implemented.
+  "test-sqlite-virtual-table.js",
 ]);
 
 // Individual tests within files that cannot pass in our standalone package.
@@ -50,10 +55,14 @@ const skipTests: Record<string, Array<{ name: string; reason: string }>> = {
       reason: "Tests Node.js CLI flag",
     },
   ],
-  "test-sqlite-statement-sync.js": [
+  "test-sqlite-options-getter-reentry.js": [
     {
-      name: "iterator keeps the prepared statement from being collected",
-      reason: "Requires --expose-gc flag",
+      name: "createModule() throws instead of using a closed connection",
+      reason: "createModule() is not ported yet",
+    },
+    {
+      name: "createModule() throws when a column getter closes the database",
+      reason: "createModule() is not ported yet",
     },
   ],
   "test-sqlite-session.js": [
@@ -70,17 +79,6 @@ const skipTests: Record<string, Array<{ name: string; reason: string }>> = {
         "finalization corrupts V8 JIT pages on Alpine/musl (SIGSEGV). We " +
         "detach instead, so an orphaned session reports 'database is not " +
         "open'. Also needs Node's internal ../common/gc helper.",
-    },
-  ],
-  "test-sqlite-template-tag.js": [
-    {
-      name: "a tag store keeps the database alive by itself",
-      reason: "Requires --expose-gc flag",
-    },
-    {
-      name: "tag store prevents circular reference leaks",
-      reason:
-        "Requires --expose-gc flag and Node.js internal GC test utilities",
     },
   ],
 };
