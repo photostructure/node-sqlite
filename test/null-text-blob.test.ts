@@ -112,6 +112,33 @@ describe("NULL and Zero-Length TEXT/BLOB Handling", () => {
       }
       expect(values).toEqual(["a\0b"]);
     });
+
+    // Binding and callback arguments used NUL-terminated conversions, so
+    // "a\0b" was stored as "a" and user functions received "a".
+    test("binds a string with embedded NUL in full", () => {
+      db.exec("CREATE TABLE test (value TEXT)");
+      db.prepare("INSERT INTO test VALUES (?)").run("a\0b");
+      const row = db.prepare("SELECT hex(value) AS hex, value FROM test").get();
+      expect(row.hex).toBe("610062");
+      expect(row.value).toBe("a\0b");
+    });
+
+    test("passes embedded NUL to user-defined functions", () => {
+      db.function("len", (value: string) => value.length);
+      const row = db.prepare(`SELECT len(CAST(X'610062' AS TEXT)) AS n`).get();
+      expect(row.n).toBe(3);
+    });
+
+    test("passes embedded NUL to aggregate step functions", () => {
+      db.aggregate("total_len", {
+        start: 0,
+        step: (total: number, value: string) => total + value.length,
+      });
+      const row = db
+        .prepare(`SELECT total_len(CAST(X'610062' AS TEXT)) AS n`)
+        .get();
+      expect(row.n).toBe(3);
+    });
   });
 
   describe("BLOB column NULL handling", () => {

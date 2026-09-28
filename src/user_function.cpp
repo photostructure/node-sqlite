@@ -184,7 +184,11 @@ Napi::Value UserDefinedFunction::SqliteValueToJS(sqlite3_value *value) {
   case SQLITE_TEXT: {
     const char *text =
         reinterpret_cast<const char *>(sqlite3_value_text(value));
-    return Napi::String::New(env_, text ? text : "");
+    if (!text) {
+      return Napi::String::New(env_, "");
+    }
+    // Pass the byte length, as node:sqlite does: text can contain NUL bytes.
+    return Napi::String::New(env_, text, sqlite3_value_bytes(value));
   }
 
   case SQLITE_BLOB: {

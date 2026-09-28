@@ -3630,8 +3630,10 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
                                param.As<Napi::Number>().DoubleValue());
     } else if (param.IsString()) {
       std::string str = param.As<Napi::String>().Utf8Value();
-      rc = sqlite3_bind_text(statement_, param_index, str.c_str(), -1,
-                             SQLITE_TRANSIENT);
+      // Pass the byte length, as node:sqlite does: with -1, SQLite stops at
+      // the first NUL byte and binds only the text before it.
+      rc = sqlite3_bind_text64(statement_, param_index, str.data(), str.size(),
+                               SQLITE_TRANSIENT, SQLITE_UTF8);
     } else if (param.IsBoolean()) {
       rc = sqlite3_bind_int(statement_, param_index,
                             param.As<Napi::Boolean>().Value() ? 1 : 0);
