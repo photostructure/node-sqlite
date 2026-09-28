@@ -235,6 +235,18 @@ describe("Aggregate Functions Tests", () => {
       );
     });
 
+    test("a DataView accumulator keeps its bytes", () => {
+      // N-API's IsBuffer() is true for a DataView, and reading one as a Buffer
+      // threw a C++ exception ("Invalid argument") out of SQLite's step
+      // callback.
+      db.aggregate("bytes", {
+        start: new DataView(Uint8Array.of(1, 2, 3).buffer),
+        step: (acc: unknown) => acc,
+      });
+      const row = db.prepare("SELECT hex(bytes()) AS hex FROM test_data").get();
+      expect(row.hex).toBe("010203");
+    });
+
     test("a 4095-byte string fits", () => {
       db.aggregate("longest", { start: "", step: () => "x".repeat(4095) });
       const row = db.prepare("SELECT longest() AS value FROM test_data").get();

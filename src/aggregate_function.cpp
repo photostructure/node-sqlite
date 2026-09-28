@@ -367,7 +367,9 @@ bool CustomAggregate::StoreValue(Napi::Env env, AggregateValue *state,
       return false;
     }
     state->type = type;
-    memcpy(state->string_buffer, data, size);
+    if (size > 0) {
+      memcpy(state->string_buffer, data, size);
+    }
     state->string_buffer[size] = '\0';
     state->string_length = size;
     return true;
@@ -394,6 +396,15 @@ bool CustomAggregate::StoreValue(Napi::Env env, AggregateValue *state,
   } else if (value.IsBoolean()) {
     state->type = AggregateValue::BOOLEAN;
     state->bool_value = value.As<Napi::Boolean>().Value();
+  } else if (value.IsDataView()) {
+    // Before IsBuffer(): N-API's IsBuffer() is true for any ArrayBufferView,
+    // and reading a DataView as a Buffer throws.
+    Napi::DataView view = value.As<Napi::DataView>();
+    return store_bytes(
+        AggregateValue::BUFFER, "DataView",
+        static_cast<const uint8_t *>(view.ArrayBuffer().Data()) +
+            view.ByteOffset(),
+        view.ByteLength());
   } else if (value.IsBuffer()) {
     Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
     return store_bytes(AggregateValue::BUFFER, "Buffer", buffer.Data(),
