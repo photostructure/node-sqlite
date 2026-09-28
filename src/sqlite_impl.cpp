@@ -3929,6 +3929,9 @@ Napi::Object StatementSyncIterator::Init(Napi::Env env, Napi::Object exports) {
   if (addon_data) {
     addon_data->statementSyncIteratorConstructor =
         Napi::Reference<Napi::Function>::New(func);
+    addon_data->statementSyncIteratorStatementKey =
+        Napi::Reference<Napi::Value>::New(
+            Napi::Symbol::New(env, "StatementSyncIterator statement"), 1);
   }
 
   exports.Set("StatementSyncIterator", func);
@@ -3943,6 +3946,13 @@ Napi::Object StatementSyncIterator::Create(Napi::Env env, StatementSync *stmt) {
     return Napi::Object::New(env);
   }
   Napi::Object obj = addon_data->statementSyncIteratorConstructor.New({});
+  // Keep the statement's JS object alive for as long as the iterator is, as
+  // node:sqlite's BaseObjectPtr<StatementSync> does; otherwise the statement
+  // can be collected and stmt_ dangles. A Napi::Reference member would be
+  // released during GC finalization, which crashes on Alpine/musl (4da0638).
+  obj.DefineProperty(Napi::PropertyDescriptor::Value(
+      addon_data->statementSyncIteratorStatementKey.Value().As<Napi::Symbol>(),
+      stmt->Value(), napi_default));
   StatementSyncIterator *iter =
       Napi::ObjectWrap<StatementSyncIterator>::Unwrap(obj);
   iter->SetStatement(stmt);

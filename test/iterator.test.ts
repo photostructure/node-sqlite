@@ -164,4 +164,32 @@ describe("Statement Iterator Tests", () => {
 
     expect(results).toEqual([{ value: 100 }, { value: 200 }, { value: 300 }]);
   });
+
+  test("iterator keeps its statement alive after the caller drops it", async () => {
+    // The iterator used to hold only a raw StatementSync pointer, so once the
+    // statement was collected, next() read freed memory and could segfault.
+    // node:sqlite's iterator holds a strong reference to its statement.
+    expect(typeof global.gc).toBe("function");
+    const collected = new Set<string>();
+    const registry = new FinalizationRegistry<string>((name) =>
+      collected.add(name),
+    );
+
+    const iterator = (() => {
+      const stmt = db.prepare("SELECT name FROM test_data ORDER BY id");
+      registry.register(stmt, "iterated");
+      registry.register(db.prepare("SELECT 1"), "control");
+      return stmt.iterate();
+    })();
+    expect(iterator.next().value).toEqual({ name: "alice" });
+
+    // The unreferenced control statement being collected shows that a full GC
+    // and its finalizers have run.
+    while (!collected.has("control")) {
+      global.gc!();
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    expect(collected.has("iterated")).toBe(false);
+    expect([...iterator]).toEqual([{ name: "bob" }, { name: "charlie" }]);
+  });
 });

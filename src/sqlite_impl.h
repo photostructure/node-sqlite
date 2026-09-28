@@ -47,6 +47,8 @@ struct AddonData {
   Napi::FunctionReference databaseSyncConstructor;
   Napi::FunctionReference statementSyncConstructor;
   Napi::FunctionReference statementSyncIteratorConstructor;
+  // Symbol key under which each iterator holds its statement's JS object.
+  Napi::Reference<Napi::Value> statementSyncIteratorStatementKey;
   Napi::FunctionReference sessionConstructor;
   Napi::FunctionReference asyncPoolConnectionConstructor;
   Napi::Reference<Napi::Value> asyncPoolConnectionToken;
