@@ -152,24 +152,27 @@ for lib in "${ASAN_CANDIDATES[@]}"; do
     echo -e "${YELLOW}  unusable (hung during leak check) -- trying next${NC}"
 done
 
-# UBSan ships as its own runtime. The addon is compiled -fsanitize=undefined
-# with -fno-sanitize-recover, so it references the *_abort handlers; without a
-# matching libubsan every test suite dies at load with
-# "undefined symbol: __ubsan_handle_type_mismatch_v1_abort". Pick the one that
-# goes with whichever ASan runtime won the probe above.
+# The addon is compiled -fsanitize=undefined with -fno-sanitize-recover, so it
+# references UBSan's *_abort handlers; if no preloaded runtime defines them,
+# every test suite dies at load with
+# "undefined symbol: __ubsan_handle_type_mismatch_v1_abort".
+#
+# clang's ASan runtime defines them itself: for -fsanitize=address,undefined
+# clang's driver links only that runtime. Preloading
+# libclang_rt.ubsan_standalone next to it (a pairing clang never links) hangs
+# node at startup, before any JavaScript runs, with clang 21. GCC's libasan does
+# not define them, so it needs its libubsan alongside. Add a separate UBSan
+# runtime only when the ASan runtime that won the probe lacks the handlers.
+# (grep output goes to /dev/null rather than -q: under pipefail, -q's early
+# exit can SIGPIPE nm and fail the pipeline.)
 UBSAN_RUNTIME=""
-case "$ASAN_RUNTIME" in
-    *libclang_rt.asan*)
-        cand=$(clang -print-file-name=libclang_rt.ubsan_standalone-x86_64.so 2>/dev/null || echo "")
-        [[ -n "$cand" && "$cand" != *"not found"* && -f "$cand" ]] && UBSAN_RUNTIME="$cand"
-        ;;
-    ?*)
-        for cand in "${ASAN_RUNTIME%/*}"/libubsan.so.{1,0} \
-                    /usr/lib/x86_64-linux-gnu/libubsan.so.1 /usr/lib64/libubsan.so.1; do
-            [[ -f "$cand" ]] && { UBSAN_RUNTIME="$cand"; break; }
-        done
-        ;;
-esac
+if [[ -n "$ASAN_RUNTIME" ]] &&
+    ! nm -D --defined-only "$ASAN_RUNTIME" | grep -w __ubsan_handle_type_mismatch_v1_abort >/dev/null; then
+    for cand in "${ASAN_RUNTIME%/*}"/libubsan.so.{1,0} \
+                /usr/lib/x86_64-linux-gnu/libubsan.so.1 /usr/lib64/libubsan.so.1; do
+        [[ -f "$cand" ]] && { UBSAN_RUNTIME="$cand"; break; }
+    done
+fi
 
 SAN_PRELOAD="$ASAN_RUNTIME"
 if [[ -n "$UBSAN_RUNTIME" ]]; then
