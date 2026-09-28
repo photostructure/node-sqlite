@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
+import { createHook } from "node:async_hooks";
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -1006,6 +1007,49 @@ describe("Backup functionality", () => {
           code: "ERR_SQLITE_ERROR",
           errcode: 1,
         });
+      }
+    },
+    getTestTimeout(30000),
+  );
+
+  it(
+    "should reject a backup whose source is closed while it waits on a locked destination",
+    async () => {
+      // Another connection holds the destination with BEGIN EXCLUSIVE, so every
+      // step returns SQLITE_BUSY and the backup retries. Closing the source
+      // there crashed 2.6.0, which retried in a loop on the worker thread. Each
+      // step is a new async resource of type "BackupStep", so a second one means
+      // the first step has returned SQLITE_BUSY.
+      let steps = 0;
+      const hook = createHook({
+        init(_asyncId, type) {
+          if (type === "BackupStep") steps++;
+        },
+      }).enable();
+      try {
+        for (let i = 0; i < 10; i++) {
+          const destination = getDbPath(`locked-destination-${i}.db`);
+          const holder = new DatabaseSync(destination);
+          testDatabases.add(holder);
+          holder.exec(
+            "CREATE TABLE x (a); BEGIN EXCLUSIVE; INSERT INTO x VALUES (1);",
+          );
+          const db = new DatabaseSync(sourcePath);
+          testDatabases.add(db);
+          steps = 0;
+          const result = backup(db, destination, { rate: 1 });
+          while (steps < 2) {
+            await new Promise((resolve) => setImmediate(resolve));
+          }
+          db.close();
+          await expect(result).rejects.toMatchObject({
+            code: "ERR_SQLITE_ERROR",
+            errcode: 5,
+          });
+          holder.exec("ROLLBACK");
+        }
+      } finally {
+        hook.disable();
       }
     },
     getTestTimeout(30000),
