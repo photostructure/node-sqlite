@@ -2,11 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [2.7.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.7.0) (2026-09-27)
 
 ### Changed
 
 - **`backup()` runs one step per threadpool job**: each `sqlite3_backup_step()` now returns to the main thread before the next one is queued, as in `node:sqlite`. The `progress` callback is therefore called after every step that leaves pages remaining; previously calls could be coalesced. Small `rate` values cost more: on tmpfs, a 128 MB backup took 580–690 ms at `rate: 1` (was 195–210 ms; `node:sqlite` 580–670 ms) and 132–150 ms at the default `rate: 100` (was 124–132 ms).
+- **Strings with NUL bytes are no longer truncated**: binding `"a\0b"` stored `"a"`, and user-defined and aggregate functions received only the text before the first NUL byte of a TEXT argument. Both now use the full string, as `node:sqlite` and `DatabasePool` already did. Queries that bound such strings now store and match different values.
+- **INT64_MIN passed to a function throws `ERR_OUT_OF_RANGE`**: a user-defined or aggregate function without `useBigIntArguments` received -9223372036854775808 as the imprecise Number -9223372036854776000, because the range check used `std::abs()`, which is undefined for that value. It now throws like every other integer outside the safe range, as in `node:sqlite`.
+- **Aggregate values that do not fit the stored state throw `ERR_OUT_OF_RANGE`**: between steps, an aggregate's accumulator is stored in a 4096-byte buffer, and a BigInt as int64. A string or Buffer over 4095 bytes used to be truncated, an object or array whose JSON reached 4095 bytes was replaced with `{"_truncated":true}`, and a BigInt outside the int64 range wrapped (`2n ** 64n + 5n` became `5n`), all without an error. A `start` or `step` value that does not fit now throws, and `aggregate()` throws for such a BigInt `start`. `node:sqlite` keeps the JavaScript value itself and has neither limit.
 
 ### Fixed
 
@@ -14,6 +17,9 @@ All notable changes to this project will be documented in this file.
 - **Worker terminated during `backup()`**: terminating a worker thread while it ran a backup with a `progress` callback aborted the process (`terminate called after throwing an instance of 'Napi::Error'`). The backup now stops at the next step without settling its promise, and the worker exits.
 - **`process.exit()` in a worker's backup progress callback**: aborted the process with `FATAL ERROR: Error::Error napi_define_properties`, because node-addon-api's conversion of the termination exception into a `Napi::Error` is fatal when JavaScript can no longer run. The worker now exits with the requested code. Rejection messages for a throwing `progress` callback are unchanged.
 - **`close()` during `backup()`**: closing the source database freed the SQLite backup handle while a backup step was using it on a worker thread, and before the first step it freed the source connection that step was about to attach to (heap use-after-free, confirmed with AddressSanitizer; present in 2.6.0). `close()` now waits for a running step to finish, and a step that has not started does nothing. The promise rejects with `ERR_SQLITE_ERROR`: errcode 1 (`SQL logic error`), or errcode 5 (`database is locked`) if the backup was waiting on a lock when `close()` was called.
+- **Iterator used after its statement was collected**: `iterate()` returned an iterator that did not keep its statement alive, so an iterator over a statement the caller no longer referenced (for example `Readable.from(db.prepare(sql).iterate())`) could segfault or return rows from a different statement once the statement was garbage-collected. The iterator now holds its statement, as in `node:sqlite`.
+- **`expand()` wrote columns onto `Object.prototype`**: with `enhance()`, a query whose columns came from a table named `__proto__` (directly or through a view) set those columns on `Object.prototype` for the whole process, and a table named `constructor` set them on `Object`. Anyone who controls the schema of a database the application reads with `.expand()` could set properties on every object. Such tables now appear as ordinary own properties of the row.
+- **Aggregate errors lost with an object or Buffer accumulator**: when a `step` function threw, or an argument could not be converted, in an aggregate whose accumulator was an object, array, or Buffer, `get()` returned `undefined` instead of throwing. SQLite finalizes the aggregate after the failed step, and rebuilding the accumulator there cleared the pending error. The error now reaches the caller.
 
 ## [2.6.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.6.0) (2026-09-17)
 
