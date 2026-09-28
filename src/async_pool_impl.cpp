@@ -379,6 +379,14 @@ bool CopyViewBytes(Napi::Value value, Blob *out) {
   return false;
 }
 
+// A request that fails to parse describes the caller's arguments, so its
+// error carries the code the TypeScript layer uses for the same checks.
+Napi::TypeError InvalidArgTypeError(Napi::Env env, const std::string &message) {
+  Napi::TypeError error = Napi::TypeError::New(env, message);
+  error.Set("code", Napi::String::New(env, "ERR_INVALID_ARG_TYPE"));
+  return error;
+}
+
 bool ParseValue(Napi::Env env, Napi::Value value, NativeValue *out,
                 std::string *message) {
   if (value.IsNull()) {
@@ -1739,13 +1747,13 @@ Napi::Value AsyncPoolConnection::Execute(const Napi::CallbackInfo &info) {
   for (uint32_t index = 0; index < operations.Length(); ++index) {
     NativeOperation operation;
     if (!ParseOperation(env, operations.Get(index), &operation, &message)) {
-      throw Napi::TypeError::New(env, message);
+      throw InvalidArgTypeError(env, message);
     }
     request.operations.push_back(std::move(operation));
   }
   request.transaction = ParseTransaction(object.Get("transaction"), &message);
   if (!message.empty()) {
-    throw Napi::TypeError::New(env, message);
+    throw InvalidArgTypeError(env, message);
   }
 
   Napi::Promise::Deferred deferred = Napi::Promise::Deferred::New(env);
@@ -1833,7 +1841,7 @@ bool ParseOpenConfiguration(Napi::Env env, Napi::Value location_value,
   for (uint32_t index = 0; index < setup.Length(); ++index) {
     NativeOperation operation;
     if (!ParseOperation(env, setup.Get(index), &operation, &message)) {
-      throw Napi::TypeError::New(env, message);
+      throw InvalidArgTypeError(env, message);
     }
     operation.kind = OperationKind::kRun;
     configuration->setup.push_back(std::move(operation));

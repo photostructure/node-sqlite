@@ -145,6 +145,23 @@ describe("DatabasePool values and rows", () => {
     },
   );
 
+  test("rejects a named value the native layer cannot read with ERR_INVALID_ARG_TYPE", async () => {
+    // The JavaScript checks accept ":t\0x", but the native layer reads the key
+    // as the C string ":t", finds no value, and threw a TypeError without a
+    // code.
+    const pool = await DatabasePool.open(":memory:", { authorizer: "none" });
+    try {
+      await expect(
+        pool.get("SELECT :t AS value", { ":t\0x": "value" }),
+      ).rejects.toMatchObject({
+        name: "TypeError",
+        code: "ERR_INVALID_ARG_TYPE",
+      });
+    } finally {
+      await pool.close();
+    }
+  });
+
   test("accepts bare and prefixed names and rejects conflicts and unknown names", async () => {
     const pool = await DatabasePool.open(":memory:", { authorizer: "none" });
     try {
