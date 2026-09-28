@@ -940,6 +940,32 @@ describe("Backup functionality", () => {
     },
     getTestTimeout(30000),
   );
+
+  it(
+    "should let a worker thread exit from a backup progress callback",
+    async () => {
+      // process.exit() in a worker terminates JavaScript while the progress
+      // callback runs, so the call fails with a termination exception that is
+      // not an object.
+      const result = await runBackupWorker(`
+        const { workerData } = require("node:worker_threads");
+        const { backup, DatabaseSync } = require("node-gyp-build")(workerData.root);
+        const db = new DatabaseSync(workerData.source);
+        backup(db, workerData.dest, {
+          rate: 1,
+          progress: () => process.exit(0),
+        });
+      `);
+
+      expect(result).toEqual({
+        code: 0,
+        signal: null,
+        stdout: "0",
+        stderr: "",
+      });
+    },
+    getTestTimeout(30000),
+  );
 });
 
 /**

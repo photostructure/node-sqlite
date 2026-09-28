@@ -4556,6 +4556,23 @@ void BackupJob::OnStepComplete() {
   Finish();
 }
 
+// Clears the exception the progress callback threw and returns its message.
+// Only an object or function goes through Napi::Error: its constructor wraps
+// any other value in a new object via napi_define_properties and aborts the
+// process if that fails, which it does for the termination exception that
+// process.exit() in a worker leaves behind. Napi::Error::Message() is empty
+// for such values anyway.
+static std::string TakeProgressErrorMessage(napi_env env) {
+  napi_value exception;
+  napi_valuetype type;
+  if (napi_get_and_clear_last_exception(env, &exception) != napi_ok ||
+      napi_typeof(env, exception, &type) != napi_ok ||
+      (type != napi_object && type != napi_function)) {
+    return "";
+  }
+  return Napi::Error(env, exception).Message();
+}
+
 void BackupJob::ReportProgress() {
   // Node.js only calls progress when there are still pages remaining. Once the
   // callback throws, stop calling it; Finish rejects with its error.
@@ -4572,9 +4589,19 @@ void BackupJob::ReportProgress() {
     progress_info.Set("totalPages", Napi::Number::New(env, total_pages_));
     progress_info.Set("remainingPages",
                       Napi::Number::New(env, remaining_pages));
-    progress_func_.Value().Call(env.Null(), {progress_info});
+    // Not Napi::Function::Call(): when the callback throws, it converts the
+    // exception with Napi::Error::New(env), which aborts the process for the
+    // termination exception left by process.exit() in a worker (see
+    // TakeProgressErrorMessage).
+    napi_value argv[] = {progress_info};
+    napi_value result;
+    if (napi_call_function(env, env.Null(), progress_func_.Value(), 1, argv,
+                           &result) != napi_ok) {
+      // Capture error from progress callback - backup should fail with this
+      progress_error_ = TakeProgressErrorMessage(env);
+    }
   } catch (const Napi::Error &e) {
-    // Capture error from progress callback - backup should fail with this
+    // Building the progress object failed
     progress_error_ = e.Message();
   } catch (...) {
     // Unknown error

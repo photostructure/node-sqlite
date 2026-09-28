@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 
 - **Statements starved during `backup()`**: every backup step holds the source connection's mutex, and the whole backup ran as one threadpool loop, so a synchronous statement on the same `DatabaseSync` waited for most of the backup (204 ms of a 208 ms backup of a 128 MB WAL database). It now waits for at most one step (under 1 ms at `rate: 100`).
 - **Worker terminated during `backup()`**: terminating a worker thread while it ran a backup with a `progress` callback aborted the process (`terminate called after throwing an instance of 'Napi::Error'`). The backup now stops at the next step without settling its promise, and the worker exits.
+- **`process.exit()` in a worker's backup progress callback**: aborted the process with `FATAL ERROR: Error::Error napi_define_properties`, because node-addon-api's conversion of the termination exception into a `Napi::Error` is fatal when JavaScript can no longer run. The worker now exits with the requested code. Rejection messages for a throwing `progress` callback are unchanged.
 
 ## [2.6.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.6.0) (2026-09-17)
 
