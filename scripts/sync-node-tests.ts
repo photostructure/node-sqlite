@@ -25,6 +25,7 @@ import {
   toTestFileName,
 } from "./adapt-node-test";
 import { githubFetch } from "./github-api";
+import { assertCommitSha, assertRelativeTreePath } from "./github-response";
 import { resolveLatestStagingBranch } from "./sync-from-node";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -80,7 +81,7 @@ async function discoverUpstreamFiles(
   // Filter for SQLite-related test files in test/parallel/
   const sqliteTests = tree.tree
     .filter((f) => f.type === "blob" && f.path.startsWith("test/parallel/"))
-    .map((f) => f.path.replace("test/parallel/", ""))
+    .map((f) => assertRelativeTreePath(f.path.replace("test/parallel/", "")))
     .filter(
       (name) =>
         name.includes("-sqlite") &&
@@ -92,7 +93,9 @@ async function discoverUpstreamFiles(
     .filter(
       (f) => f.type === "blob" && f.path.startsWith("test/fixtures/sqlite/"),
     )
-    .map((f) => f.path.replace("test/fixtures/sqlite/", ""))
+    .map((f) =>
+      assertRelativeTreePath(f.path.replace("test/fixtures/sqlite/", "")),
+    )
     .sort();
 
   console.log(
@@ -267,15 +270,17 @@ async function main() {
 
   console.log(`Syncing Node.js SQLite tests from ${args.repo}@${branch}`);
 
-  let sha: string | null = null;
+  const commitUrl = `https://api.github.com/repos/${args.repo}/commits/${branch}`;
+  let commit: { sha: unknown } | null = null;
   try {
-    const res = await githubFetch(
-      `https://api.github.com/repos/${args.repo}/commits/${branch}`,
-    );
-    if (res.ok) sha = ((await res.json()) as any).sha;
+    const res = await githubFetch(commitUrl);
+    if (res.ok) commit = (await res.json()) as { sha: unknown };
   } catch {
     // API error - proceed without SHA
   }
+  // Checked outside the try: a malformed SHA is a bad response, not an API
+  // outage, so it stops the sync instead of falling back to the branch name.
+  const sha = commit ? assertCommitSha(commit.sha, commitUrl) : null;
 
   if (sha && shouldSkipSync(args.repo, branch, sha, args.force)) {
     console.log("✅ Already up to date");

@@ -26,6 +26,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { githubFetch } from "./github-api";
+import { assertCommitSha } from "./github-response";
 
 const execAsync = promisify(exec);
 
@@ -395,19 +396,27 @@ async function main() {
   let successCount = 0;
   const totalCount = filesToSync.length;
   let nodeVersion: string | null = null;
-  let nodeCommitSha: string | null = null;
 
-  // Fetch Node.js version and commit info
+  // Get commit SHA using authenticated fetch
+  const commitUrl = `https://api.github.com/repos/${args.repo}/commits/${branch}`;
+  let commitData: { sha: unknown } | null = null;
   try {
-    // Get commit SHA using authenticated fetch
-    const commitUrl = `https://api.github.com/repos/${args.repo}/commits/${branch}`;
     const commitResponse = await githubFetch(commitUrl);
-
     if (commitResponse.ok) {
-      const commitData = (await commitResponse.json()) as any;
-      nodeCommitSha = commitData.sha; // Full SHA for file fetching
+      commitData = (await commitResponse.json()) as { sha: unknown };
     }
+  } catch (err: any) {
+    console.log(`Warning: Could not fetch Node.js commit info: ${err.message}`);
+  }
+  // Full SHA for file fetching. Checked outside the try: a malformed SHA is a
+  // bad response, not an API outage, and its prefix reaches the `npm pkg set`
+  // shell command below.
+  const nodeCommitSha = commitData
+    ? assertCommitSha(commitData.sha, commitUrl)
+    : null;
 
+  // Fetch Node.js version info
+  try {
     // Only parse node_version.h for release tags (e.g., v25.8.1), not staging
     // branches — staging branches have version numbers bumped ahead of the
     // actual release, so the parsed version would be misleading.
