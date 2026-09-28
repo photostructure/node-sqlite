@@ -438,6 +438,37 @@ describe("expand() Tests", () => {
     });
   });
 
+  describe("table names that are Object.prototype properties", () => {
+    // A table named "__proto__" or "constructor" (also behind a view, since
+    // columns() reports the origin table) used to make expand() write that
+    // table's columns onto Object.prototype or Object: `result[table] ??= {}`
+    // found the inherited value instead of creating an own property.
+    test("expand() stores them as own properties", () => {
+      db.exec(`
+        CREATE TABLE "__proto__" (polluted TEXT);
+        INSERT INTO "__proto__" VALUES ('yes');
+        CREATE TABLE "constructor" (ctorProp TEXT);
+        INSERT INTO "constructor" VALUES ('c');
+      `);
+      try {
+        const row = db
+          .prepare(
+            `SELECT p.polluted, c.ctorProp FROM "__proto__" p, "constructor" c`,
+          )
+          .expand()
+          .get() as Record<string, unknown>;
+        expect(Object.keys(row)).toEqual(["__proto__", "constructor"]);
+        expect(row["__proto__"]).toEqual({ polluted: "yes" });
+        expect(row["constructor"]).toEqual({ ctorProp: "c" });
+        expect(Object.prototype).not.toHaveProperty("polluted");
+        expect(Object).not.toHaveProperty("ctorProp");
+      } finally {
+        delete (Object.prototype as Record<string, unknown>)["polluted"];
+        delete (Object as unknown as Record<string, unknown>)["ctorProp"];
+      }
+    });
+  });
+
   describe("duplicate column names", () => {
     // This is the canonical case expand mode exists to handle: when a query
     // has columns with the same name from different sources, flat objects

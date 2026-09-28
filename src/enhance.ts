@@ -186,6 +186,27 @@ function buildColumnTableMap(
 }
 
 /**
+ * Return `result[table]`, creating it as an own property. Table names come
+ * from the database schema: `result[table] ??= {}` would find the inherited
+ * `Object.prototype` for a table named "__proto__" (or `Object` for
+ * "constructor"), and the row's columns would be written onto it.
+ */
+function tableSlot(
+  result: Record<string, Record<string, unknown>>,
+  table: string,
+): Record<string, unknown> {
+  if (!Object.hasOwn(result, table)) {
+    Object.defineProperty(result, table, {
+      value: {},
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  return result[table]!; // eslint-disable-line security/detect-object-injection
+}
+
+/**
  * Transform a row array into a table-namespaced expanded object.
  * Uses array indices to match columns, avoiding data loss from duplicate names.
  */
@@ -196,9 +217,7 @@ function expandRowFromArray(
   const result: Record<string, Record<string, unknown>> = {};
   for (let i = 0; i < columnMap.length && i < row.length; i++) {
     const { table, column } = columnMap[i]!; // eslint-disable-line security/detect-object-injection
-    // eslint-disable-next-line security/detect-object-injection -- table/column from our own columnMap
-    result[table] ??= {};
-    result[table]![column] = row[i]; // eslint-disable-line security/detect-object-injection
+    tableSlot(result, table)[column] = row[i]; // eslint-disable-line security/detect-object-injection
   }
   return result;
 }
@@ -216,9 +235,7 @@ function expandRowFromObject(
   const keys = Object.keys(row);
   for (let i = 0; i < keys.length && i < columnMap.length; i++) {
     const { table, column } = columnMap[i]!; // eslint-disable-line security/detect-object-injection
-    // eslint-disable-next-line security/detect-object-injection -- table/column from our own columnMap
-    result[table] ??= {};
-    result[table]![column] = row[keys[i]!]; // eslint-disable-line security/detect-object-injection
+    tableSlot(result, table)[column] = row[keys[i]!]; // eslint-disable-line security/detect-object-injection
   }
   return result;
 }
