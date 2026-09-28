@@ -42,6 +42,25 @@ describe("Aggregate Functions Error Handling", () => {
     }).toThrow("Value too large!");
   });
 
+  test.each([
+    ["an object", {}],
+    ["a Buffer", Buffer.alloc(1)],
+  ])("a step error with %s accumulator reaches the caller", (_type, start) => {
+    // SQLite calls xFinal after a failed step. Rebuilding an object or Buffer
+    // accumulator there ran N-API calls that fail while the step's exception
+    // is pending, and node-addon-api's handling of that failure cleared the
+    // exception, so get() returned undefined without an error.
+    db.aggregate("step_fails", {
+      start,
+      step: () => {
+        throw new Error("step failed");
+      },
+    });
+    expect(() =>
+      db.prepare("SELECT step_fails() FROM test_data").get(),
+    ).toThrow("step failed");
+  });
+
   test("aggregate result function throwing error should not segfault", () => {
     expect(() => {
       db.aggregate("error_avg", {

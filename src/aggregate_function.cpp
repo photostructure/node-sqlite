@@ -442,6 +442,16 @@ void CustomAggregate::xValueBase(sqlite3_context *ctx, bool is_final) {
   auto callback_guard = self->db_->EnterCallback();
   Napi::HandleScope scope(self->env_);
 
+  // SQLite calls xFinal after a step fails, with that step's JavaScript
+  // exception still pending. Rebuilding the state below would make N-API
+  // calls that fail while an exception is pending, and node-addon-api's
+  // handling of that failure clears it, so leave it for the caller.
+  if (self->env_.IsExceptionPending()) {
+    self->db_->SetIgnoreNextSQLiteError(true);
+    sqlite3_result_error(ctx, "", 0);
+    return;
+  }
+
   // Get the same AggregateValue struct used in xStepBase
   AggregateValue *state = static_cast<AggregateValue *>(
       sqlite3_aggregate_context(ctx, sizeof(AggregateValue)));
