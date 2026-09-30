@@ -25,7 +25,11 @@ import {
   toTestFileName,
 } from "./adapt-node-test";
 import { githubFetch } from "./github-api";
-import { assertCommitSha, assertRelativeTreePath } from "./github-response";
+import {
+  assertGitSha,
+  assertRelativeTreePath,
+  gitBlobSha,
+} from "./github-response";
 import { resolveLatestStagingBranch } from "./sync-from-node";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -37,6 +41,8 @@ type UpstreamFiles = {
   tests: string[];
   /** File names under test/fixtures/sqlite/ */
   fixtures: string[];
+  /** Blob SHA of every file in the tree, keyed by its repository path */
+  blobShas: Map<string, string>;
 };
 
 /**
@@ -58,7 +64,7 @@ async function discoverUpstreamFiles(
   const commit = (await commitRes.json()) as {
     commit: { tree: { sha: string } };
   };
-  const treeSha = commit.commit.tree.sha;
+  const treeSha = assertGitSha(commit.commit.tree.sha, commitUrl);
 
   // Get the tree recursively (this returns all files, no pagination limits)
   const treeUrl = `https://api.github.com/repos/${repo}/git/trees/${treeSha}?recursive=1`;
@@ -68,7 +74,7 @@ async function discoverUpstreamFiles(
   }
 
   const tree = (await treeRes.json()) as {
-    tree: Array<{ path: string; type: string }>;
+    tree: Array<{ path: string; type: string; sha: string }>;
     truncated: boolean;
   };
 
@@ -101,7 +107,11 @@ async function discoverUpstreamFiles(
   console.log(
     `Found ${sqliteTests.length} SQLite test files and ${fixtures.length} fixtures`,
   );
-  return { tests: sqliteTests, fixtures };
+  return {
+    tests: sqliteTests,
+    fixtures,
+    blobShas: new Map(tree.tree.map((f) => [f.path, f.sha])),
+  };
 }
 
 function parseArgs() {
@@ -218,6 +228,7 @@ function updateSyncCache(repo: string, branch: string, sha: string) {
 
 async function downloadAndAdapt(
   url: string,
+  blobSha: string,
   upstreamPath: string,
   adaptedPath: string,
   fileName: string,
@@ -240,7 +251,15 @@ async function downloadAndAdapt(
     throw new Error(`HTTP ${response.status}`);
   }
 
-  const content = await response.text();
+  // The tree listing gives each file's blob SHA at the synced commit. A
+  // download that hashes differently is not that commit's file.
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (gitBlobSha(bytes) !== blobSha) {
+    throw new Error(
+      `${fileName} does not match blob ${blobSha} from the tree listing`,
+    );
+  }
+  const content = bytes.toString("utf8");
 
   // Save original
   ensureDir(upstreamPath);
@@ -280,7 +299,7 @@ async function main() {
   }
   // Checked outside the try: a malformed SHA is a bad response, not an API
   // outage, so it stops the sync instead of falling back to the branch name.
-  const sha = commit ? assertCommitSha(commit.sha, commitUrl) : null;
+  const sha = commit ? assertGitSha(commit.sha, commitUrl) : null;
 
   if (sha && shouldSkipSync(args.repo, branch, sha, args.force)) {
     console.log("✅ Already up to date");
@@ -291,10 +310,11 @@ async function main() {
   console.log(sha ? `Commit: ${sha.substring(0, 7)}` : "");
 
   // Dynamically discover test files from the Node.js repo
-  const { tests: testFiles, fixtures } = await discoverUpstreamFiles(
-    args.repo,
-    ref,
-  );
+  const {
+    tests: testFiles,
+    fixtures,
+    blobShas,
+  } = await discoverUpstreamFiles(args.repo, ref);
   const filesToSync = testFiles.filter((f) => !skipFiles.has(f));
 
   if (filesToSync.length === 0) {
@@ -311,13 +331,15 @@ async function main() {
 
   let successCount = 0;
   for (const fileName of filesToSync) {
-    const url = `https://raw.githubusercontent.com/${args.repo}/${ref}/test/parallel/${fileName}`;
+    const repoPath = `test/parallel/${fileName}`;
+    const url = `https://raw.githubusercontent.com/${args.repo}/${ref}/${repoPath}`;
     const upstreamPath = path.join(upstreamDir, fileName);
     const adaptedPath = path.join(adaptedDir, toTestFileName(fileName));
 
     if (
       await downloadAndAdapt(
         url,
+        blobShas.get(repoPath)!,
         upstreamPath,
         adaptedPath,
         fileName,
@@ -336,10 +358,12 @@ async function main() {
   const fixturesDir = path.join(packageRoot, "test", "fixtures", "sqlite");
   let fixtureCount = 0;
   for (const fileName of fixtures) {
-    const url = `https://raw.githubusercontent.com/${args.repo}/${ref}/test/fixtures/sqlite/${fileName}`;
+    const repoPath = `test/fixtures/sqlite/${fileName}`;
+    const url = `https://raw.githubusercontent.com/${args.repo}/${ref}/${repoPath}`;
     if (
       await downloadAndAdapt(
         url,
+        blobShas.get(repoPath)!,
         path.join(upstreamDir, "fixtures", "sqlite", fileName),
         path.join(fixturesDir, fileName),
         fileName,

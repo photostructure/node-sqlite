@@ -26,7 +26,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { githubFetch } from "./github-api";
-import { assertCommitSha } from "./github-response";
+import { assertGitSha } from "./github-response";
 
 const execAsync = promisify(exec);
 
@@ -412,7 +412,7 @@ async function main() {
   // bad response, not an API outage, and its prefix reaches the `npm pkg set`
   // shell command below.
   const nodeCommitSha = commitData
-    ? assertCommitSha(commitData.sha, commitUrl)
+    ? assertGitSha(commitData.sha, commitUrl)
     : null;
 
   // Fetch Node.js version info

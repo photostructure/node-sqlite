@@ -1,13 +1,14 @@
 import {
-  assertCommitSha,
+  assertGitSha,
   assertRelativeTreePath,
+  gitBlobSha,
 } from "../scripts/github-response";
 
-describe("assertCommitSha", () => {
+describe("assertGitSha", () => {
   const sha = "0123456789abcdef0123456789abcdef01234567";
 
-  it("returns a full lowercase hex commit SHA", () => {
-    expect(assertCommitSha(sha, "test")).toBe(sha);
+  it("returns a full lowercase hex SHA", () => {
+    expect(assertGitSha(sha, "test")).toBe(sha);
   });
 
   it.each([
@@ -19,7 +20,7 @@ describe("assertCommitSha", () => {
     ["a missing field", undefined],
     ["a number", 123],
   ])("rejects %s", (_label, value) => {
-    expect(() => assertCommitSha(value, "test")).toThrow(/commit SHA/);
+    expect(() => assertGitSha(value, "test")).toThrow(/hex SHA/);
   });
 });
 
@@ -42,5 +43,16 @@ describe("assertRelativeTreePath", () => {
     "..\\..\\package.json",
   ])("rejects %s", (name) => {
     expect(() => assertRelativeTreePath(name)).toThrow(/tree path/);
+  });
+});
+
+describe("gitBlobSha", () => {
+  // Expected values from `printf <content> | git hash-object --stdin`.
+  it.each([
+    ["empty content", "", "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"],
+    ["a line", "hello\n", "ce013625030ba8dba906f756967f9e9ca394464a"],
+    ["a NUL byte", "a\0b", "20b5be91886d0b6f26dc98a225c0dac05fe2c86e"],
+  ])("hashes %s as git does", (_label, content, expected) => {
+    expect(gitBlobSha(Buffer.from(content))).toBe(expected);
   });
 });
