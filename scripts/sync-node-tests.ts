@@ -396,7 +396,10 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === path.resolve(__filename)
 ) {
-  main().catch(console.error);
+  main().catch((error) => {
+    console.error("Error:", error.message);
+    process.exit(1);
+  });
 }
 
 export { adaptTest, discoverUpstreamFiles, skipFiles, toTestFileName };
