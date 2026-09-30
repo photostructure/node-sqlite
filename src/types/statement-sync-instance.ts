@@ -51,6 +51,16 @@ export type StatementStatCounter =
 /**
  * A prepared SQL statement that can be executed multiple times with different parameters.
  * This interface represents an instance of the StatementSync class.
+ *
+ * A named-parameter key that contains a NUL character (U+0000) is matched only
+ * up to the NUL, because SQLite looks parameter names up as C strings:
+ * `":tenant\0x"` resolves to `:tenant`. This package then binds the value of the
+ * `":tenant"` key, or NULL if there is none, never the value of the
+ * NUL-containing key; a bare key such as `"tenant\0x"` throws
+ * `ERR_INVALID_STATE` ("Unknown named parameter"). `node:sqlite` binds the
+ * NUL-containing key's value instead, so there such a key can replace another
+ * binding. If parameter objects are built from untrusted keys, reject keys that
+ * contain NUL.
  */
 export interface StatementSyncInstance {
   /** The original SQL source string. */

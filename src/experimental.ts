@@ -44,6 +44,14 @@ export type PoolValue =
  * Bind parameters for one operation: an array for positional placeholders, or a
  * plain object for named placeholders. Named keys may omit the `:`, `$`, or `@`
  * prefix, matching the synchronous API's bare-name behavior.
+ *
+ * A named key that contains a NUL character (U+0000) never binds its own value.
+ * SQLite looks parameter names up as C strings, so a prefixed key such as
+ * `":tenant\0x"` resolves to `:tenant`: the pool binds the value of the
+ * `":tenant"` key, or rejects with `ERR_INVALID_ARG_TYPE` if there is none. A
+ * bare key such as `"tenant\0x"` rejects: with `ERR_INVALID_ARG_TYPE` on its
+ * own, and with an "Unknown named parameter" error that has no `code` when the
+ * object also has a `"tenant"` key.
  */
 export type PoolParams =
   readonly PoolValue[] | Readonly<Record<string, PoolValue>>;
