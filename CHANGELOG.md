@@ -26,7 +26,10 @@ API compatible with `node:sqlite` from Node.js v26.10.0. `DatabaseSync.prototype
 - **`backup()` spun a CPU core while waiting on a lock**: while another connection held a lock on the source or destination, each step that returned `SQLITE_BUSY` or `SQLITE_LOCKED` queued the next one at once, so a waiting backup kept one core busy until the lock was released. Retries now wait 1 ms, doubling up to 100 ms.
 - **`backup()` resolved with 0 pages**: if its first step found a lock, the backup copied every page but resolved with 0, because the page count was read only after that first step.
 - **`DataView` aggregate accumulator**: an aggregate whose `start` or `step` value was a `DataView` failed with `Invalid argument`, thrown as a C++ exception through SQLite's C code, which can crash on musl. Its bytes are now kept, and the next step receives them as a `Uint8Array`, as for a `Buffer`.
-- **`DatabasePool` error without a code**: a named parameter whose key contained a NUL byte was rejected with a `TypeError` that had no `code`; it now has `ERR_INVALID_ARG_TYPE`, like the pool's other argument errors.
+- **`DatabasePool` error without a code**: a named parameter whose key contained a NUL byte was rejected with a `TypeError` that had no `code`; it now has `ERR_INVALID_ARG_TYPE`, like the pool's other argument errors. A bare key such as `"t\0x"` next to a `"t"` key still rejects with an `Unknown named parameter` error that has no `code`.
+- **`SECURITY.md` read-only example opened read-write**: it passed `readonly: true`, which `DatabaseSync` ignores; it now passes `readOnly: true`. Its extension example called `db.allowExtension()`, which does not exist, instead of passing `allowExtension: true` to the constructor.
+- **`defensive` documented as off by default**: the type docs and API reference said `defensive` defaults to `false`. It defaults to `true`; only the docs changed.
+- **NUL in named-parameter keys documented**: SQLite matches a parameter name only up to a NUL, so a key such as `":tenant\0x"` never binds its own value here, while `node:sqlite` binds it and can replace the `":tenant"` binding. The `StatementSync` and `DatabasePool` type docs give the details. If parameter objects are built from untrusted keys, reject keys that contain NUL.
 
 ## [2.6.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.6.0) (2026-09-17)
 
