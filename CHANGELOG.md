@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.7.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.7.0) (2026-09-27)
+## [2.7.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.7.0) (2026-09-29)
 
 API compatible with `node:sqlite` from Node.js v26.10.0. `DatabaseSync.prototype.createModule()`, which is only on `v26.x-staging` so far, is not ported yet. Several changes below make calls throw or store values differently than they did, so this is a minor release. SQLite is unchanged at 3.53.4.
 
