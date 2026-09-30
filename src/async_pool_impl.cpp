@@ -72,6 +72,8 @@ struct NativeError {
   bool sqlite = false;
   bool range = false;
   bool fatal = false;
+  // Node.js error code for an error that is neither sqlite nor range.
+  const char *code = nullptr;
   std::string message;
   int sqlite_code = SQLITE_ERROR;
   int sqlite_extended_code = SQLITE_ERROR;
@@ -302,6 +304,14 @@ void SetPlainError(NativeError *error, std::string message) {
   }
   error->present = true;
   error->message = std::move(message);
+}
+
+void SetInvalidStateError(NativeError *error, std::string message) {
+  if (error->present) {
+    return;
+  }
+  SetPlainError(error, std::move(message));
+  error->code = "ERR_INVALID_STATE";
 }
 
 void SetRangeError(NativeError *error, int64_t value) {
@@ -704,6 +714,9 @@ Napi::Error CreateNativeError(Napi::Env env, const NativeError &native) {
                    : Napi::Error::New(env, native.message);
   if (native.range) {
     error.Set("code", Napi::String::New(env, "ERR_OUT_OF_RANGE"));
+  }
+  if (native.code != nullptr) {
+    error.Set("code", Napi::String::New(env, native.code));
   }
   if (native.sqlite) {
     error.Set("code", Napi::String::New(env, "ERR_SQLITE_ERROR"));
@@ -1282,7 +1295,7 @@ bool BindParameters(sqlite3 *db, sqlite3_stmt *statement,
       }
     }
     if (index == 0) {
-      SetPlainError(error, "Unknown named parameter '" + key + "'");
+      SetInvalidStateError(error, "Unknown named parameter '" + key + "'");
       return false;
     }
     const int rc = BindValue(statement, index, value);

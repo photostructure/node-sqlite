@@ -50,8 +50,8 @@ export type PoolValue =
  * `":tenant\0x"` resolves to `:tenant`: the pool binds the value of the
  * `":tenant"` key, or rejects with `ERR_INVALID_ARG_TYPE` if there is none. A
  * bare key such as `"tenant\0x"` rejects: with `ERR_INVALID_ARG_TYPE` on its
- * own, and with an "Unknown named parameter" error that has no `code` when the
- * object also has a `"tenant"` key.
+ * own, and with `ERR_INVALID_STATE` ("Unknown named parameter") when the object
+ * also has a `"tenant"` key.
  */
 export type PoolParams =
   readonly PoolValue[] | Readonly<Record<string, PoolValue>>;

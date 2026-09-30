@@ -182,6 +182,25 @@ describe("DatabasePool values and rows", () => {
     }
   });
 
+  test("rejects an unknown named parameter with ERR_INVALID_STATE", async () => {
+    // The native bind step rejected unknown names, including a bare key that
+    // contains NUL, with an Error that had no code. DatabaseSync and
+    // node:sqlite use ERR_INVALID_STATE.
+    const pool = await DatabasePool.open(":memory:", { authorizer: "none" });
+    try {
+      for (const params of [{ unknown: 1 }, { tenant: 7, "tenant\0x": 99 }]) {
+        await expect(
+          pool.get("SELECT $tenant AS value", params),
+        ).rejects.toMatchObject({
+          code: "ERR_INVALID_STATE",
+          message: expect.stringMatching(/unknown named parameter/i),
+        });
+      }
+    } finally {
+      await pool.close();
+    }
+  });
+
   test("rejects a second executable statement but permits trailing comments", async () => {
     const pool = await DatabasePool.open(":memory:", { authorizer: "none" });
     try {
