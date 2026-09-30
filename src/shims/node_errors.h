@@ -16,6 +16,14 @@ inline void THROW_ERR_INVALID_STATE(Napi::Env env,
   error.ThrowAsJavaScriptException();
 }
 
+// For a message that can contain NUL bytes, which the C string overload
+// above would cut off.
+inline void THROW_ERR_INVALID_STATE(Napi::Env env, const std::string &message) {
+  Napi::Error error = Napi::Error::New(env, message);
+  error.Set("code", Napi::String::New(env, "ERR_INVALID_STATE"));
+  error.ThrowAsJavaScriptException();
+}
+
 inline void THROW_ERR_INVALID_ARG_TYPE(Napi::Env env,
                                        const char *message = nullptr) {
   const char *msg = message ? message : "Invalid argument type";

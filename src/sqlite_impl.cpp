@@ -3580,8 +3580,8 @@ void StatementSync::BindParameters(const Napi::CallbackInfo &info,
           continue;
         } else {
           // Throw error when not allowed (default behavior)
-          std::string msg = "Unknown named parameter '" + key_str + "'";
-          node::THROW_ERR_INVALID_STATE(env, msg.c_str());
+          node::THROW_ERR_INVALID_STATE(
+              env, "Unknown named parameter '" + key_str + "'");
           return;
         }
       }

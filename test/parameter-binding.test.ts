@@ -588,6 +588,23 @@ describe("Parameter Binding Tests", () => {
       );
     });
 
+    test("names a NUL-containing unknown parameter in full", () => {
+      // The message was passed on as a C string, so it ended at the NUL:
+      // "Unknown named parameter 'tenant".
+      let error: unknown;
+      try {
+        db.prepare("SELECT :tenant AS value").get({ "tenant\0x": 1 });
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toEqual(
+        expect.objectContaining({
+          code: "ERR_INVALID_STATE",
+          message: "Unknown named parameter 'tenant\0x'",
+        }),
+      );
+    });
+
     test("buffer size validation (normal buffers work)", () => {
       // Note: Actually allocating 2GB+ buffers would OOM most systems
       // This test documents that normal buffers work and that SafeCastToInt
