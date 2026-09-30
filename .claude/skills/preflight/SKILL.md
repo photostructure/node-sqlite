@@ -72,7 +72,7 @@ npm install                                    # re-resolve lockfile
 npm run sync:node                              # may require GITHUB_TOKEN
 npm run sync:sqlite
 npm run sync:tests                             # see §3.5 for common failures here
-npx prettier --cache --write test/node-compat/ # upstream tests use single quotes; normalize
+npx prettier --cache --write test/node-compat/ test/fixtures/sqlite/ # upstream tests use single quotes; normalize
 npm run build:native
 npm run build:dist
 npm run lint
@@ -132,7 +132,7 @@ The script carries no such transform today: ERM (`using`/`await using`) is all o
 adapted = adapted.replace(/\busing\s+(\w+)\s*=/g, "const $1 =");
 ```
 
-After adding a transform, re-run with `--force` (the SHA cache will otherwise skip the regen) and `npx prettier --cache --write test/node-compat/`.
+After adding a transform, re-run with `--force` (the SHA cache will otherwise skip the regen) and `npx prettier --cache --write test/node-compat/ test/fixtures/sqlite/`.
 
 **B. `TypeError: db.X is not a function`**: upstream added a test file for a node:sqlite API we haven't ported yet (recent example: `test-sqlite-serialize.js` for `serialize()`/`deserialize()`). Options:
 
@@ -148,7 +148,7 @@ After adding a transform, re-run with `--force` (the SHA cache will otherwise sk
 
 **C. Per-test skip for behavior we've intentionally diverged on** (e.g. worker-thread races, GC-dependent tests): use the per-file `skipTests` map with an explicit `reason`. This is the only case where the existing skip mechanism is sufficient.
 
-**D. Prettier diff noise**: upstream uses single quotes, our prettier config uses double. After every `sync:tests`, run `npx prettier --cache --write test/node-compat/` so the committed diff reflects only semantic changes.
+**D. Prettier diff noise**: upstream uses single quotes, our prettier config uses double. After every `sync:tests`, run `npx prettier --cache --write test/node-compat/ test/fixtures/sqlite/` so the committed diff reflects only semantic changes. `sync:tests` also rewrites the fixtures it downloads into `test/fixtures/sqlite/`.
 
 ### 4. Decide semver bump
 
