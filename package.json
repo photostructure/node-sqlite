@@ -188,7 +188,7 @@
     "typescript-eslint": "8.70.0"
   },
   "versions": {
-    "nodejs": "v26.x-staging@bc26176",
+    "nodejs": "v26.x-staging@6c924ee",
     "sqlite": "3.53.4"
   },
   "overrides": {

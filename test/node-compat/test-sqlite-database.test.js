@@ -1,9 +1,9 @@
 /**
  * Node.js SQLite compatibility test
- * Adapted from: test-sqlite-database-sync.js
+ * Adapted from: test-sqlite-database.js
  * Source: https://github.com/nodejs/node
  *
- * Run with: node --test test-sqlite-database-sync.test.js
+ * Run with: node --test test-sqlite-database.test.js
  *
  * AUTO-GENERATED - Do not edit. Run 'npm run sync:tests' to regenerate.
  */
@@ -12,7 +12,7 @@
 const { tmpdir, isWindows } = require("../common/test-utils.cjs");
 const { existsSync, mkdirSync } = require("node:fs");
 const { join } = require("node:path");
-const { DatabaseSync, StatementSync } = require("@photostructure/sqlite");
+const { Database, Statement } = require("@photostructure/sqlite");
 const { suite, test } = require("node:test");
 let cnt = 0;
 
@@ -22,11 +22,11 @@ function nextDb() {
   return join(tmpdir.path, `database-${cnt++}.db`);
 }
 
-suite("DatabaseSync() constructor", () => {
+suite("Database() constructor", () => {
   test("throws if called without new", (t) => {
     t.assert.throws(
       () => {
-        DatabaseSync();
+        Database();
       },
       {
         code: "ERR_CONSTRUCT_CALL_REQUIRED",
@@ -38,7 +38,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if database path is not a string, Uint8Array, or URL", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync();
+        new Database();
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -51,7 +51,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if the database location as Buffer contains null bytes", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync(Buffer.from("l\0cation"));
+        new Database(Buffer.from("l\0cation"));
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -64,7 +64,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if the database location as string contains null bytes", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync("l\0cation");
+        new Database("l\0cation");
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -77,7 +77,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if the URL-like path has an unparsable href", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync({ href: "not a url" });
+        new Database({ href: "not a url" });
       },
       { code: "ERR_INVALID_URL" },
     );
@@ -86,7 +86,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if options is provided but is not an object", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync("foo", null);
+        new Database("foo", null);
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -98,7 +98,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if options.open is provided but is not a boolean", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync("foo", { open: 5 });
+        new Database("foo", { open: 5 });
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -110,7 +110,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if options.readOnly is provided but is not a boolean", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync("foo", { readOnly: 5 });
+        new Database("foo", { readOnly: 5 });
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -122,7 +122,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if options.timeout is provided but is not an integer", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync("foo", { timeout: 0.99 });
+        new Database("foo", { timeout: 0.99 });
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -133,18 +133,18 @@ suite("DatabaseSync() constructor", () => {
 
   test("is not read-only by default", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath);
+    using db = new Database(dbPath);
     db.exec("CREATE TABLE foo (id INTEGER PRIMARY KEY)");
   });
 
   test("is read-only if readOnly is set", (t) => {
     const dbPath = nextDb();
     {
-      using db = new DatabaseSync(dbPath);
+      using db = new Database(dbPath);
       db.exec("CREATE TABLE foo (id INTEGER PRIMARY KEY)");
     }
     {
-      using db = new DatabaseSync(dbPath, { readOnly: true });
+      using db = new Database(dbPath, { readOnly: true });
       t.assert.throws(
         () => {
           db.exec("CREATE TABLE bar (id INTEGER PRIMARY KEY)");
@@ -160,7 +160,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if options.enableForeignKeyConstraints is provided but is not a boolean", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync("foo", { enableForeignKeyConstraints: 5 });
+        new Database("foo", { enableForeignKeyConstraints: 5 });
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -172,7 +172,7 @@ suite("DatabaseSync() constructor", () => {
 
   test("enables foreign key constraints by default", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath);
+    using db = new Database(dbPath);
     db.exec(`
       CREATE TABLE foo (id INTEGER PRIMARY KEY);
       CREATE TABLE bar (foo_id INTEGER REFERENCES foo(id));
@@ -190,7 +190,7 @@ suite("DatabaseSync() constructor", () => {
 
   test("allows disabling foreign key constraints", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath, { enableForeignKeyConstraints: false });
+    using db = new Database(dbPath, { enableForeignKeyConstraints: false });
     db.exec(`
       CREATE TABLE foo (id INTEGER PRIMARY KEY);
       CREATE TABLE bar (foo_id INTEGER REFERENCES foo(id));
@@ -201,7 +201,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if options.enableDoubleQuotedStringLiterals is provided but is not a boolean", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync("foo", { enableDoubleQuotedStringLiterals: 5 });
+        new Database("foo", { enableDoubleQuotedStringLiterals: 5 });
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -213,7 +213,7 @@ suite("DatabaseSync() constructor", () => {
 
   test("disables double-quoted string literals by default", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath);
+    using db = new Database(dbPath);
     t.assert.throws(
       () => {
         db.exec('SELECT "foo";');
@@ -227,16 +227,14 @@ suite("DatabaseSync() constructor", () => {
 
   test("allows enabling double-quoted string literals", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath, {
-      enableDoubleQuotedStringLiterals: true,
-    });
+    using db = new Database(dbPath, { enableDoubleQuotedStringLiterals: true });
     db.exec('SELECT "foo";');
   });
 
   test("throws if options.readBigInts is provided but is not a boolean", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync("foo", { readBigInts: 42 });
+        new Database("foo", { readBigInts: 42 });
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -247,7 +245,7 @@ suite("DatabaseSync() constructor", () => {
 
   test("allows reading big integers", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath, { readBigInts: true });
+    using db = new Database(dbPath, { readBigInts: true });
 
     const setup = db.exec(`
       CREATE TABLE data(key INTEGER PRIMARY KEY, val INTEGER) STRICT;
@@ -268,7 +266,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if options.returnArrays is provided but is not a boolean", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync("foo", { returnArrays: 42 });
+        new Database("foo", { returnArrays: 42 });
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -279,7 +277,7 @@ suite("DatabaseSync() constructor", () => {
 
   test("allows returning arrays", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath, { returnArrays: true });
+    using db = new Database(dbPath, { returnArrays: true });
     const setup = db.exec(`
       CREATE TABLE data(key INTEGER PRIMARY KEY, val TEXT) STRICT;
       INSERT INTO data (key, val) VALUES (1, 'one');
@@ -294,7 +292,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if options.allowBareNamedParameters is provided but is not a boolean", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync("foo", { allowBareNamedParameters: 42 });
+        new Database("foo", { allowBareNamedParameters: 42 });
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -306,7 +304,7 @@ suite("DatabaseSync() constructor", () => {
 
   test("throws if bare named parameters are used when option is false", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath, { allowBareNamedParameters: false });
+    using db = new Database(dbPath, { allowBareNamedParameters: false });
     const setup = db.exec(
       "CREATE TABLE data(key INTEGER PRIMARY KEY, val INTEGER) STRICT;",
     );
@@ -327,7 +325,7 @@ suite("DatabaseSync() constructor", () => {
   test("throws if options.allowUnknownNamedParameters is provided but is not a boolean", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync("foo", { allowUnknownNamedParameters: 42 });
+        new Database("foo", { allowUnknownNamedParameters: 42 });
       },
       {
         code: "ERR_INVALID_ARG_TYPE",
@@ -339,7 +337,7 @@ suite("DatabaseSync() constructor", () => {
 
   test("allows unknown named parameters", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath, { allowUnknownNamedParameters: true });
+    using db = new Database(dbPath, { allowUnknownNamedParameters: true });
     const setup = db.exec(
       "CREATE TABLE data(key INTEGER, val INTEGER) STRICT;",
     );
@@ -355,17 +353,17 @@ suite("DatabaseSync() constructor", () => {
 
   test("has sqlite-type symbol property", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath);
+    using db = new Database(dbPath);
 
     const sqliteTypeSymbol = Symbol.for("sqlite-type");
     t.assert.strictEqual(db[sqliteTypeSymbol], "node:sqlite");
   });
 });
 
-suite("DatabaseSync.prototype.open()", () => {
+suite("Database.prototype.open()", () => {
   test("opens a database connection", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath, { open: false });
+    using db = new Database(dbPath, { open: false });
 
     t.assert.strictEqual(db.isOpen, false);
     t.assert.strictEqual(existsSync(dbPath), false);
@@ -375,7 +373,7 @@ suite("DatabaseSync.prototype.open()", () => {
   });
 
   test("throws if database is already open", (t) => {
-    using db = new DatabaseSync(nextDb(), { open: false });
+    using db = new Database(nextDb(), { open: false });
 
     t.assert.strictEqual(db.isOpen, false);
     db.open();
@@ -396,7 +394,7 @@ suite("DatabaseSync.prototype.open()", () => {
     // Regression test for https://github.com/nodejs/node/issues/63831
     const dbDir = join(tmpdir.path, `database-dir-${cnt++}`);
     const dbPath = join(dbDir, "failed-open.db");
-    using db = new DatabaseSync(dbPath, { open: false });
+    using db = new Database(dbPath, { open: false });
 
     // The directory does not exist, so opening the database fails.
     t.assert.throws(
@@ -438,9 +436,9 @@ suite("DatabaseSync.prototype.open()", () => {
   });
 });
 
-suite("DatabaseSync.prototype.close()", () => {
+suite("Database.prototype.close()", () => {
   test("closes an open database connection", (t) => {
-    using db = new DatabaseSync(nextDb());
+    using db = new Database(nextDb());
 
     t.assert.strictEqual(db.isOpen, true);
     t.assert.strictEqual(db.close(), undefined);
@@ -448,7 +446,7 @@ suite("DatabaseSync.prototype.close()", () => {
   });
 
   test("throws if database is not open", (t) => {
-    using db = new DatabaseSync(nextDb(), { open: false });
+    using db = new Database(nextDb(), { open: false });
 
     t.assert.strictEqual(db.isOpen, false);
     t.assert.throws(
@@ -464,15 +462,15 @@ suite("DatabaseSync.prototype.close()", () => {
   });
 });
 
-suite("DatabaseSync.prototype.prepare()", () => {
+suite("Database.prototype.prepare()", () => {
   test("returns a prepared statement", (t) => {
-    using db = new DatabaseSync(nextDb());
+    using db = new Database(nextDb());
     const stmt = db.prepare("CREATE TABLE webstorage(key TEXT)");
-    t.assert.ok(stmt instanceof StatementSync);
+    t.assert.ok(stmt instanceof Statement);
   });
 
   test("throws if database is not open", (t) => {
-    using db = new DatabaseSync(nextDb(), { open: false });
+    using db = new Database(nextDb(), { open: false });
 
     t.assert.throws(
       () => {
@@ -486,7 +484,7 @@ suite("DatabaseSync.prototype.prepare()", () => {
   });
 
   test("throws if sql is not a string", (t) => {
-    using db = new DatabaseSync(nextDb());
+    using db = new Database(nextDb());
 
     t.assert.throws(
       () => {
@@ -500,7 +498,7 @@ suite("DatabaseSync.prototype.prepare()", () => {
   });
 
   test("throws if sql contains no statements", (t) => {
-    using db = new DatabaseSync(nextDb());
+    using db = new Database(nextDb());
 
     for (const sql of ["", "   ", ";", "-- comment", "/* comment */"]) {
       t.assert.throws(
@@ -516,7 +514,7 @@ suite("DatabaseSync.prototype.prepare()", () => {
   });
 
   test("prepares statements that contain comments", (t) => {
-    using db = new DatabaseSync(nextDb());
+    using db = new Database(nextDb());
     const queries = [
       "-- lead\nSELECT 1 AS v",
       "SELECT 1 AS v -- trail",
@@ -529,9 +527,9 @@ suite("DatabaseSync.prototype.prepare()", () => {
   });
 });
 
-suite("DatabaseSync.prototype.exec()", () => {
+suite("Database.prototype.exec()", () => {
   test("executes SQL", (t) => {
-    using db = new DatabaseSync(nextDb());
+    using db = new Database(nextDb());
     const result = db.exec(`
       CREATE TABLE data(
         key INTEGER PRIMARY KEY,
@@ -549,7 +547,7 @@ suite("DatabaseSync.prototype.exec()", () => {
   });
 
   test("reports errors from SQLite", (t) => {
-    using db = new DatabaseSync(nextDb());
+    using db = new Database(nextDb());
 
     t.assert.throws(
       () => {
@@ -565,7 +563,7 @@ suite("DatabaseSync.prototype.exec()", () => {
   test("throws if the URL does not have the file: scheme", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync(new URL("http://example.com"));
+        new Database(new URL("http://example.com"));
       },
       {
         code: "ERR_INVALID_URL_SCHEME",
@@ -575,7 +573,7 @@ suite("DatabaseSync.prototype.exec()", () => {
   });
 
   test("throws if database is not open", (t) => {
-    using db = new DatabaseSync(nextDb(), { open: false });
+    using db = new Database(nextDb(), { open: false });
 
     t.assert.throws(
       () => {
@@ -589,7 +587,7 @@ suite("DatabaseSync.prototype.exec()", () => {
   });
 
   test("throws if sql is not a string", (t) => {
-    using db = new DatabaseSync(nextDb());
+    using db = new Database(nextDb());
 
     t.assert.throws(
       () => {
@@ -603,9 +601,9 @@ suite("DatabaseSync.prototype.exec()", () => {
   });
 });
 
-suite("DatabaseSync.prototype.isTransaction", () => {
+suite("Database.prototype.isTransaction", () => {
   test("correctly detects a committed transaction", (t) => {
-    using db = new DatabaseSync(":memory:");
+    using db = new Database(":memory:");
 
     t.assert.strictEqual(db.isTransaction, false);
     db.exec("BEGIN");
@@ -617,7 +615,7 @@ suite("DatabaseSync.prototype.isTransaction", () => {
   });
 
   test("correctly detects a rolled back transaction", (t) => {
-    using db = new DatabaseSync(":memory:");
+    using db = new Database(":memory:");
 
     t.assert.strictEqual(db.isTransaction, false);
     db.exec("BEGIN");
@@ -629,7 +627,7 @@ suite("DatabaseSync.prototype.isTransaction", () => {
   });
 
   test("throws if database is not open", (t) => {
-    using db = new DatabaseSync(nextDb(), { open: false });
+    using db = new Database(nextDb(), { open: false });
 
     t.assert.throws(
       () => {
@@ -643,9 +641,9 @@ suite("DatabaseSync.prototype.isTransaction", () => {
   });
 });
 
-suite("DatabaseSync.prototype.location()", () => {
+suite("Database.prototype.location()", () => {
   test("throws if database is not open", (t) => {
-    using db = new DatabaseSync(nextDb(), { open: false });
+    using db = new Database(nextDb(), { open: false });
 
     t.assert.throws(
       () => {
@@ -659,7 +657,7 @@ suite("DatabaseSync.prototype.location()", () => {
   });
 
   test("throws if provided dbName is not string", (t) => {
-    using db = new DatabaseSync(nextDb());
+    using db = new Database(nextDb());
 
     t.assert.throws(
       () => {
@@ -673,20 +671,20 @@ suite("DatabaseSync.prototype.location()", () => {
   });
 
   test("returns null when connected to in-memory database", (t) => {
-    using db = new DatabaseSync(":memory:");
+    using db = new Database(":memory:");
     t.assert.strictEqual(db.location(), null);
   });
 
   test("returns db path when connected to a persistent database", (t) => {
     const dbPath = nextDb();
-    using db = new DatabaseSync(dbPath);
+    using db = new Database(dbPath);
     t.assert.strictEqual(db.location(), dbPath);
   });
 
   test("returns that specific db path when attached", (t) => {
     const dbPath = nextDb();
     const otherPath = nextDb();
-    using db = new DatabaseSync(dbPath);
+    using db = new Database(dbPath);
 
     // Adding this escape because the test with unusual chars have a single quote which breaks the query
     const escapedPath = otherPath.replace("'", "''");
@@ -696,16 +694,16 @@ suite("DatabaseSync.prototype.location()", () => {
   });
 });
 
-suite("DatabaseSync.prototype[Symbol.dispose]", () => {
+suite("Database.prototype[Symbol.dispose]", () => {
   test("closes an open database", (t) => {
-    const db = new DatabaseSync(nextDb());
+    const db = new Database(nextDb());
     t.assert.strictEqual(db.isOpen, true);
     db[Symbol.dispose]();
     t.assert.strictEqual(db.isOpen, false);
   });
 
   test("does not throw on databases that are not open", (t) => {
-    const db = new DatabaseSync(nextDb(), { open: false });
+    const db = new Database(nextDb(), { open: false });
     t.assert.strictEqual(db.isOpen, false);
     db[Symbol.dispose]();
   });

@@ -9,13 +9,13 @@
  */
 
 "use strict";
-const { DatabaseSync } = require("@photostructure/sqlite");
+const { Database } = require("@photostructure/sqlite");
 const { suite, test } = require("node:test");
 
 suite("data binding and mapping", () => {
   test("supported data types", (t) => {
     const u8a = new TextEncoder().encode("a☃b☃c");
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.after(() => {
       db.close();
     });
@@ -112,7 +112,7 @@ suite("data binding and mapping", () => {
   });
 
   test("undefined is bound as NULL", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.after(() => {
       db.close();
     });
@@ -150,7 +150,7 @@ suite("data binding and mapping", () => {
   });
 
   test("undefined is not treated as the named parameters argument", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.after(() => {
       db.close();
     });
@@ -179,7 +179,7 @@ suite("data binding and mapping", () => {
   });
 
   test("large strings are bound correctly", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.after(() => {
       db.close();
     });
@@ -216,7 +216,7 @@ suite("data binding and mapping", () => {
   });
 
   test("unsupported data types", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.after(() => {
       db.close();
     });
@@ -258,7 +258,7 @@ suite("data binding and mapping", () => {
 
   test("throws when binding a BigInt that is too large", (t) => {
     const max = 9223372036854775807n; // Largest 64-bit signed integer value.
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.after(() => {
       db.close();
     });
@@ -283,7 +283,7 @@ suite("data binding and mapping", () => {
   });
 
   test("statements are unbound on each call", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.after(() => {
       db.close();
     });

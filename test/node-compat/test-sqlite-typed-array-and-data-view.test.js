@@ -9,7 +9,7 @@
  */
 
 "use strict";
-const { DatabaseSync } = require("@photostructure/sqlite");
+const { Database } = require("@photostructure/sqlite");
 const { suite, test } = require("node:test");
 
 const arrayBuffer = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]).buffer;
@@ -32,10 +32,10 @@ const TypedArrays = [
   ["DataView", DataView],
 ];
 
-suite("StatementSync with TypedArray/DataView", () => {
+suite("Statement with TypedArray/DataView", () => {
   for (const [displayName, TypedArray] of TypedArrays) {
     test(displayName, (t) => {
-      const db = new DatabaseSync(":memory:");
+      const db = new Database(":memory:");
       t.after(() => {
         db.close();
       });
@@ -66,7 +66,7 @@ suite("StatementSync with TypedArray/DataView", () => {
   }
 });
 
-suite("StatementSync with ArrayBuffer and SharedArrayBuffer", () => {
+suite("Statement with ArrayBuffer and SharedArrayBuffer", () => {
   const buffers = [
     ["ArrayBuffer", arrayBuffer],
     ["SharedArrayBuffer", sharedArrayBuffer],
@@ -74,7 +74,7 @@ suite("StatementSync with ArrayBuffer and SharedArrayBuffer", () => {
 
   for (const [displayName, buffer] of buffers) {
     test(`${displayName} - anonymous binding`, (t) => {
-      const db = new DatabaseSync(":memory:");
+      const db = new Database(":memory:");
       t.after(() => {
         db.close();
       });
@@ -104,7 +104,7 @@ suite("StatementSync with ArrayBuffer and SharedArrayBuffer", () => {
     });
 
     test(`${displayName} - named binding (object)`, (t) => {
-      const db = new DatabaseSync(":memory:");
+      const db = new Database(":memory:");
       t.after(() => {
         db.close();
       });

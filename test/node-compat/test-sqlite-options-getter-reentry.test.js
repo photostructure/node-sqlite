@@ -11,7 +11,7 @@
 "use strict";
 const { tmpdir, isWindows } = require("../common/test-utils.cjs");
 const { join } = require("node:path");
-const { backup, DatabaseSync } = require("@photostructure/sqlite");
+const { backup, Database } = require("@photostructure/sqlite");
 const { suite, test } = require("node:test");
 
 tmpdir.refresh();
@@ -26,7 +26,7 @@ const invalidState = {
 // the time it is used.
 suite("closing the database from an options getter", () => {
   test("prepare() throws instead of using a closed connection", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(() => {
       db.prepare("SELECT 1", {
         get returnArrays() {
@@ -38,7 +38,7 @@ suite("closing the database from an options getter", () => {
   });
 
   test("function() throws instead of using a closed connection", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(() => {
       db.function(
         "fn",
@@ -54,7 +54,7 @@ suite("closing the database from an options getter", () => {
   });
 
   test("function() throws when the length getter closes the database", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     const fn = () => 1;
     Object.defineProperty(fn, "length", {
       configurable: true,
@@ -69,7 +69,7 @@ suite("closing the database from an options getter", () => {
   });
 
   test("aggregate() throws instead of using a closed connection", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(() => {
       db.aggregate("agg", {
         get start() {
@@ -82,7 +82,7 @@ suite("closing the database from an options getter", () => {
   });
 
   test("aggregate() throws when the length getter closes the database", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     const step = (acc, value) => acc;
     Object.defineProperty(step, "length", {
       configurable: true,
@@ -97,7 +97,7 @@ suite("closing the database from an options getter", () => {
   });
 
   test.skip("createModule() throws instead of using a closed connection" /* createModule() is not ported yet */, (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(() => {
       db.createModule("mod", {
         columns: [{ name: "value", type: "INTEGER" }],
@@ -113,7 +113,7 @@ suite("closing the database from an options getter", () => {
   });
 
   test.skip("createModule() throws when a column getter closes the database" /* createModule() is not ported yet */, (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(() => {
       db.createModule("mod", {
         columns: [
@@ -133,11 +133,11 @@ suite("closing the database from an options getter", () => {
   });
 
   test("deserialize() throws instead of using a closed connection", (t) => {
-    const source = new DatabaseSync(":memory:");
+    const source = new Database(":memory:");
     source.exec("CREATE TABLE data(value TEXT)");
     const image = source.serialize();
 
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(() => {
       db.deserialize(image, {
         get dbName() {
@@ -149,7 +149,7 @@ suite("closing the database from an options getter", () => {
   });
 
   test("createSession() throws instead of using a closed connection", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(() => {
       db.createSession({
         get db() {
@@ -161,7 +161,7 @@ suite("closing the database from an options getter", () => {
   });
 
   test("applyChangeset() throws instead of using a closed connection", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
     const session = db.createSession();
     db.exec("INSERT INTO data (key) VALUES (1)");
@@ -178,7 +178,7 @@ suite("closing the database from an options getter", () => {
   });
 
   test("backup() throws instead of using a closed connection", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(() => {
       backup(db, join(tmpdir.path, "getter-backup.db"), {
         get rate() {
@@ -193,7 +193,7 @@ suite("closing the database from an options getter", () => {
 // The state check runs before the options bag is read, so a call that is
 // already doomed must not execute any of the caller's getters.
 test("options getters do not run on an already-closed database", (t) => {
-  const source = new DatabaseSync(":memory:");
+  const source = new Database(":memory:");
   source.exec("CREATE TABLE data(key INTEGER PRIMARY KEY)");
   const image = source.serialize();
   const session = source.createSession();
@@ -225,7 +225,7 @@ test("options getters do not run on an already-closed database", (t) => {
   };
 
   for (const [name, invoke] of Object.entries(cases)) {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.close();
 
     const [key, value] = probes[name];
@@ -244,7 +244,7 @@ test("options getters do not run on an already-closed database", (t) => {
 
 suite("resizing a deserialize() buffer from an options getter", () => {
   test("throws rather than handing uninitialized memory to SQLite", (t) => {
-    const source = new DatabaseSync(":memory:");
+    const source = new Database(":memory:");
     source.exec("CREATE TABLE data(value TEXT)");
     source.prepare("INSERT INTO data (value) VALUES (?)").run("hello");
     const image = source.serialize();
@@ -254,7 +254,7 @@ suite("resizing a deserialize() buffer from an options getter", () => {
     });
     new Uint8Array(buffer).set(image);
 
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(
       () => {
         db.deserialize(new Uint8Array(buffer), {
@@ -272,14 +272,14 @@ suite("resizing a deserialize() buffer from an options getter", () => {
   });
 
   test("throws when the buffer is detached", (t) => {
-    const source = new DatabaseSync(":memory:");
+    const source = new Database(":memory:");
     source.exec("CREATE TABLE data(value TEXT)");
     const image = source.serialize();
 
     const buffer = new ArrayBuffer(image.byteLength);
     new Uint8Array(buffer).set(image);
 
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(
       () => {
         db.deserialize(new Uint8Array(buffer), {

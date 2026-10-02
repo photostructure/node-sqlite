@@ -1,21 +1,21 @@
 /**
  * Node.js SQLite compatibility test
- * Adapted from: test-sqlite-statement-sync-columns.js
+ * Adapted from: test-sqlite-statement-columns.js
  * Source: https://github.com/nodejs/node
  *
- * Run with: node --test test-sqlite-statement-sync-columns.test.js
+ * Run with: node --test test-sqlite-statement-columns.test.js
  *
  * AUTO-GENERATED - Do not edit. Run 'npm run sync:tests' to regenerate.
  */
 
 "use strict";
 const assert = require("node:assert");
-const { DatabaseSync } = require("@photostructure/sqlite");
+const { Database } = require("@photostructure/sqlite");
 const { suite, test } = require("node:test");
 
-suite("StatementSync.prototype.columns()", () => {
+suite("Statement.prototype.columns()", () => {
   test("returns column metadata for core SQLite types", () => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec(`CREATE TABLE test (
       col1 INTEGER,
       col2 REAL,
@@ -69,7 +69,7 @@ suite("StatementSync.prototype.columns()", () => {
   });
 
   test("supports statements using multiple tables", () => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec(`
       CREATE TABLE test1 (value1 INTEGER);
       CREATE TABLE test2 (value2 INTEGER);
@@ -96,7 +96,7 @@ suite("StatementSync.prototype.columns()", () => {
   });
 
   test("supports column aliases", () => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec(`CREATE TABLE test (value INTEGER)`);
     const stmt = db.prepare("SELECT value AS foo FROM test");
     assert.deepStrictEqual(stmt.columns(), [
@@ -112,7 +112,7 @@ suite("StatementSync.prototype.columns()", () => {
   });
 
   test("supports column expressions", () => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec(`CREATE TABLE test (value INTEGER)`);
     const stmt = db.prepare("SELECT value + 1, value FROM test");
     assert.deepStrictEqual(stmt.columns(), [
@@ -136,7 +136,7 @@ suite("StatementSync.prototype.columns()", () => {
   });
 
   test("supports subqueries", () => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec(`CREATE TABLE test (value INTEGER)`);
     const stmt = db.prepare("SELECT * FROM (SELECT * FROM test)");
     assert.deepStrictEqual(stmt.columns(), [
@@ -152,14 +152,14 @@ suite("StatementSync.prototype.columns()", () => {
   });
 
   test("supports statements that do not return data", () => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec("CREATE TABLE test (value INTEGER)");
     const stmt = db.prepare("INSERT INTO test (value) VALUES (?)");
     assert.deepStrictEqual(stmt.columns(), []);
   });
 
   test("throws if the statement is finalized", () => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec("CREATE TABLE test (value INTEGER)");
     const stmt = db.prepare("SELECT value FROM test");
     db.close();

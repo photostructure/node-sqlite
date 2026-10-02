@@ -12,10 +12,10 @@
 // Flags: --expose-gc
 
 const assert = require("assert");
-const { DatabaseSync } = require("@photostructure/sqlite");
+const { Database } = require("@photostructure/sqlite");
 const { test, beforeEach } = require("node:test");
 
-const db = new DatabaseSync(":memory:");
+const db = new Database(":memory:");
 const sql = db.createTagStore(10);
 
 beforeEach(() => {
@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 
 test("throws error if database is not open", () => {
-  const db = new DatabaseSync(":memory:", { open: false });
+  const db = new Database(":memory:", { open: false });
 
   assert.throws(
     () => {
@@ -134,7 +134,7 @@ test("queries with no results", () => {
 });
 
 test("rejects parameters outside of template expressions", () => {
-  const ldb = new DatabaseSync(":memory:");
+  const ldb = new Database(":memory:");
   const lsql = ldb.createTagStore();
   ldb.exec(`
     CREATE TABLE secrets(owner TEXT, token TEXT);
@@ -200,7 +200,7 @@ test("TagStore capacity, size, and clear", () => {
 });
 
 test("iterator is invalidated when the cached statement is reset", () => {
-  const ldb = new DatabaseSync(":memory:");
+  const ldb = new Database(":memory:");
   const lsql = ldb.createTagStore();
   ldb.exec("CREATE TABLE foo (id INTEGER PRIMARY KEY, text TEXT)");
   for (let i = 0; i < 5; i++) {
@@ -274,7 +274,7 @@ test("iterator is invalidated when the cached statement is reset", () => {
 });
 
 test("a stale iterator cannot replay a victim-bound write", () => {
-  const bank = new DatabaseSync(":memory:");
+  const bank = new Database(":memory:");
   const tx = bank.createTagStore();
   bank.exec(`
     CREATE TABLE acct(user TEXT PRIMARY KEY, balance INTEGER);
@@ -335,7 +335,7 @@ test("a finished iterator stays done and does not restart", () => {
 });
 
 test("createTagStore throws on invalid maxSize", () => {
-  const db = new DatabaseSync(":memory:");
+  const db = new Database(":memory:");
 
   assert.throws(() => db.createTagStore(0), {
     code: "ERR_OUT_OF_RANGE",
@@ -368,7 +368,7 @@ test("createTagStore throws on invalid maxSize", () => {
   });
 });
 
-test("sql.db returns the associated DatabaseSync instance", () => {
+test("sql.db returns the associated Database instance", () => {
   assert.strictEqual(sql.db, db);
 });
 
@@ -430,7 +430,7 @@ test("rejects SQL that contains no statements", () => {
 });
 
 test("a tag store keeps the database alive by itself", () => {
-  const sql = new DatabaseSync(":memory:").createTagStore();
+  const sql = new Database(":memory:").createTagStore();
 
   sql.db.exec("CREATE TABLE test (data INTEGER)");
 
@@ -444,9 +444,9 @@ test("tag store prevents circular reference leaks", async () => {
   const { gcUntil } = require("../common/test-utils.cjs");
   const before = process.memoryUsage().heapUsed;
 
-  // Create many SQLTagStore + DatabaseSync pairs with circular references
+  // Create many SQLTagStore + Database pairs with circular references
   for (let i = 0; i < 1000; i++) {
-    const sql = new DatabaseSync(":memory:").createTagStore();
+    const sql = new Database(":memory:").createTagStore();
     sql.db.exec("CREATE TABLE test (data INTEGER)");
     // eslint-disable-next-line no-void
     sql.db.setAuthorizer(() => void sql.db);
@@ -465,7 +465,7 @@ test("tag store prevents circular reference leaks", async () => {
 });
 
 test("cached statements are finalized when the database is closed", () => {
-  const db = new DatabaseSync(":memory:");
+  const db = new Database(":memory:");
   const sql = db.createTagStore();
 
   db.exec("CREATE TABLE foo (id INTEGER PRIMARY KEY)");

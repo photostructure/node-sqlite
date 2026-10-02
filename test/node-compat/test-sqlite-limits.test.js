@@ -9,12 +9,12 @@
  */
 
 "use strict";
-const { DatabaseSync } = require("@photostructure/sqlite");
+const { Database } = require("@photostructure/sqlite");
 const { suite, test } = require("node:test");
 
-suite("DatabaseSync limits", () => {
+suite("Database limits", () => {
   test("limits object has expected properties with positive values", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     const expectedProperties = [
       "length",
       "sqlLength",
@@ -40,7 +40,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("constructor accepts limits option", (t) => {
-    const db = new DatabaseSync(":memory:", {
+    const db = new Database(":memory:", {
       limits: {
         length: 500000,
         sqlLength: 50000,
@@ -70,7 +70,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("getter returns current limit value", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.strictEqual(typeof db.limits.length, "number");
     t.assert.ok(db.limits.length > 0);
     t.assert.strictEqual(typeof db.limits.sqlLength, "number");
@@ -78,7 +78,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("setter modifies limit value", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
 
     db.limits.length = 100000;
     t.assert.strictEqual(db.limits.length, 100000);
@@ -91,7 +91,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("Infinity resets limit to maximum", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     const originalLength = db.limits.length;
 
     // Set to a lower value
@@ -104,7 +104,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("throws on invalid argument type", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(
       () => {
         db.limits.length = "invalid";
@@ -117,7 +117,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("throws on negative value", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(
       () => {
         db.limits.length = -1;
@@ -130,7 +130,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("throws on null value", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(
       () => {
         db.limits.length = null;
@@ -143,7 +143,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("throws on negative Infinity", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     t.assert.throws(
       () => {
         db.limits.length = -Infinity;
@@ -156,7 +156,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("throws on getter access after close", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.close();
     t.assert.throws(
       () => {
@@ -170,7 +170,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("throws on setter access after close", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.close();
     t.assert.throws(
       () => {
@@ -184,7 +184,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("limits object is enumerable", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     const keys = Object.keys(db.limits);
     t.assert.ok(keys.includes("length"));
     t.assert.ok(keys.includes("sqlLength"));
@@ -202,7 +202,7 @@ suite("DatabaseSync limits", () => {
   test("throws on invalid limits option type", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync(":memory:", { limits: "invalid" });
+        new Database(":memory:", { limits: "invalid" });
       },
       {
         name: "TypeError",
@@ -214,7 +214,7 @@ suite("DatabaseSync limits", () => {
   test("throws on invalid limit value type in constructor", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync(":memory:", { limits: { length: "invalid" } });
+        new Database(":memory:", { limits: { length: "invalid" } });
       },
       {
         name: "TypeError",
@@ -226,7 +226,7 @@ suite("DatabaseSync limits", () => {
   test("throws on negative limit value in constructor", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync(":memory:", { limits: { length: -100 } });
+        new Database(":memory:", { limits: { length: -100 } });
       },
       {
         name: "RangeError",
@@ -238,7 +238,7 @@ suite("DatabaseSync limits", () => {
   test("throws on Infinity limit value in constructor", (t) => {
     t.assert.throws(
       () => {
-        new DatabaseSync(":memory:", { limits: { length: Infinity } });
+        new Database(":memory:", { limits: { length: Infinity } });
       },
       {
         name: "TypeError",
@@ -248,7 +248,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("partial limits in constructor", (t) => {
-    const db = new DatabaseSync(":memory:", {
+    const db = new Database(":memory:", {
       limits: {
         length: 100000,
       },
@@ -258,7 +258,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("throws when exceeding column limit", (t) => {
-    const db = new DatabaseSync(":memory:", {
+    const db = new Database(":memory:", {
       limits: {
         column: 10,
       },
@@ -279,7 +279,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("throws when exceeding attach limit", (t) => {
-    const db = new DatabaseSync(":memory:", {
+    const db = new Database(":memory:", {
       limits: {
         attach: 0,
       },
@@ -296,7 +296,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("throws when exceeding variable number limit", (t) => {
-    const db = new DatabaseSync(":memory:", {
+    const db = new Database(":memory:", {
       limits: {
         variableNumber: 2,
       },
@@ -314,7 +314,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("throws when exceeding compound select limit", (t) => {
-    const db = new DatabaseSync(":memory:", {
+    const db = new Database(":memory:", {
       limits: {
         compoundSelect: 1,
       },
@@ -331,7 +331,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("throws when exceeding function arg limit", (t) => {
-    const db = new DatabaseSync(":memory:", {
+    const db = new Database(":memory:", {
       limits: {
         functionArg: 2,
       },
@@ -348,7 +348,7 @@ suite("DatabaseSync limits", () => {
   });
 
   test("setter applies limit to SQLite immediately", (t) => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
 
     db.limits.attach = 0;
 

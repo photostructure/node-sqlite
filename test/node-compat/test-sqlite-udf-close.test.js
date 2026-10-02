@@ -12,11 +12,11 @@
 
 const assert = require("node:assert");
 const { test } = require("node:test");
-const { DatabaseSync } = require("@photostructure/sqlite");
+const { Database } = require("@photostructure/sqlite");
 
 for (const method of ["all", "get", "run", "iterate"]) {
   test(`database.close() from a UDF during statement.${method}()`, () => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec(`
       CREATE TABLE data (value INTEGER);
       INSERT INTO data VALUES (1), (2), (3);
@@ -51,7 +51,7 @@ for (const method of ["all", "get", "run", "iterate"]) {
   // Finalizing the statement being stepped frees the virtual machine that
   // sqlite3_step() is still running, so this must throw rather than crash.
   test(`statement.close() from a UDF during statement.${method}()`, () => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec(`
       CREATE TABLE data (value INTEGER);
       INSERT INTO data VALUES (1), (2), (3);
@@ -89,7 +89,7 @@ for (const method of ["all", "get", "run", "iterate"]) {
     test(
       `statement.${reentrant}() from a UDF during ` + `statement.${method}()`,
       () => {
-        const db = new DatabaseSync(":memory:");
+        const db = new Database(":memory:");
         db.exec(`
         CREATE TABLE data (value INTEGER, padding TEXT);
         INSERT INTO data VALUES (1, '${"x".repeat(400)}'),
@@ -137,7 +137,7 @@ for (const method of ["all", "get", "run", "iterate"]) {
   // four are exercised.
   for (const reentrant of ["run", "get", "all", "iterate"]) {
     test(`tag store ${reentrant} reentry during statement.${method}()`, () => {
-      const db = new DatabaseSync(":memory:");
+      const db = new Database(":memory:");
       const sql = db.createTagStore(10);
       db.exec(`
         CREATE TABLE data (value INTEGER, padding TEXT);
@@ -183,7 +183,7 @@ for (const method of ["all", "get", "run", "iterate"]) {
   // A UDF may prepare and finalize its own helper statements. Only the
   // statement being stepped is off limits.
   test(`UDF finalizes its own statement during statement.${method}()`, () => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec(`
       CREATE TABLE data (value INTEGER);
       INSERT INTO data VALUES (1), (2), (3);
@@ -224,7 +224,7 @@ for (const method of ["all", "get", "run", "iterate"]) {
 // again, so both reach the virtual machine that is mid-execution.
 for (const op of ["next", "return"]) {
   test(`iterator.${op}() from a UDF during iteration`, () => {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     db.exec(`
       CREATE TABLE data (value INTEGER, padding TEXT);
       INSERT INTO data VALUES (1, '${"x".repeat(400)}'),

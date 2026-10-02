@@ -3,9 +3,9 @@
 //
 // AUTO-GENERATED - Do not edit. Run 'npm run sync:tests' to regenerate.
 
-import { backup, DatabaseSync } from "@photostructure/sqlite";
+import { backup, Database } from "@photostructure/sqlite";
 
-const source = new DatabaseSync(":memory:");
+const source = new Database(":memory:");
 source.exec(`
   CREATE TABLE data(value);
   INSERT INTO data VALUES (zeroblob(1048576));
