@@ -2,12 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.7.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.7.0) (2026-09-29)
+## [3.0.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.0.0) (2026-10-02)
 
-API compatible with `node:sqlite` from Node.js v26.10.0. `DatabaseSync.prototype.createModule()`, which is only on `v26.x-staging` so far, is not ported yet. Several changes below make calls throw or store values differently than they did, so this is a minor release. SQLite is unchanged at 3.53.4.
+API compatible with `node:sqlite` from Node.js v26.10.0, plus the `Database` and `Statement` class rename from [Node.js PR #65988](https://github.com/nodejs/node/pull/65988), which landed on `v26.x-staging` but is not yet in a Node.js release. `Database.prototype.createModule()`, also only on `v26.x-staging` so far, is not ported yet. The rename changes the classes' `name` values, so this is a major release. SQLite is unchanged at 3.53.4.
+
+### Added
+
+- **`Database` and `Statement`**: the new names of `DatabaseSync` and `StatementSync` from [Node.js PR #65988](https://github.com/nodejs/node/pull/65988). The old names are still exported and are the same classes (`DatabaseSync === Database`, `StatementSync === Statement`); Node.js deprecates them in documentation only (DEP0210, DEP0211). The types `DatabaseInstance`, `DatabaseOptions`, `DatabaseLimits`, and `StatementInstance` are aliases of `DatabaseSyncInstance`, `DatabaseSyncOptions`, `DatabaseSyncLimits`, and `StatementSyncInstance`.
 
 ### Changed
 
+- **BREAKING**: **Class names follow the rename**: `DatabaseSync.name` and a database's `constructor.name` are now `"Database"`, `StatementSync.name` and a statement's `constructor.name` are `"Statement"`, and the iterator from `iterate()` is a `StatementIterator` (was `StatementSyncIterator`), as in `node:sqlite` from [Node.js PR #65988](https://github.com/nodejs/node/pull/65988). In 2.6.0 the exported constructors were named `"DatabaseSync2"` and `"StatementSync2"`, because the bundler renamed them, while instances reported `"DatabaseSync"` and `"StatementSync"`. Code that compares these names against the old strings must change; `instanceof DatabaseSync` and `instanceof StatementSync` still work.
+- **Experimental `DatabasePool` keeps its name**: the bundler renamed the class, so `DatabasePool.name` was `"_DatabasePool"` and `util.inspect()` printed a pool as `_DatabasePool {}`. The build now keeps the source names of all exported classes and functions.
 - **`backup()` runs one step per threadpool job**: each `sqlite3_backup_step()` now returns to the main thread before the next one is queued, as in `node:sqlite`. The `progress` callback is therefore called after every step that leaves pages remaining; previously calls could be coalesced. Small `rate` values cost more: on tmpfs, a 128 MB backup took 580–690 ms at `rate: 1` (was 195–210 ms; `node:sqlite` 580–670 ms) and 132–150 ms at the default `rate: 100` (was 124–132 ms).
 - **Strings with NUL bytes are no longer truncated**: binding `"a\0b"` stored `"a"`, and user-defined and aggregate functions received only the text before the first NUL byte of a TEXT argument. Both now use the full string, as `node:sqlite` and `DatabasePool` already did. Queries that bound such strings now store and match different values.
 - **INT64_MIN passed to a function throws `ERR_OUT_OF_RANGE`**: a user-defined or aggregate function without `useBigIntArguments` received -9223372036854775808 as the imprecise Number -9223372036854776000, because the range check used `std::abs()`, which is undefined for that value. It now throws like every other integer outside the safe range, as in `node:sqlite`.
