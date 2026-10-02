@@ -400,11 +400,10 @@ bool CustomAggregate::StoreValue(Napi::Env env, AggregateValue *state,
     // Before IsBuffer(): N-API's IsBuffer() is true for any ArrayBufferView,
     // and reading a DataView as a Buffer throws.
     Napi::DataView view = value.As<Napi::DataView>();
-    return store_bytes(
-        AggregateValue::BUFFER, "DataView",
-        static_cast<const uint8_t *>(view.ArrayBuffer().Data()) +
-            view.ByteOffset(),
-        view.ByteLength());
+    return store_bytes(AggregateValue::BUFFER, "DataView",
+                       static_cast<const uint8_t *>(view.ArrayBuffer().Data()) +
+                           view.ByteOffset(),
+                       view.ByteLength());
   } else if (value.IsBuffer()) {
     Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
     return store_bytes(AggregateValue::BUFFER, "Buffer", buffer.Data(),

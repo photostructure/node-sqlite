@@ -212,12 +212,15 @@ describe("Aggregate Functions Tests", () => {
     test.each([
       ["an object", {}],
       ["a Buffer", Buffer.alloc(1)],
-    ])("a value that does not fit throws after %s accumulator", (_type, start) => {
-      db.aggregate("outgrows", { start, step: () => "x".repeat(4096) });
-      expectOutOfRange(() =>
-        db.prepare("SELECT outgrows() FROM test_data").get(),
-      );
-    });
+    ])(
+      "a value that does not fit throws after %s accumulator",
+      (_type, start) => {
+        db.aggregate("outgrows", { start, step: () => "x".repeat(4096) });
+        expectOutOfRange(() =>
+          db.prepare("SELECT outgrows() FROM test_data").get(),
+        );
+      },
+    );
 
     test("a start value that does not fit throws", () => {
       db.aggregate("long_start", {
