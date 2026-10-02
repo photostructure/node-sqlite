@@ -342,7 +342,7 @@ if (!Object.getOwnPropertyDescriptor(DatabaseSync.prototype, "limits")) {
  * ```typescript
  * const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
  * const user = stmt.get(123);
- * stmt.finalize();
+ * stmt.close();
  * ```
  */
 // Store the native binding's Statement for internal use
