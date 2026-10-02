@@ -22,6 +22,7 @@ import {
   adaptFixture,
   adaptTest,
   skipFiles,
+  staleTestFiles,
   toTestFileName,
 } from "./adapt-node-test";
 import { githubFetch } from "./github-api";
@@ -78,10 +79,10 @@ async function discoverUpstreamFiles(
     truncated: boolean;
   };
 
+  // The sync removes adapted files that the listing lacks, so a partial
+  // listing would delete tests that still exist upstream.
   if (tree.truncated) {
-    console.warn(
-      "Warning: Tree response was truncated, some files may be missing",
-    );
+    throw new Error(`Tree listing for ${repo}@${ref} was truncated`);
   }
 
   // Filter for SQLite-related test files in test/parallel/
@@ -375,6 +376,25 @@ async function main() {
     }
   }
   console.log(`Synced ${fixtureCount}/${fixtures.length} fixtures`);
+
+  // The downloads above only write files. Remove adapted tests and fixtures
+  // that upstream deleted or renamed, or that skipFiles now excludes, so they
+  // do not keep running.
+  const upstreamFixtures = new Set(fixtures);
+  const stale = [
+    ...staleTestFiles(fs.readdirSync(adaptedDir), filesToSync).map((name) =>
+      path.join(adaptedDir, name),
+    ),
+    ...fs
+      .readdirSync(fixturesDir)
+      .filter((name) => !upstreamFixtures.has(name))
+      .map((name) => path.join(fixturesDir, name)),
+  ];
+  for (const file of stale) {
+    const relative = path.relative(packageRoot, file);
+    console.log(`${args.dryRun ? "Would remove" : "Removing"}: ${relative}`);
+    if (!args.dryRun) fs.rmSync(file);
+  }
 
   if (!args.dryRun) {
     if (sha) updateSyncCache(args.repo, branch, sha);

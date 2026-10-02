@@ -307,4 +307,27 @@ function toTestFileName(nodeFileName: string): string {
   return nodeFileName.replace(/\.(m?js)$/, ".test.$1");
 }
 
-export { adaptFixture, adaptTest, skipFiles, skipTests, toTestFileName };
+/**
+ * Adapted tests among `present` (the names in test/node-compat/) that a sync
+ * of `syncedTests` does not write: upstream deleted or renamed their test, or
+ * skipFiles now excludes it. The sync only writes files, so these would stay
+ * behind and keep running.
+ */
+function staleTestFiles(
+  present: readonly string[],
+  syncedTests: readonly string[],
+): string[] {
+  const written = new Set(syncedTests.map(toTestFileName));
+  return present.filter(
+    (name) => /\.test\.m?js$/.test(name) && !written.has(name),
+  );
+}
+
+export {
+  adaptFixture,
+  adaptTest,
+  skipFiles,
+  skipTests,
+  staleTestFiles,
+  toTestFileName,
+};

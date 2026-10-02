@@ -1,4 +1,8 @@
-import { adaptFixture, adaptTest } from "../scripts/adapt-node-test";
+import {
+  adaptFixture,
+  adaptTest,
+  staleTestFiles,
+} from "../scripts/adapt-node-test";
 
 /** Strips the generated header so assertions read against the body alone. */
 function body(adapted: string): string {
@@ -199,5 +203,30 @@ describe("adaptFixture", () => {
         'import { backup, DatabaseSync } from "@photostructure/sqlite";\n',
       ),
     ).toBe(true);
+  });
+});
+
+describe("staleTestFiles", () => {
+  it("lists adapted tests whose upstream file is no longer synced", () => {
+    // Upstream deleted test-sqlite-database-sync-dispose.js and renamed
+    // test-sqlite-database-sync.js, and skipFiles excludes the virtual-table
+    // test, so the sync writes none of their adapted copies.
+    expect(
+      staleTestFiles(
+        [
+          "README.md",
+          "test-sqlite-database-sync-dispose.test.js",
+          "test-sqlite-database-sync.test.js",
+          "test-sqlite-database.test.js",
+          "test-sqlite-backup.test.mjs",
+          "test-sqlite-virtual-table.test.js",
+        ],
+        ["test-sqlite-backup.mjs", "test-sqlite-database.js"],
+      ),
+    ).toEqual([
+      "test-sqlite-database-sync-dispose.test.js",
+      "test-sqlite-database-sync.test.js",
+      "test-sqlite-virtual-table.test.js",
+    ]);
   });
 });
