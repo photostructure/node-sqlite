@@ -898,6 +898,9 @@ describe("Backup functionality", () => {
     const child = spawn(process.execPath, ["-e", childScript], {
       cwd: projectRoot(),
       stdio: ["ignore", "pipe", "pipe"],
+      // Shorter than the callers' Jest timeout, so a hung backup fails the
+      // assertion (signal SIGTERM) instead of leaving the child running.
+      timeout: getTestTimeout(20000),
     });
     let stdout = "";
     let stderr = "";
@@ -917,8 +920,8 @@ describe("Backup functionality", () => {
     "should let a worker thread terminate while a backup waits to retry",
     async () => {
       // While another connection holds the destination, no step is queued
-      // between retries, and the retry timer never fires once JavaScript is
-      // disallowed, so the environment cleanup hook has to finish the job.
+      // between retries, so the environment cleanup hooks have to stop the
+      // retry timer and finish the job.
       // Six steps in, the retry delay is at least 16 ms, so the worker is
       // almost always terminated between steps.
       const result = await runBackupWorker(`
@@ -943,6 +946,52 @@ describe("Backup functionality", () => {
         code: 0,
         signal: null,
         stdout: "1",
+        stderr: "",
+      });
+    },
+    getTestTimeout(30000),
+  );
+
+  it.each(["before", "after"])(
+    "should retry a locked backup when setTimeout is replaced %s the addon loads",
+    async (replaced) => {
+      // Fake timers, such as Sinon's, replace setTimeout on the global and on
+      // node:timers. A retry scheduled with a replaced setTimeout never runs,
+      // even after the fake is uninstalled, so retries must not use it.
+      const result = await runBackupWorker(`
+        const { workerData } = require("node:worker_threads");
+        const timers = require("node:timers");
+        const realSetTimeout = timers.setTimeout;
+        // Stands in for fake timers: the callback never runs.
+        const setTimeoutTo = (fn) => {
+          globalThis.setTimeout = timers.setTimeout = fn;
+        };
+        if (${JSON.stringify(replaced)} === "before") setTimeoutTo(() => {});
+        const { backup, DatabaseSync } = require("node-gyp-build")(workerData.root);
+        setTimeoutTo(${JSON.stringify(replaced)} === "before" ? realSetTimeout : () => {});
+
+        const holder = new DatabaseSync(workerData.dest);
+        holder.exec("CREATE TABLE x (a); BEGIN EXCLUSIVE; INSERT INTO x VALUES (1);");
+        let steps = 0;
+        require("node:async_hooks").createHook({
+          init(_asyncId, type) {
+            if (type === "BackupStep") steps++;
+          },
+        }).enable();
+        const result = backup(new DatabaseSync(workerData.source), workerData.dest);
+        // Two steps have found the lock, so at least one retry has run.
+        const poll = () => {
+          if (steps < 3) return setImmediate(poll);
+          holder.exec("ROLLBACK");
+          result.then((pages) => process.exit(pages > 0 ? 0 : 2));
+        };
+        poll();
+      `);
+
+      expect(result).toEqual({
+        code: 0,
+        signal: null,
+        stdout: "0",
         stderr: "",
       });
     },
@@ -1138,11 +1187,16 @@ describe("Backup functionality", () => {
     async () => {
       // A step that returned SQLITE_BUSY queued the next one at once, so a
       // backup spun a CPU core for as long as another connection held the
-      // lock. Retries now wait 1 ms, doubling up to 100 ms.
-      const starts: number[] = [];
+      // lock. Retries now wait 1 ms, doubling up to 100 ms. A retry's step is
+      // created before its delay, so time each step's completion instead.
+      const steps = new Set<number>();
+      const completions: number[] = [];
       const hook = createHook({
-        init(_asyncId, type) {
-          if (type === "BackupStep") starts.push(performance.now());
+        init(asyncId, type) {
+          if (type === "BackupStep") steps.add(asyncId);
+        },
+        before(asyncId) {
+          if (steps.has(asyncId)) completions.push(performance.now());
         },
       }).enable();
       try {
@@ -1155,14 +1209,14 @@ describe("Backup functionality", () => {
         const db = new DatabaseSync(sourcePath);
         testDatabases.add(db);
         const result = backup(db, destination);
-        while (starts.length < 8) {
+        while (completions.length < 8) {
           await new Promise((resolve) => setImmediate(resolve));
         }
         holder.exec("ROLLBACK");
         await result;
         // The seven retries wait 1 + 2 + ... + 64 = 127 ms in total; the bound
         // leaves room for libuv's millisecond timer granularity.
-        expect(starts[7]! - starts[0]!).toBeGreaterThanOrEqual(100);
+        expect(completions[7]! - completions[0]!).toBeGreaterThanOrEqual(100);
       } finally {
         hook.disable();
       }

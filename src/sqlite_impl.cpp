@@ -4434,6 +4434,56 @@ std::atomic<int> BackupJob::active_jobs_(0);
 std::mutex BackupJob::active_jobs_mutex_;
 std::set<BackupJob *> BackupJob::active_job_instances_;
 
+// A retry waiting on its timer. The timer callback runs without a V8 context,
+// so it cannot create a step; ScheduleRetry() creates the next one up front,
+// and the callback only queues it (napi_queue_async_work takes a
+// node_api_basic_env). The uv_close() callback deletes this. The async cleanup
+// hook makes environment teardown run the loop until that callback has run,
+// which a worker needs before it closes its loop.
+struct BackupRetry {
+  uv_timer_t timer;
+  BackupJob *job;
+  BackupStep *step; // Not yet queued; null once queued or deleted.
+  napi_async_cleanup_hook_handle cleanup_handle = nullptr;
+
+  static void OnTimer(uv_timer_t *timer) {
+    auto *retry = static_cast<BackupRetry *>(timer->data);
+    BackupJob *job = retry->job;
+    job->retry_ = nullptr;
+    // BackupStep deletes itself after OnOK().
+    NAPI_FATAL_IF_FAILED(napi_queue_async_work(job->env_, *retry->step),
+                         "BackupRetry::OnTimer", "napi_queue_async_work");
+    retry->step = nullptr;
+    retry->Close();
+  }
+
+  // Environment teardown: stop the timer. BackupJob::CleanupHook deletes the
+  // step and finishes the job.
+  static void OnEnvCleanup(napi_async_cleanup_hook_handle, void *arg) {
+    auto *retry = static_cast<BackupRetry *>(arg);
+    if (!uv_is_closing(reinterpret_cast<uv_handle_t *>(&retry->timer))) {
+      retry->Close();
+    }
+  }
+
+  // Called by BackupJob::CleanupHook instead of letting the timer fire.
+  void Cancel() {
+    delete step;
+    step = nullptr;
+    if (!uv_is_closing(reinterpret_cast<uv_handle_t *>(&timer))) {
+      Close();
+    }
+  }
+
+  void Close() {
+    uv_close(reinterpret_cast<uv_handle_t *>(&timer), [](uv_handle_t *handle) {
+      auto *retry = static_cast<BackupRetry *>(handle->data);
+      napi_remove_async_cleanup_hook(retry->cleanup_handle);
+      delete retry;
+    });
+  }
+};
+
 void BackupJob::CleanupHook(void *arg) {
   // Called before environment teardown - safe to Reset() references here
   auto *self = static_cast<BackupJob *>(arg);
@@ -4450,9 +4500,11 @@ void BackupJob::CleanupHook(void *arg) {
   if (!self->source_ref_.IsEmpty()) {
     self->source_ref_.Reset();
   }
-  // No step is queued while a retry waits, and the retry timer cannot fire
-  // once JavaScript is disallowed, so nothing else would finish the job.
-  if (self->retry_pending_) {
+  // No step is queued while a retry waits, so nothing else would finish the
+  // job.
+  if (self->retry_ != nullptr) {
+    self->retry_->Cancel();
+    self->retry_ = nullptr;
     self->Finish();
   }
 }
@@ -4607,27 +4659,27 @@ void BackupJob::OnStepComplete() {
 }
 
 void BackupJob::ScheduleRetry() {
-  retry_delay_ms_ = retry_delay_ms_ == 0 ? 1 : std::min(retry_delay_ms_ * 2, 100);
-  Napi::Env env(env_);
-  Napi::Function retry = Napi::Function::New(
-      env,
-      [](const Napi::CallbackInfo &info) {
-        static_cast<BackupJob *>(info.Data())->OnRetryTimer();
-      },
-      "backupRetry", this);
-  GetAddonData(env)->setTimeoutFunction.Call(
-      {retry, Napi::Number::New(env, retry_delay_ms_)});
-  retry_pending_ = true;
-}
-
-void BackupJob::OnRetryTimer() {
-  retry_pending_ = false;
-  // close() abandoned the backup while the retry waited.
-  if (backup_ == nullptr) {
-    Finish();
-    return;
-  }
-  QueueStep();
+  retry_delay_ms_ =
+      retry_delay_ms_ == 0 ? 1 : std::min(retry_delay_ms_ * 2, 100);
+  uv_loop_t *loop = nullptr;
+  NAPI_FATAL_IF_FAILED(napi_get_uv_event_loop(env_, &loop),
+                       "BackupJob::ScheduleRetry", "napi_get_uv_event_loop");
+  auto *retry = new BackupRetry{};
+  retry->job = this;
+  // If close() abandons the backup while the retry waits, this step does
+  // nothing and its completion finishes the job.
+  retry->step = new BackupStep(Napi::Env(env_), this);
+  NAPI_CHECK(uv_timer_init(loop, &retry->timer) == 0,
+             "BackupJob::ScheduleRetry", "uv_timer_init");
+  retry->timer.data = retry;
+  NAPI_FATAL_IF_FAILED(
+      napi_add_async_cleanup_hook(env_, BackupRetry::OnEnvCleanup, retry,
+                                  &retry->cleanup_handle),
+      "BackupJob::ScheduleRetry", "napi_add_async_cleanup_hook");
+  NAPI_CHECK(uv_timer_start(&retry->timer, BackupRetry::OnTimer,
+                            retry_delay_ms_, 0) == 0,
+             "BackupJob::ScheduleRetry", "uv_timer_start");
+  retry_ = retry;
 }
 
 // Clears the exception the progress callback threw and returns its message.

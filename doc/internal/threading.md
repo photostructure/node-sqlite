@@ -214,12 +214,17 @@ steps back into one worker loop:
 - A step that returns `SQLITE_BUSY` or `SQLITE_LOCKED` is retried from a
   timer, 1 ms at first and doubling to 100 ms, rather than queued at once,
   which kept one CPU core busy for as long as another connection held the
-  lock (`node:sqlite` still does). The timer is `setTimeout()` from
-  `node:timers`, passed in by `src/index.ts`: a raw `uv_timer_t` callback runs
-  without an entered V8 context, and the global `setTimeout` is replaced by
-  fake timers. No step is queued while a retry waits, and the timer cannot fire
-  once teardown disallows JavaScript, so `BackupJob::CleanupHook` finishes a
-  job whose retry is pending.
+  lock (`node:sqlite` still does). The timer is a `uv_timer_t`, not
+  `setTimeout()`: fake timers such as Sinon's replace `setTimeout` on both the
+  global and `node:timers`, and a retry scheduled on a fake clock never runs,
+  even after the fake is uninstalled. The timer callback runs without an
+  entered V8 context, so `ScheduleRetry()` creates the next step up front and
+  the callback only queues it (`napi_queue_async_work` takes a
+  `node_api_basic_env`). Each timer has an async cleanup hook, because a worker
+  aborts if its loop still has an open handle when it closes, and Node runs the
+  loop during teardown only while async cleanup hooks are pending. No step is
+  queued while a retry waits, so `BackupJob::CleanupHook` deletes the unqueued
+  step and finishes the job.
 
 ### Why detached threads are problematic
 

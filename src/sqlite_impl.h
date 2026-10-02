@@ -3,6 +3,7 @@
 
 #include <napi.h>
 #include <sqlite3.h>
+#include <uv.h>
 
 #include <array>
 #include <atomic>
@@ -35,6 +36,7 @@ class StatementSync;
 class StatementSyncIterator;
 class Session;
 class BackupJob;
+struct BackupRetry;
 class AsyncPoolEnvironment;
 
 // Per-worker instance data
@@ -61,11 +63,6 @@ struct AddonData {
   // Keeping the JS object here makes it available to SQLite's native profile
   // callback without relying on Node-internal diagnostics_channel APIs.
   Napi::ObjectReference queryDiagnosticsChannel;
-
-  // Used by BackupJob::ScheduleRetry(). The TypeScript entrypoint supplies
-  // setTimeout() from node:timers, which fake timers and application code
-  // that replace the global leave alone; Init() sets the global as a default.
-  Napi::FunctionReference setTimeoutFunction;
 
   // Cached Object.create function for creating objects with null prototype
   Napi::FunctionReference objectCreateFn;
@@ -688,6 +685,7 @@ public:
 
 private:
   friend class BackupStep;
+  friend struct BackupRetry;
 
   // Finishes the backup and closes the destination.
   void Cleanup();
@@ -697,12 +695,12 @@ private:
   void Step();
   // Run on the main thread after each Step().
   void OnStepComplete();
-  // A step that returned SQLITE_BUSY or SQLITE_LOCKED is retried from a timer
-  // rather than queued at once, which spun a CPU core for as long as another
-  // connection held the lock. The delay starts at 1 ms, doubles up to 100 ms,
-  // and resets after a step that succeeds.
+  // A step that returned SQLITE_BUSY or SQLITE_LOCKED is retried from a libuv
+  // timer rather than queued at once, which spun a CPU core for as long as
+  // another connection held the lock. The delay starts at 1 ms, doubles up to
+  // 100 ms, and resets after a step that succeeds. A JavaScript setTimeout()
+  // would run the retry on a fake clock whenever fake timers had replaced it.
   void ScheduleRetry();
-  void OnRetryTimer();
   void ReportProgress();
   // Settles the promise and deletes this job.
   void Finish();
@@ -739,7 +737,8 @@ private:
   Napi::FunctionReference progress_func_;
   Napi::Promise::Deferred deferred_;
   int retry_delay_ms_ = 0;
-  bool retry_pending_ = false;
+  // Set while a retry waits on its timer.
+  BackupRetry *retry_ = nullptr;
 
   // Error from progress callback (set on main thread, checked in Finish)
   std::optional<std::string> progress_error_;
