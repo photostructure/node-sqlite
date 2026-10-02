@@ -20,10 +20,15 @@ import { StatementSyncInstance } from "./types/statement-sync-instance";
 export type { AggregateOptions } from "./types/aggregate-options";
 export type { ChangesetApplyOptions } from "./types/changeset-apply-options";
 export type {
+  DatabaseInstance,
+  DatabaseLimits,
   DatabaseSyncInstance,
   DatabaseSyncLimits,
 } from "./types/database-sync-instance";
-export type { DatabaseSyncOptions } from "./types/database-sync-options";
+export type {
+  DatabaseOptions,
+  DatabaseSyncOptions,
+} from "./types/database-sync-options";
 export type { PragmaOptions } from "./types/pragma-options";
 export type { SessionOptions } from "./types/session-options";
 export type { SQLTagStoreInstance } from "./types/sql-tag-store-instance";
@@ -34,6 +39,7 @@ export type { SqliteChangesetResolution } from "./types/sqlite-changeset-resolut
 export type { SqliteOpenFlags } from "./types/sqlite-open-flags";
 export type {
   StatementColumnMetadata,
+  StatementInstance,
   StatementStatCounter,
   StatementSyncInstance,
 } from "./types/statement-sync-instance";
@@ -145,22 +151,32 @@ export interface Session {
  */
 export interface SqliteModule {
   /**
-   * The DatabaseSync class represents a synchronous connection to a SQLite database.
+   * The Database class represents a synchronous connection to a SQLite database.
    * All operations are performed synchronously, blocking until completion.
    */
-  DatabaseSync: new (
+  Database: new (
     location?: string | Buffer | URL,
     options?: DatabaseSyncOptions,
   ) => DatabaseSyncInstance;
   /**
-   * The StatementSync class represents a synchronous prepared statement.
+   * The pre-rename name of {@link SqliteModule.Database}, kept as an alias.
+   * Node.js deprecates it in documentation only (DEP0210).
+   */
+  DatabaseSync: SqliteModule["Database"];
+  /**
+   * The Statement class represents a synchronous prepared statement.
    * This class should not be instantiated directly; use Database.prepare() instead.
    */
-  StatementSync: new (
+  Statement: new (
     database: DatabaseSyncInstance,
     sql: string,
     options?: StatementOptions,
   ) => StatementSyncInstance;
+  /**
+   * The pre-rename name of {@link SqliteModule.Statement}, kept as an alias.
+   * Node.js deprecates it in documentation only (DEP0211).
+   */
+  StatementSync: SqliteModule["Statement"];
   /**
    * The Session class for recording database changes.
    * This class should not be instantiated directly; use Database.createSession() instead.
@@ -179,41 +195,48 @@ export interface SqliteModule {
 }
 
 /**
- * The DatabaseSync class represents a synchronous connection to a SQLite database.
+ * The Database class represents a synchronous connection to a SQLite database.
  * All database operations are performed synchronously, blocking the thread until completion.
  *
  * @example
  * ```typescript
- * import { DatabaseSync } from '@photostructure/sqlite';
+ * import { Database } from '@photostructure/sqlite';
  *
  * // Create an in-memory database
- * const db = new DatabaseSync(':memory:');
+ * const db = new Database(':memory:');
  *
  * // Create a file-based database
- * const fileDb = new DatabaseSync('./mydata.db');
+ * const fileDb = new Database('./mydata.db');
  *
  * // Create with options
- * const readOnlyDb = new DatabaseSync('./data.db', { readOnly: true });
+ * const readOnlyDb = new Database('./data.db', { readOnly: true });
  * ```
  */
-// Store the native binding's DatabaseSync
-const _DatabaseSync = binding.DatabaseSync;
+// Store the native binding's Database
+const _Database = binding.Database;
 // Wrapper around the native constructor to enforce usage of `new` with the correct error code.
 // We use a function wrapper instead of a Proxy for better performance and explicit prototype handling.
-// The function expression is named so that DatabaseSync.name === "DatabaseSync"
-// at runtime (TypeScript compiles this to `exports.DatabaseSync = ...`, an
-// assignment to a member expression, which does NOT infer a name otherwise).
-// eslint-disable-next-line @typescript-eslint/no-shadow -- intentional: the named function expression shares its binding's name
-export const DatabaseSync = function DatabaseSync(this: any, ...args: any[]) {
+export const Database = function (this: any, ...args: any[]) {
   if (!new.target) {
     const err = new TypeError("Cannot call constructor without `new`");
     (err as NodeJS.ErrnoException).code = "ERR_CONSTRUCT_CALL_REQUIRED";
     throw err;
   }
-  return Reflect.construct(_DatabaseSync, args, new.target);
-} as unknown as SqliteModule["DatabaseSync"];
-Object.setPrototypeOf(DatabaseSync, _DatabaseSync);
-DatabaseSync.prototype = _DatabaseSync.prototype;
+  return Reflect.construct(_Database, args, new.target);
+} as unknown as SqliteModule["Database"];
+// Set explicitly: TypeScript compiles this to `exports.Database = ...`, which
+// infers no name, and the bundler renames a named function expression that
+// shares its binding's name (Database2).
+Object.defineProperty(Database, "name", { value: "Database" });
+Object.setPrototypeOf(Database, _Database);
+Database.prototype = _Database.prototype;
+
+/**
+ * The pre-rename name of {@link Database}, kept as an alias: `DatabaseSync ===
+ * Database`. Node.js renamed the class in PR #65988 and deprecates the old
+ * name in documentation only (DEP0210).
+ */
+export const DatabaseSync = Database;
 
 // node:sqlite implements createTagStore and SQLTagStore entirely in native C++.
 // We use a TypeScript implementation instead, attached via prototype extension.
@@ -313,8 +336,8 @@ if (!Object.getOwnPropertyDescriptor(DatabaseSync.prototype, "limits")) {
 //   db.transaction(() => { ... });
 
 /**
- * The StatementSync class represents a prepared SQL statement.
- * This class should not be instantiated directly; use DatabaseSync.prepare() instead.
+ * The Statement class represents a prepared SQL statement.
+ * This class should not be instantiated directly; use Database.prepare() instead.
  *
  * @example
  * ```typescript
@@ -323,21 +346,27 @@ if (!Object.getOwnPropertyDescriptor(DatabaseSync.prototype, "limits")) {
  * stmt.finalize();
  * ```
  */
-// Store the native binding's StatementSync for internal use
-const _StatementSync = binding.StatementSync;
+// Store the native binding's Statement for internal use
+const _Statement = binding.Statement;
 // Export a wrapper that throws ERR_ILLEGAL_CONSTRUCTOR when called directly
 // but preserves instanceof checks and prototype chain.
-// Named function expression so StatementSync.name === "StatementSync" at
-// runtime (see the DatabaseSync wrapper above for why this is required).
-// eslint-disable-next-line @typescript-eslint/no-shadow -- intentional: the named function expression shares its binding's name
-export const StatementSync = function StatementSync() {
+export const Statement = function () {
   const err = new TypeError("Illegal constructor");
   (err as NodeJS.ErrnoException).code = "ERR_ILLEGAL_CONSTRUCTOR";
   throw err;
-} as unknown as SqliteModule["StatementSync"];
+} as unknown as SqliteModule["Statement"];
+// See the Database wrapper above.
+Object.defineProperty(Statement, "name", { value: "Statement" });
 // Use the native prototype directly so instanceof checks work correctly
-// (stmt instanceof StatementSync will check if StatementSync.prototype is in stmt's chain)
-StatementSync.prototype = _StatementSync.prototype;
+// (stmt instanceof Statement will check if Statement.prototype is in stmt's chain)
+Statement.prototype = _Statement.prototype;
+
+/**
+ * The pre-rename name of {@link Statement}, kept as an alias: `StatementSync
+ * === Statement`. Node.js renamed the class in PR #65988 and deprecates the
+ * old name in documentation only (DEP0211).
+ */
+export const StatementSync = Statement;
 
 /**
  * The Session class for recording database changes.

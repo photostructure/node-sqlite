@@ -8,9 +8,11 @@ describe("experimental DatabasePool API", () => {
 
   test("does not change the stable root export surface", () => {
     expect(Object.keys(stable).sort()).toEqual([
+      "Database",
       "DatabaseSync",
       "SQLTagStore",
       "Session",
+      "Statement",
       "StatementSync",
       "backup",
       "constants",

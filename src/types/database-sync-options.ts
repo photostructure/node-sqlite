@@ -86,3 +86,9 @@ export interface DatabaseSyncOptions {
     readonly triggerDepth?: number;
   };
 }
+
+/**
+ * Same type as {@link DatabaseSyncOptions}, named after the class Node.js
+ * renamed from `DatabaseSync` in PR #65988.
+ */
+export type DatabaseOptions = DatabaseSyncOptions;

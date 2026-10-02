@@ -161,3 +161,10 @@ export interface StatementSyncInstance {
    */
   [Symbol.dispose](): void;
 }
+
+/**
+ * An instance of the `Statement` class. Same type as
+ * {@link StatementSyncInstance}, named after the class Node.js renamed from
+ * `StatementSync` in PR #65988.
+ */
+export type StatementInstance = StatementSyncInstance;

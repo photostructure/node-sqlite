@@ -6,8 +6,8 @@ Complete API documentation for @photostructure/sqlite. This package provides 100
 
 - [Module exports](#module-exports)
 - [Enhancement utilities](#enhancement-utilities)
-- [DatabaseSync](#databasesync)
-- [StatementSync](#statementsync)
+- [Database](#database)
+- [Statement](#statement)
 - [Types and interfaces](#types-and-interfaces)
 - [Constants](#constants)
 - [Error handling](#error-handling)
@@ -18,8 +18,10 @@ The module exports the following items that match `node:sqlite`:
 
 ```typescript
 import {
-  DatabaseSync, // Main database class
-  StatementSync, // Prepared statement class
+  Database, // Main database class
+  Statement, // Prepared statement class
+  DatabaseSync, // Pre-rename alias of Database
+  StatementSync, // Pre-rename alias of Statement
   Session, // Session class for changesets
   backup, // Standalone backup function
   constants, // SQLite constants
@@ -215,9 +217,11 @@ const inner = db.transaction(() => {
 outer(); // "outer" is committed, "inner" is not
 ```
 
-## DatabaseSync
+## Database
 
 The main database class for synchronous SQLite operations.
+
+Node.js renamed this class from `DatabaseSync` in [PR #65988](https://github.com/nodejs/node/pull/65988). `DatabaseSync` is still exported and is the same class (`DatabaseSync === Database`); Node.js deprecates the old name in documentation only (DEP0210). The examples below use `DatabaseSync`, which works unchanged.
 
 ### Constructor
 
@@ -667,9 +671,11 @@ console.log(db.location()); // "myapp.db"
 console.log(db.location("main")); // "myapp.db"
 ```
 
-## StatementSync
+## Statement
 
 Represents a prepared SQL statement.
+
+Node.js renamed this class from `StatementSync` in [PR #65988](https://github.com/nodejs/node/pull/65988). `StatementSync` is still exported and is the same class (`StatementSync === Statement`); Node.js deprecates the old name in documentation only (DEP0211).
 
 ### Methods
 
@@ -883,6 +889,8 @@ console.log(stmt.expandedSQL); // "SELECT * FROM users WHERE id = 42"
 ```
 
 ## Types and interfaces
+
+`DatabaseOptions`, `DatabaseInstance`, `DatabaseLimits`, and `StatementInstance` are aliases of `DatabaseSyncOptions`, `DatabaseSyncInstance`, `DatabaseSyncLimits`, and `StatementSyncInstance`, named after the renamed classes. Either name works.
 
 ### DatabaseSyncOptions
 

@@ -231,3 +231,16 @@ export interface DatabaseSyncLimits {
   /** Maximum depth of recursion for triggers. */
   triggerDepth: number;
 }
+
+/**
+ * An instance of the `Database` class. Same type as
+ * {@link DatabaseSyncInstance}, named after the class Node.js renamed from
+ * `DatabaseSync` in PR #65988.
+ */
+export type DatabaseInstance = DatabaseSyncInstance;
+
+/**
+ * Same type as {@link DatabaseSyncLimits}, named after the class Node.js
+ * renamed from `DatabaseSync` in PR #65988.
+ */
+export type DatabaseLimits = DatabaseSyncLimits;

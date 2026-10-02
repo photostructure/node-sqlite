@@ -2,13 +2,59 @@
  * Runtime tests to verify our API surface matches node:sqlite exactly
  */
 
-import { DatabaseSync, Session, StatementSync, constants } from "../src";
+import sqlite, {
+  Database,
+  DatabaseInstance,
+  DatabaseLimits,
+  DatabaseOptions,
+  DatabaseSync,
+  DatabaseSyncInstance,
+  DatabaseSyncLimits,
+  DatabaseSyncOptions,
+  Session,
+  Statement,
+  StatementInstance,
+  StatementSync,
+  StatementSyncInstance,
+  constants,
+} from "../src";
+
+type Equals<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : false;
+type AssertTrue<T extends true> = T;
 
 describe("API Surface Tests", () => {
+  describe("Database and Statement names (Node.js PR #65988)", () => {
+    test("DatabaseSync and StatementSync are aliases of the renamed classes", () => {
+      expect(DatabaseSync).toBe(Database);
+      expect(StatementSync).toBe(Statement);
+    });
+
+    test("the default export has both names for each class", () => {
+      expect(sqlite.DatabaseSync).toBe(sqlite.Database);
+      expect(sqlite.StatementSync).toBe(sqlite.Statement);
+    });
+
+    test("new type names are aliases of the old ones", () => {
+      type _Aliases = [
+        AssertTrue<Equals<DatabaseInstance, DatabaseSyncInstance>>,
+        AssertTrue<Equals<DatabaseOptions, DatabaseSyncOptions>>,
+        AssertTrue<Equals<DatabaseLimits, DatabaseSyncLimits>>,
+        AssertTrue<Equals<StatementInstance, StatementSyncInstance>>,
+      ];
+      void (null as unknown as _Aliases);
+      const db: DatabaseInstance = new Database(":memory:");
+      expect(db).toBeInstanceOf(DatabaseSync);
+      db.close();
+    });
+  });
+
   describe("DatabaseSync class", () => {
     test("has all required static properties", () => {
       expect(typeof DatabaseSync).toBe("function");
-      expect(DatabaseSync.name).toBe("DatabaseSync");
+      expect(DatabaseSync.name).toBe("Database");
     });
 
     test("constructor overloads work", () => {
@@ -85,7 +131,7 @@ describe("API Surface Tests", () => {
   describe("StatementSync class", () => {
     test("has all required static properties", () => {
       expect(typeof StatementSync).toBe("function");
-      expect(StatementSync.name).toBe("StatementSync");
+      expect(StatementSync.name).toBe("Statement");
     });
 
     test("has all required instance methods", () => {
@@ -326,7 +372,8 @@ describe("API Surface Tests", () => {
       const stmt = db.prepare("SELECT 1");
 
       expect(stmt).toBeInstanceOf(StatementSync);
-      expect(stmt.constructor.name).toBe("StatementSync");
+      expect(stmt).toBeInstanceOf(Statement);
+      expect(stmt.constructor.name).toBe("Statement");
 
       db.close();
     });
@@ -358,6 +405,7 @@ describe("API Surface Tests", () => {
       // Check it's an iterator
       expect(typeof iterator[Symbol.iterator]).toBe("function");
       expect(typeof iterator.next).toBe("function");
+      expect(iterator.constructor.name).toBe("StatementIterator");
 
       // Test iteration
       const values = [];

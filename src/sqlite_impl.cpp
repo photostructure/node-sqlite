@@ -355,7 +355,7 @@ Napi::Object CreateObjectWithNullPrototype(Napi::Env env) {
 // DatabaseSync Implementation
 Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(
-      env, "DatabaseSync",
+      env, "Database",
       {InstanceMethod("open", &DatabaseSync::Open),
        InstanceMethod("close", &DatabaseSync::Close),
        InstanceMethod("dispose", &DatabaseSync::Dispose),
@@ -419,6 +419,9 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
       .As<Napi::Object>()
       .Set(sqliteTypeSymbol, Napi::String::New(env, "node:sqlite"));
 
+  // Node.js PR #65988 renamed DatabaseSync to Database and kept the old name
+  // as an alias (DEP0210).
+  exports.Set("Database", func);
   exports.Set("DatabaseSync", func);
   return exports;
 }
@@ -2574,7 +2577,7 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
 // StatementSync Implementation
 Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(
-      env, "StatementSync",
+      env, "Statement",
       {InstanceMethod("run", &StatementSync::Run),
        InstanceMethod("get", &StatementSync::Get),
        InstanceMethod("all", &StatementSync::All),
@@ -2625,6 +2628,9 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
                  }));
   }
 
+  // Node.js PR #65988 renamed StatementSync to Statement and kept the old
+  // name as an alias (DEP0211).
+  exports.Set("Statement", func);
   exports.Set("StatementSync", func);
   return exports;
 }
@@ -3922,7 +3928,7 @@ void StatementSync::Reset() {
 
 Napi::Object StatementSyncIterator::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func =
-      DefineClass(env, "StatementSyncIterator",
+      DefineClass(env, "StatementIterator",
                   {InstanceMethod("next", &StatementSyncIterator::Next),
                    InstanceMethod("return", &StatementSyncIterator::Return),
                    InstanceMethod("toArray", &StatementSyncIterator::ToArray)});

@@ -7,9 +7,11 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json");
 const stableKeys = [
+  "Database",
   "DatabaseSync",
   "SQLTagStore",
   "Session",
+  "Statement",
   "StatementSync",
   "backup",
   "constants",
@@ -74,6 +76,14 @@ test("the built stable root export surface is unchanged", async () => {
 
   assert.deepEqual(Object.keys(commonjs).sort(), stableKeys);
   assert.deepEqual(Object.keys(esm).sort(), stableKeys);
+  for (const module of [commonjs, esm]) {
+    assert.equal(module.DatabaseSync, module.Database);
+    assert.equal(module.StatementSync, module.Statement);
+    // The bundler renames named function expressions (Database2), so the
+    // wrappers set their names explicitly.
+    assert.equal(module.Database.name, "Database");
+    assert.equal(module.Statement.name, "Statement");
+  }
   assert.equal("DatabasePool" in commonjs, false);
   assert.equal("DatabasePool" in esm, false);
 });
