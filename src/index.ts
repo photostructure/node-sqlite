@@ -224,9 +224,8 @@ export const Database = function (this: any, ...args: any[]) {
   }
   return Reflect.construct(_Database, args, new.target);
 } as unknown as SqliteModule["Database"];
-// Set explicitly: TypeScript compiles this to `exports.Database = ...`, which
-// infers no name, and the bundler renames a named function expression that
-// shares its binding's name (Database2).
+// Set explicitly: TypeScript compiles this to `exports.Database = ...`, an
+// assignment to a member expression, which infers no name.
 Object.defineProperty(Database, "name", { value: "Database" });
 Object.setPrototypeOf(Database, _Database);
 Database.prototype = _Database.prototype;

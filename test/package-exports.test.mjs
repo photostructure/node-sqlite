@@ -19,9 +19,25 @@ const stableKeys = [
   "enhance",
   "isEnhanced",
 ];
+// The pre-rename names are aliases, so they report the new names.
+const aliasTargets = new Map([
+  ["DatabaseSync", "Database"],
+  ["StatementSync", "Statement"],
+]);
+
+// esbuild renames a class or function expression whose name a top-level
+// binding also uses (2.6.0 exported DatabaseSync2 and _DatabasePool).
+function checkExportNames(module, label) {
+  for (const [key, value] of Object.entries(module)) {
+    if (typeof value === "function") {
+      assert.equal(value.name, aliasTargets.get(key) ?? key, `${label} ${key}`);
+    }
+  }
+}
 
 function checkExperimentalModule(module, label) {
   assert.deepEqual(Object.keys(module).sort(), ["DatabasePool"]);
+  checkExportNames(module, label);
   assert.equal(typeof module.DatabasePool, "function");
   assert.throws(() => new module.DatabasePool(), /illegal constructor/i);
   assert.equal(typeof module.DatabasePool.open, "function");
@@ -79,11 +95,9 @@ test("the built stable root export surface is unchanged", async () => {
   for (const module of [commonjs, esm]) {
     assert.equal(module.DatabaseSync, module.Database);
     assert.equal(module.StatementSync, module.Statement);
-    // The bundler renames named function expressions (Database2), so the
-    // wrappers set their names explicitly.
-    assert.equal(module.Database.name, "Database");
-    assert.equal(module.Statement.name, "Statement");
   }
+  checkExportNames(commonjs, "CommonJS");
+  checkExportNames(esm, "ESM");
   assert.equal("DatabasePool" in commonjs, false);
   assert.equal("DatabasePool" in esm, false);
 });

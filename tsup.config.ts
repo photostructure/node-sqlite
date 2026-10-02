@@ -11,5 +11,9 @@ export default defineConfig({
   }),
   shims: true, // Inject CJS shims (__dirname, __filename) in ESM output
   target: "es2022", // Align with TypeScript target
+  // esbuild renames a class or function expression whose name a top-level
+  // binding also uses, which changes its .name (DatabasePool became
+  // _DatabasePool). test/package-exports.test.mjs checks the built names.
+  keepNames: true,
   tsconfig: "tsconfig.build.json", // Use a single tsconfig for building
 });
