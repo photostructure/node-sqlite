@@ -100,7 +100,8 @@ void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
   js_args.reserve(argc);
 
   for (int i = 0; i < argc; i++) {
-    Napi::Value js_val = SqliteValueToJS(self->env_, argv[i], self->use_bigint_args_);
+    Napi::Value js_val =
+        SqliteValueToJS(self->env_, argv[i], self->use_bigint_args_);
 
     // Check if SqliteValueToJS threw an exception (e.g., ERR_OUT_OF_RANGE)
     if (self->env_.IsExceptionPending()) {

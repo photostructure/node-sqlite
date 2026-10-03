@@ -54,9 +54,8 @@ public:
 
   const sqlite3_module *module_def() const { return &module_def_; }
 
-  static int xCreate(sqlite3 *db, void *pAux, int argc,
-                     const char *const *argv, sqlite3_vtab **ppVTab,
-                     char **pzErr);
+  static int xCreate(sqlite3 *db, void *pAux, int argc, const char *const *argv,
+                     sqlite3_vtab **ppVTab, char **pzErr);
   static int xBestIndex(sqlite3_vtab *pVTab, sqlite3_index_info *pInfo);
   static int xDisconnect(sqlite3_vtab *pVTab);
   static int xDestroy(sqlite3_vtab *pVTab);
@@ -66,8 +65,7 @@ public:
                      const char *idxStr, int argc, sqlite3_value **argv);
   static int xNext(sqlite3_vtab_cursor *pCursor);
   static int xEof(sqlite3_vtab_cursor *pCursor);
-  static int xColumn(sqlite3_vtab_cursor *pCursor, sqlite3_context *ctx,
-                     int i);
+  static int xColumn(sqlite3_vtab_cursor *pCursor, sqlite3_context *ctx, int i);
   static int xRowid(sqlite3_vtab_cursor *pCursor, sqlite3_int64 *pRowid);
   static void xDestroyModule(void *pAux);
 

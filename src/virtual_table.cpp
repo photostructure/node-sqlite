@@ -479,8 +479,7 @@ int VirtualTableModule::xNext(sqlite3_vtab_cursor *pCursor) {
 
       // Read "value" property.
       napi_value row;
-      if (napi_get_named_property(env, next_result, "value", &row) !=
-          napi_ok) {
+      if (napi_get_named_property(env, next_result, "value", &row) != napi_ok) {
         return mod->PropagateJSError();
       }
 

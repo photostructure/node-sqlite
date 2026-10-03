@@ -135,10 +135,7 @@ describe("createModule()", () => {
         columns: [{ name: "v", type: "INTEGER" }],
         rows: () => [[true], [false]],
       });
-      expect(db.prepare("SELECT v FROM m").all()).toEqual([
-        { v: 1 },
-        { v: 0 },
-      ]);
+      expect(db.prepare("SELECT v FROM m").all()).toEqual([{ v: 1 }, { v: 0 }]);
       db.close();
     });
   });
@@ -353,8 +350,12 @@ describe("createModule()", () => {
           };
         },
       });
-      db.exec("CREATE TABLE t(v INTEGER PRIMARY KEY); INSERT INTO t VALUES (5)");
-      expect(() => db.exec("INSERT INTO t SELECT value FROM both_fail")).toThrow(
+      db.exec(
+        "CREATE TABLE t(v INTEGER PRIMARY KEY); INSERT INTO t VALUES (5)",
+      );
+      expect(() =>
+        db.exec("INSERT INTO t SELECT value FROM both_fail"),
+      ).toThrow(
         expect.objectContaining({
           code: "ERR_SQLITE_ERROR",
           message: expect.stringMatching(/UNIQUE constraint failed: t\.v/),
@@ -379,10 +380,7 @@ describe("createModule()", () => {
           yield [2n];
         },
       });
-      expect(db.prepare("SELECT * FROM m").all()).toEqual([
-        { v: 1 },
-        { v: 2 },
-      ]);
+      expect(db.prepare("SELECT * FROM m").all()).toEqual([{ v: 1 }, { v: 2 }]);
       expect(db.prepare("SELECT * FROM m").all()).toEqual([{ w: "x" }]);
       db.close();
     });
@@ -527,7 +525,12 @@ describe("createModule()", () => {
           globalThis.iterator.next();
           process.exit(3);
         `);
-        expect(result).toEqual({ code: 0, signal: null, stdout: "3", stderr: "" });
+        expect(result).toEqual({
+          code: 0,
+          signal: null,
+          stdout: "3",
+          stderr: "",
+        });
       },
       getTestTimeout(30000),
     );
@@ -547,7 +550,12 @@ describe("createModule()", () => {
           parentPort.postMessage("suspended");
           setInterval(() => {}, 1000);
         `);
-        expect(result).toEqual({ code: 0, signal: null, stdout: "1", stderr: "" });
+        expect(result).toEqual({
+          code: 0,
+          signal: null,
+          stdout: "1",
+          stderr: "",
+        });
       },
       getTestTimeout(30000),
     );

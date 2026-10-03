@@ -68,16 +68,16 @@ maintainer's choice of commit split and CHANGELOG lines.
 Every accepted finding was reproduced before its fix and is pinned by tests in
 `test/create-module.test.ts`.
 
-| ID      | Finding                                                                                  | Verdict                                                                                                                                       |
-| ------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| R019-A  | `return()` could close/step its statement while `close()`/`db.close()` finalized it      | Accepted: SIGSEGV or hang. Statements are marked finalized before `sqlite3_finalize`, as upstream's `unique_ptr::reset()` does.             |
-| R019-B  | Iterator `return()` reset its statement without `StepGuard`                              | Accepted: SIGSEGV or hang. Guarded. Stricter than upstream, whose `StatementIterator::Return` has the same gap.                             |
-| R019-C  | `exec()` bypassed the ignore flag and cleanup precedence                                 | Accepted: wrong error, and `process.exit()` in a worker aborted (also for UDFs). `Exec()` uses `ThrowEnhancedSqliteErrorWithDB`.           |
-| A-1     | `All()`/`Get()` reset in `catch` after `StepGuard` was gone (own read)                  | Accepted on review only; no test can force a C++ exception there. Guard declared before `try`.                                               |
-| R019-D  | Statement reuse with named parameters replaced a throwing `return()`'s error            | Accepted: plain `Error` instead of the thrown value. `Reset()` returns false with the exception pending; callers return.                    |
-| R019-E  | `process.exit()` in `return()` aborted via iterator `return()`/`next()`/`iterate()`      | Accepted, widened: also six failing-statement paths ("terminate called"). Pending checks after resets; the error helper stops when JS can't run. |
-| R019-F  | Same exit during `deserialize()` with an authorizer aborted                              | Accepted diagnosis; narrower fix than proposed: return only when JS can no longer run, so an ordinary throw keeps upstream's behavior. Not re-reviewed (4-pass cap). |
-| R842-A  | `db[Symbol.dispose]()` threw a throwing `return()`'s error (maintainer's review run)    | Accepted: reproduced. Upstream `Database::Dispose` runs `Close()` under a `TryCatch` and drops the error; `Dispose()` now clears it with raw Node-API calls. |
+| ID     | Finding                                                                              | Verdict                                                                                                                                                              |
+| ------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R019-A | `return()` could close/step its statement while `close()`/`db.close()` finalized it  | Accepted: SIGSEGV or hang. Statements are marked finalized before `sqlite3_finalize`, as upstream's `unique_ptr::reset()` does.                                      |
+| R019-B | Iterator `return()` reset its statement without `StepGuard`                          | Accepted: SIGSEGV or hang. Guarded. Stricter than upstream, whose `StatementIterator::Return` has the same gap.                                                      |
+| R019-C | `exec()` bypassed the ignore flag and cleanup precedence                             | Accepted: wrong error, and `process.exit()` in a worker aborted (also for UDFs). `Exec()` uses `ThrowEnhancedSqliteErrorWithDB`.                                     |
+| A-1    | `All()`/`Get()` reset in `catch` after `StepGuard` was gone (own read)               | Accepted on review only; no test can force a C++ exception there. Guard declared before `try`.                                                                       |
+| R019-D | Statement reuse with named parameters replaced a throwing `return()`'s error         | Accepted: plain `Error` instead of the thrown value. `Reset()` returns false with the exception pending; callers return.                                             |
+| R019-E | `process.exit()` in `return()` aborted via iterator `return()`/`next()`/`iterate()`  | Accepted, widened: also six failing-statement paths ("terminate called"). Pending checks after resets; the error helper stops when JS can't run.                     |
+| R019-F | Same exit during `deserialize()` with an authorizer aborted                          | Accepted diagnosis; narrower fix than proposed: return only when JS can no longer run, so an ordinary throw keeps upstream's behavior. Not re-reviewed (4-pass cap). |
+| R842-A | `db[Symbol.dispose]()` threw a throwing `return()`'s error (maintainer's review run) | Accepted: reproduced. Upstream `Database::Dispose` runs `Close()` under a `TryCatch` and drops the error; `Dispose()` now clears it with raw Node-API calls.         |
 
 ### Moved to `main` (2026-10-02)
 
@@ -129,15 +129,15 @@ grep -n "^// VirtualTableModule\|^void Database::CreateModule\|\"createModule\""
   $PROJECT_ROOT/src/upstream/node_sqlite.cc
 ```
 
-| What                                                     | Where (6c924ee)                     |
-| -------------------------------------------------------- | ----------------------------------- |
-| `NodeVTab`, `NodeVTabCursor`, `class VirtualTableModule` | `node_sqlite.h:652-739`             |
-| `friend class VirtualTableModule` on `Database`          | `node_sqlite.h:364`                 |
-| `VirtualTableModule` implementation (all callbacks)      | `node_sqlite.cc:1027-1520`          |
-| `Database::CreateModule` (validation, schema, register)  | `node_sqlite.cc:2841-3068`          |
-| `SetMethod(..., "createModule", ...)`                    | `node_sqlite.cc:5332`               |
-| `DestructorScope` in `~Database` / `~Statement`          | `node_sqlite.cc:1569`, `:3743`      |
-| `JSValueToSQLiteResult`, `SQLITE_VALUE_TO_JS`            | `node_sqlite.cc:316`, `:198`        |
+| What                                                     | Where (6c924ee)                |
+| -------------------------------------------------------- | ------------------------------ |
+| `NodeVTab`, `NodeVTabCursor`, `class VirtualTableModule` | `node_sqlite.h:652-739`        |
+| `friend class VirtualTableModule` on `Database`          | `node_sqlite.h:364`            |
+| `VirtualTableModule` implementation (all callbacks)      | `node_sqlite.cc:1027-1520`     |
+| `Database::CreateModule` (validation, schema, register)  | `node_sqlite.cc:2841-3068`     |
+| `SetMethod(..., "createModule", ...)`                    | `node_sqlite.cc:5332`          |
+| `DestructorScope` in `~Database` / `~Statement`          | `node_sqlite.cc:1569`, `:3743` |
+| `JSValueToSQLiteResult`, `SQLITE_VALUE_TO_JS`            | `node_sqlite.cc:316`, `:198`   |
 
 Upstream PRs: [#65787](https://github.com/nodejs/node/pull/65787) (the
 feature) and [#66195](https://github.com/nodejs/node/pull/66195) (run the
@@ -197,38 +197,38 @@ done
    the database.
 9. Schema: `CREATE TABLE x("name" TYPE[ HIDDEN], ...)`, each `"` in a name
    doubled. Register with `sqlite3_create_module_v2(db, name, &module_def_,
-   module, xDestroyModule)`; on failure throw the SQLite error.
+module, xDestroyModule)`; on failure throw the SQLite error.
 
 Exact message strings are in `node_sqlite.cc:2841-3068`; copy them verbatim.
 
 **Callbacks** (`iVersion = 1`, read-only: no `xUpdate`):
 
-| Callback                 | Runs JS?                                                                                  | What it does                                                                                                                                                                                                                                                                                           |
-| ------------------------ | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `xCreate` (= `xConnect`) | no                                                                                        | `sqlite3_declare_vtab(schema)`; `sqlite3_vtab_config(SQLITE_VTAB_DIRECTONLY)` if `directOnly`; allocates `NodeVTab`.                                                                                                                                                                                  |
-| `xBestIndex`             | no                                                                                        | For each hidden column, the first usable `EQ` constraint gets the next `argvIndex` and `omit = 1`. `idxStr` = comma-separated hidden-column indices in argv order (a bitmask would cap at 32 parameters; a test covers 40). `idxNum` = count. `estimatedRows = estimatedCost = max(1000 / 10^count, 1)`. |
-| `xDisconnect`/`xDestroy` | no                                                                                        | Deletes the `NodeVTab`.                                                                                                                                                                                                                                                                                |
-| `xOpen`                  | no                                                                                        | Allocates a cursor with `done = true`, `rowid = 0`, `hidden_values` sized to the column count.                                                                                                                                                                                                        |
-| `xFilter`                | yes: old iterator's `return()`, `rows()`, `[Symbol.iterator]` getter and call             | Closes the previous iterator (refilter, PR #66195; a throw there fails this query); resets state; builds `rows()` arguments (`null` for unconstrained parameters) from `argv` via `idxStr`; keeps `sqlite3_value_dup` copies of constrained hidden values; calls `rows()` with `this = undefined`; takes the iterator; calls `xNext`. |
-| `xNext`                  | yes: `next` getter and call, `done` and `value` getters                                   | `done` uses JavaScript truthiness. On a row: `rowid++`, keep `value` as the current row.                                                                                                                                                                                                               |
-| `xEof`                   | no                                                                                        | Returns `done`.                                                                                                                                                                                                                                                                                        |
-| `xColumn`                | yes for visible columns: `row[visibleIndex]` (may be a getter)                            | Out-of-range index → NULL. Hidden column → its `dup`ed constrained value, or NULL. Non-object row → NULL. Otherwise convert `row[visibleIndex]`.                                                                                                                                                       |
-| `xRowid`                 | no                                                                                        | Returns the per-filter counter (first row is 1).                                                                                                                                                                                                                                                       |
-| `xClose`                 | yes: `return` getter and call                                                             | `CloseIterator`, then frees the cursor. SQLite ignores the return code.                                                                                                                                                                                                                                |
-| `xDestroyModule`         | no                                                                                        | Deletes the module.                                                                                                                                                                                                                                                                                    |
+| Callback                 | Runs JS?                                                                      | What it does                                                                                                                                                                                                                                                                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `xCreate` (= `xConnect`) | no                                                                            | `sqlite3_declare_vtab(schema)`; `sqlite3_vtab_config(SQLITE_VTAB_DIRECTONLY)` if `directOnly`; allocates `NodeVTab`.                                                                                                                                                                                                                  |
+| `xBestIndex`             | no                                                                            | For each hidden column, the first usable `EQ` constraint gets the next `argvIndex` and `omit = 1`. `idxStr` = comma-separated hidden-column indices in argv order (a bitmask would cap at 32 parameters; a test covers 40). `idxNum` = count. `estimatedRows = estimatedCost = max(1000 / 10^count, 1)`.                              |
+| `xDisconnect`/`xDestroy` | no                                                                            | Deletes the `NodeVTab`.                                                                                                                                                                                                                                                                                                               |
+| `xOpen`                  | no                                                                            | Allocates a cursor with `done = true`, `rowid = 0`, `hidden_values` sized to the column count.                                                                                                                                                                                                                                        |
+| `xFilter`                | yes: old iterator's `return()`, `rows()`, `[Symbol.iterator]` getter and call | Closes the previous iterator (refilter, PR #66195; a throw there fails this query); resets state; builds `rows()` arguments (`null` for unconstrained parameters) from `argv` via `idxStr`; keeps `sqlite3_value_dup` copies of constrained hidden values; calls `rows()` with `this = undefined`; takes the iterator; calls `xNext`. |
+| `xNext`                  | yes: `next` getter and call, `done` and `value` getters                       | `done` uses JavaScript truthiness. On a row: `rowid++`, keep `value` as the current row.                                                                                                                                                                                                                                              |
+| `xEof`                   | no                                                                            | Returns `done`.                                                                                                                                                                                                                                                                                                                       |
+| `xColumn`                | yes for visible columns: `row[visibleIndex]` (may be a getter)                | Out-of-range index → NULL. Hidden column → its `dup`ed constrained value, or NULL. Non-object row → NULL. Otherwise convert `row[visibleIndex]`.                                                                                                                                                                                      |
+| `xRowid`                 | no                                                                            | Returns the per-filter counter (first row is 1).                                                                                                                                                                                                                                                                                      |
+| `xClose`                 | yes: `return` getter and call                                                 | `CloseIterator`, then frees the cursor. SQLite ignores the return code.                                                                                                                                                                                                                                                               |
+| `xDestroyModule`         | no                                                                            | Deletes the module.                                                                                                                                                                                                                                                                                                                   |
 
 **Errors from callbacks** (three kinds, kept distinct upstream):
 
-- *JavaScript threw*: `PropagateJSError()` leaves the exception pending, sets
+- _JavaScript threw_: `PropagateJSError()` leaves the exception pending, sets
   `SetIgnoreNextSQLiteError(true)`, returns `SQLITE_ERROR`. The caller sees the
   thrown value. `xColumn` also calls `sqlite3_result_error(ctx, "", 0)`.
-- *Iteration-protocol violation, nothing thrown*: `ReportProtocolError()` puts
+- _Iteration-protocol violation, nothing thrown_: `ReportProtocolError()` puts
   the message in `pVtab->zErrMsg` and returns `SQLITE_ERROR`, so the caller
   gets `ERR_SQLITE_ERROR` with that message, from both `prepare().all()` and
   `exec()`. The four messages: `rows` returned a non-object; `Symbol.iterator`
   returned a non-object; iterator has no `next()`; `next()` returned a
   non-object.
-- *Cleanup threw in `xClose`*: the exception is left pending, the ignore flag is
+- _Cleanup threw in `xClose`_: the exception is left pending, the ignore flag is
   **not** set (no SQLite error pairs with it), so the next unrelated SQLite
   error is still reported.
 
@@ -257,15 +257,15 @@ grep -n "^Napi::Value DatabaseSync::CustomFunction\|^Napi::Value DatabaseSync::A
   $PROJECT_ROOT/src/sqlite_impl.cpp
 ```
 
-| Upstream                                  | Ours (at 7df3343)                                                                                                                                                                                       |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CallbackDepthGuard`                      | `DatabaseSync::CallbackGuard` / `EnterCallback()` (`sqlite_impl.h:292`). Also pins open sessions, as upstream's guard does.                                                                            |
-| `THROW_AND_RETURN_IF_IN_AUTHORIZER`       | `ThrowIfInAuthorizerCallback(env)` (`sqlite_impl.cpp:738`)                                                                                                                                             |
-| `PropagateJSError` effect                 | `SetIgnoreNextSQLiteError(true)`, consumed by `ThrowEnhancedSqliteErrorWithDB` / `ThrowErrSqliteErrorWithDb` (`sqlite_impl.cpp:35-72`)                                                                |
-| `DestructorScope` / `IsInDestructor()`    | **missing**; added in Task 3                                                                                                                                                                            |
-| `Database::CustomFunction`                | `DatabaseSync::CustomFunction` (`sqlite_impl.cpp:1588`): option parsing, the `IsOpen()` re-check after reading options, and "SQLite already invoked xDestroy" on a failed registration                |
-| `UserDefinedFunction` lifetime            | `src/user_function.{h,cpp}`: heap object owned by a SQLite registration, freed by SQLite's destroy callback, holds a `Napi::FunctionReference`, `Reset()`s it in an env `CleanupHook`, not in the destructor |
-| Calling JS that may be terminated         | `BackupJob::ReportProgress` + `TakeProgressErrorMessage` (`sqlite_impl.cpp:4697-4740`): raw `napi_call_function`                                                                                       |
+| Upstream                               | Ours (at 7df3343)                                                                                                                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CallbackDepthGuard`                   | `DatabaseSync::CallbackGuard` / `EnterCallback()` (`sqlite_impl.h:292`). Also pins open sessions, as upstream's guard does.                                                                                  |
+| `THROW_AND_RETURN_IF_IN_AUTHORIZER`    | `ThrowIfInAuthorizerCallback(env)` (`sqlite_impl.cpp:738`)                                                                                                                                                   |
+| `PropagateJSError` effect              | `SetIgnoreNextSQLiteError(true)`, consumed by `ThrowEnhancedSqliteErrorWithDB` / `ThrowErrSqliteErrorWithDb` (`sqlite_impl.cpp:35-72`)                                                                       |
+| `DestructorScope` / `IsInDestructor()` | **missing**; added in Task 3                                                                                                                                                                                 |
+| `Database::CustomFunction`             | `DatabaseSync::CustomFunction` (`sqlite_impl.cpp:1588`): option parsing, the `IsOpen()` re-check after reading options, and "SQLite already invoked xDestroy" on a failed registration                       |
+| `UserDefinedFunction` lifetime         | `src/user_function.{h,cpp}`: heap object owned by a SQLite registration, freed by SQLite's destroy callback, holds a `Napi::FunctionReference`, `Reset()`s it in an env `CleanupHook`, not in the destructor |
+| Calling JS that may be terminated      | `BackupJob::ReportProgress` + `TakeProgressErrorMessage` (`sqlite_impl.cpp:4697-4740`): raw `napi_call_function`                                                                                             |
 
 `src/aggregate_function.cpp` is the same lifetime as `UserDefinedFunction` but
 keeps state in SQLite's aggregate context; the virtual table keeps state in the
@@ -280,7 +280,7 @@ the cursor (see Landmine 6).
    pending. glibc tolerates an escaping throw; musl segfaults. Every callback in
    the table above that touches N-API, `std::string`, or `std::vector` wraps its
    whole body: `try { ... } catch (const Napi::Error&) { ... } catch (const
-   std::exception&) { ... } catch (...) { ... }`, in that order (`Napi::Error`
+std::exception&) { ... } catch (...) { ... }`, in that order (`Napi::Error`
    derives from `std::exception`).
 
 2. **Do not run user JavaScript through node-addon-api wrappers.**
@@ -609,7 +609,7 @@ GC test does **not** validate the destructor scope (Landmine 4); Task 4 does.
      prepares a new statement while `close()` is finalizing statements.
      Upstream has neither guard; if ASan reports a defect, record it here and
      report it upstream rather than inventing a guard.
-   Use `useTempDir` only if a test needs a file; close every database.
+     Use `useTempDir` only if a test needs a file; close every database.
 3. Run the GC test 20 times in the Alpine container. If it crashes, apply the
    R1 fallback and record the result here.
 
@@ -624,7 +624,7 @@ compiles a call with columns, a generator `rows`, `directOnly`, and
    Suggested names `CreateModuleOptions` and `VirtualTableColumn`
    (`@types/node` has no names for these yet). `type` is the union
    `"INTEGER" | "TEXT" | "REAL" | "BLOB" | "ANY"`; `rows` takes `...params:
-   any[]` and returns `Iterable<ArrayLike<unknown>> | Iterator<ArrayLike<unknown>>`.
+any[]` and returns `Iterable<ArrayLike<unknown>> | Iterator<ArrayLike<unknown>>`.
 2. `createModule(name: string, options: CreateModuleOptions): void` on
    `DatabaseSyncInstance` (`src/types/database-sync-instance.ts`), next to
    `aggregate()`, with TSDoc that names `sqlite3_create_module_v2()`.
