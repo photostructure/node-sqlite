@@ -91,6 +91,12 @@ describe("Path Validation", () => {
       }).toThrow(/must be of scheme file/i);
     });
 
+    it("should reject URLs with an unparsable href", () => {
+      expect(() => {
+        new DatabaseSync({ href: "not a url" } as any);
+      }).toThrow(expect.objectContaining({ code: "ERR_INVALID_URL" }));
+    });
+
     it("should reject URLs with null bytes in href", () => {
       const urlWithNull = { href: "file:///test\0.db" };
       expect(() => {
@@ -222,6 +228,12 @@ describe("Path Validation", () => {
       }).toThrow(
         /must be a string, (Buffer|Uint8Array), or URL without null bytes/,
       );
+    });
+
+    it("should reject destination URLs with an unparsable href", () => {
+      expect(() => {
+        backup(sourceDb, { href: "not a url" } as any);
+      }).toThrow(expect.objectContaining({ code: "ERR_INVALID_URL" }));
     });
   });
 });
