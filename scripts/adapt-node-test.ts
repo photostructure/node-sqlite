@@ -34,11 +34,6 @@ const skipFiles = new Set([
 
   // Tests webstorage behavior when sqlite is unavailable - not relevant for us
   "test-webstorage-without-sqlite.js",
-
-  // Tests DatabaseSync.prototype.createModule() (virtual tables), which
-  // Node.js added on v26.x-staging and we have not ported yet. Remove this
-  // entry once createModule() is implemented.
-  "test-sqlite-virtual-table.js",
 ]);
 
 // Individual tests within files that cannot pass in our standalone package.
@@ -53,16 +48,6 @@ const skipTests: Record<string, Array<{ name: string; reason: string }>> = {
     {
       name: "can be disabled with --no-experimental-sqlite flag",
       reason: "Tests Node.js CLI flag",
-    },
-  ],
-  "test-sqlite-options-getter-reentry.js": [
-    {
-      name: "createModule() throws instead of using a closed connection",
-      reason: "createModule() is not ported yet",
-    },
-    {
-      name: "createModule() throws when a column getter closes the database",
-      reason: "createModule() is not ported yet",
     },
   ],
   "test-sqlite-session.js": [

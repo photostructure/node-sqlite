@@ -1,6 +1,7 @@
 import { Session, StatementOptions } from "../index";
 import { AggregateOptions } from "./aggregate-options";
 import { ChangesetApplyOptions } from "./changeset-apply-options";
+import { CreateModuleOptions } from "./create-module-options";
 import { SessionOptions } from "./session-options";
 import { SQLTagStoreInstance } from "./sql-tag-store-instance";
 import { StatementSyncInstance } from "./statement-sync-instance";
@@ -70,6 +71,15 @@ export interface DatabaseSyncInstance {
    * @param options Configuration object containing step function and other settings.
    */
   aggregate(name: string, options: AggregateOptions): void;
+  /**
+   * Registers a virtual table module whose rows come from JavaScript, wrapping
+   * sqlite3_create_module_v2(). Query the module by its name, or create tables
+   * with `CREATE VIRTUAL TABLE t USING name`. Hidden columns are parameters,
+   * passed with table-valued function syntax: `SELECT * FROM name(1, 10)`.
+   * @param name The name of the virtual table module.
+   * @param options The columns and the function that produces the rows.
+   */
+  createModule(name: string, options: CreateModuleOptions): void;
   /**
    * Create a new session to record database changes.
    * @param options Optional configuration for the session.

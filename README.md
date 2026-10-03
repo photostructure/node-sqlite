@@ -63,6 +63,7 @@ production.
 - TypeScript support with complete type definitions
 - Cross-platform prebuilt binaries (Windows/macOS/Linux, x64/ARM64)
 - User-defined functions and aggregates
+- Virtual tables backed by JavaScript iterables (`createModule()`)
 - Database backups and session/changeset support
 - Session class exposed for advanced replication workflows
 - Native `Symbol.dispose` for resource management

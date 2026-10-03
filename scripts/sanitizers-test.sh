@@ -261,7 +261,7 @@ fi
 # amalgamation is excluded from UB instrumentation (.ubsan-ignorelist.txt), so
 # anything here is ours. We build with -fno-sanitize-recover=undefined, so this
 # should already have aborted the run -- this catches it either way.
-if grep -E "runtime error:" "$OUTPUT_FILE" | grep -E "(sqlite_impl|async_pool_impl|user_function|aggregate_function|sqlite_value_conversion|binding)\.(cpp|h)" > /dev/null; then
+if grep -E "runtime error:" "$OUTPUT_FILE" | grep -E "(sqlite_impl|async_pool_impl|user_function|aggregate_function|sqlite_value_conversion|virtual_table|binding)\.(cpp|h)" > /dev/null; then
     OUR_UB=1
 fi
 
@@ -310,7 +310,7 @@ fi
 
 if [[ "$OUR_UB" -eq 1 ]]; then
     echo -e "${RED}\n✗ UndefinedBehaviorSanitizer found undefined behavior in sqlite code:${NC}"
-    grep -E "runtime error:" "$OUTPUT_FILE" | grep -E "(sqlite_impl|async_pool_impl|user_function|aggregate_function|sqlite_value_conversion|binding)\.(cpp|h)" | head -20
+    grep -E "runtime error:" "$OUTPUT_FILE" | grep -E "(sqlite_impl|async_pool_impl|user_function|aggregate_function|sqlite_value_conversion|virtual_table|binding)\.(cpp|h)" | head -20
     EXIT_CODE=1
 fi
 

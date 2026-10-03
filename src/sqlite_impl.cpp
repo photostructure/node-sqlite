@@ -32,6 +32,17 @@ bool IsSharedArrayBufferValue(Napi::Env env, Napi::Value value) {
          tag.As<Napi::String>().Utf8Value() == "SharedArrayBuffer";
 }
 
+// False once the environment disallows JavaScript, as during teardown or after
+// process.exit() in a worker: Node-API calls that may run JavaScript, such as
+// napi_has_named_property, then fail. They also fail while an exception is
+// pending, so this is false then too.
+bool CanRunJavaScript(napi_env env) {
+  napi_value object;
+  bool has_property;
+  return napi_create_object(env, &object) == napi_ok &&
+         napi_has_named_property(env, object, "", &has_property) == napi_ok;
+}
+
 inline void ThrowErrSqliteErrorWithDb(Napi::Env env,
                                       photostructure::sqlite::DatabaseSync *db,
                                       const char *message = nullptr) {
@@ -74,6 +85,23 @@ inline void ThrowEnhancedSqliteErrorWithDB(
     }
   }
 
+  // A pending exception here is not the statement's own error, which sets the
+  // ignore flag checked above. It is what a virtual table iterator's return()
+  // threw while SQLite closed the cursors of the failing statement. node:sqlite
+  // reports the SQLite error in its place; creating our error object with it
+  // still pending would fail and surface the cleanup error instead.
+  bool pending = false;
+  if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {
+    napi_value discarded;
+    napi_get_and_clear_last_exception(env, &discarded);
+    // The discarded exception can be the termination process.exit() leaves
+    // in a worker. JavaScript cannot run after it, and building the error
+    // object would then abort the process.
+    if (!CanRunJavaScript(env)) {
+      return;
+    }
+  }
+
   // Use extended error code from db handle (e.g., 1555 for
   // SQLITE_CONSTRAINT_PRIMARYKEY) instead of basic code (e.g., 19 for
   // SQLITE_CONSTRAINT) to match Node.js behavior
@@ -83,6 +111,7 @@ inline void ThrowEnhancedSqliteErrorWithDB(
 } // namespace
 #include "sqlite_exception.h"
 #include "user_function.h"
+#include "virtual_table.h"
 
 namespace photostructure::sqlite {
 
@@ -387,6 +416,7 @@ Napi::Object DatabaseSync::Init(Napi::Env env, Napi::Object exports) {
        InstanceMethod("exec", &DatabaseSync::Exec),
        InstanceMethod("function", &DatabaseSync::CustomFunction),
        InstanceMethod("aggregate", &DatabaseSync::AggregateFunction),
+       InstanceMethod("createModule", &DatabaseSync::CreateModule),
        InstanceMethod("enableLoadExtension",
                       &DatabaseSync::EnableLoadExtension),
        InstanceMethod("loadExtension", &DatabaseSync::LoadExtension),
@@ -724,6 +754,9 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
 }
 
 DatabaseSync::~DatabaseSync() {
+  // Closing the connection here must not reach back into JavaScript.
+  DestructorScope destructor_scope(this);
+
   // Remove cleanup hook if still registered
   napi_remove_env_cleanup_hook(env_, CleanupHook, this);
 
@@ -885,6 +918,17 @@ Napi::Value DatabaseSync::Dispose(const Napi::CallbackInfo &info) {
     }
   } catch (...) {
     // Ignore errors during disposal
+  }
+
+  // Closing finalizes statements, which runs the return() of any suspended
+  // virtual table iterator, and an exception it threw is still pending.
+  // node:sqlite drops that too. Raw Node-API calls, because node-addon-api
+  // aborts the process when the exception is the termination that
+  // process.exit() leaves in a worker.
+  bool pending = false;
+  if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {
+    napi_value discarded;
+    napi_get_and_clear_last_exception(env, &discarded);
   }
 
   return env.Undefined();
@@ -1128,8 +1172,10 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
     std::string error = error_msg ? error_msg : "Unknown SQLite error";
     if (error_msg)
       sqlite3_free(error_msg);
-    // Use enhanced error throwing with database handle
-    node::ThrowSqliteError(env, connection(), error);
+    // The database-aware helper leaves a callback's pending JavaScript
+    // exception in place of the SQLite error, and reports the SQLite error
+    // over one thrown by a virtual table iterator's cleanup.
+    ThrowEnhancedSqliteErrorWithDB(env, this, connection(), result, error);
   }
 
   return env.Undefined();
@@ -1321,6 +1367,21 @@ Napi::Value DatabaseSync::Deserialize(const Napi::CallbackInfo &info) {
   // active statements on the connection. After this call, any user-held
   // StatementSync instances will throw on use.
   FinalizeStatements();
+
+  // Finalizing ran the return() of any suspended virtual table iterator. An
+  // exception it threw stays pending, as in node:sqlite, but if it exited a
+  // worker no JavaScript can run, and the authorizer sqlite3_deserialize()
+  // can invoke would abort the process.
+  bool pending = false;
+  if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {
+    napi_value exception;
+    napi_get_and_clear_last_exception(env, &exception);
+    if (!CanRunJavaScript(env)) {
+      sqlite3_free(buf);
+      return env.Undefined();
+    }
+    napi_throw(env, exception);
+  }
 
   // Clear any stale deferred exception from a previous operation.
   ClearDeferredAuthorizerException();
@@ -1974,6 +2035,183 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo &info) {
   return env.Undefined();
 }
 
+// Port of node:sqlite's Database::CreateModule. The validation order and
+// messages follow src/upstream/node_sqlite.cc.
+Napi::Value DatabaseSync::CreateModule(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  if (ThrowIfInAuthorizerCallback(env)) {
+    return env.Undefined();
+  }
+
+  if (!info[0].IsString()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env,
+                                     "The \"name\" argument must be a string.");
+    return env.Undefined();
+  }
+
+  if (!info[1].IsObject()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The \"options\" argument must be an object.");
+    return env.Undefined();
+  }
+
+  std::string name = info[0].As<Napi::String>().Utf8Value();
+  Napi::Object options = info[1].As<Napi::Object>();
+
+  Napi::Value columns_v = options.Get("columns");
+  if (!columns_v.IsArray()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The \"options.columns\" argument must be an array.");
+    return env.Undefined();
+  }
+
+  Napi::Array columns = columns_v.As<Napi::Array>();
+  uint32_t num_columns = columns.Length();
+
+  if (num_columns == 0) {
+    node::THROW_ERR_INVALID_ARG_VALUE(
+        env, "The \"options.columns\" array must not be empty.");
+    return env.Undefined();
+  }
+
+  Napi::Value rows_v = options.Get("rows");
+  if (!rows_v.IsFunction()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The \"options.rows\" argument must be a function.");
+    return env.Undefined();
+  }
+  Napi::Function rows_fn = rows_v.As<Napi::Function>();
+
+  bool direct_only = false;
+  Napi::Value direct_only_v = options.Get("directOnly");
+  if (!direct_only_v.IsUndefined()) {
+    if (!direct_only_v.IsBoolean()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The \"options.directOnly\" argument must be a boolean.");
+      return env.Undefined();
+    }
+    direct_only = direct_only_v.As<Napi::Boolean>().Value();
+  }
+
+  bool use_bigint_args = false;
+  Napi::Value use_bigint_args_v = options.Get("useBigIntArguments");
+  if (!use_bigint_args_v.IsUndefined()) {
+    if (!use_bigint_args_v.IsBoolean()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env,
+          "The \"options.useBigIntArguments\" argument must be a boolean.");
+      return env.Undefined();
+    }
+    use_bigint_args = use_bigint_args_v.As<Napi::Boolean>().Value();
+  }
+
+  // Build CREATE TABLE schema SQL from columns.
+  std::string schema_sql = "CREATE TABLE x(";
+  std::vector<int> hidden_col_indices;
+
+  for (uint32_t i = 0; i < num_columns; i++) {
+    Napi::Value col_v = columns.Get(i);
+    if (!col_v.IsObject()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "Each column in \"options.columns\" must be an object.");
+      return env.Undefined();
+    }
+    Napi::Object col = col_v.As<Napi::Object>();
+
+    Napi::Value col_name_v = col.Get("name");
+    if (!col_name_v.IsString()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The column \"name\" property must be a string.");
+      return env.Undefined();
+    }
+    std::string col_name = col_name_v.As<Napi::String>().Utf8Value();
+
+    Napi::Value col_type_v = col.Get("type");
+    if (!col_type_v.IsString()) {
+      node::THROW_ERR_INVALID_ARG_TYPE(
+          env, "The column \"type\" property must be a string.");
+      return env.Undefined();
+    }
+    std::string col_type = col_type_v.As<Napi::String>().Utf8Value();
+
+    bool hidden = false;
+    Napi::Value hidden_v = col.Get("hidden");
+    if (!hidden_v.IsUndefined()) {
+      if (!hidden_v.IsBoolean()) {
+        node::THROW_ERR_INVALID_ARG_TYPE(
+            env, "The column \"hidden\" property must be a boolean.");
+        return env.Undefined();
+      }
+      hidden = hidden_v.As<Napi::Boolean>().Value();
+    }
+
+    if (hidden) {
+      hidden_col_indices.push_back(static_cast<int>(i));
+    }
+
+    if (i > 0) {
+      schema_sql += ", ";
+    }
+
+    // Validate column type against allowed SQLite type names.
+    if (col_type != "INTEGER" && col_type != "TEXT" && col_type != "REAL" &&
+        col_type != "BLOB" && col_type != "ANY") {
+      node::THROW_ERR_INVALID_ARG_VALUE(
+          env, "The column \"type\" property must be one of "
+               "'INTEGER', 'TEXT', 'REAL', 'BLOB', or 'ANY'.");
+      return env.Undefined();
+    }
+
+    // Quote column name to prevent SQL injection.
+    schema_sql += "\"";
+    for (char c : col_name) {
+      if (c == '"') {
+        schema_sql += "\"\"";
+      } else {
+        schema_sql += c;
+      }
+    }
+    schema_sql += "\" ";
+    schema_sql += col_type;
+
+    if (hidden) {
+      schema_sql += " HIDDEN";
+    }
+  }
+
+  schema_sql += ")";
+
+  // Reading the options bag and the column definitions above can run user
+  // JavaScript through a property getter, which may have closed the database
+  // since it was checked.
+  if (!IsOpen()) {
+    node::THROW_ERR_INVALID_STATE(env, "database is not open");
+    return env.Undefined();
+  }
+
+  auto *module = new VirtualTableModule(
+      env, this, rows_fn, std::move(schema_sql), static_cast<int>(num_columns),
+      std::move(hidden_col_indices), use_bigint_args, direct_only);
+
+  // On failure SQLite has already called xDestroyModule on `module`, so it
+  // must not be deleted here.
+  int r = sqlite3_create_module_v2(connection(), name.c_str(),
+                                   module->module_def(), module,
+                                   VirtualTableModule::xDestroyModule);
+  if (r != SQLITE_OK) {
+    ThrowEnhancedSqliteErrorWithDB(env, this, connection(), r,
+                                   sqlite3_errmsg(connection()));
+  }
+
+  return env.Undefined();
+}
+
 Napi::Value DatabaseSync::EnableLoadExtension(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
@@ -2285,17 +2523,25 @@ void DatabaseSync::UntrackStatement(StatementSync *stmt) {
 }
 
 void DatabaseSync::FinalizeStatements() {
-  // Copy the set under lock then drain it; FinalizeFromDatabase nulls each
+  // Take the set under lock then drain it; FinalizeFromDatabase nulls each
   // statement's database_ so its destructor will not call UntrackStatement.
-  std::set<StatementSync *> statements_copy;
-  {
-    std::lock_guard<std::mutex> lock(statements_mutex_);
-    statements_copy = statements_;
-    statements_.clear();
-  }
+  // Finalizing can run JavaScript, since a virtual table cursor's xClose calls
+  // its iterator's return(), and that can prepare another statement. Repeat
+  // until none is left, so the caller never closes or replaces the connection
+  // under a statement that still points at this database.
+  while (true) {
+    std::set<StatementSync *> statements_copy;
+    {
+      std::lock_guard<std::mutex> lock(statements_mutex_);
+      if (statements_.empty()) {
+        return;
+      }
+      statements_copy.swap(statements_);
+    }
 
-  for (auto *stmt : statements_copy) {
-    stmt->FinalizeFromDatabase();
+    for (auto *stmt : statements_copy) {
+      stmt->FinalizeFromDatabase();
+    }
   }
 }
 
@@ -2764,7 +3010,11 @@ StatementSync::~StatementSync() {
     database->UntrackStatement(this);
   }
   if (statement_ && !finalized_) {
+    // This runs from a finalizer, so finalizing must not reach back into
+    // JavaScript, as a virtual table cursor's xClose would.
+    std::optional<DatabaseSync::DestructorScope> destructor_scope;
     if (database) {
+      destructor_scope.emplace(database);
       database->EnterTraceSuppression();
     }
     sqlite3_finalize(statement_);
@@ -2775,17 +3025,21 @@ StatementSync::~StatementSync() {
 }
 
 void StatementSync::FinalizeFromDatabase() {
-  if (statement_ && !finalized_) {
-    database_->EnterTraceSuppression();
-    sqlite3_finalize(statement_);
-    database_->LeaveTraceSuppression();
-  }
+  sqlite3_stmt *statement = finalized_ ? nullptr : statement_;
+  DatabaseSync *database = database_;
+  // Mark this statement finalized before SQLite finalizes it, as node:sqlite's
+  // unique_ptr::reset() does: finalizing closes virtual table cursors, whose
+  // iterator's return() can reach this statement again. Also detach from the
+  // database so ~StatementSync will not call UntrackStatement back into a
+  // database that is being torn down or has already cleared its tracking set.
   statement_ = nullptr;
   finalized_ = true;
-  // Detach from database so ~StatementSync will not call UntrackStatement
-  // back into a database that is being torn down or has already cleared
-  // its tracking set.
   database_ = nullptr;
+  if (statement) {
+    database->EnterTraceSuppression();
+    sqlite3_finalize(statement);
+    database->LeaveTraceSuppression();
+  }
 }
 
 inline int StatementSync::ResetStatement() {
@@ -2829,7 +3083,9 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
     // JavaScript getters, and re-entering this statement there would reset the
     // virtual machine a second time behind the outer call's back.
     StepGuard guard(this);
-    Reset();
+    if (!Reset()) {
+      return env.Undefined();
+    }
     BindParameters(info);
 
     // Check if BindParameters set a pending exception
@@ -2911,12 +3167,16 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  // Held across reset, binding, and stepping: binding a named parameter runs
+  // JavaScript getters, and re-entering this statement there would reset the
+  // virtual machine a second time behind the outer call's back. Declared
+  // outside the try so the catch block's reset is covered too: resetting can
+  // run a virtual table iterator's return().
+  StepGuard guard(this);
   try {
-    // Held across reset, binding, and stepping: binding a named parameter runs
-    // JavaScript getters, and re-entering this statement there would reset the
-    // virtual machine a second time behind the outer call's back.
-    StepGuard guard(this);
-    Reset();
+    if (!Reset()) {
+      return env.Undefined();
+    }
     BindParameters(info);
 
     // Check if BindParameters set a pending exception
@@ -2979,12 +3239,16 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
+  // Held across reset, binding, and the whole row loop: binding a named
+  // parameter runs JavaScript getters, and a user function invoked by any
+  // step must not be able to re-enter this statement until the loop unwinds.
+  // Declared outside the try so the catch block's reset is covered too:
+  // resetting can run a virtual table iterator's return().
+  StepGuard guard(this);
   try {
-    // Held across reset, binding, and the whole row loop: binding a named
-    // parameter runs JavaScript getters, and a user function invoked by any
-    // step must not be able to re-enter this statement until the loop unwinds.
-    StepGuard guard(this);
-    Reset();
+    if (!Reset()) {
+      return env.Undefined();
+    }
     BindParameters(info);
 
     // Check if BindParameters set a pending exception
@@ -3088,6 +3352,12 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
                                    sqlite3_errmsg(database_->connection()));
       return info.Env().Undefined();
     }
+    // Resetting closes a cursor an unfinished iterate() left open, and its
+    // iterator's return() may have thrown, or exited a worker: binding would
+    // abort the process on the termination exception.
+    if (info.Env().IsExceptionPending()) {
+      return info.Env().Undefined();
+    }
 
     // Bind parameters if provided
     BindParameters(info, 0);
@@ -3118,19 +3388,23 @@ void StatementSync::CloseStatement() {
     // gives no ordering guarantee between the two wrappers.
     database_ = nullptr;
   }
-  if (statement_) {
+  // Mark this statement finalized before SQLite finalizes it, as node:sqlite's
+  // unique_ptr::reset() does: finalizing closes virtual table cursors, whose
+  // iterator's return() can reach this statement again.
+  sqlite3_stmt *statement = statement_;
+  statement_ = nullptr;
+  finalized_ = true;
+  if (statement) {
     // Safe to finalize even if the database is already closed; SQLite handles
     // that gracefully.
     if (database) {
       database->EnterTraceSuppression();
     }
-    sqlite3_finalize(statement_);
+    sqlite3_finalize(statement);
     if (database) {
       database->LeaveTraceSuppression();
     }
-    statement_ = nullptr;
   }
-  finalized_ = true;
 }
 
 Napi::Value StatementSync::Close(const Napi::CallbackInfo &info) {
@@ -3969,14 +4243,15 @@ Napi::Value StatementSync::CreateResult() {
   return BuildRow(env, sqlite3_column_count(statement_), nullptr);
 }
 
-void StatementSync::Reset() {
+bool StatementSync::Reset() {
   // Safety check
   if (!statement_ || finalized_) {
-    return; // Silent return, error should have been caught earlier
+    return true; // Silent return, error should have been caught earlier
   }
 
   ResetStatement();
   sqlite3_clear_bindings(statement_);
+  return !Env().IsExceptionPending();
 }
 
 // ================================
@@ -4115,6 +4390,13 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
     sqlite3_reset(stmt_->statement_);
     done_ = true;
 
+    // Finishing early, as for LIMIT, closed a virtual table cursor, and its
+    // iterator's return() may have thrown, or exited a worker: building the
+    // result below would abort the process on the termination exception.
+    if (env.IsExceptionPending()) {
+      return env.Undefined();
+    }
+
     Napi::Object result = CreateObjectWithNullPrototype(env);
     result.Set("done", true);
     result.Set("value", env.Null());
@@ -4162,8 +4444,18 @@ Napi::Value StatementSyncIterator::Return(const Napi::CallbackInfo &info) {
       return env.Undefined();
     }
 
-    sqlite3_reset(stmt_->statement_);
+    {
+      // Resetting closes virtual table cursors, whose iterator's return() can
+      // reach this statement; it must find the statement executing.
+      StatementSync::StepGuard guard(stmt_);
+      sqlite3_reset(stmt_->statement_);
+    }
     done_ = true;
+    // The return() it ran may have thrown, or exited a worker: building the
+    // result below would abort the process on the termination exception.
+    if (env.IsExceptionPending()) {
+      return env.Undefined();
+    }
   }
 
   Napi::Object result = CreateObjectWithNullPrototype(env);
@@ -4683,16 +4975,8 @@ void BackupJob::Step() {
 // to completion, and only then runs env cleanup hooks. A step that completes
 // in that window runs before CleanupHook has set shutting_down_, and queuing
 // another step there creates a new async resource, whose async_hooks init
-// callbacks now fail as fatal exceptions. Node-API calls that may run
-// JavaScript, such as napi_has_named_property, fail once JavaScript is
-// disallowed.
-static bool CanRunJavaScript(napi_env env) {
-  napi_value object;
-  bool has_property;
-  return napi_create_object(env, &object) == napi_ok &&
-         napi_has_named_property(env, object, "", &has_property) == napi_ok;
-}
-
+// callbacks now fail as fatal exceptions. CanRunJavaScript() detects that
+// window.
 void BackupJob::OnStepComplete() {
   // This runs on the main thread after each Step().
   if (!CanRunJavaScript(env_)) {

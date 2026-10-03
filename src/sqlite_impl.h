@@ -230,6 +230,9 @@ public:
   // Aggregate functions
   Napi::Value AggregateFunction(const Napi::CallbackInfo &info);
 
+  // Virtual table modules backed by a JavaScript iterable
+  Napi::Value CreateModule(const Napi::CallbackInfo &info);
+
   // Extension loading
   Napi::Value EnableLoadExtension(const Napi::CallbackInfo &info);
   Napi::Value LoadExtension(const Napi::CallbackInfo &info);
@@ -338,6 +341,27 @@ public:
   }
   bool ThrowIfInAuthorizerCallback(Napi::Env env) const;
 
+  // node:sqlite's DestructorScope. ~DatabaseSync and ~StatementSync run from
+  // Node-API finalizers, where user JavaScript must not run, and the SQLite
+  // teardown they do can reach callbacks that would run it: a virtual table
+  // cursor's xClose calls its iterator's return(). Those callbacks check
+  // IsInDestructor() and skip the JavaScript.
+  class DestructorScope {
+  public:
+    explicit DestructorScope(DatabaseSync *database) noexcept
+        : database_(database) {
+      ++database_->destructor_depth_;
+    }
+    ~DestructorScope() noexcept { --database_->destructor_depth_; }
+    DestructorScope(const DestructorScope &) = delete;
+    DestructorScope &operator=(const DestructorScope &) = delete;
+
+  private:
+    DatabaseSync *database_;
+  };
+
+  bool IsInDestructor() const { return destructor_depth_ > 0; }
+
   // Deferred exception handling for authorizer callbacks
   void SetDeferredAuthorizerException(const Napi::Error &error) {
     // Reconstruct rather than assign: Napi::Error's copy assignment unwraps a
@@ -397,6 +421,9 @@ private:
   // same-connection prepare/step work, while user functions may use a
   // different statement on the same connection.
   int in_authorizer_callback_depth_ = 0;
+
+  // Depth of DestructorScopes on this connection's stack.
+  int destructor_depth_ = 0;
 
   // The exact JavaScript value thrown by an authorizer callback, held as
   // Napi::Error's persistent reference until the surrounding SQLite call
@@ -519,7 +546,12 @@ private:
   // 4da0638 and nodejs/node-addon-api#660).
   bool BuildColumnKeys(Napi::Env env, int column_count,
                        std::vector<napi_value> *out_keys);
-  void Reset();
+  // Resets the statement and clears its bindings. Resetting closes a virtual
+  // table cursor that an unfinished iterate() left open, and its iterator's
+  // return() can throw: returns false with that exception pending, which the
+  // caller must report as thrown rather than bind parameters, which would
+  // replace it with a new error.
+  bool Reset();
 
   DatabaseSync *database_ = nullptr;
   sqlite3_stmt *statement_ = nullptr;

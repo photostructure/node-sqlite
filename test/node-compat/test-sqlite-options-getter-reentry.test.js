@@ -96,7 +96,7 @@ suite("closing the database from an options getter", () => {
     }, invalidState);
   });
 
-  test.skip("createModule() throws instead of using a closed connection" /* createModule() is not ported yet */, (t) => {
+  test("createModule() throws instead of using a closed connection", (t) => {
     const db = new Database(":memory:");
     t.assert.throws(() => {
       db.createModule("mod", {
@@ -112,7 +112,7 @@ suite("closing the database from an options getter", () => {
     }, invalidState);
   });
 
-  test.skip("createModule() throws when a column getter closes the database" /* createModule() is not ported yet */, (t) => {
+  test("createModule() throws when a column getter closes the database", (t) => {
     const db = new Database(":memory:");
     t.assert.throws(() => {
       db.createModule("mod", {

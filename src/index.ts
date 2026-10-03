@@ -20,6 +20,10 @@ import { StatementSyncInstance } from "./types/statement-sync-instance";
 export type { AggregateOptions } from "./types/aggregate-options";
 export type { ChangesetApplyOptions } from "./types/changeset-apply-options";
 export type {
+  CreateModuleOptions,
+  VirtualTableColumn,
+} from "./types/create-module-options";
+export type {
   DatabaseInstance,
   DatabaseLimits,
   DatabaseSyncInstance,

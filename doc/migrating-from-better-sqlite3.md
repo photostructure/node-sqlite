@@ -319,7 +319,7 @@ const db = enhance(new DatabaseSync("mydb.sqlite"));
 
 1. **Use `enhance()` for better-sqlite3 compatibility** - Wrap your database with `enhance()` to get `.transaction()` and `.pragma()` methods
 2. **Property name changes** - `.name` → `.location()`, `.open` → `.isOpen`, `.inTransaction` → `.isTransaction`
-3. **No virtual table API** - Use raw SQL if needed
+3. **Virtual tables use `createModule()`, not `.table()`** - Columns are objects with a `type`, parameters are columns with `hidden: true`, rows must be arrays (not objects keyed by column name), and omitted parameters are `null` rather than `undefined`. See [createModule()](./api-reference.md#createmodule)
 4. **`undefined` binds as NULL** - As of v2.6.0 `undefined` binds SQL NULL, matching both `node:sqlite` and better-sqlite3. Earlier versions threw `ERR_INVALID_ARG_TYPE`, which commonly surfaced with ORMs like Knex that produce `undefined` in multi-row inserts for missing columns:
 
    ```javascript

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- **`createModule()`**: virtual tables whose rows come from a JavaScript iterable, via `Database.prototype.createModule(name, { columns, rows, directOnly, useBigIntArguments })`, wrapping `sqlite3_create_module_v2()`. Ports [Node.js PR #65787](https://github.com/nodejs/node/pull/65787) and [PR #66195](https://github.com/nodejs/node/pull/66195), which are on `v26.x-staging` but not yet in a Node.js release.
+
+### Fixed
+
+- **`process.exit()` in a worker during `exec()`**: a user-defined function that called `process.exit()` while `exec()` ran in a worker aborted the process with `FATAL ERROR: Error::Error napi_define_properties`. The worker now exits with the requested code.
+
 ## [3.0.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.0.0) (2026-10-02)
 
 API compatible with `node:sqlite` from Node.js v26.10.0, plus the `Database` and `Statement` class rename from [Node.js PR #65988](https://github.com/nodejs/node/pull/65988), which landed on `v26.x-staging`, and two fixes from Node.js `main` ([Node.js PR #66042](https://github.com/nodejs/node/pull/66042), [Node.js PR #66209](https://github.com/nodejs/node/pull/66209)). None of these is in a Node.js release yet. `Database.prototype.createModule()`, also only on `v26.x-staging` so far, is not ported yet. The rename changes the classes' `name` values, so this is a major release. SQLite is unchanged at 3.53.4.

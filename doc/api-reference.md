@@ -447,6 +447,59 @@ db.aggregate("moving_sum", {
 });
 ```
 
+#### createModule()
+
+```typescript
+createModule(name: string, options: CreateModuleOptions): void
+```
+
+Registers a read-only virtual table module whose rows come from JavaScript, wrapping [`sqlite3_create_module_v2()`](https://sqlite.org/c3ref/create_module.html). Query the module by its name, as an eponymous table (`SELECT * FROM name`), or create tables with `CREATE VIRTUAL TABLE t USING name`. Registering a name again replaces the module.
+
+**Options:**
+
+```typescript
+interface CreateModuleOptions {
+  columns: {
+    name: string;
+    type: "INTEGER" | "TEXT" | "REAL" | "BLOB" | "ANY";
+    hidden?: boolean; // A parameter rather than data (default: false)
+  }[]; // Must not be empty
+  rows: (...parameters: any[]) => Iterable<ArrayLike<unknown>>; // Or an iterator
+  directOnly?: boolean; // Cannot be used in triggers/views (default: false)
+  useBigIntArguments?: boolean; // Receive BigInt for INTEGER parameters (default: false)
+}
+```
+
+SQLite calls `rows` each time it scans the table. Hidden columns are its parameters: their values come from table-valued function syntax (`SELECT * FROM name(1, 10)`) and are passed to `rows` in the order the columns are defined, with `null` for any the query does not constrain. `rows` returns an iterable or an iterator, such as an array or a generator, whose elements are arrays of the visible columns' values.
+
+When SQLite stops reading before the iterator is done (`LIMIT`, `break` out of a `for...of` loop over `iterate()`, `close()`), it calls the iterator's `return()`, so a generator's `finally` block runs. An error thrown there reaches the caller, unless the statement failed with a SQLite error, which is reported instead. A statement that is garbage-collected with an unfinished iterator does not call `return()`, just as an abandoned generator does not run `finally`.
+
+A virtual table does not apply column affinity: a JavaScript number is stored as `REAL` and a BigInt as `INTEGER`, whatever the declared `type`. Row values convert as [user-defined function results](#function) do, which differs from `node:sqlite` in three cases: a boolean is stored as 0 or 1 (`node:sqlite` throws), a BigInt outside the int64 range throws `ERR_OUT_OF_RANGE` (`node:sqlite` throws `ERR_SQLITE_ERROR`), and an `ArrayBuffer` or `SharedArrayBuffer` throws (`node:sqlite` stores it as a BLOB).
+
+`close()` from inside `rows`, an iterator method, or a row getter throws `ERR_INVALID_STATE`, as from any other callback.
+
+```javascript
+db.createModule("generate_series", {
+  columns: [
+    { name: "value", type: "INTEGER" },
+    { name: "start", type: "INTEGER", hidden: true },
+    { name: "stop", type: "INTEGER", hidden: true },
+    { name: "step", type: "INTEGER", hidden: true },
+  ],
+  *rows(start, stop, step) {
+    start ??= 0;
+    stop ??= 10;
+    step ??= 1;
+    for (let i = start; i <= stop; i += step) {
+      yield [i];
+    }
+  },
+});
+
+db.prepare("SELECT value FROM generate_series(1, 5, 2)").all();
+// [{ value: 1 }, { value: 3 }, { value: 5 }]
+```
+
 #### createSession()
 
 ```typescript
@@ -942,6 +995,25 @@ interface AggregateOptions {
   directOnly?: boolean; // Cannot be used in triggers/views (default: false)
   useBigIntArguments?: boolean; // Receive BigInt for INTEGER args (default: false)
   varargs?: boolean; // Accept variable number of arguments (default: false)
+}
+```
+
+### CreateModuleOptions
+
+```typescript
+interface CreateModuleOptions {
+  columns: readonly VirtualTableColumn[]; // Must not be empty
+  rows: (
+    ...parameters: any[] // One per hidden column; null when unconstrained
+  ) => Iterable<ArrayLike<unknown>> | Iterator<ArrayLike<unknown>>;
+  directOnly?: boolean; // Cannot be used in triggers/views (default: false)
+  useBigIntArguments?: boolean; // Receive BigInt for INTEGER parameters (default: false)
+}
+
+interface VirtualTableColumn {
+  name: string;
+  type: "INTEGER" | "TEXT" | "REAL" | "BLOB" | "ANY";
+  hidden?: boolean; // A parameter rather than data (default: false)
 }
 ```
 

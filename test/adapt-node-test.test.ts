@@ -209,8 +209,8 @@ describe("adaptFixture", () => {
 describe("staleTestFiles", () => {
   it("lists adapted tests whose upstream file is no longer synced", () => {
     // Upstream deleted test-sqlite-database-sync-dispose.js and renamed
-    // test-sqlite-database-sync.js, and skipFiles excludes the virtual-table
-    // test, so the sync writes none of their adapted copies.
+    // test-sqlite-database-sync.js, and the virtual-table test stands in for a
+    // file skipFiles excludes, so the sync writes none of their adapted copies.
     expect(
       staleTestFiles(
         [
