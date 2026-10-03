@@ -73,6 +73,13 @@ using v8::Value;
 
 inline MaybeLocal<String> Utf8StringMaybeOneByte(Isolate* isolate,
                                                  std::string_view input) {
+  // SQLITE_MAX_LENGTH exceeds String::kMaxLength, and V8 returns an empty
+  // handle without throwing. Raise the error here or the value is dropped.
+  if (input.size() > static_cast<size_t>(String::kMaxLength)) [[unlikely]] {
+    isolate->ThrowException(node::ERR_STRING_TOO_LONG(isolate));
+    return MaybeLocal<String>();
+  }
+
   const int len = static_cast<int>(input.size());
   if (simdutf::validate_ascii(input.data(), input.size())) {
     return String::NewFromOneByte(
@@ -351,7 +358,11 @@ class Database;
 inline void THROW_ERR_SQLITE_ERROR(Isolate* isolate, Database* db) {
   if (db->ShouldIgnoreSQLiteError()) {
     db->SetIgnoreNextSQLiteError(false);
-    return;
+    // Suppression that swallows no pending exception would also swallow the
+    // SQLite error, reporting a failed statement as a success.
+    if (isolate->HasPendingException()) {
+      return;
+    }
   }
 
   Local<Object> e;
@@ -971,8 +982,7 @@ Intercepted DatabaseLimits::LimitsSetter(
     }
   }
 
-  sqlite3_limit(
-      limits->database_->Connection(), limit_info->sqlite_limit_id, new_value);
+  limits->database_->SetLimit(limit_info->sqlite_limit_id, new_value);
   return Intercepted::kYes;
 }
 
@@ -1190,6 +1200,7 @@ int VirtualTableModule::xBestIndex(sqlite3_vtab* pVTab,
   for (int hidden_idx = 0; hidden_idx < num_hidden; hidden_idx++) {
     int col = mod->hidden_col_indices_[hidden_idx];
 
+    int args_before = argv_index;
     for (int i = 0; i < pInfo->nConstraint; i++) {
       if (pInfo->aConstraint[i].iColumn == col &&
           pInfo->aConstraint[i].usable &&
@@ -1202,6 +1213,20 @@ int VirtualTableModule::xBestIndex(sqlite3_vtab* pVTab,
         }
         idx_str += std::to_string(hidden_idx);
         break;
+      }
+    }
+
+    // No usable constraint means the query supplied a parameter whose value is
+    // not available at this point in the plan. Accepting it would pass null to
+    // rows() and silently return empty results, so reject the plan and let
+    // SQLite pick a different ordering instead.
+    // https://www.sqlite.org/vtab.html#enforcing_required_parameters_on_table_valued_functions
+    if (argv_index == args_before) {
+      for (int i = 0; i < pInfo->nConstraint; i++) {
+        if (pInfo->aConstraint[i].iColumn == col &&
+            pInfo->aConstraint[i].op == SQLITE_INDEX_CONSTRAINT_EQ) {
+          return SQLITE_CONSTRAINT;
+        }
       }
     }
   }
@@ -1650,15 +1675,14 @@ bool Database::Open() {
 
   sqlite3_busy_timeout(connection_.get(), open_config_.get_timeout());
 
-  // Apply initial limits
   for (const auto& [js_name, sqlite_limit_id] : kLimitMapping) {
-    const auto& limit_value = open_config_.initial_limits()[sqlite_limit_id];
+    const auto& limit_value = open_config_.limits()[sqlite_limit_id];
     if (limit_value.has_value()) {
       sqlite3_limit(connection_.get(), sqlite_limit_id, *limit_value);
     }
   }
 
-  if (allow_load_extension_) {
+  if (enable_load_extension_) {
     if (env()->permission()->enabled()) [[unlikely]] {
       THROW_ERR_LOAD_SQLITE_EXTENSION(env(),
                                       "Cannot load SQLite extensions when the "
@@ -1675,6 +1699,15 @@ bool Database::Open() {
   if (trace_channel_ && trace_channel_->HasSubscribers()) {
     sqlite3_trace_v2(
         connection_.get(), SQLITE_TRACE_PROFILE, TraceCallback, this);
+  }
+
+  // The authorizer outlives the connection, so reopening must reinstall it.
+  Local<Value> authorizer =
+      object()->GetInternalField(kAuthorizerCallback).template As<Value>();
+  if (authorizer->IsFunction()) {
+    r = sqlite3_set_authorizer(
+        connection_.get(), Database::AuthorizerCallback, this);
+    CHECK_ERROR_OR_THROW(env()->isolate(), this, r, SQLITE_OK, false);
   }
 
   opened = true;
@@ -1722,6 +1755,11 @@ inline bool Database::IsOpen() {
 
 inline sqlite3* Database::Connection() {
   return connection_.get();
+}
+
+void Database::SetLimit(int sqlite_limit_id, int value) {
+  sqlite3_limit(connection_.get(), sqlite_limit_id, value);
+  open_config_.set_limit(sqlite_limit_id, value);
 }
 
 void Database::SetIgnoreNextSQLiteError(bool ignore) {
@@ -2069,7 +2107,7 @@ void Database::New(const FunctionCallbackInfo<Value>& args) {
             return;
           }
 
-          open_config.set_initial_limit(sqlite_limit_id, limit_val);
+          open_config.set_limit(sqlite_limit_id, limit_val);
         }
       }
     }
@@ -2171,9 +2209,7 @@ void Database::Prepare(const FunctionCallbackInfo<Value>& args) {
     Local<Object> options = args[1].As<Object>();
 
     Local<Value> return_arrays_v;
-    if (!options
-             ->Get(env->context(),
-                   FIXED_ONE_BYTE_STRING(env->isolate(), "returnArrays"))
+    if (!options->Get(env->context(), env->return_arrays_string())
              .ToLocal(&return_arrays_v)) {
       return;
     }
@@ -2188,9 +2224,7 @@ void Database::Prepare(const FunctionCallbackInfo<Value>& args) {
     }
 
     Local<Value> read_big_ints_v;
-    if (!options
-             ->Get(env->context(),
-                   FIXED_ONE_BYTE_STRING(env->isolate(), "readBigInts"))
+    if (!options->Get(env->context(), env->read_bigints_string())
              .ToLocal(&read_big_ints_v)) {
       return;
     }
@@ -2205,10 +2239,7 @@ void Database::Prepare(const FunctionCallbackInfo<Value>& args) {
     }
 
     Local<Value> allow_bare_named_params_v;
-    if (!options
-             ->Get(env->context(),
-                   FIXED_ONE_BYTE_STRING(env->isolate(),
-                                         "allowBareNamedParameters"))
+    if (!options->Get(env->context(), env->allow_bare_named_params_string())
              .ToLocal(&allow_bare_named_params_v)) {
       return;
     }
@@ -2224,10 +2255,7 @@ void Database::Prepare(const FunctionCallbackInfo<Value>& args) {
     }
 
     Local<Value> allow_unknown_named_params_v;
-    if (!options
-             ->Get(env->context(),
-                   FIXED_ONE_BYTE_STRING(env->isolate(),
-                                         "allowUnknownNamedParameters"))
+    if (!options->Get(env->context(), env->allow_unknown_named_params_string())
              .ToLocal(&allow_unknown_named_params_v)) {
       return;
     }
@@ -5338,10 +5366,8 @@ static void Initialize(Local<Object> target,
                           db_tmpl,
                           FIXED_ONE_BYTE_STRING(isolate, "isTransaction"),
                           Database::IsTransactionGetter);
-  SetSideEffectFreeGetter(isolate,
-                          db_tmpl,
-                          FIXED_ONE_BYTE_STRING(isolate, "limits"),
-                          Database::LimitsGetter);
+  SetSideEffectFreeGetter(
+      isolate, db_tmpl, env->limits_string(), Database::LimitsGetter);
   Local<String> sqlite_type_key = FIXED_ONE_BYTE_STRING(isolate, "sqlite-type");
   Local<v8::Symbol> sqlite_type_symbol =
       v8::Symbol::For(isolate, sqlite_type_key);

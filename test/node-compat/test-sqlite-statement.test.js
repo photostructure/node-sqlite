@@ -10,7 +10,9 @@
 
 // Flags: --expose-gc
 "use strict";
+const { enoughTestMem } = require("../common/test-utils.cjs");
 const { Database, Statement } = require("@photostructure/sqlite");
+const { constants } = require("node:buffer");
 const { suite, test } = require("node:test");
 
 suite("Statement() constructor", () => {
@@ -1613,3 +1615,36 @@ suite("options.persistent", () => {
     t.assert.deepStrictEqual(stmt.get(), { __proto__: null, val: 42n });
   });
 });
+
+suite(
+  "values larger than the maximum string length",
+  { skip: !enoughTestMem },
+  () => {
+    // hex() doubles its input, so this is the smallest blob whose text form
+    // exceeds what V8 can hold in a string.
+    const blobSize = (constants.MAX_STRING_LENGTH >>> 1) + 1;
+    const tooLong = { code: "ERR_STRING_TOO_LONG", name: "Error" };
+
+    test("get() throws instead of returning undefined", (t) => {
+      using db = new Database(":memory:");
+      using stmt = db.prepare("SELECT hex(zeroblob(?))");
+      t.assert.throws(() => {
+        stmt.get(blobSize);
+      }, tooLong);
+    });
+
+    test("exec() surfaces the error from a user-defined function", (t) => {
+      using db = new Database(":memory:");
+      db.exec("CREATE TABLE data(val TEXT)");
+      db.function("identity", (val) => val);
+
+      t.assert.throws(() => {
+        db.exec(
+          `INSERT INTO data (val) VALUES (identity(hex(zeroblob(${blobSize}))))`,
+        );
+      }, tooLong);
+      using stmt = db.prepare("SELECT count(*) AS count FROM data");
+      t.assert.deepStrictEqual(stmt.get(), { __proto__: null, count: 0 });
+    });
+  },
+);

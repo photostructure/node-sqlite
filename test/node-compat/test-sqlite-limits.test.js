@@ -361,4 +361,22 @@ suite("Database limits", () => {
       },
     );
   });
+
+  test("limits set at runtime survive close() and open()", (t) => {
+    const db = new Database(":memory:");
+
+    db.limits.attach = 0;
+    db.close();
+    db.open();
+
+    t.assert.strictEqual(db.limits.attach, 0);
+    t.assert.throws(
+      () => {
+        db.exec("ATTACH DATABASE ':memory:' AS db1");
+      },
+      {
+        message: /too many attached databases/,
+      },
+    );
+  });
 });
