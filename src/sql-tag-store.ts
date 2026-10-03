@@ -18,6 +18,7 @@ function checkPlaceholders(
   stmt: StatementSyncInstance,
   valueCount: number,
 ): void {
+  // eslint-disable-next-line security/detect-object-injection -- PARAMETER_COUNT is a Symbol
   const paramCount = (stmt as unknown as Record<symbol, number>)[
     PARAMETER_COUNT
   ];
@@ -42,6 +43,7 @@ const STATEMENT_FINALIZED = Symbol.for("photostructure.sqlite.finalized");
  * this reads the same state through an internal Symbol-keyed accessor.
  */
 function throwIfInAuthorizerCallback(db: DatabaseSyncInstance): void {
+  // eslint-disable-next-line security/detect-object-injection -- IN_AUTHORIZER_CALLBACK is a Symbol
   if ((db as unknown as Record<symbol, boolean>)[IN_AUTHORIZER_CALLBACK]) {
     const err = new Error(
       "database cannot be accessed from an authorizer callback",
@@ -189,6 +191,7 @@ export class SQLTagStore {
     const cached = this.cache.get(sql);
     if (cached != null) {
       if (
+        // eslint-disable-next-line security/detect-object-injection -- STATEMENT_FINALIZED is a Symbol
         !(cached as unknown as Record<symbol, boolean>)[STATEMENT_FINALIZED]
       ) {
         checkPlaceholders(cached, valueCount);
