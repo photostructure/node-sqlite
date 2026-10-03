@@ -1609,44 +1609,58 @@ int DatabaseSync::QueryTraceCallback(unsigned int type, void *user_data,
     return 0;
   }
 
-  auto callback_guard = database->EnterCallback();
-  Napi::HandleScope scope(env);
-  Napi::Object channel = addon_data->queryDiagnosticsChannel.Value();
-  Napi::Value has_subscribers = channel.Get("hasSubscribers");
-  if (!has_subscribers.IsBoolean() ||
-      !has_subscribers.As<Napi::Boolean>().Value()) {
-    return 0;
-  }
-
-  auto *sqlite_statement = static_cast<sqlite3_stmt *>(statement);
-  char *expanded = sqlite3_expanded_sql(sqlite_statement);
-  Napi::String sql;
-  if (expanded != nullptr) {
-    sql = Napi::String::New(env, expanded);
-    sqlite3_free(expanded);
-  } else {
-    const char *source = sqlite3_sql(sqlite_statement);
-    if (source == nullptr) {
+  // SQLite calls this from inside sqlite3_step() and sqlite3_reset(), so no
+  // C++ exception may leave it. A failure skips the event: subscribing to
+  // diagnostics must not change whether the traced statement succeeds.
+  try {
+    auto callback_guard = database->EnterCallback();
+    Napi::HandleScope scope(env);
+    Napi::Object channel = addon_data->queryDiagnosticsChannel.Value();
+    Napi::Value has_subscribers = channel.Get("hasSubscribers");
+    if (!has_subscribers.IsBoolean() ||
+        !has_subscribers.As<Napi::Boolean>().Value()) {
       return 0;
     }
-    sql = Napi::String::New(env, source);
-  }
 
-  Napi::Object payload = CreateObjectWithNullPrototype(env);
-  payload.Set("sql", sql);
-  payload.Set("database", database->Value());
-  payload.Set(
-      "duration",
-      Napi::Number::New(
-          env, static_cast<double>(*static_cast<sqlite3_int64 *>(duration))));
+    auto *sqlite_statement = static_cast<sqlite3_stmt *>(statement);
+    char *expanded = sqlite3_expanded_sql(sqlite_statement);
+    napi_value sql;
+    if (expanded != nullptr) {
+      // A bound blob over about 256 MB expands to hex longer than V8's
+      // maximum string length, which fails this call without throwing. Pass
+      // the length: given NAPI_AUTO_LENGTH, V8 aborts the process instead.
+      napi_status status =
+          napi_create_string_utf8(env, expanded, strlen(expanded), &sql);
+      sqlite3_free(expanded);
+      if (status != napi_ok) {
+        return 0;
+      }
+    } else {
+      const char *source = sqlite3_sql(sqlite_statement);
+      if (source == nullptr) {
+        return 0;
+      }
+      sql = Napi::String::New(env, source);
+    }
 
-  Napi::Value publish_value = channel.Get("publish");
-  if (!publish_value.IsFunction()) {
-    return 0;
-  }
+    Napi::Object payload = CreateObjectWithNullPrototype(env);
+    payload.Set("sql", sql);
+    payload.Set("database", database->Value());
+    payload.Set(
+        "duration",
+        Napi::Number::New(
+            env, static_cast<double>(*static_cast<sqlite3_int64 *>(duration))));
 
-  try {
+    Napi::Value publish_value = channel.Get("publish");
+    if (!publish_value.IsFunction()) {
+      return 0;
+    }
+
     publish_value.As<Napi::Function>().Call(channel, {payload});
+  } catch (const Napi::Error &) {
+    return 0;
+  } catch (const std::exception &) {
+    return 0;
   } catch (...) {
     return 0;
   }
@@ -3500,11 +3514,17 @@ Napi::Value StatementSync::ExpandedSQLGetter(const Napi::CallbackInfo &info) {
   }
 
   if (statement_) {
-    char *expanded = sqlite3_expanded_sql(statement_);
+    std::unique_ptr<char, decltype(&sqlite3_free)> expanded(
+        sqlite3_expanded_sql(statement_), sqlite3_free);
     if (expanded) {
-      Napi::String result = Napi::String::New(info.Env(), expanded);
-      sqlite3_free(expanded);
-      return result;
+      // A bound blob over about 256 MB expands past V8's maximum string
+      // length, for which this raises ERR_STRING_TOO_LONG.
+      napi_value result;
+      if (!SqliteTextToValue(info.Env(), expanded.get(), strlen(expanded.get()),
+                             &result)) {
+        return info.Env().Undefined(); // ERR_STRING_TOO_LONG is pending
+      }
+      return Napi::Value(info.Env(), result);
     }
   }
   return info.Env().Undefined();

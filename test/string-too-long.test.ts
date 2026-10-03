@@ -7,6 +7,7 @@ import {
   test,
 } from "@jest/globals";
 import { constants } from "node:buffer";
+import * as diagnosticsChannel from "node:diagnostics_channel";
 import { totalmem } from "node:os";
 import { DatabaseSync, type DatabaseSyncInstance } from "../src";
 import { DatabasePool } from "../src/experimental";
@@ -25,7 +26,8 @@ const tooLong = { name: "Error", code: "ERR_STRING_TOO_LONG" };
 
 // Measured on Linux x64, a Jest process running one of these cases peaks at
 // about 1.6 GB RSS (2.1 GB for DatabasePool, which copies the 512 MB hex()
-// text off its worker thread), against 0.34 GB running none. Upstream gates
+// text off its worker thread; 1.1 GB for an expanded SQL case), against
+// 0.34 GB running none. Upstream gates
 // its version of this test on 1.75 GB of total memory for a lone node:test
 // process; Jest runs other suites in parallel worker processes, so require
 // 4 GiB.
@@ -130,5 +132,55 @@ describeLarge("TEXT values longer than the maximum string length", () => {
     } finally {
       await pool.close();
     }
+  });
+});
+
+// A bound blob appears in expanded SQL as x'<hex>', twice its size, so a
+// blobSize blob also expands past the limit. node:sqlite has no behavior to
+// match here: it converts expanded SQL with V8's auto-length
+// String::NewFromUtf8(), which aborts the process on such a string (Node.js
+// v24.21.0 does when reading expandedSQL).
+describeLarge("expanded SQL longer than the maximum string length", () => {
+  jest.setTimeout(getTestTimeout(30_000));
+
+  let db: DatabaseSyncInstance;
+
+  beforeEach(() => {
+    db = new DatabaseSync(":memory:");
+  });
+
+  afterEach(() => {
+    if (db.isOpen) db.close();
+  });
+
+  test("expandedSQL throws ERR_STRING_TOO_LONG", () => {
+    const statement = db.prepare("SELECT length(?) AS n");
+    expect(statement.get(Buffer.alloc(blobSize))).toEqual({ n: blobSize });
+
+    expect(() => statement.expandedSQL).toThrow(
+      expect.objectContaining(tooLong),
+    );
+    statement.get(Buffer.from([0xab]));
+    expect(statement.expandedSQL).toBe("SELECT length(x'ab') AS n");
+  });
+
+  test("a sqlite.db.query subscriber gets no event and the statement succeeds", () => {
+    const published: string[] = [];
+    const handler = (message: unknown) => {
+      published.push((message as { sql: string }).sql);
+    };
+    diagnosticsChannel.subscribe("sqlite.db.query", handler);
+
+    try {
+      const statement = db.prepare("SELECT length(?) AS n");
+      expect(statement.get(Buffer.alloc(blobSize))).toEqual({ n: blobSize });
+      expect(published).toEqual([]);
+
+      expect(statement.get(Buffer.from([0xab]))).toEqual({ n: 1 });
+      expect(published).toEqual(["SELECT length(x'ab') AS n"]);
+    } finally {
+      diagnosticsChannel.unsubscribe("sqlite.db.query", handler);
+    }
+    expect(() => db.close()).not.toThrow();
   });
 });

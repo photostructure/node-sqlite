@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - **`process.exit()` in a worker during `exec()`**: a user-defined function that called `process.exit()` while `exec()` ran in a worker aborted the process with `FATAL ERROR: Error::Error napi_define_properties`. The worker now exits with the requested code.
+- **Expanded SQL longer than V8's maximum string length**: with a `sqlite.db.query` diagnostics subscriber, running a statement whose expanded SQL exceeded V8's maximum string length (for example, one with a bound blob over about 256 MB, which expands to hex) threw `Error: Unknown failure` from a C++ exception that unwound through SQLite, and leaked the expanded SQL. The statement now succeeds and publishes no event. Reading `expandedSQL` on such a statement threw `Error: Unknown failure` with no `code`; it now throws `ERR_STRING_TOO_LONG`, as oversized TEXT values do since 3.0.0. `node:sqlite` aborts the process when reading `expandedSQL` on such a statement (checked on v24.21.0).
 
 ## [3.0.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.0.0) (2026-10-02)
 
