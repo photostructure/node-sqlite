@@ -130,7 +130,7 @@ This package includes SQLite 3.53.4 with extensive compile-time options enabled.
 
 - **Automatic disposal** - DatabaseSync and StatementSync implement `Symbol.dispose` natively in C++
 - **`using` statement support** - Automatic cleanup with explicit resource management
-- **Manual cleanup** - Traditional close()/finalize() methods
+- **Manual cleanup** - `close()` on databases and statements
 - **Exception safety** - Resources cleaned up even when errors occur
 
 ### Error handling

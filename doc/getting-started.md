@@ -159,7 +159,7 @@ using select = db.prepare("SELECT * FROM users WHERE id = ?");
 insert.run("Alice", "alice@example.com");
 const user = select.get(1);
 
-// No need to call db.close() or insert.finalize() - happens automatically!
+// No need to call db.close() or insert.close() - happens automatically!
 ```
 
 This pattern ensures resources are always cleaned up, even if an exception occurs. Both `DatabaseSync` and `StatementSync` implement the disposable interface (`Symbol.dispose`) natively in C++ for optimal performance.

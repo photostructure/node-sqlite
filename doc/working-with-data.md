@@ -24,8 +24,8 @@ const stmt = db.prepare("SELECT * FROM users WHERE age > ?");
 const adults = stmt.all(18);
 const seniors = stmt.all(65);
 
-// Always finalize statements when done (or let them be garbage collected)
-stmt.finalize();
+// Close statements when done (or let them be garbage collected)
+stmt.close();
 db.close();
 ```
 

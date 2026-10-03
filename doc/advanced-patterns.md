@@ -46,7 +46,7 @@ parentPort.on("message", ({ sql, params }) => {
   try {
     const stmt = db.prepare(sql);
     const result = stmt.all(...(params || []));
-    stmt.finalize();
+    stmt.close();
     parentPort.postMessage({ success: true, result });
   } catch (error) {
     parentPort.postMessage({
@@ -94,7 +94,7 @@ class DatabaseWorkerPool {
         try {
           const stmt = db.prepare(sql);
           const result = stmt.all(...(params || []));
-          stmt.finalize();
+          stmt.close();
           parentPort.postMessage({ id, success: true, result });
         } catch (error) {
           parentPort.postMessage({ id, success: false, error: error.message });
@@ -506,7 +506,7 @@ function bulkInsert(db, data) {
       stmt.run(record.timestamp, record.sensorId, record.value);
     }
 
-    stmt.finalize();
+    stmt.close();
     db.exec("COMMIT");
 
     console.log(`Inserted ${data.length} records`);
