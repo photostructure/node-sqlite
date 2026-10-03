@@ -76,6 +76,13 @@ struct AddonData {
 // Helper to create an object with null prototype (matches Node.js behavior)
 Napi::Object CreateObjectWithNullPrototype(Napi::Env env);
 
+// Converts `length` bytes of SQLite TEXT to a JavaScript string in *out.
+// SQLite allows TEXT longer than V8's maximum string length; for such a value
+// this returns false with ERR_STRING_TOO_LONG pending instead of throwing a
+// C++ exception, so SQLite callbacks can call it.
+bool SqliteTextToValue(Napi::Env env, const char *text, size_t length,
+                       napi_value *out);
+
 // Worker thread support functions
 void RegisterDatabaseInstance(Napi::Env env, DatabaseSync *database);
 void UnregisterDatabaseInstance(Napi::Env env, DatabaseSync *database);

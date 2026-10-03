@@ -42,8 +42,13 @@ inline void ThrowErrSqliteErrorWithDb(Napi::Env env,
     // Check for deferred authorizer exception and throw it instead
     if (db->HasDeferredAuthorizerException()) {
       db->RethrowDeferredAuthorizerException();
+      return;
     }
-    return; // Don't throw SQLite error, JavaScript exception takes precedence
+    // Suppression that swallows no pending exception would also swallow the
+    // SQLite error, reporting a failed statement as a success.
+    if (env.IsExceptionPending()) {
+      return; // Don't throw SQLite error, JavaScript exception takes precedence
+    }
   }
 
   const char *msg = (message != nullptr) ? message : "SQLite error";
@@ -60,8 +65,13 @@ inline void ThrowEnhancedSqliteErrorWithDB(
     // Check for deferred authorizer exception and throw it instead
     if (db_sync->HasDeferredAuthorizerException()) {
       db_sync->RethrowDeferredAuthorizerException();
+      return;
     }
-    return; // Don't throw SQLite error, JavaScript exception takes precedence
+    // Suppression that swallows no pending exception would also swallow the
+    // SQLite error, reporting a failed statement as a success.
+    if (env.IsExceptionPending()) {
+      return; // Don't throw SQLite error, JavaScript exception takes precedence
+    }
   }
 
   // Use extended error code from db handle (e.g., 1555 for
@@ -350,6 +360,20 @@ Napi::Object CreateObjectWithNullPrototype(Napi::Env env) {
   }
   // Fallback to regular object if Object.create not available
   return Napi::Object::New(env);
+}
+
+bool SqliteTextToValue(Napi::Env env, const char *text, size_t length,
+                       napi_value *out) {
+  // V8 refuses a string longer than String::kMaxLength by returning an empty
+  // handle without throwing, which Node-API reports as napi_generic_failure
+  // with no exception pending. For a non-null pointer and SQLite's int-sized
+  // length that is the only way this call fails, so its status identifies the
+  // oversized value without hard-coding V8's limit.
+  if (napi_create_string_utf8(env, text, length, out) == napi_ok) {
+    return true;
+  }
+  node::THROW_ERR_STRING_TOO_LONG(env);
+  return false;
 }
 
 // DatabaseSync Implementation
@@ -1083,9 +1107,11 @@ Napi::Value DatabaseSync::Exec(const Napi::CallbackInfo &info) {
   char *error_msg = nullptr;
   // Raise the user-callback depth for the duration of sqlite3_exec so that a
   // close()/deserialize() re-entered from a user function it invokes throws
-  // ERR_INVALID_STATE. sqlite3_exec is a plain C call and never propagates a
-  // C++ exception (JS callback errors are deferred), so manual balancing here
-  // is safe.
+  // ERR_INVALID_STATE. sqlite3_exec is a C call, so no C++ exception may
+  // unwind through it: the callbacks it runs must report errors as pending or
+  // deferred JavaScript exceptions (see AGENTS.md). That makes manual
+  // balancing here safe; an escaping exception would skip LeaveStatementStep()
+  // and leave close() throwing ERR_INVALID_STATE for good.
   EnterStatementStep();
   int result =
       sqlite3_exec(connection(), sql.c_str(), nullptr, nullptr, &error_msg);
@@ -3792,9 +3818,11 @@ void StatementSync::BindSingleParameter(int param_index, Napi::Value param) {
 
 // Converts one column of the current row into a JS value written to *out.
 // Shared by both the array and object result paths. Returns false with a
-// pending ERR_OUT_OF_RANGE exception ONLY for the integer-out-of-safe-range
-// case; every other branch writes *out and returns true. Returning a bool lets
-// BuildRow drop a per-column env.IsExceptionPending() N-API call.
+// pending exception ONLY for an integer outside the safe range
+// (ERR_OUT_OF_RANGE) or TEXT longer than V8's maximum string length
+// (ERR_STRING_TOO_LONG); every other branch writes *out and returns true.
+// Returning a bool lets BuildRow drop a per-column env.IsExceptionPending()
+// N-API call.
 bool StatementSync::GetColumnValue(Napi::Env env, int i, int column_type,
                                    napi_value *out) {
   switch (column_type) {
@@ -3810,7 +3838,7 @@ bool StatementSync::GetColumnValue(Napi::Env env, int i, int column_type,
     }
     if (int_val > JS_MAX_SAFE_INTEGER || int_val < JS_MIN_SAFE_INTEGER) {
       // Throw ERR_OUT_OF_RANGE for values outside safe integer range
-      // (matches Node.js behavior). This is the sole false-returning branch.
+      // (matches Node.js behavior).
       char error_msg[128];
       snprintf(error_msg, sizeof(error_msg),
                "Value is too large to be represented as a JavaScript "
@@ -3835,9 +3863,8 @@ bool StatementSync::GetColumnValue(Napi::Env env, int i, int column_type,
     // Pass the byte length (valid to read after column_text) so N-API skips a
     // strlen over the value.
     int byte_len = sqlite3_column_bytes(statement_, i);
-    *out = Napi::String::New(env, reinterpret_cast<const char *>(text),
-                             static_cast<size_t>(byte_len));
-    return true;
+    return SqliteTextToValue(env, reinterpret_cast<const char *>(text),
+                             static_cast<size_t>(byte_len), out);
   }
   case SQLITE_BLOB: {
     const void *blob_data = sqlite3_column_blob(statement_, i);

@@ -635,7 +635,14 @@ Napi::Value CustomAggregate::SqliteValueToJS(sqlite3_value *value) {
       return Napi::String::New(env_, "");
     }
     // Pass the byte length, as node:sqlite does: text can contain NUL bytes.
-    return Napi::String::New(env_, text, sqlite3_value_bytes(value));
+    // Napi::String::New would throw a C++ exception for an oversized value,
+    // and this runs inside xStep/xInverse, where one must not unwind through
+    // SQLite.
+    napi_value result;
+    if (!SqliteTextToValue(env_, text, sqlite3_value_bytes(value), &result)) {
+      return env_.Undefined(); // Return undefined, exception is pending
+    }
+    return Napi::Value(env_, result);
   }
 
   case SQLITE_BLOB: {

@@ -149,6 +149,37 @@ describe("Callback Function Error Handling", () => {
         db.prepare("SELECT varargs_error(10, 20, 30) as result").get();
       }).toThrow(); // Just verify that an error is thrown
     });
+
+    // A throwing user function tells the connection to drop the next SQLite
+    // error in favor of the pending JavaScript exception. exec() reports that
+    // exception without clearing the request, so a later statement's SQLite
+    // error arrives with no exception pending and must still be thrown.
+    test("a failed exec() does not hide a later statement's SQLite error", () => {
+      db.function("boom", () => {
+        throw new Error("boom");
+      });
+      const insert = db.prepare(
+        "INSERT INTO test_data (id, value) VALUES (1, 0)",
+      );
+
+      expect(() => db.exec("SELECT boom()")).toThrow("boom");
+      // 1555 is SQLITE_CONSTRAINT_PRIMARYKEY: row 1 exists.
+      expect(() => insert.run()).toThrow(
+        expect.objectContaining({ code: "ERR_SQLITE_ERROR", errcode: 1555 }),
+      );
+    });
+
+    test("a failed exec() does not hide a later function registration error", () => {
+      db.function("boom", () => {
+        throw new Error("boom");
+      });
+
+      expect(() => db.exec("SELECT boom()")).toThrow("boom");
+      // SQLite rejects function names longer than 255 bytes.
+      expect(() => db.function("f".repeat(256), () => 1)).toThrow(
+        /Failed to create function/,
+      );
+    });
   });
 
   describe("Aggregate functions", () => {

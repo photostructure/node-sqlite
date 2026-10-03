@@ -3,6 +3,7 @@
 
 #include <napi.h>
 
+#include <cstdio>
 #include <string>
 
 namespace node {
@@ -95,6 +96,26 @@ inline void THROW_ERR_LOAD_SQLITE_EXTENSION(Napi::Env env,
   const char *msg = message ? message : "Failed to load SQLite extension";
   Napi::Error error = Napi::Error::New(env, msg);
   error.Set("code", Napi::String::New(env, "ERR_LOAD_SQLITE_EXTENSION"));
+  error.ThrowAsJavaScriptException();
+}
+
+// Node.js's ERR_STRING_TOO_LONG message names V8's String::kMaxLength, which
+// Node-API does not expose. This copies its definition from
+// include/v8-primitive.h for the message only: callers detect an oversized
+// string from napi_create_string_utf8() failing, not from this value.
+inline std::string ERR_STRING_TOO_LONG_MESSAGE() {
+  constexpr unsigned int kMaxLength =
+      sizeof(void *) == 4 ? (1u << 28) - 16 : (1u << 29) - 24;
+  char message[64];
+  snprintf(message, sizeof(message),
+           "Cannot create a string longer than 0x%x characters", kMaxLength);
+  return message;
+}
+
+inline void THROW_ERR_STRING_TOO_LONG(Napi::Env env) {
+  Napi::Error error =
+      Napi::Error::New(env, ERR_STRING_TOO_LONG_MESSAGE().c_str());
+  error.Set("code", Napi::String::New(env, "ERR_STRING_TOO_LONG"));
   error.ThrowAsJavaScriptException();
 }
 

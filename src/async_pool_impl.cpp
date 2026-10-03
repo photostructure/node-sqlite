@@ -325,6 +325,14 @@ void SetRangeError(NativeError *error, int64_t value) {
                    std::to_string(value);
 }
 
+void SetStringTooLongError(NativeError *error) {
+  if (error->present) {
+    return;
+  }
+  SetPlainError(error, node::ERR_STRING_TOO_LONG_MESSAGE());
+  error->code = "ERR_STRING_TOO_LONG";
+}
+
 void SetSqliteError(sqlite3 *db, int rc, NativeError *error,
                     const char *fallback = nullptr) {
   if (error->present) {
@@ -760,7 +768,13 @@ bool ToJsValue(Napi::Env env, const NativeValue &native, bool read_big_ints,
     return true;
   }
   if (const auto *text = std::get_if<std::string>(&native.data)) {
-    *out = Napi::String::New(env, text->data(), text->size());
+    // Fails only for text longer than V8's maximum string length; see
+    // SqliteTextToValue().
+    if (napi_create_string_utf8(env, text->data(), text->size(), out) !=
+        napi_ok) {
+      SetStringTooLongError(error);
+      return false;
+    }
     return true;
   }
   const auto *blob = std::get_if<Blob>(&native.data);
