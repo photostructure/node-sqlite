@@ -364,4 +364,53 @@ describe("SQLite Resource Limits", () => {
       expect(results).toHaveLength(2);
     });
   });
+
+  describe("db.limits across close() and open()", () => {
+    test("limits set at runtime survive close() and open()", () => {
+      db = new DatabaseSync(":memory:");
+
+      db.limits.attach = 0;
+      db.close();
+      db.open();
+
+      expect(db.limits.attach).toBe(0);
+      expect(() => {
+        db.exec("ATTACH DATABASE ':memory:' AS db1");
+      }).toThrow(
+        expect.objectContaining({
+          code: "ERR_SQLITE_ERROR",
+          message: expect.stringMatching(/too many attached databases/),
+        }),
+      );
+    });
+
+    test("a runtime limit replaces the constructor limit on reopen", () => {
+      db = new DatabaseSync(":memory:", { limits: { attach: 0 } });
+
+      db.limits.attach = 5;
+      db.close();
+      db.open();
+
+      expect(db.limits.attach).toBe(5);
+      expect(() => {
+        db.exec("ATTACH DATABASE ':memory:' AS db1");
+      }).not.toThrow();
+    });
+
+    test("native setLimit() records only ids and values db.limits can pass", () => {
+      db = new DatabaseSync(":memory:");
+      db.limits.attach = 3;
+
+      // 11 is SQLITE_LIMIT_WORKER_THREADS, which db.limits does not expose
+      expect(typeof db.setLimit(11, 1)).toBe("number");
+      expect(db.setLimit(-1, 1)).toBe(-1);
+      // 7 is SQLITE_LIMIT_ATTACHED. A negative value only queries the limit,
+      // so it must not replace 3.
+      expect(db.setLimit(7, -1)).toBe(3);
+      db.close();
+      db.open();
+
+      expect(db.limits.attach).toBe(3);
+    });
+  });
 });

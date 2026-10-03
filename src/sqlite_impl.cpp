@@ -679,7 +679,7 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
               return;
             }
 
-            config.set_initial_limit(limit.id, limit_val);
+            config.set_limit(limit.id, limit_val);
           }
         }
       }
@@ -1438,17 +1438,33 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
     }
   }
 
-  // Apply initial limits from constructor options.
+  // Apply limits from constructor options and later db.limits writes (see
+  // SetLimit()), so a reopened connection keeps the runtime values.
   //
   // Bind the array once rather than calling the accessor three times per
   // iteration: it makes the has_value()/deref pair obviously operate on the
   // same optional, which is also what lets clang-tidy's dataflow analysis see
   // the access is checked (bugprone-unchecked-optional-access).
-  const auto &initial_limits = config_.initial_limits();
-  for (size_t i = 0; i < initial_limits.size(); i++) {
-    const std::optional<int> &limit = initial_limits[i];
+  const auto &limits = config_.limits();
+  for (size_t i = 0; i < limits.size(); i++) {
+    const std::optional<int> &limit = limits[i];
     if (limit.has_value()) {
       sqlite3_limit(connection_, static_cast<int>(i), *limit);
+    }
+  }
+
+  // close() keeps the enableLoadExtension() setting, so re-apply it to the
+  // new connection the same way EnableLoadExtension() does.
+  if (enable_load_extension_) {
+    result = sqlite3_db_config(
+        connection(), SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, 1, nullptr);
+    if (result != SQLITE_OK) {
+      std::string error = sqlite3_errmsg(connection());
+      SqliteException ex(connection_, result,
+                         "Failed to configure extension loading: " + error);
+      sqlite3_close(connection_);
+      connection_ = nullptr;
+      throw ex;
     }
   }
 
@@ -1459,6 +1475,21 @@ void DatabaseSync::InternalOpen(DatabaseOpenConfiguration config) {
   if (addon_data != nullptr && !addon_data->queryDiagnosticsChannel.IsEmpty()) {
     sqlite3_trace_v2(connection_, SQLITE_TRACE_PROFILE, QueryTraceCallback,
                      this);
+  }
+
+  // The authorizer outlives the connection, so reopening must reinstall it.
+  // setAuthorizer(null) resets authorizer_callback_, so a cleared authorizer
+  // stays cleared.
+  if (authorizer_callback_) {
+    result = sqlite3_set_authorizer(connection_, AuthorizerCallback, this);
+    if (result != SQLITE_OK) {
+      std::string error = sqlite3_errmsg(connection());
+      SqliteException ex(connection_, result,
+                         "Failed to set authorizer: " + error);
+      sqlite3_close(connection_);
+      connection_ = nullptr;
+      throw ex;
+    }
   }
 }
 
@@ -1569,7 +1600,6 @@ void DatabaseSync::InternalClose() {
     connection_ = nullptr;
   }
   location_.clear();
-  enable_load_extension_ = false;
 }
 
 // V8's Value::IsInt32(): a Number holding an integer in int32 range, and not
@@ -5153,6 +5183,16 @@ Napi::Value DatabaseSync::SetLimit(const Napi::CallbackInfo &info) {
   int limit_id = info[0].As<Napi::Number>().Int32Value();
   int new_value = info[1].As<Napi::Number>().Int32Value();
   int old_value = sqlite3_limit(connection_, limit_id, new_value);
+
+  // Record the value so InternalOpen() re-applies it after close() and open(),
+  // as node:sqlite does. db.limits validates its arguments, but this method is
+  // callable directly: skip a negative value (sqlite3_limit() ignores it) and
+  // an id set_limit() doesn't track (it would throw std::out_of_range).
+  if (new_value >= 0 && limit_id >= 0 &&
+      limit_id < static_cast<int>(DatabaseOpenConfiguration::kNumLimits)) {
+    config_.set_limit(limit_id, new_value);
+  }
+
   return Napi::Number::New(env, old_value);
 }
 

@@ -137,12 +137,14 @@ public:
   bool get_open_uri() const { return open_uri_; }
   void set_open_uri(bool flag) { open_uri_ = flag; }
 
+  // Limits from constructor options, updated by db.limits writes so that
+  // open() after close() re-applies the values the previous connection had.
   static constexpr size_t kNumLimits = 11;
-  void set_initial_limit(int sqlite_limit_id, int value) {
-    initial_limits_.at(sqlite_limit_id) = value;
+  void set_limit(int sqlite_limit_id, int value) {
+    limits_.at(sqlite_limit_id) = value;
   }
-  const std::array<std::optional<int>, kNumLimits> &initial_limits() const {
-    return initial_limits_;
+  const std::array<std::optional<int>, kNumLimits> &limits() const {
+    return limits_;
   }
 
 private:
@@ -157,7 +159,7 @@ private:
   bool allow_unknown_named_params_ = false;
   bool defensive_ = true; // Node.js v25+ defaults to true
   bool open_uri_ = false;
-  std::array<std::optional<int>, kNumLimits> initial_limits_{};
+  std::array<std::optional<int>, kNumLimits> limits_{};
 };
 
 // Main database class

@@ -980,6 +980,44 @@ describe("DatabaseSync.prototype.setAuthorizer()", () => {
         db.setAuthorizer(() => constants.SQLITE_OK);
       }).toThrow(/not open/);
     });
+
+    it("remains installed after close() and open()", () => {
+      const db = new DatabaseSync(":memory:");
+      let calls = 0;
+      db.setAuthorizer(() => {
+        calls++;
+        return constants.SQLITE_DENY;
+      });
+
+      expect(() => {
+        db.exec("CREATE TABLE x (a)");
+      }).toThrow(expect.objectContaining({ code: "ERR_SQLITE_ERROR" }));
+      const callsBefore = calls;
+      expect(callsBefore).toBeGreaterThan(0);
+
+      db.close();
+      db.open();
+
+      expect(() => {
+        db.exec("CREATE TABLE x (a)");
+      }).toThrow(expect.objectContaining({ code: "ERR_SQLITE_ERROR" }));
+      expect(calls).toBeGreaterThan(callsBefore);
+      db.close();
+    });
+
+    it("stays cleared after close() and open()", () => {
+      const db = new DatabaseSync(":memory:");
+      db.setAuthorizer(() => constants.SQLITE_DENY);
+      db.setAuthorizer(null);
+
+      db.close();
+      db.open();
+
+      expect(() => {
+        db.exec("CREATE TABLE x (a)");
+      }).not.toThrow();
+      db.close();
+    });
   });
 
   describe("complex scenarios", () => {

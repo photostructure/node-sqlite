@@ -212,6 +212,45 @@ describe("Extension Loading Tests", () => {
     });
   });
 
+  describe("close() and open()", () => {
+    // Our own refusal is ERR_INVALID_STATE. ERR_SQLITE_ERROR means the call
+    // passed that check; SQLite then either refuses with "not authorized"
+    // (its connection flag is off) or tries and fails to load the file.
+    test("keeps extension loading enabled", () => {
+      const db = new DatabaseSync(":memory:", { allowExtension: true });
+      db.enableLoadExtension(true);
+
+      db.close();
+      db.open();
+
+      expect(() => {
+        db.loadExtension("/nonexistent/ext");
+      }).toThrow(
+        expect.objectContaining({
+          code: "ERR_SQLITE_ERROR",
+          message: expect.not.stringMatching(/not authorized/),
+        }),
+      );
+
+      db.close();
+    });
+
+    test("keeps extension loading disabled", () => {
+      const db = new DatabaseSync(":memory:", { allowExtension: true });
+      db.enableLoadExtension(true);
+      db.enableLoadExtension(false);
+
+      db.close();
+      db.open();
+
+      expect(() => {
+        db.loadExtension("/nonexistent/ext");
+      }).toThrow(expect.objectContaining({ code: "ERR_INVALID_STATE" }));
+
+      db.close();
+    });
+  });
+
   describeWithExtension("loading real extension", () => {
     test("can load test extension and use its functions", () => {
       const db = new DatabaseSync(":memory:", { allowExtension: true });
@@ -255,6 +294,21 @@ describe("Extension Loading Tests", () => {
       expect(version).toEqual({
         "test_extension_version()": "test-extension-1.0.0",
       });
+
+      db.close();
+    });
+
+    test("can load an extension after close() and open()", () => {
+      const db = new DatabaseSync(":memory:", { allowExtension: true });
+      db.enableLoadExtension(true);
+
+      db.close();
+      db.open();
+
+      // Succeeds only if open() re-applied SQLite's own extension-loading flag
+      db.loadExtension(testExtensionPath);
+      const sum = db.prepare("SELECT test_extension_add(?, ?)").get(5, 3);
+      expect(sum).toEqual({ "test_extension_add(?, ?)": 8 });
 
       db.close();
     });
