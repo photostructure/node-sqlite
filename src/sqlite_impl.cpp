@@ -2215,9 +2215,9 @@ Napi::Value DatabaseSync::CreateModule(const Napi::CallbackInfo &info) {
 
   // On failure SQLite has already called xDestroyModule on `module`, so it
   // must not be deleted here.
-  int r = sqlite3_create_module_v2(connection(), name.c_str(),
-                                   module->module_def(), module,
-                                   VirtualTableModule::xDestroyModule);
+  int r =
+      sqlite3_create_module_v2(connection(), name.c_str(), module->module_def(),
+                               module, VirtualTableModule::xDestroyModule);
   if (r != SQLITE_OK) {
     ThrowEnhancedSqliteErrorWithDB(env, this, connection(), r,
                                    sqlite3_errmsg(connection()));
