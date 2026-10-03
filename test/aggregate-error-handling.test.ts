@@ -1,4 +1,16 @@
+import { spawnSync } from "node:child_process";
+import * as path from "node:path";
 import { DatabaseSync } from "../src";
+import { getTestTimeout, projectRoot } from "./test-utils";
+
+function thrownBy(fn: () => unknown): unknown {
+  try {
+    fn();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected the function to throw");
+}
 
 describe("Aggregate Functions Error Handling", () => {
   let db: InstanceType<typeof DatabaseSync>;
@@ -181,4 +193,103 @@ describe("Aggregate Functions Error Handling", () => {
       db.prepare("SELECT null_access(value) as result FROM test_data").get();
     }).toThrow();
   });
+
+  // The Promise check on a step's result reads `then` through node-addon-api,
+  // which throws a C++ exception when the getter throws. That exception
+  // unwound through sqlite3_step(); from exec() it also skipped the end of the
+  // statement, after which close() failed with "database cannot be closed
+  // while in a callback".
+  describe.each([
+    ["exec()", (sql: string) => db.exec(sql)],
+    ["prepare().all()", (sql: string) => db.prepare(sql).all()],
+  ])("a result whose then getter throws, through %s", (_name, run) => {
+    const thenThrows = (error: Error) => ({
+      get then(): never {
+        throw error;
+      },
+    });
+
+    test("from step reaches the caller, and close() succeeds", () => {
+      const error = new Error("then getter failed");
+      db.aggregate("step_then", {
+        start: 0,
+        step: (_acc: unknown, _value: unknown) => thenThrows(error),
+      });
+
+      expect(
+        thrownBy(() => run("SELECT step_then(value) FROM test_data")),
+      ).toBe(error);
+      expect(db.prepare("SELECT count(*) AS n FROM test_data").get()).toEqual({
+        n: 3,
+      });
+      expect(() => db.close()).not.toThrow();
+    });
+
+    test("from inverse reaches the caller, and close() succeeds", () => {
+      const error = new Error("then getter failed");
+      db.aggregate("inverse_then", {
+        start: 0,
+        step: (acc: number, value: number) => acc + value,
+        inverse: (_acc: unknown, _value: unknown) => thenThrows(error),
+      });
+
+      expect(
+        thrownBy(() =>
+          run(`
+            SELECT inverse_then(value) OVER (
+              ORDER BY id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW
+            ) FROM test_data
+          `),
+        ),
+      ).toBe(error);
+      expect(db.prepare("SELECT count(*) AS n FROM test_data").get()).toEqual({
+        n: 3,
+      });
+      expect(() => db.close()).not.toThrow();
+    });
+  });
+
+  // SQLite calls xFinal for a window aggregate that is still accumulating when
+  // its statement is finalized, and at exit that happens after JavaScript can
+  // no longer run. Rebuilding a Uint8Array accumulator then fails, and
+  // node-addon-api's C++ exception aborted the process with "terminate called
+  // after throwing an instance of 'Napi::Error'".
+  test.each(["the main thread", "a worker"])(
+    "exiting %s while a window aggregate is mid-query does not abort",
+    (where) => {
+      const entry = path.join(projectRoot(), "dist", "index.cjs");
+      const query = `
+        const { DatabaseSync } = require(${JSON.stringify(entry)});
+        const db = new DatabaseSync(":memory:");
+        db.exec("CREATE TABLE t(x); INSERT INTO t VALUES (1), (2)");
+        db.aggregate("bytes", {
+          start: null,
+          step: (_acc, x) => new Uint8Array([x]),
+          inverse: (acc) => acc,
+        });
+        // Keep the statement until exit, so only teardown finalizes it.
+        globalThis.rows = db
+          .prepare("SELECT bytes(x) OVER (ROWS UNBOUNDED PRECEDING) FROM t")
+          .iterate();
+        globalThis.rows.next();
+      `;
+      const script =
+        where === "a worker"
+          ? `const { Worker } = require("node:worker_threads");
+             new Worker(${JSON.stringify(query)}, { eval: true });`
+          : query;
+
+      const result = spawnSync(process.execPath, ["--eval", script], {
+        encoding: "utf8",
+        timeout: getTestTimeout(),
+      });
+
+      expect({
+        status: result.status,
+        signal: result.signal,
+        stderr: result.stderr,
+      }).toEqual({ status: 0, signal: null, stderr: "" });
+    },
+    getTestTimeout(),
+  );
 });

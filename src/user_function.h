@@ -12,6 +12,16 @@ namespace sqlite {
 // Forward declaration
 class DatabaseSync;
 
+// Call only from a catch block in a function SQLite calls for a user-defined
+// function or aggregate (xFunc, xStep, xInverse, xValue, xFinal), which must
+// not let a C++ exception unwind into SQLite. Fails the call the way a
+// throwing JavaScript callback does: the caught exception becomes the pending
+// JavaScript exception, and the statement throws it instead of the SQLite
+// error. Once JavaScript can no longer run, as during environment teardown,
+// the call fails with a SQLite error instead.
+void FailWithCaughtException(napi_env env, DatabaseSync *db,
+                             sqlite3_context *ctx) noexcept;
+
 // User-defined function wrapper for SQLite callbacks
 class UserDefinedFunction {
 public:
@@ -26,6 +36,9 @@ public:
 private:
   // Environment cleanup hook - called before environment teardown
   static void CleanupHook(void *arg);
+
+  // xFunc's body, which may throw.
+  static void Invoke(sqlite3_context *ctx, int argc, sqlite3_value **argv);
 
   Napi::Env env_;
   Napi::FunctionReference fn_;

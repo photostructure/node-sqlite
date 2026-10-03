@@ -58,8 +58,56 @@ void UserDefinedFunction::CleanupHook(void *arg) {
   }
 }
 
+void FailWithCaughtException(napi_env env, DatabaseSync *db,
+                             sqlite3_context *ctx) noexcept {
+  // Raw Node-API calls only, because node-addon-api throws when a call fails.
+  // A failing call leaves any exception already pending in place.
+  auto fail = [&](const char *message) {
+    bool pending = false;
+    if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {
+      db->SetIgnoreNextSQLiteError(true);
+      sqlite3_result_error(ctx, "", 0);
+    } else {
+      sqlite3_result_error(ctx, message, -1);
+    }
+  };
+
+  try {
+    throw;
+  } catch (const Napi::Error &e) {
+    // node-addon-api moves the JavaScript exception that made a call fail out
+    // of the pending state and into `e`; make it pending again. Not e.what():
+    // it reads `message` through node-addon-api, which clears the pending
+    // exception when that read fails.
+    try {
+      napi_throw(env, e.Value());
+    } catch (...) {
+      // e.Value() failed.
+    }
+    fail("JavaScript exception in a user-defined function");
+  } catch (const std::exception &e) {
+    napi_throw_error(env, nullptr, e.what());
+    fail(e.what());
+  } catch (...) {
+    const char *message = "Unknown C++ exception in a user-defined function";
+    napi_throw_error(env, nullptr, message);
+    fail(message);
+  }
+}
+
 void UserDefinedFunction::xFunc(sqlite3_context *ctx, int argc,
                                 sqlite3_value **argv) {
+  try {
+    Invoke(ctx, argc, argv);
+  } catch (...) {
+    // Invoke() checks the user data before anything that can throw.
+    auto *self = static_cast<UserDefinedFunction *>(sqlite3_user_data(ctx));
+    FailWithCaughtException(self->env_, self->db_, ctx);
+  }
+}
+
+void UserDefinedFunction::Invoke(sqlite3_context *ctx, int argc,
+                                 sqlite3_value **argv) {
   void *user_data = sqlite3_user_data(ctx);
   if (!user_data) {
     sqlite3_result_error(ctx, "Invalid user data in function callback", -1);

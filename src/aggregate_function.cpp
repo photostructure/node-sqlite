@@ -8,6 +8,7 @@
 #include "shims/node_errors.h"
 #include "sqlite_impl.h"
 #include "sqlite_value_conversion.h"
+#include "user_function.h"
 
 namespace photostructure::sqlite {
 
@@ -148,22 +149,47 @@ CustomAggregate::~CustomAggregate() {
   }
 }
 
+// SQLite calls these four, so none may let a C++ exception unwind into it.
+// xStepBase() and xValueBase() check the user data before anything that can
+// throw.
 void CustomAggregate::xStep(sqlite3_context *ctx, int argc,
                             sqlite3_value **argv) {
-  xStepBase(ctx, argc, argv, &CustomAggregate::step_fn_);
+  try {
+    xStepBase(ctx, argc, argv, &CustomAggregate::step_fn_);
+  } catch (...) {
+    auto *self = static_cast<CustomAggregate *>(sqlite3_user_data(ctx));
+    FailWithCaughtException(self->env_, self->db_, ctx);
+  }
 }
 
 void CustomAggregate::xInverse(sqlite3_context *ctx, int argc,
                                sqlite3_value **argv) {
-  xStepBase(ctx, argc, argv, &CustomAggregate::inverse_fn_);
+  try {
+    xStepBase(ctx, argc, argv, &CustomAggregate::inverse_fn_);
+  } catch (...) {
+    auto *self = static_cast<CustomAggregate *>(sqlite3_user_data(ctx));
+    FailWithCaughtException(self->env_, self->db_, ctx);
+  }
 }
 
 void CustomAggregate::xFinal(sqlite3_context *ctx) {
-  xValueBase(ctx, true);
-  DestroyAggregateData(ctx);
+  try {
+    xValueBase(ctx, true);
+    DestroyAggregateData(ctx);
+  } catch (...) {
+    auto *self = static_cast<CustomAggregate *>(sqlite3_user_data(ctx));
+    FailWithCaughtException(self->env_, self->db_, ctx);
+  }
 }
 
-void CustomAggregate::xValue(sqlite3_context *ctx) { xValueBase(ctx, false); }
+void CustomAggregate::xValue(sqlite3_context *ctx) {
+  try {
+    xValueBase(ctx, false);
+  } catch (...) {
+    auto *self = static_cast<CustomAggregate *>(sqlite3_user_data(ctx));
+    FailWithCaughtException(self->env_, self->db_, ctx);
+  }
+}
 
 void CustomAggregate::xDestroy(void *self) {
   if (self) {
