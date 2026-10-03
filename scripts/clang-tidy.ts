@@ -150,6 +150,7 @@ async function getSourceFiles(): Promise<string[]> {
     "src/sqlite_impl.cpp",
     "src/user_function.cpp",
     "src/aggregate_function.cpp",
+    "src/sqlite_value_conversion.cpp",
   ]
     .map((f) => join(projectRoot, f))
     .filter(existsSync);

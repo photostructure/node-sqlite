@@ -32,10 +32,6 @@ private:
   DatabaseSync *db_;
   bool use_bigint_args_;
   napi_async_context async_context_;
-
-  // Helper methods
-  Napi::Value SqliteValueToJS(sqlite3_value *value);
-  void JSValueToSqliteResult(sqlite3_context *ctx, Napi::Value value);
 };
 
 } // namespace sqlite

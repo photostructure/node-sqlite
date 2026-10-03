@@ -92,8 +92,6 @@ private:
   static void DestroyAggregateData(sqlite3_context *ctx);
 
   AggregateData *GetAggregate(sqlite3_context *ctx);
-  Napi::Value SqliteValueToJS(sqlite3_value *value);
-  void JSValueToSqliteResult(sqlite3_context *ctx, Napi::Value value);
   Napi::Value GetStartValue();
 
   Napi::Env env_;

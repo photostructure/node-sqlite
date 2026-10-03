@@ -9,6 +9,7 @@
         "src/sqlite_impl.cpp",
         "src/user_function.cpp",
         "src/aggregate_function.cpp",
+        "src/sqlite_value_conversion.cpp",
         "src/upstream/sqlite3.c"
       ],
       "include_dirs": [
