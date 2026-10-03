@@ -2,11 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [3.1.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.1.0) (2026-10-03)
+
+API compatible with `node:sqlite` from Node.js v26.10.0, plus `createModule()` and the changes listed under 3.0.0 that are on Node.js `v26.x-staging` but not yet in a release. SQLite is unchanged at 3.53.4.
 
 ### Added
 
-- **`createModule()`**: virtual tables whose rows come from a JavaScript iterable, via `Database.prototype.createModule(name, { columns, rows, directOnly, useBigIntArguments })`, wrapping `sqlite3_create_module_v2()`. Ports [Node.js PR #65787](https://github.com/nodejs/node/pull/65787) and [PR #66195](https://github.com/nodejs/node/pull/66195), which are on `v26.x-staging` but not yet in a Node.js release.
+- **`createModule()`**: virtual tables whose rows come from a JavaScript iterable, via `Database.prototype.createModule(name, { columns, rows, directOnly, useBigIntArguments })`, wrapping `sqlite3_create_module_v2()`. Ports [Node.js PR #65787](https://github.com/nodejs/node/pull/65787), [PR #66195](https://github.com/nodejs/node/pull/66195), and [PR #66215](https://github.com/nodejs/node/pull/66215), which are on `v26.x-staging` but not yet in a Node.js release.
 
 ### Fixed
 
