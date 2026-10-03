@@ -8,8 +8,12 @@
  * AUTO-GENERATED - Do not edit. Run 'npm run sync:tests' to regenerate.
  */
 
+// Shim for Node.js test helper
+const mustCall = (fn) => fn;
+
 // Flags: --expose-gc
-"use strict";
+("use strict");
+const { mustCallAtLeast } = require("../common/test-utils.cjs");
 const assert = require("node:assert");
 const { Database } = require("@photostructure/sqlite");
 const { suite, test } = require("node:test");
@@ -382,6 +386,44 @@ suite("Database.prototype.createModule()", () => {
 
       assert.strictEqual(received.length, paramCount);
       assert.strictEqual(received[paramCount - 1], 7);
+    });
+
+    test("does not pass null for parameters that are unavailable in a plan", () => {
+      const db = new Database(":memory:");
+
+      db.createModule("join_params", {
+        columns: [
+          { name: "value", type: "INTEGER" },
+          { name: "param", type: "INTEGER", hidden: true },
+        ],
+        rows: mustCallAtLeast(function* (param) {
+          assert.notStrictEqual(
+            param,
+            null,
+            "rows() must not be called with an unavailable " + "parameter",
+          );
+          if (param !== null) {
+            yield [param];
+          }
+        }),
+      });
+
+      db.exec("CREATE TABLE t (a INTEGER)");
+      db.exec("INSERT INTO t VALUES (1), (2), (3)");
+
+      // With DISTINCT, SQLite may consider a plan where the parameter is read
+      // from the inner table and is not yet available, which used to make
+      // xBestIndex accept it and call rows(null), producing an empty result.
+      const result = db
+        .prepare(
+          "SELECT DISTINCT value FROM join_params, t WHERE join_params.param = t.a",
+        )
+        .all();
+      assert.deepStrictEqual(result, [
+        { __proto__: null, value: 1 },
+        { __proto__: null, value: 2 },
+        { __proto__: null, value: 3 },
+      ]);
     });
   });
 
