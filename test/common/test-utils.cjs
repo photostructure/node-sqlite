@@ -89,6 +89,19 @@ function mustCall(fn) {
 }
 
 /**
+ * Wraps a callback that must run at least once. Simplified version of Node.js
+ * test/common mustCallAtLeast: a pass-through, like mustCall above.
+ * @param {Function} fn - The function to wrap
+ * @returns {Function} The wrapped function
+ */
+function mustCallAtLeast(fn) {
+  return fn;
+}
+
+// Same threshold as Node.js test/common: more than 1.75 GiB of total memory.
+const enoughTestMem = os.totalmem() > 0x70000000;
+
+/**
  * Runs the garbage collector until `condition` holds, or fails the calling test.
  * Stands in for Node.js's internal test/common/gc.js helper.
  *
@@ -123,5 +136,7 @@ module.exports = {
   isWindows,
   spawnPromisified,
   mustCall,
+  mustCallAtLeast,
+  enoughTestMem,
   gcUntil,
 };

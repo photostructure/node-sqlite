@@ -67,6 +67,34 @@ describe("adaptTest", () => {
     expect(adapted).toBe("'use strict';\nconst x = 1;\n");
   });
 
+  it("re-requires destructured ../common helpers from test-utils.cjs", () => {
+    // test-sqlite-statement.js gates a suite on enoughTestMem; dropping the
+    // binding made the whole generated file a ReferenceError.
+    const adapted = body(
+      adaptTest(
+        [
+          "const { enoughTestMem, skipIfSQLiteMissing } = require('../common');",
+          "skipIfSQLiteMissing();",
+          "",
+        ].join("\n"),
+        "test-sqlite-example.js",
+      ),
+    );
+
+    expect(adapted).toBe(
+      'const { enoughTestMem } = require("../common/test-utils.cjs");\n',
+    );
+  });
+
+  it("rejects a destructured ../common helper test-utils.cjs does not provide", () => {
+    expect(() =>
+      adaptTest(
+        "const { platformTimeout } = require('../common');\n",
+        "test-sqlite-example.js",
+      ),
+    ).toThrow(/test-sqlite-example\.js.*platformTimeout/s);
+  });
+
   it("rejects a ../common helper it cannot adapt", () => {
     // A surviving `common.` reference is a ReferenceError at test time, and
     // only in the generated file -- fail here instead, naming the source.

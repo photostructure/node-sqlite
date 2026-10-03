@@ -7,8 +7,8 @@
  * compile under the CommonJS test config.
  */
 
-// Named exports of test/common/test-utils.mjs that stand in for Node's
-// ../common helpers. An ESM test importing anything else from
+// Named exports of test/common/test-utils.{cjs,mjs} that stand in for Node's
+// ../common helpers. A test importing anything else from '../common' or
 // '../common/index.mjs' fails at sync time (see adaptTest) rather than with a
 // ReferenceError from a generated file.
 const testUtilsExports = new Set([
@@ -17,6 +17,8 @@ const testUtilsExports = new Set([
   "isWindows",
   "spawnPromisified",
   "mustCall",
+  "mustCallAtLeast",
+  "enoughTestMem",
   "gcUntil",
 ]);
 
@@ -69,16 +71,60 @@ const skipTests: Record<string, Array<{ name: string; reason: string }>> = {
 };
 
 /**
+ * The names in a destructured ../common import that the generated file must
+ * import from `utilsFile`. skipIfSQLiteMissing goes away (its call is removed
+ * in adaptTest), mustCall is shimmed there, and `boundElsewhere` names are
+ * bound by another rewrite. Throws on a name test-utils does not provide.
+ */
+function helpersToImport(
+  names: string,
+  fileName: string,
+  source: string,
+  utilsFile: string,
+  boundElsewhere: ReadonlySet<string> = new Set(),
+): string[] {
+  const kept = names
+    .split(",")
+    .map((name) => name.trim())
+    .filter(
+      (name) =>
+        name !== "" &&
+        name !== "skipIfSQLiteMissing" &&
+        name !== "mustCall" &&
+        !boundElsewhere.has(name),
+    );
+  const unknown = kept.filter((name) => !testUtilsExports.has(name));
+  if (unknown.length > 0) {
+    throw new Error(
+      `${fileName}: cannot adapt \`${unknown.join(", ")}\` from ` +
+        `${source} -- add it to test/common/${utilsFile}.`,
+    );
+  }
+  return kept;
+}
+
+/**
  * Transform Node.js test to use our package instead of node:sqlite
  */
 function adaptTest(content: string, fileName: string): string {
   let adapted = content;
 
-  // Remove CJS require('../common') with any destructured imports
-  // Handles: const { skipIfSQLiteMissing, mustCall, ... } = require('../common');
+  // Rewrite a CJS destructured require('../common') to require the helpers
+  // test-utils.cjs provides.
+  // Handles: const { skipIfSQLiteMissing, enoughTestMem, ... } = require('../common');
   adapted = adapted.replace(
-    /const\s*\{[^}]+\}\s*=\s*require\(['"]\.\.\/common['"]\);\s*/g,
-    "",
+    /const\s*\{([^}]+)\}\s*=\s*require\(['"]\.\.\/common['"]\);\s*/g,
+    (_match: string, names: string) => {
+      const kept = helpersToImport(
+        names,
+        fileName,
+        "../common",
+        "test-utils.cjs",
+      );
+      return kept.length === 0
+        ? ""
+        : `const { ${kept.join(", ")} } = require("../common/test-utils.cjs");\n`;
+    },
   );
 
   // Remove the namespace binding: const common = require('../common');
@@ -101,32 +147,21 @@ function adaptTest(content: string, fileName: string): string {
   );
 
   // Rewrite the ESM import from '../common/index.mjs' to import the helpers
-  // test-utils.mjs provides. skipIfSQLiteMissing goes away (its call is removed
-  // below) and so does mustCall (the shim below defines it). tmpdir and
-  // isWindows are left to the tmpdir rewrite when the file has one.
+  // test-utils.mjs provides. tmpdir and isWindows are left to the tmpdir
+  // rewrite when the file has one.
   // Handles: import { skipIfSQLiteMissing, isWindows, ... } from '../common/index.mjs';
   const hasTmpdirImport =
     /import\s+tmpdir\s+from\s*['"]\.\.\/common\/tmpdir\.js['"]/.test(adapted);
   adapted = adapted.replace(
     /import\s*\{([^}]+)\}\s*from\s*['"]\.\.\/common\/index\.mjs['"]\s*;?\s*/g,
     (_match: string, names: string) => {
-      const kept = names
-        .split(",")
-        .map((name) => name.trim())
-        .filter(
-          (name) =>
-            name !== "" &&
-            name !== "skipIfSQLiteMissing" &&
-            name !== "mustCall" &&
-            !(hasTmpdirImport && tmpdirRewriteNames.has(name)),
-        );
-      const unknown = kept.filter((name) => !testUtilsExports.has(name));
-      if (unknown.length > 0) {
-        throw new Error(
-          `${fileName}: cannot adapt \`${unknown.join(", ")}\` from ` +
-            `../common/index.mjs -- add it to test/common/test-utils.mjs.`,
-        );
-      }
+      const kept = helpersToImport(
+        names,
+        fileName,
+        "../common/index.mjs",
+        "test-utils.mjs",
+        hasTmpdirImport ? tmpdirRewriteNames : undefined,
+      );
       return kept.length === 0
         ? ""
         : `import { ${kept.join(", ")} } from "../common/test-utils.mjs";\n`;

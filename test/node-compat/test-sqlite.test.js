@@ -9,6 +9,7 @@
  */
 
 "use strict";
+const { spawnPromisified } = require("../common/test-utils.cjs");
 const { Database, constants } = require("@photostructure/sqlite");
 const { suite, test } = require("node:test");
 const { pathToFileURL } = require("node:url");
