@@ -67,6 +67,52 @@ describe("adaptTest", () => {
     expect(adapted).toBe("'use strict';\nconst x = 1;\n");
   });
 
+  it("puts the mustCall shim after the 'use strict' directive", () => {
+    // A directive only applies while it precedes every other statement; a
+    // shim above it left test-sqlite-custom-functions.js in sloppy mode.
+    const adapted = body(
+      adaptTest(
+        [
+          "// Flags: --expose-gc",
+          "'use strict';",
+          "const { skipIfSQLiteMissing, mustCall } = require('../common');",
+          "skipIfSQLiteMissing();",
+          "const fn = mustCall(() => {});",
+          "",
+        ].join("\n"),
+        "test-sqlite-example.js",
+      ),
+    );
+
+    expect(adapted).toBe(
+      [
+        "// Flags: --expose-gc",
+        "'use strict';",
+        "// Shim for Node.js test helper",
+        "const mustCall = (fn) => fn;",
+        "",
+        "const fn = mustCall(() => {});",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("prepends the mustCall shim to a file without 'use strict'", () => {
+    const adapted = body(
+      adaptTest("const fn = mustCall(() => {});\n", "test-sqlite-example.mjs"),
+    );
+
+    expect(adapted).toBe(
+      [
+        "// Shim for Node.js test helper",
+        "const mustCall = (fn) => fn;",
+        "",
+        "const fn = mustCall(() => {});",
+        "",
+      ].join("\n"),
+    );
+  });
+
   it("re-requires destructured ../common helpers from test-utils.cjs", () => {
     // test-sqlite-statement.js gates a suite on enoughTestMem; dropping the
     // binding made the whole generated file a ReferenceError.

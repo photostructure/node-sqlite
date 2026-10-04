@@ -8,10 +8,10 @@
  * AUTO-GENERATED - Do not edit. Run 'npm run sync:tests' to regenerate.
  */
 
+"use strict";
 // Shim for Node.js test helper
 const mustCall = (fn) => fn;
 
-("use strict");
 const assert = require("node:assert");
 const { Database } = require("@photostructure/sqlite");
 const { suite, test } = require("node:test");

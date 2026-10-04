@@ -213,11 +213,17 @@ function adaptTest(content: string, fileName: string): string {
   adapted = adapted.replace(/skipIfSQLiteMissing\(\);\s*/g, "");
 
   // Add mustCall shim if the test uses it - it's a Node.js test helper
-  // that verifies a callback is called; we just use an identity function
+  // that verifies a callback is called; we just use an identity function.
+  // A 'use strict' directive only applies while it precedes every other
+  // statement, so the shim goes after it.
   if (content.includes("mustCall")) {
+    const shim =
+      "// Shim for Node.js test helper\nconst mustCall = (fn) => fn;\n\n";
+    const directive = /^(?:\/\/[^\n]*\n)*(['"])use strict\1;\n/.exec(adapted);
     adapted =
-      "// Shim for Node.js test helper\nconst mustCall = (fn) => fn;\n\n" +
-      adapted;
+      directive === null
+        ? shim + adapted
+        : directive[0] + shim + adapted.slice(directive[0].length);
   }
 
   adapted = pointAtThisPackage(adapted);

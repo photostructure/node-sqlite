@@ -8,11 +8,11 @@
  * AUTO-GENERATED - Do not edit. Run 'npm run sync:tests' to regenerate.
  */
 
+// Flags: --expose-gc
+"use strict";
 // Shim for Node.js test helper
 const mustCall = (fn) => fn;
 
-// Flags: --expose-gc
-("use strict");
 const { mustCallAtLeast } = require("../common/test-utils.cjs");
 const assert = require("node:assert");
 const { Database } = require("@photostructure/sqlite");

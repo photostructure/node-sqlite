@@ -8,11 +8,10 @@
  * AUTO-GENERATED - Do not edit. Run 'npm run sync:tests' to regenerate.
  */
 
+// Flags: --expose-gc
+"use strict";
 // Shim for Node.js test helper
 const mustCall = (fn) => fn;
-
-// Flags: --expose-gc
-("use strict");
 
 const assert = require("node:assert");
 const dc = require("node:diagnostics_channel");
