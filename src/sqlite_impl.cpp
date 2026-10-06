@@ -1073,6 +1073,16 @@ Napi::Value DatabaseSync::Prepare(const Napi::CallbackInfo &info) {
       return env.Undefined();
     }
 
+    // Keep the database's JS object alive for as long as the statement is, as
+    // node:sqlite's BaseObjectPtr<DatabaseSync> does; otherwise a caller that
+    // keeps only the statement or its iterator loses the database to GC, whose
+    // finalizer closes the connection and finalizes the statement mid-use. A
+    // Napi::Reference member would be released during GC finalization, which
+    // crashes on Alpine/musl (0691ae5).
+    stmt_obj.DefineProperty(Napi::PropertyDescriptor::Value(
+        addon_data->statementSyncDatabaseKey.Value().As<Napi::Symbol>(),
+        Value(), napi_default));
+
     // Apply per-statement option overrides (if explicitly provided)
     if (opt_read_big_ints.has_value()) {
       stmt->use_big_ints_ = *opt_read_big_ints;
@@ -2926,6 +2936,8 @@ Napi::Object StatementSync::Init(Napi::Env env, Napi::Object exports) {
   if (addon_data) {
     addon_data->statementSyncConstructor =
         Napi::Reference<Napi::Function>::New(func);
+    addon_data->statementSyncDatabaseKey = Napi::Reference<Napi::Value>::New(
+        Napi::Symbol::New(env, "StatementSync database"), 1);
   }
 
   // Add Symbol.dispose to the prototype so `using stmt = db.prepare(...)`

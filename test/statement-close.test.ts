@@ -63,37 +63,37 @@ describe("StatementSync.close() and [Symbol.dispose]()", () => {
       // Regression: close() untracks the statement from the database, so
       // FinalizeStatements() no longer visits it and nothing clears its
       // database_ back-pointer. If the DatabaseSync was then finalized first,
-      // ~StatementSync called UntrackStatement() on freed memory. N-API gives
-      // no ordering guarantee between the two wrappers.
+      // ~StatementSync called UntrackStatement() on freed memory.
+      // A statement keeps its database alive, so the database is finalized
+      // first only when both become unreachable in the same collection, where
+      // N-API gives no ordering guarantee between the two wrappers. Both
+      // orders occur across a few rounds.
       // Caught by AddressSanitizer; the read is silent without a sanitizer, so
       // this test mainly pins the ordering for the sanitizer/Valgrind runs.
       expect(typeof global.gc).toBe("function");
 
-      let dbCollected = false;
-      const registry = new FinalizationRegistry(() => {
-        dbCollected = true;
-      });
+      for (let round = 0; round < 3; round++) {
+        const collected = new Set<string>();
+        const registry = new FinalizationRegistry<string>((name) =>
+          collected.add(name),
+        );
 
-      let stmt: ReturnType<typeof db.prepare> | null;
-      (() => {
-        const scoped = new DatabaseSync(":memory:");
-        registry.register(scoped, "db");
-        scoped.exec("CREATE TABLE t (id INTEGER)");
-        stmt = scoped.prepare("SELECT 1 AS v");
-        stmt.get();
-        stmt.close();
-      })();
+        (() => {
+          const scoped = new DatabaseSync(":memory:");
+          registry.register(scoped, "db");
+          scoped.exec("CREATE TABLE t (id INTEGER)");
+          const stmt = scoped.prepare("SELECT 1 AS v");
+          registry.register(stmt, "stmt");
+          stmt.get();
+          stmt.close();
+        })();
 
-      for (let i = 0; i < 5 && !dbCollected; i++) {
-        global.gc!();
-        await new Promise((resolve) => setImmediate(resolve));
-      }
-      expect(dbCollected).toBe(true);
-
-      // Now let the statement be finalized against the already-freed database.
-      stmt = null;
-      for (let i = 0; i < 5; i++) {
-        global.gc!();
+        for (let i = 0; i < 5 && collected.size < 2; i++) {
+          global.gc!();
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+        expect(collected).toEqual(new Set(["db", "stmt"]));
+        // Let Node-API's queued finalizers run.
         await new Promise((resolve) => setImmediate(resolve));
       }
     });

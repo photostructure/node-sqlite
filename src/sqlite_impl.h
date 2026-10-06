@@ -48,6 +48,8 @@ struct AddonData {
   // Store constructors per-instance instead of globally
   Napi::FunctionReference databaseSyncConstructor;
   Napi::FunctionReference statementSyncConstructor;
+  // Symbol key under which each statement holds its database's JS object.
+  Napi::Reference<Napi::Value> statementSyncDatabaseKey;
   Napi::FunctionReference statementSyncIteratorConstructor;
   // Symbol key under which each iterator holds its statement's JS object.
   Napi::Reference<Napi::Value> statementSyncIteratorStatementKey;
