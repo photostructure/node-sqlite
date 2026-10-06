@@ -5,110 +5,118 @@ description: Prepare a new release of @photostructure/sqlite. Syncs upstream Nod
 
 # Preflight
 
-Prepare @photostructure/sqlite for a new release. This skill does NOT publish — it leaves the repo in a state where a human can trigger the GitHub Actions `Build & Release` workflow with the chosen version bump.
+Prepare @photostructure/sqlite for a new release. This skill does not publish: it leaves the repo ready for a maintainer to run the `Build & Release` workflow with the chosen version bump.
 
-## Critical constraints
+**Done means**: `npm run preflight` passed (or every §2.5 step passed), the CHANGELOG entry and doc version strings are written, the release-prep commit is pushed after the user approved it (on a cloud VM, the PR is open), and the §9 hand-off is sent.
 
-- **NEVER bump the `version` field in `package.json`** — the release GitHub Action (`.github/workflows/build.yml`) handles `npm version` based on the workflow_dispatch input (`patch` | `minor` | `major`). Manual bumps break the workflow.
-- **NEVER modify files under `src/upstream/`** — they are overwritten by sync scripts.
-- **Branch depends on where the session runs** (check `echo $USER`):
-  - **Local hardware** (`$USER` is `mrm`): committing on `main` is fine — that's how the maintainer drives releases. No feature branch required.
-  - **Anthropic-owned cloud VM** (`$USER` is anything else — a generated/bot user): work on the branch the session was started with (e.g. `claude/release-prep-automation-*`), NOT on `main`.
-- **Do NOT create a git tag, run `npm publish`, or create a GitHub release.** Those steps are the release workflow's job.
+**Stop and ask** when the semver call is ambiguous (§4), when a step fails for a reason that neither §3.5 nor a baseline re-run explains, and before every commit and push. Otherwise keep going.
+
+## Constraints
+
+- AGENTS.md applies. In particular, never bump `version` in `package.json` (the `Build & Release` workflow runs `npm version` from its `patch` | `minor` | `major` input), and never edit `src/upstream/`.
+- Don't create a git tag, run `npm publish`, or create a GitHub release. The release workflows do that.
+- The branch depends on `echo $USER`:
+  - `mrm` (local hardware): commit on `main`, which is how the maintainer drives releases. Don't open a PR.
+  - Anything else (an Anthropic cloud VM): work on the `claude/*` branch the session started on, push to that branch, and open a PR. Never push to `main`.
 
 ## Workflow
 
-Create a todo list with TodoWrite for the steps below and work through them sequentially. Many steps run long (`npm run test:all`, `npm run preflight`) — surface failures immediately rather than pressing on.
+Keep a checklist of the steps below in `.cache/preflight-tasks.md`, which is gitignored and survives `npm run clean`. Tick each step when it's done, and add anything new you find. After a context summary, read that file to find the current step. Report each failure as soon as it happens instead of pressing on.
 
 ### 1. Repo state checks
 
-- Determine the environment with `echo $USER` (see Critical constraints). On local hardware (`$USER` is `mrm`), `main` is the expected branch — no action needed. On an Anthropic cloud VM, confirm the current branch (`git branch --show-current`) matches the `claude/*` development branch the session was started on.
-- `git status` must be clean (or have only intentional in-progress work). Stash/commit anything unexpected before proceeding.
-- `git fetch --tags origin` so the latest release tag is visible.
-- Identify the last release:
-  - Latest `vX.Y.Z` tag: `git ls-remote --tags origin | awk '/refs\/tags\/v[0-9]/ {print $2}' | sort -V | tail -1`
-  - Cross-check with the top entry in `CHANGELOG.md` and the `version` field in `package.json` (they should already agree).
-- Capture baseline values from `package.json` BEFORE syncing, for later diffing:
-  - `.versions.nodejs` (e.g. `v25.x-staging@ca2d6ea`) — the Node.js upstream commit we last synced from.
-  - `.versions.sqlite` (e.g. `3.52.0`).
-  - Current `.version` (last released version).
-- Note the README's current `Synced with Node.js vX.Y.Z` / `compatible with Node.js vX.Y.Z` strings — you'll need to bump these manually if the upstream sync advances past the referenced release (see §6).
+1. Confirm the branch matches Constraints: `git branch --show-current`.
+2. `git status` must be clean, apart from intentional in-progress work. Stash or commit anything unexpected before proceeding.
+3. Run `git fetch --tags origin`, then find the last release with `git describe --tags --abbrev=0 --match 'v[0-9]*'`. It should agree with the top entry in `CHANGELOG.md` and with `version` in `package.json`.
+4. Before syncing, record `versions.nodejs`, `versions.sqlite`, and `version` from `package.json`, and the README's `Synced with Node.js vX.Y.Z` and `compatible with Node.js vX.Y.Z` strings. §6 and §9 compare against these.
 
 ### 2. Update deps, sync upstream, run full checks
-
-Run the existing `npm run preflight` orchestrator — it already does ~90% of release prep:
 
 ```bash
 npm run preflight
 ```
 
-This runs (see `scripts/preflight.ts`):
+`scripts/preflight.ts` is the list of what this runs: dependency updates, `sync:node`, `sync:tests`, `sync:sqlite`, formatting, lint, builds, every test suite, and `memory:check`.
 
-- `npm install` + `npm run update:pinact` (pins GitHub Actions to SHAs)
-- `npm-check-updates --upgrade` (respects `.ncurc.js` — pins eslint 9, cools down non-@photostructure deps 7 days)
-- `npm install` to re-sync the lockfile
-- `npm audit fix`, `npx snyk test --dev`
-- `npm run clean`
-- `npm run sync:node` — pulls `lib/sqlite.js`, `src/node_sqlite.{h,cc}` from `nodejs/node` (default branch `v25.x-staging`)
-- `npm run sync:tests` — pulls Node.js test files
-- `npm run sync:sqlite` — pulls the latest SQLite amalgamation from sqlite.org
-- `npm run fmt`, `npm run docs`, `npm run lint`, `npm run security`
-- `npm run build:dist`, `npm run build:native[:linux]`
-- `npm run test:all` (CJS + ESM)
-- On Node 22+: `lint:api`, `test:api`, `test:node`
-- On Linux/macOS: `lint:native` (clang-tidy)
-- `npm run memory:check`
+`test:api` fails on Node < 25: it compares constants against the host's `node:sqlite`, which exposes fewer constants on Node 22 than on Node 25. Before reporting it as pre-existing, `git stash`, re-run, and confirm the baseline fails the same way.
 
-### 2.5. When the `preflight` orchestrator can't run end-to-end
+### 2.5. When `npm run preflight` can't finish
 
-The `npm run preflight` orchestrator depends on a set of tools that aren't always installed in ephemeral environments (osv-scanner, snyk, pinact, docker, valgrind, clang-tidy). It also needs a GitHub token: `update:pinact` and the `sync:*` scripts each borrow one from `gh auth token` in their own process, so if neither `gh` nor `GITHUB_TOKEN` is available, `update:pinact` and `sync:tests` are capped at 60 API requests/hour and will fail once that budget is burned.
+The orchestrator needs tools that ephemeral environments may lack (osv-scanner, snyk, pinact, docker, valgrind, clang-tidy), and a GitHub token. `update:pinact` and the `sync:*` scripts each take a token from `gh auth token` in their own process. Without `gh` or `GITHUB_TOKEN`, they share GitHub's 60 requests/hour limit, and pinact's `always: true` re-verifies every pinned action on each run, so `update:pinact` and `sync:tests` fail once that budget is spent. Don't export the token for `npm run preflight`: every step would inherit it, including the freshly synced upstream tests under `test:node`.
 
-If it can't complete, do NOT skip steps blindly. Run its sub-steps individually in this order and surface each failure:
+If it can't finish, don't skip steps. Run them individually in this order and report each failure:
 
 ```bash
 npm install
-npx --no-install npm-check-updates -u          # respects .ncurc.js
+npx --no-install npm-check-updates -u          # respects .ncurc.cjs
 npm install                                    # re-resolve lockfile
-npm run sync:node                              # may require GITHUB_TOKEN
+npm run sync:node
 npm run sync:sqlite
 npm run sync:tests                             # see §3.5 for common failures here
-npx prettier --cache --write test/node-compat/ test/fixtures/sqlite/ # upstream tests use single quotes; normalize
+npx prettier --cache --write test/node-compat/ test/fixtures/sqlite/ # see §3.5 D
 npm run build:native
 npm run build:dist
 npm run lint
 node --expose-gc node_modules/jest/bin/jest.js --no-coverage
 npm run test:node
-npm run test:api                               # pre-existing Node-22 failures are not regressions
+npm run test:api                               # fails on Node < 25; see §2
 ```
 
-Notes:
-- The sync scripts cache the last-seen upstream SHA in `.sync-cache.json`. If you edited a sync script (skip list, a new text transform, etc.) but the upstream SHA hasn't moved, re-run with `--force` (e.g. `npx tsx scripts/sync-node-tests.ts --force`) or the cached SHA will short-circuit the download.
-- If `ncu` proposes a major bump on `typescript`, `typedoc`, `eslint`, `jest`, or `typescript-eslint`, check peer-dep compatibility before accepting. These are tightly coupled. Recent real-world examples:
-  - `eslint` 10 — pinned in `.ncurc.js` because `typescript-eslint` 8 doesn't support it.
-  - `typescript` 6 — pin because `typedoc` 0.28 doesn't support it.
-  When you pin, add a comment in `.ncurc.js` citing the blocker so the next engineer doesn't un-pin it prematurely.
+- `sync:node` caches the last-synced upstream SHA in `.sync-cache.json`, and `sync:tests` in `.sync-tests-cache.json`. After you change a sync script's skip list or transforms, re-run it with `--force` (e.g. `npx tsx scripts/sync-node-tests.ts --force`), or the unchanged SHA skips the download.
+- If `ncu` proposes a major bump on `typescript`, `typedoc`, `eslint`, `jest`, or `typescript-eslint`, check peer-dependency ranges before accepting; these packages constrain each other. Current pins and their reasons are comments in `.ncurc.cjs`. When you add a pin, add a comment citing the blocker so the next engineer doesn't remove it early.
 
 ### 3. Review upstream changes
 
 Now the repo has the latest upstream code. Summarize what changed since last release:
 
-**Node.js upstream**: Diff from the old commit (captured in step 1) to the newly-synced commit. The sync script updates `package.json`'s `versions.nodejs` to the new commit. Run:
+**Node.js upstream**: `versions.nodejs` names a commit on a `vNN.x-staging` branch, and Node.js rebases those branches while preparing releases, so the SHA captured in step 1 is often gone within days (`bc26176`, synced 2026-09-28, was no longer on `v26.x-staging` two days later). Don't diff SHA ranges or GitHub compare URLs. Work from file contents, which a rebase doesn't change:
+
+1. **The delta in our tree**: `git diff <last-tag> -- src/upstream/`. This is what you reason about when porting.
+2. **The upstream PRs behind it**: the script below finds the newest staging commit at which every synced file matches the last release, then lists the commits after it with their `PR-URL:` trailers. Commits that touch only tests can appear in both this release's list and the previous one's.
+3. **PRs on `main` that aren't on staging**: PRs that landed on `main` since the last release's sync and haven't reached the staging branch. Most arrive with a later sync. PRs labeled `semver-major` or `dont-land-on-vNN.x` never reach this staging branch; list them in the hand-off (§9). In October 2026, `deps: update V8 to 15.2` ([#65161](https://github.com/nodejs/node/pull/65161), semver-major) edited `node_sqlite.cc` on `main` only.
+
+Don't build either list from GitHub's `label:sqlite is:merged` search. PRs landed with `git node land` show as Closed rather than Merged (8 of the 57 that touched sqlite files on `main` in August and September 2026), and some sqlite PRs carry no `sqlite` label: [#65988](https://github.com/nodejs/node/pull/65988), which renamed `DatabaseSync` and `StatementSync`, had none.
+
+The script needs `../node` with a remote named `upstream` that points at nodejs/node. If `../node` is missing, run `git clone -o upstream --filter=blob:none https://github.com/nodejs/node.git "$PROJECT_ROOT/../node"`; the script reads only commits and trees, which a blobless clone has.
 
 ```bash
-# Use the OLD and NEW short SHAs from package.json versions.nodejs
-git -C ../node log --oneline <OLD_SHA>..<NEW_SHA> -- lib/sqlite.js src/node_sqlite.cc src/node_sqlite.h
+set -e
+PROJECT_ROOT=$(git rev-parse --show-toplevel)
+NODE=$PROJECT_ROOT/../node
+BRANCH=$(jq -r '.versions.nodejs | split("@")[0]' "$PROJECT_ROOT/package.json")
+LAST_TAG=$(git -C "$PROJECT_ROOT" describe --tags --abbrev=0 --match 'v[0-9]*')
+SYNCED=(lib/sqlite.js src/node_sqlite.h src/node_sqlite.cc deps/sqlite/sqlite.gyp)
+PATHS=("${SYNCED[@]}" 'test/parallel/test-sqlite*' test/fixtures/sqlite)
+git -C "$NODE" fetch upstream "$BRANCH" main
+
+# Newest staging commit at which each synced file matches the last release
+ANCHORS=$(for f in "${SYNCED[@]}"; do
+  blob=$(git -C "$PROJECT_ROOT" rev-parse "$LAST_TAG:src/upstream/${f##*/}")
+  sha=$(git -C "$NODE" log --format=%H --find-object="$blob" "upstream/$BRANCH" -- "$f" |
+    while read -r c; do [ "$(git -C "$NODE" rev-parse "$c:$f")" = "$blob" ] && { echo "$c"; break; }; done)
+  [ -n "$sha" ] || { echo "no $BRANCH commit has $LAST_TAG's $f" >&2; exit 1; }
+  echo "$sha"
+done)
+ANCHOR=$(git -C "$NODE" rev-list -1 --topo-order $ANCHORS)
+
+# 2. PRs on staging since the last release
+git -C "$NODE" log --format='%h %(trailers:key=PR-URL,valueonly,separator=%x20) %s' "$ANCHOR..upstream/$BRANCH" -- "${PATHS[@]}"
+
+# 3. PRs on main since the last release's sync that aren't on staging
+prs() { git -C "$NODE" log --format='%(trailers:key=PR-URL,valueonly)' "$@" -- "${PATHS[@]}" | grep . | LC_ALL=C sort -u; }
+SINCE=$(git -C "$PROJECT_ROOT" log -1 --format=%cI "$LAST_TAG" -- src/upstream/)
+LC_ALL=C comm -23 <(prs --since="$SINCE" upstream/main) <(prs "upstream/$BRANCH") |
+  xargs -rn1 gh pr view --json number,title,labels --jq '"#\(.number) \(.title) [\([.labels[].name | select(test("^semver-|^dont-land"))] | join(","))]"'
 ```
 
-If `../node` isn't cloned locally, use GitHub's compare URL: `https://github.com/nodejs/node/compare/<OLD_SHA>...<NEW_SHA>` (view via WebFetch) and filter for the three files above.
-
-Also diff `git diff src/upstream/` directly after the sync — the actual delta landing in our tree is usually smaller than the full compare range, and that's what you actually need to reason about.
+If it stops with `no vNN.x-staging commit has vX.Y.Z's <file>`, the last release synced content that this staging branch never had. That happens when the sync moves to a new major's staging branch. Build list 2 from the README's `Synced with Node.js vX.Y.Z` tag instead: `git -C "$NODE" fetch --no-tags upstream tag vX.Y.Z`, then `git -C "$NODE" log vX.Y.Z..upstream/$BRANCH -- "${PATHS[@]}"`. That lists every commit since the old major branched from `main`, including PRs that reached us through backports, so use the diff from item 1 to tell which are new.
 
 Classify each upstream commit:
 - **API addition** (new method/option exposed) → MINOR
 - **API change or removal** (signature, defaults, error shape) → MAJOR
 - **Bug fix, internal refactor, test-only change** → PATCH
 
-For non-trivial upstream code deltas, also check whether `src/sqlite_impl.cpp` — our port of `node_sqlite.cc` — needs the same change. Node.js fixes that touch callback lifetimes, error propagation, or memory management usually DO need a port. Pure stylistic refactors usually don't.
+`src/upstream/` is reference only; the shipped code is `src/sqlite_impl.cpp`, our port of `node_sqlite.cc`. For each non-trivial upstream code change, decide whether the port needs it too. Node.js fixes that touch callback lifetimes, error propagation, or memory management (including musl crash fixes) usually do. Pure stylistic refactors usually don't.
 
 **SQLite**: Compare `versions.sqlite` before/after. SQLite's own release notes (https://www.sqlite.org/changes.html) classify changes.
 - **Any vendored SQLite version bump is at least MINOR for us** — including patch-level ones (`3.53.3 → 3.53.4`). We statically compile the amalgamation into the shipped binary, so a SQLite bump changes what every consumer runs whether or not we expose a new API. Even a pure bug-fix release changes query results, error paths, and corruption handling reachable through `db.exec()` / `db.prepare()`. Users decide whether to take that on their own schedule, and a PATCH bump denies them the choice. Bump to MAJOR only if the SQLite release carries a documented breaking change we pass through.
@@ -119,9 +127,9 @@ For non-trivial upstream code deltas, also check whether `src/sqlite_impl.cpp` �
 
 ### 3.5. When upstream tests fail after sync
 
-`npm run sync:tests` copies every `test-sqlite-*.{js,mjs}` file from Node.js and lightly adapts them. Upstream Node.js moves fast; expect at least one failure class per major sync. Diagnose before skipping:
+`npm run sync:tests` copies every `test-sqlite-*.{js,mjs}` file from Node.js and lightly adapts them. Expect at least one failure class per major sync. Diagnose before skipping:
 
-**A. SyntaxError at parse time** (e.g. `Unexpected identifier 'session'` pointing at a `using` declaration): a synced test uses syntax newer than the Node version the `test:node` job pins (`node-version: [24]` in `build.yml`). The fix is a **post-sync text transform** in `scripts/adapt-node-test.ts`, not a skip — adding to `skipTests` only renames `test()` → `test.skip()`; the body is still parsed and still fails.
+**A. SyntaxError at parse time** (e.g. `Unexpected identifier 'session'` pointing at a `using` declaration): a synced test uses syntax newer than the Node version the `test:node` job pins (`node-version: [24]` in `build.yml`). The tests only have to parse on that pin, not on every Node the package supports: Node 22 can't parse ERM `using`, and that's fine. The fix is a **post-sync text transform** in `scripts/adapt-node-test.ts`, not a skip — adding to `skipTests` only renames `test()` → `test.skip()`; the body is still parsed and still fails.
 
 The script carries no such transform today: ERM (`using`/`await using`) is all over the synced tests and parses fine on 24. Write one like this when upstream outpaces the pin:
 
@@ -132,7 +140,7 @@ The script carries no such transform today: ERM (`using`/`await using`) is all o
 adapted = adapted.replace(/\busing\s+(\w+)\s*=/g, "const $1 =");
 ```
 
-After adding a transform, re-run with `--force` (the SHA cache will otherwise skip the regen) and `npx prettier --cache --write test/node-compat/ test/fixtures/sqlite/`.
+After adding a transform, re-run with `--force` (the SHA cache will otherwise skip the regen), then apply D.
 
 **B. `TypeError: db.X is not a function`**: upstream added a test file for a node:sqlite API we haven't ported yet (recent example: `test-sqlite-serialize.js` for `serialize()`/`deserialize()`). Options:
 
@@ -152,15 +160,15 @@ After adding a transform, re-run with `--force` (the SHA cache will otherwise sk
 
 ### 4. Decide semver bump
 
-Pick ONE of `patch | minor | major` based on the highest-severity change from step 3:
+Pick one of `patch | minor | major` based on the highest-severity change from step 3:
 
-- **major** if ANY: breaking API change, removed/renamed exports, default behavior flipped, minimum Node version bumped, TypeScript signature change that breaks callers.
-- **minor** if ANY: new exported API, new option/method, **any vendored SQLite version bump** (including patch-level, e.g. 3.53.3 → 3.53.4 — always minor regardless of which specific features we expose), new SQLite feature exposed. No breaking changes.
+- **major** if any: breaking API change, removed/renamed exports, default behavior flipped, minimum Node version bumped, TypeScript signature change that breaks callers.
+- **minor** if any: new exported API, new option/method, **any vendored SQLite version bump** (including patch-level, e.g. 3.53.3 → 3.53.4 — always minor regardless of which specific features we expose), new SQLite feature exposed. No breaking changes.
 - **patch** otherwise: bug fixes in our own code, dep updates, internal refactors, doc updates — i.e. releases that ship the same SQLite the previous release did.
 
-Compute the next version by applying the bump to `package.json`'s current version. **Do not write it back to `package.json`** — just use it for the CHANGELOG heading.
+Compute the next version by applying the bump to `package.json`'s current version. Use it only for the CHANGELOG heading; don't write it to `package.json`.
 
-If the bump is ambiguous (e.g. a subtle behavior change that could be called a bug fix OR breaking), stop and ask the user with AskUserQuestion. Include the evidence (commit hash, before/after behavior) so they can decide without scrolling.
+If the bump is ambiguous (e.g. a subtle behavior change that could be called a bug fix or breaking), stop and ask the user with AskUserQuestion. Include the evidence (commit hash, before/after behavior) so they can decide without scrolling.
 
 ### 5. Write the CHANGELOG.md entry
 
@@ -191,21 +199,18 @@ Open `CHANGELOG.md`. Follow the existing style exactly:
   second place to keep in sync, and it drifted: five releases rendered as dead
   literal `[2.1.0]` text with no definition, while a `[1.3.0]` definition pointed
   at a release that never existed.
-- If `node:sqlite` API parity changed, mention the Node.js version we're now compatible with (e.g. "API compatible with `node:sqlite` from Node.js v25.10.0").
+- If `node:sqlite` API parity changed, mention the Node.js version we're now compatible with (e.g. "API compatible with `node:sqlite` from Node.js v26.10.0").
 
 ### 6. Update other docs
 
-- **`README.md` (`Synced with` / `compatible with` strings)**: **manual bump required when syncing from a staging branch**. `scripts/sync-from-node.ts` only auto-updates the README when the sync source is a release tag (`v25.9.0`), not a staging branch (`v25.x-staging`). After a staging sync, determine the latest released Node.js tag whose `src/node_sqlite.cc` and `lib/sqlite.js` contents are fully contained in the synced commit. The simplest check: read `src/node_version.h` at the synced SHA — if it says `MAJOR.MINOR.PATCH` and `NODE_VERSION_IS_RELEASE=0`, then every prior released `vMAJOR.MINOR.(PATCH-1)` is fully contained. Use that as the README reference. Bump both the lead paragraph and the "Features" bullet.
+- **`README.md` (`Synced with` / `compatible with` strings)**: **manual bump required when syncing from a staging branch**. `scripts/sync-from-node.ts` only auto-updates the README when the sync source is a release tag (`v26.9.0`), not a staging branch (`v26.x-staging`). After a staging sync, determine the latest released Node.js tag whose `src/node_sqlite.cc` and `lib/sqlite.js` contents are fully contained in the synced commit. The simplest check: read `src/node_version.h` at the synced SHA — if it says `MAJOR.MINOR.PATCH` and `NODE_VERSION_IS_RELEASE=0`, then every prior released `vMAJOR.MINOR.(PATCH-1)` is fully contained. Use that as the README reference. Bump both the lead paragraph and the "Features" bullet.
 - **`doc/features.md`**: if SQLite bumped, update the SQLite version string. Check for other version-specific callouts that might need refreshing.
 - **`doc/api-reference.md`**: update if new APIs were added. Point to CHANGELOG for detail — don't duplicate.
-- Do NOT commit `build/docs/` (gitignored).
-- Do NOT update `package.json` version.
 
-Cross-check with a single grep after edits:
+Then list every Node.js and SQLite version string in the user-facing docs, and confirm none still names the versions recorded in step 1 where it should name the new ones:
 
 ```bash
-# No old Node-version or SQLite-version strings should linger in user-facing docs.
-grep -rn --include='*.md' "v25\.[0-9]\|SQLite 3\.[0-9]" README.md doc/ CHANGELOG.md
+grep -rn --include='*.md' "v[0-9][0-9]\.[0-9]\|SQLite 3\.[0-9]" README.md doc/ CHANGELOG.md
 ```
 
 ### 7. Final verification
@@ -238,49 +243,40 @@ If the sync produced meaningful changes to `src/sqlite_impl.cpp` or shims, split
 Stage explicitly — don't `git add -A`:
 
 ```bash
-git add package.json package-lock.json CHANGELOG.md README.md src/upstream/ src/sqlite_impl.* src/shims/ doc/ scripts/ test/node-compat/ .ncurc.js
+git add package.json package-lock.json CHANGELOG.md README.md src/upstream/ src/sqlite_impl.* src/shims/ doc/ scripts/ test/node-compat/ .ncurc.cjs
 git diff --cached    # review before committing
 git commit -m "..."
 git push -u origin <branch>    # retry up to 4x with 2s/4s/8s/16s backoff on network errors
 ```
 
-Where and how you land the commit depends on the environment (`echo $USER`, per Critical constraints):
+On local hardware, push `origin main`. On a cloud VM, push the `claude/*` branch, then open a PR with `mcp__github__create_pull_request` (`base: main`, the branch as `head`). Put in the PR body:
 
-- **Local hardware** (`$USER` is `mrm`): commit on `main` and push `origin main` — that's the maintainer's normal flow. Always ask before committing/pushing (see AGENTS.md). Do NOT open a PR.
-- **Anthropic cloud VM** (`$USER` is anything else): **do NOT push to `main` directly.** Push to the session's `claude/*` development branch, then open a PR with `mcp__github__create_pull_request` (`base: main`, the branch as `head`). Include in the PR body:
-  - Version bump chosen + one-line justification
-  - Upstream sync deltas (Node SHA old → new, SQLite old → new)
-  - Dep bumps
-  - Test results summary
-  - Any pre-existing test failures you confirmed are NOT regressions (for reviewer context)
+- Version bump chosen + one-line justification
+- Upstream sync deltas (Node SHA old → new, SQLite old → new)
+- Dep bumps
+- Test results summary
+- Any pre-existing test failures you confirmed are not regressions (for reviewer context)
 
 ### 9. Hand off to user
 
-In your final message, report:
+Start the final message with what the user has to do, then report what changed.
 
-1. **Version bump chosen**: `patch` | `minor` | `major` → next version `X.Y.Z`, with the 1–2 line justification.
-2. **Upstream sync summary**:
+**Needs from you:**
+
+1. **Version bump**: `patch` | `minor` | `major` → next version `X.Y.Z`, with the 1–2 line justification, for the user to confirm.
+2. **CHANGELOG entry**: quote the new section verbatim for the user to review.
+3. **Commit and push**: on local hardware, the commit you're asking to make and push. On a cloud VM, the PR link.
+4. **How to release**: merge this branch/PR to `main`, then follow [RELEASE.md](../../../RELEASE.md): trigger the `Build & Release` workflow with input `version = <patch|minor|major>`, which signs and pushes the version commit and tag, then dispatches `Stage npm Release` at that tag. That second workflow rebuilds the prebuilds, packs one tarball, tests it, and **stages** it on npm — the maintainer must approve the staged package with 2FA before it goes public. Link: https://github.com/photostructure/node-sqlite/actions/workflows/build.yml
+
+**What changed:**
+
+5. **Upstream sync summary**:
    - Node.js: `<old-sha>` → `<new-sha>` (N commits to sqlite files). Flag any commits that required a port to `src/sqlite_impl.cpp`.
+   - Node.js `main` only: the PRs from list 3 in §3, with their labels. Those labeled `semver-major` or `dont-land-on-vNN.x` won't arrive through this staging branch.
    - SQLite: `<old>` → `<new>`
-3. **Dep updates**: list of major/minor bumps (skip patch bumps unless notable). Flag any that were pinned back in `.ncurc.js` and why.
-4. **CHANGELOG entry**: quote the new section verbatim for the user to review.
-5. **Test results**: pass/fail summary. Call out pre-existing failures (not regressions) with evidence.
-6. **Node-compat test changes**: any new files added to `skipFiles` or new transforms added to `adapt-node-test.ts`. These are likely follow-up work items.
-7. **PR link** (if opened) or push destination.
-8. **How to release**: Tell the user to merge this branch/PR to `main`, then follow [RELEASE.md](../../../RELEASE.md): trigger the `Build & Release` workflow with input `version = <patch|minor|major>`, which signs and pushes the version commit and tag, then dispatches `Stage npm Release` at that tag. That second workflow rebuilds the prebuilds, packs one tarball, tests it, and **stages** it on npm — the maintainer must approve the staged package with 2FA before it goes public. Link: https://github.com/photostructure/node-sqlite/actions/workflows/build.yml
-
-## Common gotchas
-
-Learned from real release-prep sessions — consult this list when something surprises you:
-
-- **`src/upstream/` is not the source of truth for implementation.** It's the exact Node.js source verbatim. The actual shipped code is `src/sqlite_impl.cpp` (ported). When upstream changes, ask yourself: "Does my port also need this change?" — fix-for-crash-on-musl commits upstream usually do; pure refactors usually don't.
-- **Sync scripts honor `.sync-cache.json`.** If you change the script's transform/skip logic, pass `--force` to re-apply against unchanged upstream.
-- **Rate limits.** Unauthenticated GitHub API gives you 60 req/hour across `update:pinact`, `sync:node`, `sync:tests`, and compare URLs — `pinact`'s `always: true` config re-verifies every pinned action on each run, so it burns that budget fast. `update:pinact` and the `sync:*` scripts pull a token from `gh auth token` themselves, so running them by hand needs no export. `npm run preflight` deliberately does not export it: every step it runs, including the freshly synced upstream tests under `test:node`, would inherit the maintainer's token.
-- **Prettier after every sync:tests.** Upstream uses single quotes; our prettier rewrites to double. Without the formatter pass, every re-sync shows a massive noise diff.
-- **The node-compat tests only have to parse on the Node `test:node` pins** (24 today, in `build.yml`), not on every Node the package supports (>=22, which can't parse ERM `using`). `scripts/adapt-node-test.ts` rewrites no syntax at all right now; add a transform (§3.5) when upstream adopts something that pin can't parse.
-- **`test:api` has a pre-existing failure on Node <25.** It compares constants against the host's `node:sqlite`, which exposes far fewer constants on Node 22 than Node 25. If you inherit this failure, confirm via `git stash` + re-run that it exists on the baseline before calling it a regression.
-- **The `Build & Release` action bumps `package.json` and tags; `Stage npm Release` publishes.** You don't. Ever. The action's input takes `patch|minor|major` — give it that, don't pre-stage a version commit.
-- **Use `AskUserQuestion` when the semver call is ambiguous.** Release decisions are cheap to pause on and expensive to get wrong.
+6. **Dep updates**: list of major/minor bumps (skip patch bumps unless notable). Flag any that were pinned back in `.ncurc.cjs` and why.
+7. **Test results**: pass/fail summary. Call out pre-existing failures (not regressions) with evidence.
+8. **Node-compat test changes**: any new files added to `skipFiles` or new transforms added to `adapt-node-test.ts`. These are likely follow-up work items.
 
 ## Things worth doing but not required
 
