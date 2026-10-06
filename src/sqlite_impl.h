@@ -54,6 +54,8 @@ struct AddonData {
   // Symbol key under which each iterator holds its statement's JS object.
   Napi::Reference<Napi::Value> statementSyncIteratorStatementKey;
   Napi::FunctionReference sessionConstructor;
+  // Symbol key under which each session holds its database's JS object.
+  Napi::Reference<Napi::Value> sessionDatabaseKey;
   Napi::FunctionReference asyncPoolConnectionConstructor;
   Napi::Reference<Napi::Value> asyncPoolConnectionToken;
 
@@ -683,7 +685,9 @@ private:
   };
 
   sqlite3_session *session_ = nullptr;
-  DatabaseSync *database_ = nullptr; // Direct pointer to database
+  // Not owning: Create() keeps the database's JS object alive instead.
+  // DetachAllSessions() nulls this if the database is finalized first.
+  DatabaseSync *database_ = nullptr;
 
   friend class DatabaseSync;
 };

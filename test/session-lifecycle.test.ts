@@ -144,48 +144,102 @@ describe("Session Lifecycle Management (RAII)", () => {
       expect(() => session.close()).toThrow(/database is not open/);
     });
 
-    it("should invalidate a session whose database is garbage collected", async () => {
-      // Regression test for a use-after-free: Session holds a raw
-      // DatabaseSync*, and N-API finalization order between the two wrappers
-      // is unspecified. If the DatabaseSync is finalized first, every
-      // surviving Session was left pointing at freed memory, and the next
-      // Session method dereferenced it. Ports the upstream fix from
-      // nodejs/node@bb86521a4 / @14e802d1c.
-      //
-      // Unlike the sibling tests above, this one deliberately does NOT call
-      // db.close() -- the destructor path is what leaves the dangling pointer.
+    it("should keep its database alive while the session is reachable", async () => {
+      // Matches node:sqlite, whose Session holds a strong
+      // BaseObjectPtr<DatabaseSync>: a caller that keeps only the session can
+      // still use it after dropping every reference to the database.
       expect(typeof global.gc).toBe("function");
 
-      let session: Session;
       let dbCollected = false;
       const registry = new FinalizationRegistry(() => {
         dbCollected = true;
       });
 
-      (() => {
+      const refs: { session?: Session } = {};
+      refs.session = (() => {
         const db = new DatabaseSync(":memory:");
-        db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)");
         registry.register(db, "db");
-        session = db.createSession();
+        db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)");
+        const scoped = db.createSession();
         db.exec("INSERT INTO test VALUES (1, 'a')");
+        return scoped;
       })();
 
-      // Drop the last reference to the database and let it be finalized.
-      for (let i = 0; i < 3 && !dbCollected; i++) {
+      // Nothing signals that the database survived, so give GC a fixed number
+      // of chances to collect it.
+      for (let i = 0; i < 5; i++) {
+        global.gc!();
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      expect(dbCollected).toBe(false);
+      expect(refs.session.changeset().length).toBeGreaterThan(0);
+      refs.session.close();
+
+      // Dropping the session must release the database.
+      delete refs.session;
+      for (let i = 0; i < 5 && !dbCollected; i++) {
         global.gc!();
         await new Promise((resolve) => setImmediate(resolve));
       }
       expect(dbCollected).toBe(true);
+    });
 
-      // The session must report the database as gone rather than reading
-      // through a dangling pointer.
-      expect(() => session!.changeset()).toThrow(/database is not open/);
-      expect(() => session!.close()).toThrow(/database is not open/);
+    // Drops databases that each have one session, open or closed, and waits
+    // until all are finalized, in both orders. A session keeps its database
+    // alive, so the database is finalized first only when both become
+    // unreachable in the same collection, where N-API leaves the order
+    // unspecified; several pairs are dropped at once so that order is likely.
+    async function dropSessionsWithDatabases(closeSession: boolean) {
+      expect(typeof global.gc).toBe("function");
 
-      // Disposal of the orphaned session must not crash. Session.dispose() is
-      // exposed by the native layer but not yet declared on the TS interface.
-      const disposable = session! as unknown as { dispose(): void };
-      expect(() => disposable.dispose()).not.toThrow();
+      const collected = new Set<string>();
+      const registry = new FinalizationRegistry<string>((name) =>
+        collected.add(name),
+      );
+      const gcUntil = async (done: () => boolean) => {
+        for (let i = 0; i < 5 && !done(); i++) {
+          global.gc!();
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+        expect(done()).toBe(true);
+        // Let Node-API's queued finalizers run.
+        await new Promise((resolve) => setImmediate(resolve));
+      };
+      const openWithSession = (name: string) => {
+        const db = new DatabaseSync(":memory:");
+        registry.register(db, `db ${name}`);
+        db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY)");
+        const session = db.createSession();
+        registry.register(session, `session ${name}`);
+        db.exec("INSERT INTO test VALUES (1)");
+        if (closeSession) session.close();
+        return db;
+      };
+
+      // Session first: hold the database until its session is gone.
+      const refs: { held?: InstanceType<typeof DatabaseSync> } = {};
+      refs.held = openWithSession("held");
+      await gcUntil(() => collected.has("session held"));
+      expect(refs.held.isOpen).toBe(true);
+      delete refs.held;
+      await gcUntil(() => collected.has("db held"));
+
+      const pairs = 8;
+      (() => {
+        for (let i = 0; i < pairs; i++) openWithSession(String(i));
+      })();
+      await gcUntil(() => collected.size === 2 * (pairs + 1));
+    }
+
+    it("should survive an open session and its database being finalized", async () => {
+      // Regression test for a use-after-free: Session holds a raw
+      // DatabaseSync*. If the DatabaseSync was finalized first, the Session
+      // was left pointing at freed memory, and ~Session dereferenced it.
+      // Ports the upstream fix from nodejs/node@bb86521a4 / @14e802d1c.
+      //
+      // Neither object is closed: ~DatabaseSync has to delete the live
+      // sqlite3_session itself before clearing the back-pointer.
+      await dropSessionsWithDatabases(false);
     });
 
     it("should survive a session being finalized before its closed database", async () => {
@@ -220,38 +274,12 @@ describe("Session Lifecycle Management (RAII)", () => {
       expect(() => db.close()).toThrow();
     });
 
-    it("should survive a closed session outliving its database", async () => {
-      // Third ordering: session.close() must not drop the wrapper out of the
-      // database's tracking list. If it did, ~DatabaseSync would never clear
-      // the wrapper's back-pointer, and ~Session would later call
-      // RemoveSession() on a freed database. Caught by AddressSanitizer.
-      expect(typeof global.gc).toBe("function");
-
-      let dbCollected = false;
-      const registry = new FinalizationRegistry(() => {
-        dbCollected = true;
-      });
-
-      let session: Session | null;
-      (() => {
-        const scoped = new DatabaseSync(":memory:");
-        registry.register(scoped, "db");
-        scoped.exec("CREATE TABLE test (id INTEGER PRIMARY KEY)");
-        session = scoped.createSession();
-        session.close();
-      })();
-
-      for (let i = 0; i < 5 && !dbCollected; i++) {
-        global.gc!();
-        await new Promise((resolve) => setImmediate(resolve));
-      }
-      expect(dbCollected).toBe(true);
-
-      session = null;
-      for (let i = 0; i < 5; i++) {
-        global.gc!();
-        await new Promise((resolve) => setImmediate(resolve));
-      }
+    it("should survive a closed session and its database being finalized", async () => {
+      // session.close() must not drop the wrapper out of the database's
+      // tracking list. If it did, ~DatabaseSync would never clear the
+      // wrapper's back-pointer, and ~Session would later call RemoveSession()
+      // on a freed database. Caught by AddressSanitizer.
+      await dropSessionsWithDatabases(true);
     });
 
     it("should handle multiple databases being destroyed in different order", () => {

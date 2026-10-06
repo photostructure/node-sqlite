@@ -767,8 +767,9 @@ DatabaseSync::~DatabaseSync() {
     InternalClose();
   }
 
-  // Sessions are separate JS objects that can outlive this one. Clear their
-  // back-pointers so their methods can't dereference this freed instance.
+  // A session keeps this object's JS wrapper alive, but when both become
+  // unreachable in the same collection N-API may finalize this one first.
+  // Clear their back-pointers so ~Session can't dereference this instance.
   DetachAllSessions();
 }
 
@@ -4583,6 +4584,8 @@ Napi::Object Session::Init(Napi::Env env, Napi::Object exports) {
   AddonData *addon_data = GetAddonData(env);
   if (addon_data) {
     addon_data->sessionConstructor = Napi::Reference<Napi::Function>::New(func);
+    addon_data->sessionDatabaseKey = Napi::Reference<Napi::Value>::New(
+        Napi::Symbol::New(env, "Session database"), 1);
   }
 
   // Add Symbol.dispose to the prototype (Node.js v25+ compatibility)
@@ -4613,6 +4616,14 @@ Napi::Object Session::Create(Napi::Env env, DatabaseSync *database,
     return Napi::Object::New(env);
   }
   Napi::Object obj = addon_data->sessionConstructor.New({});
+  // Keep the database's JS object alive for as long as the session is, as
+  // node:sqlite's BaseObjectPtr<DatabaseSync> does; otherwise a caller that
+  // keeps only the session loses the database to GC, whose finalizer closes
+  // the connection and deletes the session. A Napi::Reference member would be
+  // released during GC finalization, which crashes on Alpine/musl (4da0638).
+  obj.DefineProperty(Napi::PropertyDescriptor::Value(
+      addon_data->sessionDatabaseKey.Value().As<Napi::Symbol>(),
+      database->Value(), napi_default));
   Session *sess = Napi::ObjectWrap<Session>::Unwrap(obj);
   sess->SetSession(database, session);
   return obj;
@@ -4666,9 +4677,11 @@ template <int (*sqliteChangesetFunc)(sqlite3_session *, int *, void **)>
 Napi::Value Session::GenericChangeset(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  // Check database first - if db was closed or destroyed, that's the primary
-  // error. database_ is preserved by Delete() but nulled by DetachAllSessions()
-  // when the database is destroyed, so both cases report identically.
+  // Check database first - if db was closed, that's the primary error.
+  // database_ is preserved by Delete(), and is nulled by DetachAllSessions()
+  // only once the database is destroyed, which the reference set in Create()
+  // prevents while JavaScript can still reach this session. The null check is
+  // defensive.
   if (!database_ || !database_->IsOpen()) {
     node::THROW_ERR_INVALID_STATE(env, "database is not open");
     return env.Undefined();

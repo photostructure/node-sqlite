@@ -993,7 +993,7 @@ suite("session.close() - from a callback", () => {
   });
 });
 
-test.skip("session - keeps its database alive after the db handle is dropped" /* Intentional divergence: upstream keeps the database alive via a strong reference from Session. We cannot -- commit 4da0638 removed Session::database_ref_ because Napi::Reference teardown during GC finalization corrupts V8 JIT pages on Alpine/musl (SIGSEGV). We detach instead, so an orphaned session reports 'database is not open'. Also needs Node's internal ../common/gc helper. */, async (t) => {
+test.skip("session - keeps its database alive after the db handle is dropped" /* Needs onGC from Node's internal ../common/gc helper, which test/common does not provide. Session keeps its database alive as upstream does; test/session-lifecycle.test.ts covers it. */, async (t) => {
   const { gcUntil, onGC } = require("../common/gc");
 
   // The Database handle is created in a nested scope and never referenced
