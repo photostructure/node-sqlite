@@ -7,9 +7,15 @@ description: Prepare a new release of @photostructure/sqlite. Syncs upstream Nod
 
 Prepare @photostructure/sqlite for a new release. This skill does not publish: it leaves the repo ready for a maintainer to run the `Build & Release` workflow with the chosen version bump.
 
-**Done means**: `npm run preflight` passed (or every §2.5 step passed), the CHANGELOG entry and doc version strings are written, the release-prep commit is pushed after the user approved it (on a cloud VM, the PR is open), and the §9 hand-off is sent.
+**Done means**:
 
-**Stop and ask** when the semver call is ambiguous (§4), when a step fails for a reason that neither §3.5 nor a baseline re-run explains, and before every commit and push. Otherwise keep going.
+1. Every upstream PR in §3 list 2 has a disposition in `.cache/preflight-tasks.md`: ported, already matched, not applicable, or deferred with the user's agreement (§3).
+2. `npm run preflight` (or every §2.5 step) passes on the final tree, after any ports.
+3. The CHANGELOG entry and doc version strings are written.
+4. The release-prep commit is pushed after the user approved it. On a cloud VM, the PR is open.
+5. The §9 hand-off is sent.
+
+**Stop and ask** when the semver call is ambiguous (§4), before deferring an upstream PR, when a step fails for a reason that neither §3.5 nor a baseline re-run explains, and before every commit and push. Otherwise keep going.
 
 ## Constraints
 
@@ -21,7 +27,7 @@ Prepare @photostructure/sqlite for a new release. This skill does not publish: i
 
 ## Workflow
 
-Keep a checklist of the steps below in `.cache/preflight-tasks.md`, which is gitignored and survives `npm run clean`. Tick each step when it's done, and add anything new you find. After a context summary, read that file to find the current step. Report each failure as soon as it happens instead of pressing on.
+Keep a checklist of the steps below in `.cache/preflight-tasks.md`, which is gitignored and survives `npm run clean`. Replace a copy left over from an earlier release. Tick each step when it's done, and add anything new you find. After a context summary, read that file to find the current step. Report each failure as soon as it happens instead of pressing on.
 
 ### 1. Repo state checks
 
@@ -116,7 +122,14 @@ Classify each upstream commit:
 - **API change or removal** (signature, defaults, error shape) → MAJOR
 - **Bug fix, internal refactor, test-only change** → PATCH
 
-`src/upstream/` is reference only; the shipped code is `src/sqlite_impl.cpp`, our port of `node_sqlite.cc`. For each non-trivial upstream code change, decide whether the port needs it too. Node.js fixes that touch callback lifetimes, error propagation, or memory management (including musl crash fixes) usually do. Pure stylistic refactors usually don't.
+`src/upstream/` is reference only; the shipped code is `src/sqlite_impl.cpp`, our port of `node_sqlite.cc`. Record one disposition per PR in list 2 in `.cache/preflight-tasks.md`:
+
+- **Ported**: you made the same change in our code, with a test that covers it. A synced node-compat test that passes under `test:node` counts.
+- **Already matched**: our code already behaves this way. Name the code or test that shows it.
+- **Not applicable**: the change can't reach our code, such as a V8 or Node.js build change. Say why.
+- **Deferred**: only after the user agrees. Record their answer.
+
+Node.js fixes that touch callback lifetimes, error propagation, or memory management (including musl crash fixes) usually need a port. Pure stylistic refactors usually don't. A test-only PR is covered when its synced test passes under `test:node`, or is skipped per §3.5 C.
 
 **SQLite**: Compare `versions.sqlite` before/after. SQLite's own release notes (https://www.sqlite.org/changes.html) classify changes.
 - **Any vendored SQLite version bump is at least MINOR for us** — including patch-level ones (`3.53.3 → 3.53.4`). We statically compile the amalgamation into the shipped binary, so a SQLite bump changes what every consumer runs whether or not we expose a new API. Even a pure bug-fix release changes query results, error paths, and corruption handling reachable through `db.exec()` / `db.prepare()`. Users decide whether to take that on their own schedule, and a PATCH bump denies them the choice. Bump to MAJOR only if the SQLite release carries a documented breaking change we pass through.
@@ -144,7 +157,9 @@ After adding a transform, re-run with `--force` (the SHA cache will otherwise sk
 
 **B. `TypeError: db.X is not a function`**: upstream added a test file for a node:sqlite API we haven't ported yet (recent example: `test-sqlite-serialize.js` for `serialize()`/`deserialize()`). Options:
 
-1. **Implement the API** — best, but usually out-of-scope for a release-prep session.
+Ask the user which one applies; skipping the file defers the upstream PR that added the API (§3).
+
+1. **Implement the API**.
 2. **Skip the whole file** via `skipFiles` in `scripts/adapt-node-test.ts`. Add a comment with the feature name and a TODO referencing an issue to port it. Example:
    ```ts
    // Tests DatabaseSync.prototype.serialize() / deserialize(), which are
@@ -271,7 +286,7 @@ Start the final message with what the user has to do, then report what changed.
 **What changed:**
 
 5. **Upstream sync summary**:
-   - Node.js: `<old-sha>` → `<new-sha>` (N commits to sqlite files). Flag any commits that required a port to `src/sqlite_impl.cpp`.
+   - Node.js: `<old-sha>` → `<new-sha>` (N commits to sqlite files), with each PR's disposition from `.cache/preflight-tasks.md`.
    - Node.js `main` only: the PRs from list 3 in §3, with their labels. Those labeled `semver-major` or `dont-land-on-vNN.x` won't arrive through this staging branch.
    - SQLite: `<old>` → `<new>`
 6. **Dep updates**: list of major/minor bumps (skip patch bumps unless notable). Flag any that were pinned back in `.ncurc.cjs` and why.
