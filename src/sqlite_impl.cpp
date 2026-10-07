@@ -5,6 +5,7 @@
 #include <cinttypes>
 #include <climits>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 
 #include "aggregate_function.h"
