@@ -1,15 +1,20 @@
 import { DatabaseSync } from "../src/index";
 import type { CacheProfile } from "./cache-profile";
 
-// Optional dependencies - loaded lazily to allow running tests without them
+// Optional dependencies - only register drivers that can open a database
 // Use any types to avoid TypeScript issues with optional deps
 let Database: any = null;
 
 // Try to load optional dependencies
 try {
-  Database = require("better-sqlite3");
+  const BetterSqlite3Database = require("better-sqlite3");
+  // better-sqlite3 loads its native binding on first open, so require() alone
+  // succeeds even when the binding is missing or built for another Node ABI.
+  const probe = new BetterSqlite3Database(":memory:");
+  probe.close();
+  Database = BetterSqlite3Database;
 } catch {
-  // better-sqlite3 not available
+  // better-sqlite3 or its native binding is not available
 }
 
 // Track if node:sqlite is available
