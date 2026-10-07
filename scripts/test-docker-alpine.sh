@@ -11,7 +11,7 @@
 #   REUSE_CONTAINER=1 ./test-docker-alpine.sh  # Reuse container between runs (faster)
 #   REUSE_BUILD=1 ./test-docker-alpine.sh      # Reuse build artifacts (much faster)
 #
-# The REUSE_BUILD option mounts node_modules and build directories as volumes,
+# The REUSE_BUILD option mounts the build directory as a volume,
 # avoiding full rebuilds on every run. Great for local development iteration.
 
 set -euo pipefail
