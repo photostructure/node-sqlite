@@ -110,12 +110,13 @@ question; measure it against the extra cache, libuv-thread, and lock contention.
 
 #### Standard build flags (all platforms)
 
-| Flag                  | Purpose                          | Notes                                                                                                 |
-| --------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `NAPI_CPP_EXCEPTIONS` | N-API C++ exception support      | Required for proper error handling                                                                    |
-| `NAPI_VERSION=8`      | Pins the Node-API surface        | 8 is the header default and our ABI floor; explicit so a node-addon-api bump cannot silently widen it |
-| `HAVE_STDINT_H=1`     | Standard integer types available | Cross-platform compatibility                                                                          |
-| `HAVE_USLEEP=1`       | usleep() function available      | Sleep functionality                                                                                   |
+| Flag                                      | Purpose                                   | Notes                                                                                                                                                                                                                         |
+| ----------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NAPI_CPP_EXCEPTIONS`                     | N-API C++ exception support               | Required for proper error handling                                                                                                                                                                                            |
+| `NAPI_VERSION=8`                          | Pins the Node-API surface                 | 8 is the header default and our ABI floor; explicit so a node-addon-api bump cannot silently widen it                                                                                                                         |
+| `NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS` | Drops errors that can no longer be thrown | After `process.exit()` or `terminate()` stops a worker's JavaScript, node-addon-api otherwise aborts the whole process when a failed call tries to become an `Error`, for example a getter that exits while an option is read |
+| `HAVE_STDINT_H=1`                         | Standard integer types available          | Cross-platform compatibility                                                                                                                                                                                                  |
+| `HAVE_USLEEP=1`                           | usleep() function available               | Sleep functionality                                                                                                                                                                                                           |
 
 #### Compiler and linker hardening (POSIX)
 

@@ -11,12 +11,12 @@ namespace sqlite {
 // napi_get_named_property, ...) and checks the status, rather than through
 // node-addon-api's Function::Call() or Object::Get(). When the JavaScript
 // throws, those convert the exception with Napi::Error::New(env), as
-// env.GetAndClearPendingException() does: its Napi::Error wraps a thrown
-// primitive in a new object via napi_define_properties and aborts the process
-// if that fails, which it does for the termination exception that
-// process.exit() in a worker leaves behind. Once JavaScript cannot run,
-// throwing anything fails as well, with a C++ exception that ends the process,
-// so nothing may be thrown then.
+// env.GetAndClearPendingException() does, and throw it as a C++ exception,
+// which must not unwind through SQLite's C frames. A raw call instead leaves
+// the exception pending for the caller to rethrow. Converting the termination
+// exception that process.exit() in a worker leaves behind would abort the
+// process, but the build defines NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS (see
+// doc/build-flags.md). Once JavaScript cannot run, nothing can be thrown.
 
 // False once the environment disallows JavaScript, as during teardown or after
 // process.exit() in a worker: Node-API calls that may run JavaScript, such as

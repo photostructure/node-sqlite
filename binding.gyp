@@ -25,6 +25,11 @@
       # including comparison with Node.js configuration and rationale for our choices
       "defines": [
         "NAPI_CPP_EXCEPTIONS",
+        # Once process.exit() or terminate() has stopped a worker's JavaScript,
+        # a failed Node-API call cannot become an Error: without this,
+        # node-addon-api aborts the whole process when it tries. With it, the
+        # unthrowable error is dropped and the worker exits normally.
+        "NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS",
         # Pin the Node-API surface we compile against. 8 is the header default
         # and the broadest ABI floor; stating it explicitly keeps a future
         # node-addon-api bump from silently widening the surface we rely on.

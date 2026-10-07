@@ -1370,8 +1370,8 @@ Napi::Value DatabaseSync::Deserialize(const Napi::CallbackInfo &info) {
 
   // Finalizing ran the return() of any suspended virtual table iterator. An
   // exception it threw stays pending, as in node:sqlite, but if it exited a
-  // worker no JavaScript can run, and the authorizer sqlite3_deserialize()
-  // can invoke would abort the process.
+  // worker no JavaScript can run, so stop before sqlite3_deserialize() runs
+  // its ATTACH, which can invoke the authorizer.
   bool pending = false;
   if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {
     napi_value exception;
@@ -3336,8 +3336,8 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
       return info.Env().Undefined();
     }
     // Resetting closes a cursor an unfinished iterate() left open, and its
-    // iterator's return() may have thrown, or exited a worker: binding would
-    // abort the process on the termination exception.
+    // iterator's return() may have thrown, or exited a worker: binding below
+    // would fail on that pending exception.
     if (info.Env().IsExceptionPending()) {
       return info.Env().Undefined();
     }
@@ -4382,7 +4382,7 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
     // Finishing early, as for LIMIT, closed a virtual table cursor, and its
     // iterator's return() may have thrown, or exited a worker; so may a
     // sqlite.db.query subscriber, which leaves no exception pending. Building
-    // the result below would abort the process once JavaScript cannot run.
+    // the result below fails once JavaScript cannot run.
     if (!CanRunJavaScript(env)) {
       return env.Undefined();
     }
@@ -4442,8 +4442,8 @@ Napi::Value StatementSyncIterator::Return(const Napi::CallbackInfo &info) {
     }
     done_ = true;
     // The return() it ran may have thrown, or exited a worker, as may a
-    // sqlite.db.query subscriber: building the result below would abort the
-    // process once JavaScript cannot run.
+    // sqlite.db.query subscriber: building the result below fails once
+    // JavaScript cannot run.
     if (!CanRunJavaScript(env)) {
       return env.Undefined();
     }

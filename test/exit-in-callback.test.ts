@@ -119,4 +119,44 @@ describe("process.exit() in a worker's callback", () => {
       getTestTimeout(30000),
     );
   }
+
+  // A getter or Proxy trap that a native method runs while reading an argument
+  // aborted the same way, through node-addon-api's Object::Get(). Defining
+  // NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS in binding.gyp fixes every such
+  // read. Each trap of this Proxy exits, so the first read of any kind does.
+  const exiting = `
+    const exit = () => process.exit(7);
+    const exiting = new Proxy({}, {
+      get: exit,
+      has: exit,
+      ownKeys: exit,
+      getOwnPropertyDescriptor: exit,
+      getPrototypeOf: exit,
+    });
+  `;
+  const nativeReads: Record<string, string> = {
+    "named parameters": `db.prepare("SELECT $x").get(exiting);`,
+    "constructor options": `new DatabaseSync(":memory:", exiting);`,
+    "prepare() options": `db.prepare("SELECT 1", exiting);`,
+    "function() options": `db.function("f", exiting, () => 1);`,
+    "a createModule() column": `
+      db.createModule("m", { columns: [exiting], rows: () => [] });`,
+    "applyChangeset() options": `
+      db.applyChangeset(new Uint8Array(0), exiting);`,
+  };
+
+  for (const [name, code] of Object.entries(nativeReads)) {
+    it(
+      `exits from a getter on ${name}`,
+      async () => {
+        expect(await runInWorker(setup + exiting + code)).toEqual({
+          code: 0,
+          signal: null,
+          stdout: "7",
+          stderr: "",
+        });
+      },
+      getTestTimeout(30000),
+    );
+  }
 });
