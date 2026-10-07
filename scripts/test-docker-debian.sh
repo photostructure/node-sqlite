@@ -3,13 +3,13 @@
 # This validates that cleanup hooks work correctly in containerized glibc environments
 #
 # Usage:
-#   ./test-docker-glibc.sh           # Test all versions (20, 22, 24)
-#   ./test-docker-glibc.sh 22        # Test only Node 22
-#   NODE_VERSION=22 ./test-docker-glibc.sh  # Test only Node 22 (via env var)
+#   ./test-docker-debian.sh           # Test all versions (22, 24, 26)
+#   ./test-docker-debian.sh 22        # Test only Node 22
+#   NODE_VERSION=22 ./test-docker-debian.sh  # Test only Node 22 (via env var)
 #
 # Caching:
-#   REUSE_CONTAINER=1 ./test-docker-glibc.sh  # Reuse container between runs (faster)
-#   REUSE_BUILD=1 ./test-docker-glibc.sh      # Reuse build artifacts (much faster)
+#   REUSE_CONTAINER=1 ./test-docker-debian.sh  # Reuse container between runs (faster)
+#   REUSE_BUILD=1 ./test-docker-debian.sh      # Reuse build artifacts (much faster)
 #
 # The REUSE_BUILD option mounts node_modules and build directories as volumes,
 # avoiding full rebuilds on every run. Great for local development iteration.
@@ -22,7 +22,7 @@ if [ -n "${NODE_VERSION:-}" ]; then
 elif [ $# -eq 1 ]; then
   NODE_VERSIONS=("$1")
 else
-  NODE_VERSIONS=("20" "22" "24")
+  NODE_VERSIONS=("22" "24" "26")
 fi
 
 echo "Testing @photostructure/sqlite in glibc Docker containers..."
