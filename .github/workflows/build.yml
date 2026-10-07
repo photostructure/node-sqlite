@@ -224,6 +224,14 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build:dist
       - run: npm test
+      # Jest logs only the signal when a worker crashes; macOS writes the
+      # crashed process's native stack to an .ips report.
+      - name: Upload macOS crash reports
+        if: failure() && runner.os == 'macOS'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: crash-reports-${{ matrix.os }}-node${{ matrix.node-version }}
+          path: ~/Library/Logs/DiagnosticReports/*.ips
 
   test-ubuntu:
     needs:
