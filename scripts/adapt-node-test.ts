@@ -216,6 +216,7 @@ function adaptTest(content: string, fileName: string): string {
   if (content.includes("mustCall")) {
     const shim =
       "// Shim for Node.js test helper\nconst mustCall = (fn) => fn;\n\n";
+    // eslint-disable-next-line security/detect-unsafe-regex -- linear: each repetition starts with "//" and ends at the only "\n" [^\n]* can't consume
     const directive = /^(?:\/\/[^\n]*\n)*(['"])use strict\1;\n/.exec(adapted);
     adapted =
       directive === null
