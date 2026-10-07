@@ -74,7 +74,10 @@ for NODE_VERSION in "${NODE_VERSIONS[@]}"; do
   if [ "${REUSE_BUILD:-0}" = "1" ]; then
     # Exclude build and prebuilds when using cache
     # (prebuilds may be incompatible with container's libc)
-    tar --exclude='node_modules' --exclude='build' --exclude='prebuilds' --exclude='.cache' --exclude='dist' -c . | docker exec -i "$CONTAINER_NAME" sh -c "cd /tmp/project && tar -xf -"
+    # COPYFILE_DISABLE stops macOS tar from adding an AppleDouble ._<name>
+    # entry for each file with extended attributes; Jest would run
+    # test/._*.test.ts as test files. GNU tar ignores it.
+    COPYFILE_DISABLE=1 tar --exclude='node_modules' --exclude='build' --exclude='prebuilds' --exclude='.cache' --exclude='dist' -c . | docker exec -i "$CONTAINER_NAME" sh -c "cd /tmp/project && tar -xf -"
   else
     docker cp . "$CONTAINER_NAME:/tmp/project"
   fi
