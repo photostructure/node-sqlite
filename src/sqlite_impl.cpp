@@ -726,6 +726,10 @@ DatabaseSync::DatabaseSync(const Napi::CallbackInfo &info)
     }
   } catch (const SqliteException &e) {
     node::ThrowFromSqliteException(info.Env(), e);
+  } catch (const Napi::Error &e) {
+    // A JavaScript exception, such as one a getter on the options threw, is
+    // rethrown as is rather than as a SQLite error.
+    e.ThrowAsJavaScriptException();
   } catch (const std::exception &e) {
     node::THROW_ERR_SQLITE_ERROR(info.Env(), e.what());
   }
@@ -3072,6 +3076,12 @@ Napi::Value StatementSync::Run(const Napi::CallbackInfo &info) {
     result_obj.Set("lastInsertRowid", last_rowid_value);
 
     return result_obj;
+  } catch (const Napi::Error &e) {
+    // A JavaScript exception, such as one a named parameter's getter threw, is
+    // rethrown as is. An error built from e.what() would replace it, and a
+    // thrown primitive has no message.
+    e.ThrowAsJavaScriptException();
+    return env.Undefined();
   } catch (const std::exception &e) {
     ThrowErrSqliteErrorWithDb(env, database_, e.what());
     return env.Undefined();
@@ -3146,6 +3156,11 @@ Napi::Value StatementSync::Get(const Napi::CallbackInfo &info) {
                                      result, error);
       return env.Undefined();
     }
+  } catch (const Napi::Error &e) {
+    // A JavaScript exception is rethrown as is (see Run).
+    ResetStatement();
+    e.ThrowAsJavaScriptException();
+    return env.Undefined();
   } catch (const std::exception &e) {
     // Reset statement on exception to release locks
     ResetStatement();
@@ -3244,6 +3259,11 @@ Napi::Value StatementSync::All(const Napi::CallbackInfo &info) {
     }
 
     return results;
+  } catch (const Napi::Error &e) {
+    // A JavaScript exception is rethrown as is (see Run).
+    ResetStatement();
+    e.ThrowAsJavaScriptException();
+    return env.Undefined();
   } catch (const std::exception &e) {
     // Reset statement on exception to release locks
     ResetStatement();

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- **A value thrown by an option or named-parameter getter reaches the caller**: when a getter on the constructor's options or `limits` threw, the constructor threw a new `ERR_SQLITE_ERROR` error in its place, with the message `SQLite error` for a thrown primitive. When a getter on a named parameter passed to `get()`, `run()`, or `all()` threw, those methods threw a new `Error` with the thrown error's message, or with an empty message for a thrown primitive. The caller now receives the thrown value itself, as `iterate()` and the other methods already did and as `node:sqlite` does (checked on v24.21.0). Code that checked these errors for `code === "ERR_SQLITE_ERROR"` sees the getter's own error instead.
+
 ### Fixed
 
 - **`process.exit()` in a worker from other callbacks**: calling `process.exit()` in a worker from a `setAuthorizer()` callback, an `applyChangeset()` `filter` or `onConflict` callback, a `sqlite.db.query` diagnostics subscriber, an aggregate `step` result's `then` getter, or an aggregate accumulator's `toJSON()` aborted the process with `FATAL ERROR: Error::Error napi_define_properties`, as a user-defined function in `exec()` did before 3.1.0. The worker now exits with the requested code, as `node:sqlite` does for the authorizer and changeset callbacks (checked on v24.21.0). The authorizer abort is also present in 2.6.0. `worker.terminate()` while one of these callbacks ran aborted the same way; the worker now ends normally.
