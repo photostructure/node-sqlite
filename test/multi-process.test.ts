@@ -427,19 +427,23 @@ describe("Multi-Process Database Access", () => {
         console.log("Waiting for lock holder to finish...");
         const lockFinishTimeout = lockHoldTime + 10000 * multiplier;
 
+        let lockFinishTimer: NodeJS.Timeout | undefined;
         const lockFinished = await Promise.race([
           workerExitPromise.then((code) => {
             console.log(`Lock holder exited with code ${code}`);
             return true;
           }),
           new Promise<boolean>((resolve) => {
-            setTimeout(async () => {
+            lockFinishTimer = setTimeout(async () => {
               console.error("Lock holder timeout - terminating worker");
               await lockHolderWorker.terminate();
               resolve(false);
             }, lockFinishTimeout);
           }),
         ]);
+        // Left pending, the timer keeps Jest's process alive for
+        // lockFinishTimeout after the test passes.
+        clearTimeout(lockFinishTimer);
 
         if (!lockFinished) {
           throw new Error(
