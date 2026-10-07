@@ -2,11 +2,9 @@
 
 #include <cstring>
 #include <limits>
-#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
-#include "pending_exception.h"
 #include "shims/node_errors.h"
 #include "sqlite_impl.h"
 #include "sqlite_value_conversion.h"
@@ -357,22 +355,9 @@ void CustomAggregate::xStepBase(
   // Check for Promise (from async functions) first
   if (result_val.IsObject() && !result_val.IsArray() &&
       !result_val.IsBuffer()) {
-    // Check if it's a Promise by looking for 'then' method. Raw Node-API,
-    // because a getter can run JavaScript (see pending_exception.h). A failed
-    // read leaves the exception pending, as a throwing step function does.
-    bool has_then = false;
-    napi_value then = nullptr;
-    if (napi_has_named_property(self->env_, result, "then", &has_then) !=
-            napi_ok ||
-        (has_then && napi_get_named_property(self->env_, result, "then",
-                                             &then) != napi_ok)) {
-      self->db_->SetIgnoreNextSQLiteError(true);
-      sqlite3_result_error(ctx, "", 0);
-      return;
-    }
-    napi_valuetype then_type;
-    if (has_then && napi_typeof(self->env_, then, &then_type) == napi_ok &&
-        then_type == napi_function) {
+    Napi::Object obj = result_val.As<Napi::Object>();
+    // Check if it's a Promise by looking for 'then' method
+    if (obj.Has("then") && obj.Get("then").IsFunction()) {
       sqlite3_result_error(ctx, "User-defined function returned invalid type",
                            -1);
       return;
@@ -683,17 +668,8 @@ std::string CustomAggregate::SafeJsonStringify(Napi::Env env,
     Napi::Object global = env.Global();
     Napi::Object json = global.Get("JSON").As<Napi::Object>();
     Napi::Function stringify = json.Get("stringify").As<Napi::Function>();
-    // Raw Node-API, because toJSON() methods and getters run JavaScript (see
-    // pending_exception.h). Clear the exception and fall back as for any other
-    // failure.
-    napi_value argv[] = {value};
-    napi_value json_result;
-    if (napi_call_function(env, env.Undefined(), stringify, 1, argv,
-                           &json_result) != napi_ok) {
-      ClearPendingException(env);
-      throw std::runtime_error("JSON.stringify() threw");
-    }
-    return Napi::Value(env, json_result).As<Napi::String>().Utf8Value();
+    Napi::Value json_result = stringify.Call({value});
+    return json_result.As<Napi::String>().Utf8Value();
   } catch (...) {
     // Handle circular references by creating a simplified object
     // Try to preserve key properties while breaking circularity

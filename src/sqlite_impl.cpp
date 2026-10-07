@@ -62,13 +62,6 @@ inline void ThrowErrSqliteErrorWithDb(Napi::Env env,
     return;
   }
 
-  // Nothing can be thrown once JavaScript cannot run (see
-  // pending_exception.h). A pending exception, which this also detects, is
-  // thrown in place of the SQLite error.
-  if (!CanRunJavaScript(env)) {
-    return;
-  }
-
   const char *msg = (message != nullptr) ? message : "SQLite error";
   Napi::Error::New(env, msg).ThrowAsJavaScriptException();
 }
@@ -86,12 +79,6 @@ inline void ThrowEnhancedSqliteErrorWithDB(
   // reports the SQLite error in its place; creating our error object with it
   // still pending would fail and surface the cleanup error instead.
   ClearPendingException(env);
-  // That exception, or one a callback cleared, can be the termination
-  // process.exit() leaves in a worker, after which nothing can be thrown (see
-  // pending_exception.h).
-  if (!CanRunJavaScript(env)) {
-    return;
-  }
 
   // Use extended error code from db handle (e.g., 1555 for
   // SQLITE_CONSTRAINT_PRIMARYKEY) instead of basic code (e.g., 19 for
@@ -832,11 +819,7 @@ void DatabaseSync::RethrowDeferredAuthorizerException() {
   Napi::Error error = GetDeferredAuthorizerException();
   ClearDeferredAuthorizerException();
   SetIgnoreNextSQLiteError(false);
-  // Once JavaScript cannot run, the error is empty and nothing can be thrown
-  // (see pending_exception.h).
-  if (!error.IsEmpty() && CanRunJavaScript(env_)) {
-    error.ThrowAsJavaScriptException();
-  }
+  error.ThrowAsJavaScriptException();
 }
 
 Napi::Value DatabaseSync::Open(const Napi::CallbackInfo &info) {
@@ -1369,19 +1352,7 @@ Napi::Value DatabaseSync::Deserialize(const Napi::CallbackInfo &info) {
   FinalizeStatements();
 
   // Finalizing ran the return() of any suspended virtual table iterator. An
-  // exception it threw stays pending, as in node:sqlite, but if it exited a
-  // worker no JavaScript can run, so stop before sqlite3_deserialize() runs
-  // its ATTACH, which can invoke the authorizer.
-  bool pending = false;
-  if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {
-    napi_value exception;
-    napi_get_and_clear_last_exception(env, &exception);
-    if (!CanRunJavaScript(env)) {
-      sqlite3_free(buf);
-      return env.Undefined();
-    }
-    napi_throw(env, exception);
-  }
+  // exception it threw stays pending, as in node:sqlite.
 
   // Clear any stale deferred exception from a previous operation.
   ClearDeferredAuthorizerException();
@@ -2625,15 +2596,6 @@ static std::string GetErrorMessage(const Napi::Error &err,
   return fallback;
 }
 
-// Clears the pending exception a filter or onConflict callback threw and
-// returns its message: `fallback` once JavaScript cannot run, when the message
-// is never thrown (see TakePendingException).
-static std::string TakePendingExceptionMessage(napi_env env,
-                                               const char *fallback) {
-  Napi::Error error = TakePendingException(env);
-  return error.IsEmpty() ? fallback : GetErrorMessage(error, fallback);
-}
-
 // Calls a filter or onConflict callback with the value `make_arg` returns, and
 // returns `convert` applied to its result. SQLite calls these from C, so no C++
 // exception may leave: a failure is recorded in `callbacks` for ApplyChangeset
@@ -2660,7 +2622,7 @@ static T CallChangesetCallback(ChangesetCallbacks &callbacks, Napi::Env env,
     napi_value result;
     if (napi_call_function(env, env.Undefined(), fn, 1, argv, &result) !=
         napi_ok) {
-      return fail(TakePendingExceptionMessage(env, threw));
+      return fail(GetErrorMessage(env.GetAndClearPendingException(), threw));
     }
     return convert(Napi::Value(env, result));
   } catch (const Napi::Error &e) {
@@ -2672,7 +2634,8 @@ static T CallChangesetCallback(ChangesetCallbacks &callbacks, Napi::Env env,
   } catch (...) {
     if (env.IsExceptionPending()) {
       std::string message = std::string("Exception in ") + name + " callback";
-      return fail(TakePendingExceptionMessage(env, message.c_str()));
+      return fail(
+          GetErrorMessage(env.GetAndClearPendingException(), message.c_str()));
     }
     return fail(std::string("Unknown exception in ") + name + " callback");
   }
@@ -2833,12 +2796,8 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
   // Check for pending exception from callbacks - re-throw it
   if (callbacks.hasPendingException) {
     SetIgnoreNextSQLiteError(false);
-    // Nothing can be thrown once JavaScript cannot run (see
-    // pending_exception.h).
-    if (CanRunJavaScript(env)) {
-      Napi::Error::New(env, callbacks.pendingExceptionMessage)
-          .ThrowAsJavaScriptException();
-    }
+    Napi::Error::New(env, callbacks.pendingExceptionMessage)
+        .ThrowAsJavaScriptException();
     return env.Undefined();
   }
 
@@ -3336,8 +3295,7 @@ Napi::Value StatementSync::Iterate(const Napi::CallbackInfo &info) {
       return info.Env().Undefined();
     }
     // Resetting closes a cursor an unfinished iterate() left open, and its
-    // iterator's return() may have thrown, or exited a worker: binding below
-    // would fail on that pending exception.
+    // iterator's return() may have thrown: leave that for the caller.
     if (info.Env().IsExceptionPending()) {
       return info.Env().Undefined();
     }
@@ -4380,10 +4338,8 @@ Napi::Value StatementSyncIterator::Next(const Napi::CallbackInfo &info) {
     done_ = true;
 
     // Finishing early, as for LIMIT, closed a virtual table cursor, and its
-    // iterator's return() may have thrown, or exited a worker; so may a
-    // sqlite.db.query subscriber, which leaves no exception pending. Building
-    // the result below fails once JavaScript cannot run.
-    if (!CanRunJavaScript(env)) {
+    // iterator's return() may have thrown: leave that for the caller.
+    if (env.IsExceptionPending()) {
       return env.Undefined();
     }
 
@@ -4441,10 +4397,8 @@ Napi::Value StatementSyncIterator::Return(const Napi::CallbackInfo &info) {
       sqlite3_reset(stmt_->statement_);
     }
     done_ = true;
-    // The return() it ran may have thrown, or exited a worker, as may a
-    // sqlite.db.query subscriber: building the result below fails once
-    // JavaScript cannot run.
-    if (!CanRunJavaScript(env)) {
+    // The return() it ran may have thrown: leave that for the caller.
+    if (env.IsExceptionPending()) {
       return env.Undefined();
     }
   }
@@ -5048,17 +5002,10 @@ void BackupJob::ReportProgress() {
     progress_info.Set("totalPages", Napi::Number::New(env, total_pages_));
     progress_info.Set("remainingPages",
                       Napi::Number::New(env, remaining_pages));
-    // Raw Node-API (see pending_exception.h).
-    napi_value argv[] = {progress_info};
-    napi_value result;
-    if (napi_call_function(env, env.Null(), progress_func_.Value(), 1, argv,
-                           &result) != napi_ok) {
-      // Capture error from progress callback - backup should fail with this.
-      // Message() is empty for a thrown primitive.
-      progress_error_ = TakePendingException(env).Message();
-    }
+    progress_func_.Value().Call(env.Null(), {progress_info});
   } catch (const Napi::Error &e) {
-    // Building the progress object failed
+    // Capture error from progress callback - backup should fail with this.
+    // Message() is empty for a thrown primitive.
     progress_error_ = e.Message();
   } catch (...) {
     // Unknown error
@@ -5360,7 +5307,7 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     if (napi_call_function(env, env.Undefined(),
                            db->authorizer_callback_->Value(), args.size(),
                            args.data(), &result_value) != napi_ok) {
-      db->SetDeferredAuthorizerException(TakePendingException(env));
+      db->SetDeferredAuthorizerException(env.GetAndClearPendingException());
       db->SetIgnoreNextSQLiteError(true);
       return SQLITE_DENY;
     }
@@ -5400,7 +5347,7 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
   } catch (const Napi::Error &e) {
     // JavaScript exception occurred - clear any pending exception and store
     if (env.IsExceptionPending()) {
-      db->SetDeferredAuthorizerException(TakePendingException(env));
+      db->SetDeferredAuthorizerException(env.GetAndClearPendingException());
     } else {
       db->SetDeferredAuthorizerException(e);
     }
@@ -5411,7 +5358,7 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     // exception did not originate in JavaScript, create an Error now and defer
     // that exact object until the surrounding SQLite call returns.
     if (env.IsExceptionPending()) {
-      db->SetDeferredAuthorizerException(TakePendingException(env));
+      db->SetDeferredAuthorizerException(env.GetAndClearPendingException());
     } else {
       Napi::Error error = Napi::Error::New(env, e.what());
       db->SetDeferredAuthorizerException(error);
@@ -5421,7 +5368,7 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
   } catch (...) {
     // Unknown error - clear any pending JS exception and deny
     if (env.IsExceptionPending()) {
-      db->SetDeferredAuthorizerException(TakePendingException(env));
+      db->SetDeferredAuthorizerException(env.GetAndClearPendingException());
     } else {
       Napi::Error error =
           Napi::Error::New(env, "Unknown error in authorizer callback");

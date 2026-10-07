@@ -6,17 +6,17 @@
 namespace photostructure {
 namespace sqlite {
 
-// Code that may run when process.exit() in a worker has stopped JavaScript
-// calls into JavaScript through raw Node-API (napi_call_function,
-// napi_get_named_property, ...) and checks the status, rather than through
-// node-addon-api's Function::Call() or Object::Get(). When the JavaScript
-// throws, those convert the exception with Napi::Error::New(env), as
-// env.GetAndClearPendingException() does, and throw it as a C++ exception,
-// which must not unwind through SQLite's C frames. A raw call instead leaves
-// the exception pending for the caller to rethrow. Converting the termination
-// exception that process.exit() in a worker leaves behind would abort the
-// process, but the build defines NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS (see
-// doc/build-flags.md). Once JavaScript cannot run, nothing can be thrown.
+// JavaScript that SQLite calls back into, such as an authorizer, a changeset
+// filter, or a virtual table's iterator, is called through raw Node-API
+// (napi_call_function, ...) with its status checked, rather than through
+// node-addon-api's Function::Call(). That turns a JavaScript exception into a
+// C++ exception, which must not unwind through SQLite's C frames; a failed raw
+// call instead leaves the exception pending for the caller to rethrow.
+//
+// Once process.exit() or terminate() has stopped a worker's JavaScript,
+// node-addon-api would abort the process when a failed call becomes an Error.
+// The build defines NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS (see
+// doc/build-flags.md), so it drops that error instead.
 
 // False once the environment disallows JavaScript, as during teardown or after
 // process.exit() in a worker: Node-API calls that may run JavaScript, such as
@@ -27,18 +27,6 @@ inline bool CanRunJavaScript(napi_env env) {
   bool has_property;
   return napi_create_object(env, &object) == napi_ok &&
          napi_has_named_property(env, object, "", &has_property) == napi_ok;
-}
-
-// Clears the pending exception, which a failed call into JavaScript left, and
-// returns it. Nothing can be thrown once JavaScript cannot run, so the result
-// is then empty.
-inline Napi::Error TakePendingException(napi_env env) {
-  napi_value exception;
-  if (napi_get_and_clear_last_exception(env, &exception) != napi_ok ||
-      !CanRunJavaScript(env)) {
-    return Napi::Error(env, nullptr);
-  }
-  return Napi::Error(env, exception);
 }
 
 // Clears and drops the pending exception, if there is one.
