@@ -76,7 +76,7 @@ Study these before continuing:
 - `binding.gyp`
 - `src/binding.cpp`
 - `src/sqlite_impl.h` and `src/sqlite_impl.cpp`
-- `src/index.ts`, `tsup.config.ts`, `scripts/post-build.mjs`, and `package.json`
+- `src/index.ts`, `tsup.config.ts`, `scripts/build-dist.mjs`, and `package.json`
 - `../node-addon-api/doc/async_worker.md`, `promises.md`, and
   `async_context.md`
 - Node-API's synchronous and asynchronous environment-cleanup hook sections in
@@ -709,7 +709,7 @@ surface remains unchanged.
 
 1. Add `src/experimental.ts` as a second `tsup` entry.
 2. Add conditional CommonJS/ESM/type exports for `./experimental` and teach
-   `scripts/post-build.mjs` to create the corresponding `.d.cts` file.
+   `scripts/build-dist.mjs` to create the corresponding `.d.cts` file.
 3. Keep hidden native constructors/functions undocumented and non-enumerable
    where practical.
 4. Add CJS, ESM, declarations, illegal-constructor, and async-dispose loading

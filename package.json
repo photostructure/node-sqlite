@@ -54,7 +54,7 @@
     "install": "node-gyp-build",
     "//build": "build commands",
     "build": "run-p build:dist build:native",
-    "build:dist": "tsup && node scripts/post-build.mjs",
+    "build:dist": "node scripts/build-dist.mjs",
     "build:native": "tsx scripts/build-native.ts",
     "build:native:linux": "bash scripts/prebuild-linux-glibc.sh",
     "build:native:rebuild": "node-gyp rebuild",
