@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Fixed
+
+- **`process.exit()` in a worker from other callbacks**: calling `process.exit()` in a worker from a `setAuthorizer()` callback, an `applyChangeset()` `filter` or `onConflict` callback, a `sqlite.db.query` diagnostics subscriber, an aggregate `step` result's `then` getter, or an aggregate accumulator's `toJSON()` aborted the process with `FATAL ERROR: Error::Error napi_define_properties`, as a user-defined function in `exec()` did before 3.1.0. The worker now exits with the requested code, as `node:sqlite` does for the authorizer and changeset callbacks (checked on v24.21.0). The authorizer abort is also present in 2.6.0.
+
 ## [3.1.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.1.0) (2026-10-03)
 
 API compatible with `node:sqlite` from Node.js v26.10.0, plus `createModule()` and the changes listed under 3.0.0 that are on Node.js `v26.x-staging` but not yet in a release. SQLite is unchanged at 3.53.4.
