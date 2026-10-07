@@ -8,10 +8,14 @@
 #include <limits>
 
 #include "aggregate_function.h"
+#include "pending_exception.h"
 #include "shims/sqlite_errors.h"
 
 // Database-aware error handling functions to avoid forward declaration issues
 namespace {
+using photostructure::sqlite::CanRunJavaScript;
+using photostructure::sqlite::ClearPendingException;
+
 // SharedArrayBuffer is neither an ArrayBufferView nor a Napi ArrayBuffer, and
 // node-addon-api's IsSharedArrayBuffer() is gated behind the experimental
 // NODE_API_EXPERIMENTAL_HAS_SHAREDARRAYBUFFER, so we detect it ourselves.
@@ -32,56 +36,35 @@ bool IsSharedArrayBufferValue(Napi::Env env, Napi::Value value) {
          tag.As<Napi::String>().Utf8Value() == "SharedArrayBuffer";
 }
 
-// False once the environment disallows JavaScript, as during teardown or after
-// process.exit() in a worker: Node-API calls that may run JavaScript, such as
-// napi_has_named_property, then fail. They also fail while an exception is
-// pending, so this is false then too.
-bool CanRunJavaScript(napi_env env) {
-  napi_value object;
-  bool has_property;
-  return napi_create_object(env, &object) == napi_ok &&
-         napi_has_named_property(env, object, "", &has_property) == napi_ok;
-}
-
-// Clears the pending exception, which a failed call into JavaScript left, and
-// returns it. Callbacks that SQLite runs therefore call JavaScript through
-// napi_call_function rather than Napi::Function::Call(), which converts the
-// exception like env.GetAndClearPendingException(): its Napi::Error wraps a
-// thrown primitive in a new object via napi_define_properties and aborts the
-// process if that fails, which it does for the termination exception that
-// process.exit() in a worker leaves behind. Nothing can be thrown once
-// JavaScript cannot run, so the result is then empty.
-Napi::Error TakePendingException(napi_env env) {
-  napi_value exception;
-  if (napi_get_and_clear_last_exception(env, &exception) != napi_ok ||
-      !CanRunJavaScript(env)) {
-    return Napi::Error(env, nullptr);
+// True when a callback's JavaScript exception takes the place of the SQLite
+// error, which the callback marks with SetIgnoreNextSQLiteError(): a deferred
+// authorizer exception is rethrown here, and any other is already pending. The
+// caller must then not throw.
+bool ExceptionReplacesSqliteError(Napi::Env env,
+                                  photostructure::sqlite::DatabaseSync *db) {
+  if (db == nullptr || !db->ShouldIgnoreSQLiteError()) {
+    return false;
   }
-  return Napi::Error(env, exception);
+  db->SetIgnoreNextSQLiteError(false);
+  if (db->HasDeferredAuthorizerException()) {
+    db->RethrowDeferredAuthorizerException();
+    return true;
+  }
+  // Suppression that swallows no pending exception would also swallow the
+  // SQLite error, reporting a failed statement as a success.
+  return env.IsExceptionPending();
 }
 
 inline void ThrowErrSqliteErrorWithDb(Napi::Env env,
                                       photostructure::sqlite::DatabaseSync *db,
                                       const char *message = nullptr) {
-  // Check if we should ignore this SQLite error due to pending JavaScript
-  // exception (e.g., from authorizer callback)
-  if (db != nullptr && db->ShouldIgnoreSQLiteError()) {
-    db->SetIgnoreNextSQLiteError(false);
-    // Check for deferred authorizer exception and throw it instead
-    if (db->HasDeferredAuthorizerException()) {
-      db->RethrowDeferredAuthorizerException();
-      return;
-    }
-    // Suppression that swallows no pending exception would also swallow the
-    // SQLite error, reporting a failed statement as a success.
-    if (env.IsExceptionPending()) {
-      return; // Don't throw SQLite error, JavaScript exception takes precedence
-    }
+  if (ExceptionReplacesSqliteError(env, db)) {
+    return;
   }
 
-  // Nothing can be thrown once JavaScript cannot run, as after process.exit()
-  // in a worker's callback; trying would abort the process. A pending
-  // exception, which this also detects, is thrown in place of the SQLite error.
+  // Nothing can be thrown once JavaScript cannot run (see
+  // pending_exception.h). A pending exception, which this also detects, is
+  // thrown in place of the SQLite error.
   if (!CanRunJavaScript(env)) {
     return;
   }
@@ -93,20 +76,8 @@ inline void ThrowErrSqliteErrorWithDb(Napi::Env env,
 inline void ThrowEnhancedSqliteErrorWithDB(
     Napi::Env env, photostructure::sqlite::DatabaseSync *db_sync, sqlite3 *db,
     int /*sqlite_code*/, const std::string &message) {
-  // Check if we should ignore this SQLite error due to pending JavaScript
-  // exception (e.g., from authorizer callback)
-  if (db_sync != nullptr && db_sync->ShouldIgnoreSQLiteError()) {
-    db_sync->SetIgnoreNextSQLiteError(false);
-    // Check for deferred authorizer exception and throw it instead
-    if (db_sync->HasDeferredAuthorizerException()) {
-      db_sync->RethrowDeferredAuthorizerException();
-      return;
-    }
-    // Suppression that swallows no pending exception would also swallow the
-    // SQLite error, reporting a failed statement as a success.
-    if (env.IsExceptionPending()) {
-      return; // Don't throw SQLite error, JavaScript exception takes precedence
-    }
+  if (ExceptionReplacesSqliteError(env, db_sync)) {
+    return;
   }
 
   // A pending exception here is not the statement's own error, which sets the
@@ -114,14 +85,10 @@ inline void ThrowEnhancedSqliteErrorWithDB(
   // threw while SQLite closed the cursors of the failing statement. node:sqlite
   // reports the SQLite error in its place; creating our error object with it
   // still pending would fail and surface the cleanup error instead.
-  bool pending = false;
-  if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {
-    napi_value discarded;
-    napi_get_and_clear_last_exception(env, &discarded);
-  }
-  // The discarded exception, or one a callback cleared, can be the termination
-  // process.exit() leaves in a worker. JavaScript cannot run after it, and
-  // building the error object would then abort the process.
+  ClearPendingException(env);
+  // That exception, or one a callback cleared, can be the termination
+  // process.exit() leaves in a worker, after which nothing can be thrown (see
+  // pending_exception.h).
   if (!CanRunJavaScript(env)) {
     return;
   }
@@ -865,9 +832,8 @@ void DatabaseSync::RethrowDeferredAuthorizerException() {
   Napi::Error error = GetDeferredAuthorizerException();
   ClearDeferredAuthorizerException();
   SetIgnoreNextSQLiteError(false);
-  // Once JavaScript cannot run, as after process.exit() in a worker's
-  // authorizer, the error is empty (see TakePendingException), and throwing
-  // anything would fail with a C++ exception that aborts the process.
+  // Once JavaScript cannot run, the error is empty and nothing can be thrown
+  // (see pending_exception.h).
   if (!error.IsEmpty() && CanRunJavaScript(env_)) {
     error.ThrowAsJavaScriptException();
   }
@@ -952,14 +918,8 @@ Napi::Value DatabaseSync::Dispose(const Napi::CallbackInfo &info) {
 
   // Closing finalizes statements, which runs the return() of any suspended
   // virtual table iterator, and an exception it threw is still pending.
-  // node:sqlite drops that too. Raw Node-API calls, because node-addon-api
-  // aborts the process when the exception is the termination that
-  // process.exit() leaves in a worker.
-  bool pending = false;
-  if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {
-    napi_value discarded;
-    napi_get_and_clear_last_exception(env, &discarded);
-  }
+  // node:sqlite drops that too.
+  ClearPendingException(env);
 
   return env.Undefined();
 }
@@ -1696,14 +1656,13 @@ int DatabaseSync::QueryTraceCallback(unsigned int type, void *user_data,
       return 0;
     }
 
-    // Not Napi::Function::Call(): see TakePendingException. A subscriber's
-    // exception is discarded like the other failures here.
+    // Raw Node-API (see pending_exception.h). A subscriber's exception is
+    // discarded like the other failures here.
     napi_value argv[] = {payload};
     napi_value result;
     if (napi_call_function(env, channel, publish_value, 1, argv, &result) !=
         napi_ok) {
-      napi_value discarded;
-      napi_get_and_clear_last_exception(env, &discarded);
+      ClearPendingException(env);
     }
   } catch (const Napi::Error &) {
     return 0;
@@ -2675,6 +2634,50 @@ static std::string TakePendingExceptionMessage(napi_env env,
   return error.IsEmpty() ? fallback : GetErrorMessage(error, fallback);
 }
 
+// Calls a filter or onConflict callback with the value `make_arg` returns, and
+// returns `convert` applied to its result. SQLite calls these from C, so no C++
+// exception may leave: a failure is recorded in `callbacks` for ApplyChangeset
+// to throw, and `failed` is returned instead, as it is for every call after
+// one failed. `name` is "onConflict" or "filter", and `threw` is the message
+// for an exception that has none.
+template <typename T, typename MakeArg, typename Convert>
+static T CallChangesetCallback(ChangesetCallbacks &callbacks, Napi::Env env,
+                               const Napi::Function &fn, const char *name,
+                               const char *threw, T failed, MakeArg make_arg,
+                               Convert convert) {
+  if (callbacks.hasPendingException) {
+    return failed;
+  }
+  auto fail = [&](std::string message) {
+    callbacks.pendingExceptionMessage = std::move(message);
+    callbacks.hasPendingException = true;
+    return failed;
+  };
+  try {
+    Napi::HandleScope scope(env);
+    // Raw Node-API (see pending_exception.h).
+    napi_value argv[] = {make_arg()};
+    napi_value result;
+    if (napi_call_function(env, env.Undefined(), fn, 1, argv, &result) !=
+        napi_ok) {
+      return fail(TakePendingExceptionMessage(env, threw));
+    }
+    return convert(Napi::Value(env, result));
+  } catch (const Napi::Error &e) {
+    // Catch Napi::Error specifically (inherits from std::exception)
+    return fail(GetErrorMessage(e, threw));
+  } catch (const std::exception &e) {
+    // Catch non-Napi C++ exceptions (e.g., SqliteException)
+    return fail(std::string("C++ exception in ") + name + ": " + e.what());
+  } catch (...) {
+    if (env.IsExceptionPending()) {
+      std::string message = std::string("Exception in ") + name + " callback";
+      return fail(TakePendingExceptionMessage(env, message.c_str()));
+    }
+    return fail(std::string("Unknown exception in ") + name + " callback");
+  }
+}
+
 static int xConflict(void *pCtx, int eConflict, sqlite3_changeset_iter *pIter) {
   if (!pCtx)
     return SQLITE_CHANGESET_ABORT;
@@ -2740,57 +2743,17 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
         Napi::Function conflictFunc = conflictValue.As<Napi::Function>();
         callbacks.conflictCallback = [&callbacks, env,
                                       conflictFunc](int conflictType) -> int {
-          // Wrap in try-catch to prevent C++ exceptions from propagating
-          // through C callback boundary into SQLite (causes SIGSEGV)
-          try {
-            // Skip callback if we already have a pending exception
-            if (callbacks.hasPendingException)
-              return SQLITE_CHANGESET_ABORT;
-
-            Napi::HandleScope scope(env);
-            // Not Napi::Function::Call(): see TakePendingException.
-            napi_value argv[] = {Napi::Number::New(env, conflictType)};
-            napi_value result_value;
-            if (napi_call_function(env, env.Undefined(), conflictFunc, 1, argv,
-                                   &result_value) != napi_ok) {
-              callbacks.pendingExceptionMessage = TakePendingExceptionMessage(
-                  env, "onConflict callback threw an exception");
-              callbacks.hasPendingException = true;
-              return SQLITE_CHANGESET_ABORT;
-            }
-            Napi::Value result(env, result_value);
-
-            // Return -1 (invalid value) for non-integer results
-            // This makes SQLite return SQLITE_MISUSE
-            if (!result.IsNumber()) {
-              return -1;
-            }
-
-            return result.As<Napi::Number>().Int32Value();
-          } catch (const Napi::Error &e) {
-            // Catch Napi::Error specifically (inherits from std::exception)
-            callbacks.pendingExceptionMessage =
-                GetErrorMessage(e, "onConflict callback threw an exception");
-            callbacks.hasPendingException = true;
-            return SQLITE_CHANGESET_ABORT;
-          } catch (const std::exception &e) {
-            // Catch non-Napi C++ exceptions (e.g., SqliteException)
-            callbacks.pendingExceptionMessage =
-                std::string("C++ exception in onConflict: ") + e.what();
-            callbacks.hasPendingException = true;
-            return SQLITE_CHANGESET_ABORT;
-          } catch (...) {
-            // Catch all other exceptions
-            if (env.IsExceptionPending()) {
-              callbacks.pendingExceptionMessage = TakePendingExceptionMessage(
-                  env, "Exception in onConflict callback");
-            } else {
-              callbacks.pendingExceptionMessage =
-                  "Unknown exception in onConflict callback";
-            }
-            callbacks.hasPendingException = true;
-            return SQLITE_CHANGESET_ABORT;
-          }
+          return CallChangesetCallback(
+              callbacks, env, conflictFunc, "onConflict",
+              "onConflict callback threw an exception", SQLITE_CHANGESET_ABORT,
+              [&] { return Napi::Number::New(env, conflictType); },
+              [](Napi::Value result) {
+                // Return -1 (invalid value) for non-integer results
+                // This makes SQLite return SQLITE_MISUSE
+                return result.IsNumber()
+                           ? result.As<Napi::Number>().Int32Value()
+                           : -1;
+              });
         };
       }
     }
@@ -2807,51 +2770,11 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
       Napi::Function filterFunc = filterValue.As<Napi::Function>();
       callbacks.filterCallback = [&callbacks, env,
                                   filterFunc](std::string tableName) -> bool {
-        // Wrap in try-catch to prevent C++ exceptions from propagating
-        // through C callback boundary into SQLite (causes SIGSEGV)
-        try {
-          // Skip callback if we already have a pending exception
-          if (callbacks.hasPendingException)
-            return false;
-
-          Napi::HandleScope scope(env);
-          // Not Napi::Function::Call(): see TakePendingException.
-          napi_value argv[] = {Napi::String::New(env, tableName)};
-          napi_value result_value;
-          if (napi_call_function(env, env.Undefined(), filterFunc, 1, argv,
-                                 &result_value) != napi_ok) {
-            callbacks.pendingExceptionMessage = TakePendingExceptionMessage(
-                env, "Filter callback threw an exception");
-            callbacks.hasPendingException = true;
-            return false;
-          }
-          Napi::Value result(env, result_value);
-
-          return result.ToBoolean().Value();
-        } catch (const Napi::Error &e) {
-          // Catch Napi::Error specifically (inherits from std::exception)
-          callbacks.pendingExceptionMessage =
-              GetErrorMessage(e, "Filter callback threw an exception");
-          callbacks.hasPendingException = true;
-          return false;
-        } catch (const std::exception &e) {
-          // Catch non-Napi C++ exceptions (e.g., SqliteException)
-          callbacks.pendingExceptionMessage =
-              std::string("C++ exception in filter: ") + e.what();
-          callbacks.hasPendingException = true;
-          return false;
-        } catch (...) {
-          // Catch all other exceptions
-          if (env.IsExceptionPending()) {
-            callbacks.pendingExceptionMessage = TakePendingExceptionMessage(
-                env, "Exception in filter callback");
-          } else {
-            callbacks.pendingExceptionMessage =
-                "Unknown exception in filter callback";
-          }
-          callbacks.hasPendingException = true;
-          return false;
-        }
+        return CallChangesetCallback(
+            callbacks, env, filterFunc, "filter",
+            "Filter callback threw an exception", false,
+            [&] { return Napi::String::New(env, tableName); },
+            [](Napi::Value result) { return result.ToBoolean().Value(); });
       };
     }
   }
@@ -2910,8 +2833,8 @@ Napi::Value DatabaseSync::ApplyChangeset(const Napi::CallbackInfo &info) {
   // Check for pending exception from callbacks - re-throw it
   if (callbacks.hasPendingException) {
     SetIgnoreNextSQLiteError(false);
-    // Nothing can be thrown once JavaScript cannot run, as after
-    // process.exit() in a worker's callback; trying would abort the process.
+    // Nothing can be thrown once JavaScript cannot run (see
+    // pending_exception.h).
     if (CanRunJavaScript(env)) {
       Napi::Error::New(env, callbacks.pendingExceptionMessage)
           .ThrowAsJavaScriptException();
@@ -5109,23 +5032,6 @@ void BackupJob::ScheduleRetry() {
   retry_ = retry;
 }
 
-// Clears the exception the progress callback threw and returns its message.
-// Only an object or function goes through Napi::Error: its constructor wraps
-// any other value in a new object via napi_define_properties and aborts the
-// process if that fails, which it does for the termination exception that
-// process.exit() in a worker leaves behind. Napi::Error::Message() is empty
-// for such values anyway.
-static std::string TakeProgressErrorMessage(napi_env env) {
-  napi_value exception;
-  napi_valuetype type;
-  if (napi_get_and_clear_last_exception(env, &exception) != napi_ok ||
-      napi_typeof(env, exception, &type) != napi_ok ||
-      (type != napi_object && type != napi_function)) {
-    return "";
-  }
-  return Napi::Error(env, exception).Message();
-}
-
 void BackupJob::ReportProgress() {
   // Node.js only calls progress when there are still pages remaining. Once the
   // callback throws, stop calling it; Finish rejects with its error.
@@ -5142,16 +5048,14 @@ void BackupJob::ReportProgress() {
     progress_info.Set("totalPages", Napi::Number::New(env, total_pages_));
     progress_info.Set("remainingPages",
                       Napi::Number::New(env, remaining_pages));
-    // Not Napi::Function::Call(): when the callback throws, it converts the
-    // exception with Napi::Error::New(env), which aborts the process for the
-    // termination exception left by process.exit() in a worker (see
-    // TakeProgressErrorMessage).
+    // Raw Node-API (see pending_exception.h).
     napi_value argv[] = {progress_info};
     napi_value result;
     if (napi_call_function(env, env.Null(), progress_func_.Value(), 1, argv,
                            &result) != napi_ok) {
-      // Capture error from progress callback - backup should fail with this
-      progress_error_ = TakeProgressErrorMessage(env);
+      // Capture error from progress callback - backup should fail with this.
+      // Message() is empty for a thrown primitive.
+      progress_error_ = TakePendingException(env).Message();
     }
   } catch (const Napi::Error &e) {
     // Building the progress object failed
@@ -5450,10 +5354,7 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     args.push_back(NullableSQLiteStringToValue(env, param3));
     args.push_back(NullableSQLiteStringToValue(env, param4));
 
-    // Not Napi::FunctionReference::Call(): when the callback throws, it
-    // converts the exception with Napi::Error::New(env), which aborts the
-    // process for the termination exception left by process.exit() in a
-    // worker (see TakePendingException). The exception must be cleared
+    // Raw Node-API (see pending_exception.h). The exception must be cleared
     // before returning to SQLite.
     napi_value result_value;
     if (napi_call_function(env, env.Undefined(),

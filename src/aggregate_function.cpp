@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "pending_exception.h"
 #include "shims/node_errors.h"
 #include "sqlite_impl.h"
 #include "sqlite_value_conversion.h"
@@ -357,11 +358,8 @@ void CustomAggregate::xStepBase(
   if (result_val.IsObject() && !result_val.IsArray() &&
       !result_val.IsBuffer()) {
     // Check if it's a Promise by looking for 'then' method. Raw Node-API,
-    // because a getter can run JavaScript: when it throws, node-addon-api's
-    // Get() converts the exception with Napi::Error::New(env), which aborts
-    // the process for the termination exception process.exit() leaves in a
-    // worker. A failed read leaves the exception pending, as a throwing step
-    // function does.
+    // because a getter can run JavaScript (see pending_exception.h). A failed
+    // read leaves the exception pending, as a throwing step function does.
     bool has_then = false;
     napi_value then = nullptr;
     if (napi_has_named_property(self->env_, result, "then", &has_then) !=
@@ -685,16 +683,14 @@ std::string CustomAggregate::SafeJsonStringify(Napi::Env env,
     Napi::Object global = env.Global();
     Napi::Object json = global.Get("JSON").As<Napi::Object>();
     Napi::Function stringify = json.Get("stringify").As<Napi::Function>();
-    // Not Napi::Function::Call(): when a toJSON() method or getter throws, it
-    // converts the exception with Napi::Error::New(env), which aborts the
-    // process for the termination exception process.exit() leaves in a
-    // worker. Clear the exception and fall back as for any other failure.
+    // Raw Node-API, because toJSON() methods and getters run JavaScript (see
+    // pending_exception.h). Clear the exception and fall back as for any other
+    // failure.
     napi_value argv[] = {value};
     napi_value json_result;
     if (napi_call_function(env, env.Undefined(), stringify, 1, argv,
                            &json_result) != napi_ok) {
-      napi_value discarded;
-      napi_get_and_clear_last_exception(env, &discarded);
+      ClearPendingException(env);
       throw std::runtime_error("JSON.stringify() threw");
     }
     return Napi::Value(env, json_result).As<Napi::String>().Utf8Value();

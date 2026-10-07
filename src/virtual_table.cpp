@@ -14,13 +14,9 @@ namespace photostructure::sqlite {
 
 // Every call below that can run user JavaScript (a function call or a
 // property read that may hit a getter) uses the raw napi_* function and checks
-// its status. node-addon-api's Function::Call() and Object::Get() would turn a
-// throw into a C++ exception built with Napi::Error::New(env), which takes the
-// exception out of the engine and aborts the process for the termination
-// exception process.exit() leaves in a worker (see TakeProgressErrorMessage in
-// sqlite_impl.cpp). A failed raw call leaves the exception pending, which is
-// how it reaches the caller of step() with its identity intact, as it does for
-// user-defined functions and in node:sqlite.
+// its status (see pending_exception.h). A failed raw call leaves the exception
+// pending, which is how it reaches the caller of step() with its identity
+// intact, as it does for user-defined functions and in node:sqlite.
 
 namespace {
 
