@@ -50,7 +50,7 @@ All code was reviewed by a human and validated by automated tests before merging
 # Install dependencies
 npm install
 
-# Build native module
+# Build native module (recompiles only what changed once build/ exists)
 npm run build:native
 
 # Run tests

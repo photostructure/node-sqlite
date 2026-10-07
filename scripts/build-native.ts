@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 /**
- * Cross-platform native build script that checks for existing builds before rebuilding
+ * Cross-platform native build script.
+ *
+ * Once node-gyp has configured build/, this runs `node-gyp build`: the Makefile
+ * it generated (an MSBuild project on Windows) recompiles only what changed,
+ * tracking each source's headers, the compile commands, and binding.gyp.
+ * Otherwise, as in CI's fresh checkouts, it runs prebuildify, which writes the
+ * binary to prebuilds/.
+ *
  * This replaces the bash-only prebuildify-wrapper.sh for Windows compatibility
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -36,25 +43,40 @@ function findValidNativeModule(dir: string): boolean {
   return false;
 }
 
-// Check for existing builds
-if (findValidNativeModule("prebuilds")) {
-  console.log(
-    "Native module already built (found .node file > 25kB), skipping rebuild",
+/**
+ * True once node-gyp has configured build/ against Node headers that still
+ * exist. prebuildify configures it against headers under os.tmpdir(), which
+ * the OS may clear.
+ */
+function isConfigured(): boolean {
+  const configPath = join("build", "config.gypi");
+  if (!existsSync(configPath)) return false;
+  const nodedir = /"nodedir":\s*("(?:[^"\\]|\\.)*")/.exec(
+    readFileSync(configPath, "utf8"),
   );
+  return nodedir != null && existsSync(JSON.parse(nodedir[1]) as string);
+}
+
+// Command line arguments are prebuildify's, so they always select prebuildify.
+const args = process.argv.slice(2);
+
+if (args.length === 0 && isConfigured()) {
+  console.log("Building native module incrementally (node-gyp build)...");
+  try {
+    execFileSync("npx", ["node-gyp", "build"], {
+      stdio: "inherit",
+      shell: process.platform === "win32",
+    });
+  } catch (error) {
+    console.error("Build failed:", (error as Error).message);
+    process.exit(1);
+  }
   process.exit(0);
 }
 
-if (findValidNativeModule("build/Release")) {
-  console.log("Native module already built in build/Release, skipping rebuild");
-  process.exit(0);
-}
-
-// No existing build found, run prebuildify
 console.log("Building native module...");
 
 try {
-  // Pass through any command line arguments
-  const args = process.argv.slice(2);
   const prebuildifyArgs = [
     "prebuildify",
     "--napi",
