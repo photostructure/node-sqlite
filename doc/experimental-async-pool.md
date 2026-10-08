@@ -27,7 +27,7 @@ Three consequences follow:
 - No handle outlives a call: each statement is prepared, stepped, and finalized
   inside one operation.
 
-Work that needs to remember something between calls belongs to `DatabaseSync`.
+Work that needs to remember something between calls belongs to `Database`.
 
 ## Quick start
 
@@ -124,7 +124,7 @@ const pool = await DatabasePool.open("app.db", {
 
 Setup must be safe to replay independently on each connection. Use it for
 connection configuration, not schema migrations. Run migrations before opening
-the pool, using ordinary SQL or `DatabaseSync` when a migration needs a
+the pool, using ordinary SQL or `Database` when a migration needs a
 JavaScript-defined SQL function.
 
 `allowExtension` defaults to false. When true, SQL extension loading is enabled
@@ -289,7 +289,7 @@ await using pool = await DatabasePool.open("app.db", { connections: 4 });
 const row = await pool.get("SELECT value FROM item WHERE id = ?", [id]);
 ```
 
-An equivalent `worker_threads` design owns a `DatabaseSync` in the worker and
+An equivalent `worker_threads` design owns a `Database` in the worker and
 must correlate every response to its request, settle one promise per call,
 restart the worker after a failure, and re-marshal error metadata. SQLite error
 properties do not survive `postMessage`: structured clone keeps `message` and
@@ -297,7 +297,7 @@ drops `code`, `errcode`, `errstr`, and `sqliteCode`. Pool rejections carry them
 already.
 
 A worker earns that extra code when the workload needs any of the
-[stateful capabilities](#stateful-work-stays-with-databasesync) listed below,
+[stateful capabilities](#stateful-work-stays-with-database) listed below,
 because one worker owns one connection for its whole life and can keep the
 connection-local state the pool rejects. A worker can also run arbitrary
 JavaScript beside its SQL, where the pool moves only SQLite execution and still
@@ -312,13 +312,13 @@ recovered when that variable was raised to eight.
 Relative cost per operation on one machine, normalized to a warm synchronous
 connection with a reused statement:
 
-| Approach                                 | Relative cost per operation |
-| ---------------------------------------- | --------------------------: |
-| Warm `DatabaseSync`, reused statement    |                        1.0x |
-| Pool, four connections                   |                        1.8x |
-| Pool, one connection, batches of 100     |                        1.8x |
-| One `worker_threads` plus `DatabaseSync` |                        2.4x |
-| Pool, one connection                     |                        6.2x |
+| Approach                             | Relative cost per operation |
+| ------------------------------------ | --------------------------: |
+| Warm `Database`, reused statement    |                        1.0x |
+| Pool, four connections               |                        1.8x |
+| Pool, one connection, batches of 100 |                        1.8x |
+| One `worker_threads` plus `Database` |                        2.4x |
+| Pool, one connection                 |                        6.2x |
 
 The synchronous path is the fastest and blocks the event loop for its whole run.
 The pool's per-call overhead is the promise, the Node-API async work, and the
@@ -327,14 +327,14 @@ dominates trivial point reads and becomes negligible for longer queries; adding
 connections or batching recovers most of it. Measure your own workload before
 sizing a pool.
 
-## Stateful work stays with DatabaseSync
+## Stateful work stays with Database
 
 The pool exposes only connection-independent `run`, `get`, `all`, and `batch`
 operations. It does not expose prepared-statement handles, iteration, streams,
 JavaScript transaction callbacks, user functions or aggregates, sessions,
 changesets, backup, serialization, runtime extension loading, cancellation, or
 conversion between pooled and synchronous connections. Keep using
-`DatabaseSync` when a workload needs those stateful capabilities.
+`Database` when a workload needs those stateful capabilities.
 
 See the [benchmark guide](../benchmark/README.md#experimental-async-pool) for
 commands that measure warm/fresh connections, pool size, authorizer overhead,

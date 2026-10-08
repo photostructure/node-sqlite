@@ -41,7 +41,7 @@ import {
 
 ```typescript
 backup(
-  sourceDb: DatabaseSync,
+  sourceDb: Database,
   destination: string | Buffer | URL,
   options?: BackupOptions
 ): Promise<number>
@@ -58,9 +58,9 @@ Standalone function to create a backup of a database.
 **Returns:** A Promise that resolves to the total number of pages backed up.
 
 ```javascript
-import { DatabaseSync, backup } from "@photostructure/sqlite";
+import { Database, backup } from "@photostructure/sqlite";
 
-const db = new DatabaseSync("source.db");
+const db = new Database("source.db");
 
 // Create a backup
 await backup(db, "backup.db");
@@ -84,7 +84,7 @@ These utilities add better-sqlite3-style convenience methods to database instanc
 enhance<T extends EnhanceableDatabaseSync>(db: T): EnhancedDatabaseSync<T>
 ```
 
-Adds `.pragma()` and `.transaction()` methods to any compatible database instance. This enables better-sqlite3-style convenience methods on `node:sqlite` DatabaseSync instances or any object with compatible `exec()`, `prepare()`, and `isTransaction` properties.
+Adds `.pragma()` and `.transaction()` methods to any compatible database instance. This enables better-sqlite3-style convenience methods on `node:sqlite` database instances or any object with compatible `exec()`, `prepare()`, and `isTransaction` properties.
 
 The enhancement is done by adding methods directly to the instance, not the prototype, so it won't affect other instances or the original class.
 
@@ -95,10 +95,10 @@ The enhancement is done by adding methods directly to the instance, not the prot
 **Returns:** The same instance with `.pragma()` and `.transaction()` methods guaranteed.
 
 ```javascript
-import { DatabaseSync, enhance } from "@photostructure/sqlite";
+import { Database, enhance } from "@photostructure/sqlite";
 
 // Enhance a database to add better-sqlite3-style methods
-const db = enhance(new DatabaseSync(":memory:"));
+const db = enhance(new Database(":memory:"));
 
 // Now you can use .pragma()
 db.pragma("journal_mode = WAL");
@@ -221,12 +221,12 @@ outer(); // "outer" is committed, "inner" is not
 
 The main database class for synchronous SQLite operations.
 
-Node.js renamed this class from `DatabaseSync` in [PR #65988](https://github.com/nodejs/node/pull/65988). `DatabaseSync` is still exported and is the same class (`DatabaseSync === Database`); Node.js deprecates the old name in documentation only (DEP0210). The examples below use `DatabaseSync`, which works unchanged.
+Node.js renamed this class from `DatabaseSync` in [PR #65988](https://github.com/nodejs/node/pull/65988). `DatabaseSync` is still exported and is the same class (`DatabaseSync === Database`); Node.js deprecates the old name in documentation only (DEP0210).
 
 ### Constructor
 
 ```typescript
-new DatabaseSync(location: string, options?: DatabaseSyncOptions)
+new Database(location: string, options?: DatabaseOptions)
 ```
 
 Creates a new database connection.
@@ -242,7 +242,7 @@ Creates a new database connection.
 **Options:**
 
 ```typescript
-interface DatabaseSyncOptions {
+interface DatabaseOptions {
   open?: boolean; // Open database immediately (default: true)
   readOnly?: boolean; // Open in read-only mode (default: false)
   enableForeignKeyConstraints?: boolean; // Enable foreign keys (default: true)
@@ -261,19 +261,19 @@ interface DatabaseSyncOptions {
 
 ```javascript
 // Basic usage
-const db = new DatabaseSync("myapp.db");
+const db = new Database("myapp.db");
 
 // In-memory database
-const memDb = new DatabaseSync(":memory:");
+const memDb = new Database(":memory:");
 
 // Read-only with options
-const readOnlyDb = new DatabaseSync("data.db", {
+const readOnlyDb = new Database("data.db", {
   readOnly: true,
   timeout: 10000,
 });
 
 // URI format
-const uriDb = new DatabaseSync("file:data.db?mode=ro&cache=private");
+const uriDb = new Database("file:data.db?mode=ro&cache=private");
 ```
 
 ### Methods
@@ -300,7 +300,7 @@ Implements the disposable interface for automatic resource management. Calls `cl
 
 ```javascript
 // Automatic cleanup with using statement
-using db = new DatabaseSync("myapp.db");
+using db = new Database("myapp.db");
 // db.close() called automatically when leaving scope
 
 // Or explicit disposal
@@ -325,7 +325,7 @@ db.exec(`
 #### prepare()
 
 ```typescript
-prepare(sql: string, options?: StatementOptions): StatementSync
+prepare(sql: string, options?: StatementOptions): Statement
 ```
 
 Prepares a SQL statement for execution.
@@ -588,7 +588,7 @@ open(): void
 Opens the database connection. Only needed if `open: false` was passed to the constructor.
 
 ```javascript
-const db = new DatabaseSync("myapp.db", { open: false });
+const db = new Database("myapp.db", { open: false });
 // ... configure something ...
 db.open();
 ```
@@ -947,10 +947,10 @@ console.log(stmt.expandedSQL); // "SELECT * FROM users WHERE id = 42"
 
 `DatabaseOptions`, `DatabaseInstance`, `DatabaseLimits`, and `StatementInstance` are aliases of `DatabaseSyncOptions`, `DatabaseSyncInstance`, `DatabaseSyncLimits`, and `StatementSyncInstance`, named after the renamed classes. Either name works.
 
-### DatabaseSyncOptions
+### DatabaseOptions
 
 ```typescript
-interface DatabaseSyncOptions {
+interface DatabaseOptions {
   open?: boolean; // Open database immediately (default: true)
   readOnly?: boolean; // Open in read-only mode (default: false)
   enableForeignKeyConstraints?: boolean; // Enable foreign keys (default: true)

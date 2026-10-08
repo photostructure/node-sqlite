@@ -98,7 +98,7 @@ This prevents cross-thread usage and provides clear error messages when violatio
 
 **Connection Isolation Pattern** (Recommended):
 
-- Each worker thread creates its own DatabaseSync instance
+- Each worker thread creates its own Database instance
 - No sharing of `sqlite3*` handles between threads
 - Each thread's connections are completely independent
 
@@ -112,11 +112,11 @@ const worker = new Worker("./worker.js", {
 });
 
 // worker.js
-const { DatabaseSync } = require("@photostructure/sqlite");
+const { Database } = require("@photostructure/sqlite");
 const { workerData } = require("worker_threads");
 
 // Each worker creates its own connection
-const db = new DatabaseSync(workerData.dbPath);
+const db = new Database(workerData.dbPath);
 // ... perform operations
 db.close(); // Clean up when done
 ```

@@ -13,9 +13,9 @@ const db = new Database("mydb.sqlite");
 const db = new Database("mydb.sqlite", { readonly: true });
 
 // @photostructure/sqlite
-const { DatabaseSync } = require("@photostructure/sqlite");
-const db = new DatabaseSync("mydb.sqlite");
-const db = new DatabaseSync("mydb.sqlite", { readOnly: true });
+const { Database } = require("@photostructure/sqlite");
+const db = new Database("mydb.sqlite");
+const db = new Database("mydb.sqlite", { readOnly: true });
 ```
 
 ### Statement preparation
@@ -74,8 +74,8 @@ const joined = db
   .all();
 
 // @photostructure/sqlite - use enhance() for better-sqlite3 compatibility
-const { DatabaseSync, enhance } = require("@photostructure/sqlite");
-const db = enhance(new DatabaseSync("mydb.sqlite"));
+const { Database, enhance } = require("@photostructure/sqlite");
+const db = enhance(new Database("mydb.sqlite"));
 
 const names = db.prepare("SELECT name FROM users").pluck().all();
 const count = db.prepare("SELECT COUNT(*) FROM users").pluck().get();
@@ -162,8 +162,8 @@ const transaction = db.transaction((items) => {
 transaction(items);
 
 // @photostructure/sqlite - use enhance() for better-sqlite3 compatibility
-const { DatabaseSync, enhance } = require("@photostructure/sqlite");
-const db = enhance(new DatabaseSync("mydb.sqlite"));
+const { Database, enhance } = require("@photostructure/sqlite");
+const db = enhance(new Database("mydb.sqlite"));
 
 const transaction = db.transaction((items) => {
   for (const item of items) {
@@ -183,8 +183,8 @@ const result = db.pragma("cache_size");
 const cacheSize = db.pragma("cache_size", { simple: true });
 
 // @photostructure/sqlite - use enhance() for better-sqlite3 compatibility
-const { DatabaseSync, enhance } = require("@photostructure/sqlite");
-const db = enhance(new DatabaseSync("mydb.sqlite"));
+const { Database, enhance } = require("@photostructure/sqlite");
+const db = enhance(new Database("mydb.sqlite"));
 
 db.pragma("journal_mode = WAL");
 const result = db.pragma("cache_size");
@@ -247,33 +247,32 @@ function migrateFile(filePath) {
   if (needsEnhance) {
     content = content.replace(
       /const Database = require\(['"]better-sqlite3['"]\)/g,
-      "const { DatabaseSync, enhance } = require('@photostructure/sqlite')",
+      "const { Database, enhance } = require('@photostructure/sqlite')",
     );
     content = content.replace(
       /import Database from ['"]better-sqlite3['"]/g,
-      "import { DatabaseSync, enhance } from '@photostructure/sqlite'",
+      "import { Database, enhance } from '@photostructure/sqlite'",
     );
   } else {
     content = content.replace(
       /const Database = require\(['"]better-sqlite3['"]\)/g,
-      "const { DatabaseSync } = require('@photostructure/sqlite')",
+      "const { Database } = require('@photostructure/sqlite')",
     );
     content = content.replace(
       /import Database from ['"]better-sqlite3['"]/g,
-      "import { DatabaseSync } from '@photostructure/sqlite'",
+      "import { Database } from '@photostructure/sqlite'",
     );
   }
 
-  // Update constructor calls - wrap with enhance() if needed
+  // Wrap constructor calls with enhance() if needed. Both libraries name the
+  // class Database, so other constructor calls stay as they are.
   if (needsEnhance) {
-    content = content.replace(/new Database\(/g, "enhance(new DatabaseSync(");
+    content = content.replace(/new Database\(/g, "enhance(new Database(");
     // Note: This simple replacement doesn't close the enhance() call properly.
     // Manual review is still recommended for files using .transaction() or .pragma()
     console.warn(
       `${filePath}: Uses .transaction() or .pragma() - wrapped with enhance(), please verify`,
     );
-  } else {
-    content = content.replace(/new Database\(/g, "new DatabaseSync(");
   }
 
   // Update options
@@ -306,12 +305,12 @@ import Database from "better-sqlite3";
 const db: Database.Database = new Database("mydb.sqlite");
 
 // @photostructure/sqlite (basic)
-import { DatabaseSync } from "@photostructure/sqlite";
-const db = new DatabaseSync("mydb.sqlite");
+import { Database } from "@photostructure/sqlite";
+const db = new Database("mydb.sqlite");
 
 // @photostructure/sqlite (with better-sqlite3 compatibility)
-import { DatabaseSync, enhance } from "@photostructure/sqlite";
-const db = enhance(new DatabaseSync("mydb.sqlite"));
+import { Database, enhance } from "@photostructure/sqlite";
+const db = enhance(new Database("mydb.sqlite"));
 // Now db.pragma() and db.transaction() are available
 ```
 

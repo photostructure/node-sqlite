@@ -89,7 +89,7 @@ This package includes SQLite 3.53.4 with extensive compile-time options enabled.
 ### better-sqlite3 compatibility
 
 - **`enhance()` function** - Adds `.pragma()` and `.transaction()` methods to any compatible database
-- **Works with `node:sqlite`** - Enhance native `node:sqlite` DatabaseSync instances
+- **Works with `node:sqlite`** - Enhance native `node:sqlite` database instances
 - **Transaction helpers** - Automatic BEGIN/COMMIT/ROLLBACK with savepoint support for nested transactions
 - **Pragma convenience** - Simple API for reading and setting SQLite pragmas
 
@@ -128,7 +128,7 @@ This package includes SQLite 3.53.4 with extensive compile-time options enabled.
 
 ### Resource management
 
-- **Automatic disposal** - DatabaseSync and StatementSync implement `Symbol.dispose` natively in C++
+- **Automatic disposal** - Database and Statement implement `Symbol.dispose` natively in C++
 - **`using` statement support** - Automatic cleanup with explicit resource management
 - **Manual cleanup** - `close()` on databases and statements
 - **Exception safety** - Resources cleaned up even when errors occur

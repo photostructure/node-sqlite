@@ -54,10 +54,10 @@ If prebuilt binaries aren't available for your platform, the package will compil
 ### In-memory database
 
 ```javascript
-import { DatabaseSync } from "@photostructure/sqlite";
+import { Database } from "@photostructure/sqlite";
 
 // Create an in-memory database
-const db = new DatabaseSync(":memory:");
+const db = new Database(":memory:");
 
 // Create a table
 db.exec(`
@@ -88,10 +88,10 @@ db.close();
 ### File-based database
 
 ```javascript
-import { DatabaseSync } from "@photostructure/sqlite";
+import { Database } from "@photostructure/sqlite";
 
 // Create or open a database file
-const db = new DatabaseSync("myapp.db");
+const db = new Database("myapp.db");
 
 // Enable foreign keys (recommended)
 db.exec("PRAGMA foreign_keys = ON");
@@ -105,7 +105,7 @@ db.close();
 ### Using TypeScript
 
 ```typescript
-import { DatabaseSync, StatementSync } from "@photostructure/sqlite";
+import { Database, Statement } from "@photostructure/sqlite";
 
 interface User {
   id: number;
@@ -113,10 +113,10 @@ interface User {
   email: string;
 }
 
-const db = new DatabaseSync("users.db");
+const db = new Database("users.db");
 
 // Type your statement results
-const stmt: StatementSync = db.prepare("SELECT * FROM users WHERE id = ?");
+const stmt: Statement = db.prepare("SELECT * FROM users WHERE id = ?");
 const user = stmt.get(1) as User | undefined;
 
 if (user) {
@@ -131,7 +131,7 @@ db.close();
 ### Using try-finally for cleanup
 
 ```javascript
-const db = new DatabaseSync("myapp.db");
+const db = new Database("myapp.db");
 try {
   // Your database operations
   db.exec(
@@ -150,7 +150,7 @@ For Node.js 22+ with `--experimental-explicit-resource-management` flag, or Type
 
 ```javascript
 // Database is automatically closed when leaving scope
-using db = new DatabaseSync("myapp.db");
+using db = new Database("myapp.db");
 
 // Create and use statements
 using insert = db.prepare("INSERT INTO users (name, email) VALUES (?, ?)");
@@ -162,12 +162,12 @@ const user = select.get(1);
 // No need to call db.close() or insert.close() - happens automatically!
 ```
 
-This pattern ensures resources are always cleaned up, even if an exception occurs. Both `DatabaseSync` and `StatementSync` implement the disposable interface (`Symbol.dispose`) natively in C++ for optimal performance.
+This pattern ensures resources are always cleaned up, even if an exception occurs. Both `Database` and `Statement` implement the disposable interface (`Symbol.dispose`) natively in C++ for optimal performance.
 
 ### Transactions
 
 ```javascript
-const db = new DatabaseSync("myapp.db");
+const db = new Database("myapp.db");
 try {
   db.exec("BEGIN TRANSACTION");
 
@@ -191,10 +191,10 @@ try {
 If you're coming from better-sqlite3 or prefer its transaction helper pattern, use `enhance()`:
 
 ```javascript
-import { DatabaseSync, enhance } from "@photostructure/sqlite";
+import { Database, enhance } from "@photostructure/sqlite";
 
 // Wrap with enhance() to add .pragma() and .transaction() methods
-const db = enhance(new DatabaseSync("myapp.db"));
+const db = enhance(new Database("myapp.db"));
 
 // Use the transaction helper - automatically handles BEGIN/COMMIT/ROLLBACK
 const insertMany = db.transaction((items) => {

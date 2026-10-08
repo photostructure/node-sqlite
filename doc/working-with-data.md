@@ -13,9 +13,9 @@ Prepared statements are the recommended way to execute SQL queries. They provide
 ### Basic Usage
 
 ```javascript
-import { DatabaseSync } from "@photostructure/sqlite";
+import { Database } from "@photostructure/sqlite";
 
-const db = new DatabaseSync("myapp.db");
+const db = new Database("myapp.db");
 
 // Prepare a statement
 const stmt = db.prepare("SELECT * FROM users WHERE age > ?");
@@ -120,7 +120,7 @@ error will be thrown.
 ### Working with Different Types
 
 ```javascript
-const db = new DatabaseSync(":memory:");
+const db = new Database(":memory:");
 
 // Create table with various types
 db.exec(`
@@ -182,7 +182,7 @@ Transactions ensure data consistency by grouping multiple operations into a sing
 ### Basic Transaction
 
 ```javascript
-const db = new DatabaseSync("bank.db");
+const db = new Database("bank.db");
 
 try {
   db.exec("BEGIN TRANSACTION");
@@ -231,9 +231,9 @@ db.exec("BEGIN EXCLUSIVE");
 For a more convenient transaction API similar to better-sqlite3, use the `enhance()` function:
 
 ```javascript
-import { DatabaseSync, enhance } from "@photostructure/sqlite";
+import { Database, enhance } from "@photostructure/sqlite";
 
-const db = enhance(new DatabaseSync("bank.db"));
+const db = enhance(new Database("bank.db"));
 
 const withdraw = db.prepare(
   "UPDATE accounts SET balance = balance - ? WHERE id = ?",
@@ -262,7 +262,7 @@ transfer.deferred(100, 1, 2); // BEGIN DEFERRED (default)
 When using `enhance()`, nested transaction calls automatically use savepoints:
 
 ```javascript
-const db = enhance(new DatabaseSync("app.db"));
+const db = enhance(new Database("app.db"));
 
 const outer = db.transaction(() => {
   db.exec('INSERT INTO log VALUES ("outer start")');
@@ -333,10 +333,10 @@ When an SQLite error occurs, the thrown `Error` object includes additional prope
 ### Example Error Handling
 
 ```javascript
-import { DatabaseSync } from "@photostructure/sqlite";
+import { Database } from "@photostructure/sqlite";
 
 try {
-  const db = new DatabaseSync("/nonexistent/path/database.db", {
+  const db = new Database("/nonexistent/path/database.db", {
     readOnly: true,
   });
 } catch (error) {

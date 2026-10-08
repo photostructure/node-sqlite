@@ -37,10 +37,10 @@ worker2.terminate();
 
 ```javascript
 const { parentPort } = require("worker_threads");
-const { DatabaseSync } = require("@photostructure/sqlite");
+const { Database } = require("@photostructure/sqlite");
 
 // Each worker creates its own database connection
-const db = new DatabaseSync("./app.db");
+const db = new Database("./app.db");
 
 parentPort.on("message", ({ sql, params }) => {
   try {
@@ -86,9 +86,9 @@ class DatabaseWorkerPool {
     const worker = new Worker(
       `
       const { parentPort } = require('worker_threads');
-      const { DatabaseSync } = require('@photostructure/sqlite');
+      const { Database } = require('@photostructure/sqlite');
       
-      const db = new DatabaseSync('${this.dbPath}');
+      const db = new Database('${this.dbPath}');
       
       parentPort.on('message', ({ id, sql, params }) => {
         try {
@@ -170,10 +170,10 @@ await pool.close();
 ### Simple backup
 
 ```javascript
-const { DatabaseSync } = require("@photostructure/sqlite");
+const { Database } = require("@photostructure/sqlite");
 
 async function backupDatabase(sourcePath, backupPath) {
-  const db = new DatabaseSync(sourcePath);
+  const db = new Database(sourcePath);
 
   try {
     await db.backup(backupPath);
@@ -193,7 +193,7 @@ await backupDatabase("./production.db", "./backup-2024-01-15.db");
 
 ```javascript
 async function backupWithProgress(sourcePath, backupPath) {
-  const db = new DatabaseSync(sourcePath);
+  const db = new Database(sourcePath);
 
   console.log(`Starting backup of ${sourcePath}...`);
 
@@ -236,7 +236,7 @@ class DatabaseBackupManager {
     await fs.mkdir(this.backupDir, { recursive: true });
 
     // Create backup
-    const db = new DatabaseSync(this.dbPath);
+    const db = new Database(this.dbPath);
     try {
       await db.backup(backupPath);
       console.log(`Backup created: ${backupName}`);
@@ -294,9 +294,9 @@ SQLite's session extension allows you to record changes and apply them to other 
 ### Basic change tracking
 
 ```javascript
-const { DatabaseSync } = require("@photostructure/sqlite");
+const { Database } = require("@photostructure/sqlite");
 
-const db = new DatabaseSync("main.db");
+const db = new Database("main.db");
 
 // Create a session to track changes to the users table
 const session = db.createSession({ table: "users" });
@@ -317,7 +317,7 @@ console.log(`Changeset size: ${changeset.length} bytes`);
 session.close();
 
 // Apply changes to another database
-const replicaDb = new DatabaseSync("replica.db");
+const replicaDb = new Database("replica.db");
 const success = replicaDb.applyChangeset(changeset);
 console.log(`Changeset applied: ${success}`);
 
@@ -328,11 +328,11 @@ replicaDb.close();
 ### Conflict resolution
 
 ```javascript
-const { DatabaseSync, constants } = require("@photostructure/sqlite");
+const { Database, constants } = require("@photostructure/sqlite");
 
 function syncDatabases(primaryPath, replicaPath) {
-  const primary = new DatabaseSync(primaryPath);
-  const replica = new DatabaseSync(replicaPath);
+  const primary = new Database(primaryPath);
+  const replica = new Database(replicaPath);
 
   // Track all changes on primary
   const session = primary.createSession();
@@ -376,10 +376,10 @@ function syncDatabases(primaryPath, replicaPath) {
 Sessions track changes that can be applied to other databases for synchronization:
 
 ```javascript
-const { DatabaseSync } = require("@photostructure/sqlite");
+const { Database } = require("@photostructure/sqlite");
 
-const sourceDb = new DatabaseSync("source.db");
-const targetDb = new DatabaseSync("target.db");
+const sourceDb = new Database("source.db");
+const targetDb = new Database("target.db");
 
 // Create a session to track changes on the source database
 const session = sourceDb.createSession({ table: "documents" });
@@ -418,15 +418,15 @@ targetDb.close();
 
 ```javascript
 // High-performance read-only configuration
-const readOnlyDb = new DatabaseSync(
+const readOnlyDb = new Database(
   "file:reference.db?mode=ro&immutable=1&nolock=1",
 );
 
 // Optimized for write-heavy workloads
-const writeDb = new DatabaseSync("file:data.db?mode=rwc&cache=private&psow=0");
+const writeDb = new Database("file:data.db?mode=rwc&cache=private&psow=0");
 
 // Memory-mapped I/O for large databases
-const db = new DatabaseSync("large.db");
+const db = new Database("large.db");
 db.exec("PRAGMA mmap_size = 268435456"); // 256MB memory map
 ```
 
@@ -441,7 +441,7 @@ class DatabasePool {
 
     // Create pool
     for (let i = 0; i < poolSize; i++) {
-      const conn = new DatabaseSync(dbPath);
+      const conn = new Database(dbPath);
       this.connections.push(conn);
       this.available.push(conn);
     }
@@ -538,7 +538,7 @@ console.log(
 ### Setting memory limits
 
 ```javascript
-const db = new DatabaseSync("app.db");
+const db = new Database("app.db");
 
 // Set cache size (negative value = KB, positive = pages)
 db.exec("PRAGMA cache_size = -64000"); // 64MB cache

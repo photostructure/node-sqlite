@@ -78,9 +78,9 @@ file locks, journal mode, and transaction state govern that concurrency.
 | `SQLITE_OPEN_FULLMUTEX` | Selects serialized mode for one connection                     | Multiple threads may safely enter that handle; the mutex adds work at SQLite API boundaries                              |
 | `SQLITE_OPEN_NOMUTEX`   | Selects multi-thread mode for one connection                   | Different handles remain concurrent, but the application must prevent simultaneous use of this handle and its statements |
 
-The stable `DatabaseSync` API does not pass either mutex open flag, so it
+The stable `Database` API does not pass either mutex open flag, so it
 inherits the serialized default. Keep that behavior: asynchronous backup uses a
-`DatabaseSync` source handle on a worker thread while the JavaScript object is
+`Database` source handle on a worker thread while the JavaScript object is
 still alive. Changing the global default to `SQLITE_THREADSAFE=2` would remove
 SQLite's same-handle protection from this and every other stable connection.
 

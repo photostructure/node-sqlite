@@ -26,6 +26,8 @@ import { DatabaseSync } from "@photostructure/sqlite";
 
 All your existing code will work exactly the same.
 
+Node.js v26.11.0 renamed `DatabaseSync` and `StatementSync` to `Database` and `Statement`, and deprecates the old names in documentation only (DEP0210, DEP0211). This package exports both names on every supported Node.js version. The examples on this page use `DatabaseSync`, because `node:sqlite` has only that name before v26.11.0.
+
 ## Key differences
 
 ### Broader Node.js version support
@@ -51,8 +53,8 @@ node app.js
 
 All classes, methods, and properties are identical:
 
-- `DatabaseSync` class with all the same methods
-- `StatementSync` class with identical behavior
+- `Database` class (also exported as `DatabaseSync`) with all the same methods
+- `Statement` class (also exported as `StatementSync`) with identical behavior
 - Same parameter binding syntax
 - Same error handling
 - Same return values

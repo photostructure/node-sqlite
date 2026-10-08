@@ -9,9 +9,9 @@ Scalar functions operate on individual values and return a single result.
 ### Basic Functions
 
 ```javascript
-import { DatabaseSync } from "@photostructure/sqlite";
+import { Database } from "@photostructure/sqlite";
 
-const db = new DatabaseSync(":memory:");
+const db = new Database(":memory:");
 
 // Simple function
 db.function("double", (x) => x * 2);
@@ -348,7 +348,7 @@ SQLite supports loadable extensions to add functionality at runtime.
 
 ```javascript
 // Must be enabled in constructor
-const db = new DatabaseSync("myapp.db", {
+const db = new Database("myapp.db", {
   allowExtension: true,
 });
 
