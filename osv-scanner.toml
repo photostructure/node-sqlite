@@ -19,3 +19,15 @@ reason = "esbuild dev-server path traversal (Windows --servedir only); dev-only 
 # Jest's dependency tree uses brace-expansion >=5.0.8.
 id = "GHSA-mh99-v99m-4gvg"
 reason = "brace-expansion DoS requires attacker-controlled glob patterns; affected copies are dev-only Jest reporting/coverage transitives, receive only repository-controlled patterns, and are not shipped."
+
+[[IgnoredVulns]]
+# GHSA-hp3w-g68c-fv3c: sprintf-js throws on unbounded precision specifiers in
+# attacker-controlled format strings. The only dependency path is Jest ->
+# @istanbuljs/load-nyc-config -> js-yaml v3 -> argparse v1 -> sprintf-js.
+# load-nyc-config uses js-yaml's library API; argparse (and its sprintf-js
+# formatter) is loaded only by js-yaml's CLI, which this repo never invokes.
+# These dependencies are dev-only and are not included in the published package.
+# No patched sprintf-js version is available; remove this exception once the
+# dependency is patched or leaves Jest's dependency tree.
+id = "GHSA-hp3w-g68c-fv3c"
+reason = "sprintf-js precision DoS requires attacker-controlled format strings; dev-only Jest transitive via js-yaml's unused CLI, never loaded by the library API and not shipped."
