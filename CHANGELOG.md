@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [3.1.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.1.1)
 
 ### Changed
 
