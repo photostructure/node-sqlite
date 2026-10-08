@@ -157,7 +157,7 @@ if (os.platform() === "linux") {
   }
 }
 
-// 3. Run Address Sanitizer and Leak Sanitizer if requested (Linux only)
+// 3. Run Address Sanitizer and Leak Sanitizer (Linux only)
 if (os.platform() === "linux") {
   console.log(
     color(
