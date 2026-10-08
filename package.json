@@ -78,7 +78,7 @@
     "test:all": "npm run build && run-s test:cjs test:esm test:exports",
     "test:exports": "node --test test/package-exports.test.mjs && tsc -p test/fixtures/package-exports/tsconfig.json",
     "test:serial": "node --expose-gc --no-sparkplug node_modules/jest/bin/jest.js --runInBand --no-coverage",
-    "test:api": "jest --config jest.config.api-compat.cjs",
+    "test:api": "node --no-sparkplug node_modules/jest/bin/jest.js --config jest.config.api-compat.cjs",
     "test:node": "node --expose-gc --test test/node-compat/*.js test/node-compat/*.mjs",
     "test:memory": "cross-env TEST_MEMORY=1 node --expose-gc --no-sparkplug node_modules/jest/bin/jest.js --no-coverage test/memory.test.ts",
     "test:extension": "cd test/fixtures/test-extension && node build.js",

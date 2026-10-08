@@ -30,7 +30,7 @@ Jest, `test/*.test.ts`, run with `npm test` (builds `dist` first) or `npm run te
 - Values that change under you (`freelist_count`, free space) get type and structure assertions; stable values (`page_size`) get equality. Test data is seeded, not `Math.random()` or `Date.now()`.
 - Error messages differ by platform; match with a regex on the stable part.
 - CI runners are not uniform: Windows and macOS are roughly 4x slower than Ubuntu, Alpine ARM64 about 10x (musl plus emulation). Tests share runners, so no fixed ports or global state.
-- The Jest scripts in `package.json` and `scripts/check-memory.ts` run Node with `--no-sparkplug`. Node 24.0.0 through 24.21.0 have a V8 bug that can crash a Jest worker with SIGSEGV during garbage collection ([nodejs/node#62393](https://github.com/nodejs/node/issues/62393)), and turning off the Sparkplug compiler avoids it. Node rejects the flag in `NODE_OPTIONS`, so it goes on the `node` command line. **Remove it as soon as CI's Node 24 jobs run a release that includes the fix, [nodejs/node@fb0d0ca](https://github.com/nodejs/node/commit/fb0d0ca28993802d67360edc84d467fe3ccdc20b).**
+- The Jest scripts in `package.json`, `scripts/check-memory.ts`, and `scripts/sanitizers-test.sh` run Node with `--no-sparkplug`. Node 24.0.0 through 24.21.0 have a V8 bug that can crash a Jest worker with SIGSEGV during garbage collection ([nodejs/node#62393](https://github.com/nodejs/node/issues/62393)), and turning off the Sparkplug compiler avoids it. Node rejects the flag in `NODE_OPTIONS`, so it goes on the `node` command line. **Remove it as soon as CI's Node 24 jobs run a release that includes the fix, [nodejs/node@fb0d0ca](https://github.com/nodejs/node/commit/fb0d0ca28993802d67360edc84d467fe3ccdc20b).**
 
 ## Build and release
 

@@ -218,7 +218,7 @@ ASAN_TEST_OPTIONS="detect_leaks=0:$ASAN_OPTIONS_BASE"
 LSAN_TEST_OPTIONS="detect_leaks=1:$ASAN_OPTIONS_BASE"
 set +e  # Don't exit on test failure
 LD_PRELOAD="$SAN_PRELOAD" ASAN_OPTIONS="$ASAN_TEST_OPTIONS" \
-    node --expose-gc node_modules/jest/bin/jest.js --runInBand --no-coverage --forceExit 2>&1 | tee "$OUTPUT_FILE"
+    node --expose-gc --no-sparkplug node_modules/jest/bin/jest.js --runInBand --no-coverage --forceExit 2>&1 | tee "$OUTPUT_FILE"
 ASAN_TEST_EXIT_CODE=${PIPESTATUS[0]}
 
 # A minimal process gives LSan an attributable native ownership graph without
