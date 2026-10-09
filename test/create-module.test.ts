@@ -209,9 +209,22 @@ describe("createModule()", () => {
       iterator.next();
       db.deserialize(image);
       expect(state.cleanedUp).toBe(true);
-      // Not queried again here: in this build, querying any eponymous virtual
-      // table (json_each included) both before and after deserialize()
-      // crashes inside SQLite, independently of createModule().
+      db.close();
+    });
+
+    it("eponymous tables queried before deserialize() work after it", () => {
+      // SQLite 3.53.4 left each eponymous table pointing at the schema that
+      // deserialize() freed, so the second query crashed the process.
+      const image = new DatabaseSync(":memory:").serialize();
+      const db = new DatabaseSync(":memory:");
+      trackedModule(db);
+      const queries = [
+        "SELECT count(*) AS n FROM m",
+        "SELECT count(*) AS n FROM json_each('[1,2,3]')",
+      ];
+      const before = queries.map((sql) => db.prepare(sql).get());
+      db.deserialize(image);
+      expect(queries.map((sql) => db.prepare(sql).get())).toEqual(before);
       db.close();
     });
 

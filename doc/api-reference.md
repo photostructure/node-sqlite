@@ -680,8 +680,6 @@ const rows = db.prepare("SELECT * FROM users").all();
 
 See SQLite [`sqlite3_deserialize()`](https://sqlite.org/c3ref/deserialize.html).
 
-**Known issue:** querying an eponymous virtual table (one used by name without `CREATE VIRTUAL TABLE`, such as `json_each`, `json_tree`, `dbstat`, a `pragma_*` table, or a [createModule()](#createmodule) module), then calling `deserialize()` on the main database, then querying the same table again can crash the process. This is a bug in SQLite 3.53.4: the table keeps a pointer to the schema that `deserialize()` freed. Until a SQLite release fixes it, `deserialize()` into a connection that has not queried that table yet.
-
 ### Properties
 
 #### isOpen

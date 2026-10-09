@@ -2,10 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [3.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.2.0) (2026-10-09)
+
+API compatible with `node:sqlite` from Node.js v26.11.1. SQLite updated to 3.54.0.
+
+### Changed
+
+- **SQLite 3.54.0**: Updated from 3.53.4 ([release notes](https://www.sqlite.org/releaselog/3_54_0.html)). Two changes reach callers of this package. On a table with a rowid (not `WITHOUT ROWID`), `ALTER TABLE` now throws when it adds, drops, or renames a column named `ROWID`, `_ROWID_`, or `OID`, or renames a column to one of those names. A `setAuthorizer()` callback now receives `SQLITE_FUNCTION` for each function in a column's `DEFAULT` clause when `CREATE TABLE` or `ALTER TABLE ADD COLUMN` declares the column, and whenever a statement reads the column or fills it with its default. That includes an `UPDATE` that does not assign the column, and can include an `UPDATE` or `DELETE` on a table with an index on the column. An authorizer that denies such a function makes those statements throw `not authorized to use function: <name>`, including on databases created without an authorizer. New SQL features include the `%J`/`%j` conversions in `printf()` and `format()`, and the `weekday -N` and `end of` date/time modifiers. The new `SQLITE_LIMIT_SCHEMA` and `SQLITE_LIMIT_TRIGGER_STEPS` limits are not in `db.limits`, matching `node:sqlite`.
+- **Upstream sync**: Node.js `v26.x-staging@4251b8b` → `v26.x-staging@7615781`. Neither commit changes `lib/sqlite.js`, `node_sqlite.cc`, `node_sqlite.h`, or the synced tests, which match Node.js v26.11.1.
 
 ### Fixed
 
+- **`deserialize()` crash with eponymous virtual tables**: querying a table such as `json_each`, `dbstat`, a `pragma_*` table, or a `createModule()` module, then calling `deserialize()`, then querying the same table again crashed the process. SQLite 3.54.0 fixes the dangling schema pointer behind it.
 - **`Database`, `Statement`, `DatabaseSync`, and `StatementSync` work as types**: `const stmt: Statement = db.prepare(...)` failed to compile with `TS2749: 'Statement' refers to a value, but is being used as a type here`, because these names were exported only as values. `node:sqlite` declares them as classes, so the same annotation compiles there. Each name is now also the instance type, `DatabaseInstance` or `StatementInstance`.
 - **Portable Linux build** (developer tooling): `npm run build:native:linux` no longer copies the Debian container's `build/` directory to the host, where the next `npm run build:native` could fail with `No rule to make target '../../prebuildify/node/26.0.0/include/node/common.gypi'`.
 
