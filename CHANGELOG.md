@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - **`Database`, `Statement`, `DatabaseSync`, and `StatementSync` work as types**: `const stmt: Statement = db.prepare(...)` failed to compile with `TS2749: 'Statement' refers to a value, but is being used as a type here`, because these names were exported only as values. `node:sqlite` declares them as classes, so the same annotation compiles there. Each name is now also the instance type, `DatabaseInstance` or `StatementInstance`.
+- **Portable Linux build** (developer tooling): `npm run build:native:linux` no longer copies the Debian container's `build/` directory to the host, where the next `npm run build:native` could fail with `No rule to make target '../../prebuildify/node/26.0.0/include/node/common.gypi'`.
 
 ## [3.1.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.1.1) (2026-10-07)
 

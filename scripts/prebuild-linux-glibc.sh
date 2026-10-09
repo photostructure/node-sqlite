@@ -102,10 +102,11 @@ docker exec "$CONTAINER_NAME" sh -c "
   $BUILD_CMD
 "
 
-# Copy artifacts back with correct ownership (docker cp creates root-owned files)
+# Copy artifacts back with correct ownership (docker cp creates root-owned files).
+# build/ stays in the container: its Makefile names /tmp/project paths, so
+# build:native's incremental `node-gyp build` fails on it.
 docker exec "$CONTAINER_NAME" tar -cf - -C /tmp/project \
   prebuilds \
-  build \
   config.gypi \
   2>/dev/null | tar -xf - --owner="$(id -u)" --group="$(id -g)" || true
 
