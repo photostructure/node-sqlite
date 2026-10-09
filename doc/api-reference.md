@@ -947,6 +947,8 @@ console.log(stmt.expandedSQL); // "SELECT * FROM users WHERE id = 42"
 
 `DatabaseOptions`, `DatabaseInstance`, `DatabaseLimits`, and `StatementInstance` are aliases of `DatabaseSyncOptions`, `DatabaseSyncInstance`, `DatabaseSyncLimits`, and `StatementSyncInstance`, named after the renamed classes. Either name works.
 
+The class names are types too: `Database` and `DatabaseSync` are `DatabaseInstance`, and `Statement` and `StatementSync` are `StatementInstance`, so `const stmt: Statement = db.prepare(...)` compiles as it does with `node:sqlite`.
+
 ### DatabaseOptions
 
 ```typescript

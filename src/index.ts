@@ -233,6 +233,9 @@ export const Database = function (this: any, ...args: any[]) {
 Object.defineProperty(Database, "name", { value: "Database" });
 Object.setPrototypeOf(Database, _Database);
 Database.prototype = _Database.prototype;
+// The instance type, so `const db: Database = ...` compiles as it does with
+// node:sqlite, which declares a class.
+export type Database = DatabaseSyncInstance;
 
 /**
  * The pre-rename name of {@link Database}, kept as an alias: `DatabaseSync ===
@@ -240,6 +243,7 @@ Database.prototype = _Database.prototype;
  * name in documentation only (DEP0210).
  */
 export const DatabaseSync = Database;
+export type DatabaseSync = DatabaseSyncInstance;
 
 // node:sqlite implements createTagStore and SQLTagStore entirely in native C++.
 // We use a TypeScript implementation instead, attached via prototype extension.
@@ -363,6 +367,8 @@ Object.defineProperty(Statement, "name", { value: "Statement" });
 // Use the native prototype directly so instanceof checks work correctly
 // (stmt instanceof Statement will check if Statement.prototype is in stmt's chain)
 Statement.prototype = _Statement.prototype;
+// The instance type; see the Database type above.
+export type Statement = StatementSyncInstance;
 
 /**
  * The pre-rename name of {@link Statement}, kept as an alias: `StatementSync
@@ -370,6 +376,7 @@ Statement.prototype = _Statement.prototype;
  * old name in documentation only (DEP0211).
  */
 export const StatementSync = Statement;
+export type StatementSync = StatementSyncInstance;
 
 /**
  * The Session class for recording database changes.

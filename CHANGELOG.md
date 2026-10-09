@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Fixed
+
+- **`Database`, `Statement`, `DatabaseSync`, and `StatementSync` work as types**: `const stmt: Statement = db.prepare(...)` failed to compile with `TS2749: 'Statement' refers to a value, but is being used as a type here`, because these names were exported only as values. `node:sqlite` declares them as classes, so the same annotation compiles there. Each name is now also the instance type, `DatabaseInstance` or `StatementInstance`.
+
 ## [3.1.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.1.1)
 
 ### Changed

@@ -70,6 +70,16 @@ type _Export_Session = Assert<
 >;
 
 // =============================================================================
+// CLASS NAMES AS TYPES - node:sqlite declares classes, so its users can write
+// `const stmt: StatementSync = db.prepare(...)`
+// =============================================================================
+
+type _Type_Database = Assert<Equals<OurSqlite.Database, DBSync>>;
+type _Type_DatabaseSync = Assert<Equals<OurSqlite.DatabaseSync, DBSync>>;
+type _Type_Statement = Assert<Equals<OurSqlite.Statement, StmtSync>>;
+type _Type_StatementSync = Assert<Equals<OurSqlite.StatementSync, StmtSync>>;
+
+// =============================================================================
 // DATABASE METHODS - Core API surface
 // =============================================================================
 
