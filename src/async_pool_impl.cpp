@@ -717,9 +717,21 @@ private:
 };
 
 Napi::Error CreateNativeError(Napi::Env env, const NativeError &native) {
-  Napi::Error error =
-      native.range ? Napi::Error(Napi::RangeError::New(env, native.message))
-                   : Napi::Error::New(env, native.message);
+  Napi::Error error;
+  if (native.sqlite) {
+    // A SQLite error message can exceed V8's maximum string length; the
+    // synchronous API throws ERR_STRING_TOO_LONG then, so reject with it too.
+    error = node::NewErrorFromSqliteText(env, native.message.c_str());
+    if (error.IsEmpty()) {
+      return env.GetAndClearPendingException();
+    }
+  } else if (native.range) {
+    error = Napi::RangeError::New(env, native.message);
+  } else {
+    // Keeps the explicit length: these messages can quote a JavaScript key
+    // that contains NUL.
+    error = Napi::Error::New(env, native.message);
+  }
   if (native.range) {
     error.Set("code", Napi::String::New(env, "ERR_OUT_OF_RANGE"));
   }

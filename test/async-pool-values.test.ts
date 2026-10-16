@@ -201,6 +201,24 @@ describe("DatabasePool values and rows", () => {
     }
   });
 
+  test("keeps a NUL in an unknown named parameter's error message", async () => {
+    // Expected message from the synchronous API:
+    //   new DatabaseSync(":memory:").prepare("SELECT $tenant AS value")
+    //     .get({ tenant: 7, "tenant\0x": 99 })
+    // throws "Unknown named parameter 'tenant\u0000x'".
+    const pool = await DatabasePool.open(":memory:", { authorizer: "none" });
+    try {
+      await expect(
+        pool.get("SELECT $tenant AS value", { tenant: 7, "tenant\0x": 99 }),
+      ).rejects.toMatchObject({
+        code: "ERR_INVALID_STATE",
+        message: "Unknown named parameter 'tenant\0x'",
+      });
+    } finally {
+      await pool.close();
+    }
+  });
+
   test("rejects a second executable statement but permits trailing comments", async () => {
     const pool = await DatabasePool.open(":memory:", { authorizer: "none" });
     try {

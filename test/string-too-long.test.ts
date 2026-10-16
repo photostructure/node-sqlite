@@ -136,8 +136,8 @@ describeLarge("TEXT values longer than the maximum string length", () => {
 });
 
 // SQLite error messages repeat the offending identifier. The synced
-// test-sqlite-statement.js covers prepare(); exec() and backup() report their
-// errors through other helpers.
+// test-sqlite-statement.js covers prepare(); exec(), backup(), and DatabasePool
+// report their errors through other helpers.
 describeLarge(
   "SQLite error messages longer than the maximum string length",
   () => {
@@ -173,6 +173,18 @@ describeLarge(
         expect(await backup(db, ":memory:")).toEqual(expect.any(Number));
       } finally {
         db.close();
+      }
+    });
+
+    test("DatabasePool rejects an oversized error message with ERR_STRING_TOO_LONG", async () => {
+      const pool = await DatabasePool.open(":memory:", { authorizer: "none" });
+      try {
+        await expect(
+          pool.get(`SELECT 1 FROM "${longIdentifier}"`),
+        ).rejects.toMatchObject(tooLong);
+        await expect(pool.get("SELECT 1 AS x")).resolves.toEqual({ x: 1 });
+      } finally {
+        await pool.close();
       }
     });
   },
