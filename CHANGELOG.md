@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.3.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.3.0) (2026-10-16)
+
+### Changed
+
+- **SQLite 3.54.1**, up from 3.54.0 ([release notes](https://www.sqlite.org/releaselog/3_54_1.html)). Fixes a heap-buffer overflow in 32-bit builds and other 3.54.0 bugs. The published prebuilds are 64-bit, so the overflow affected only source builds on 32-bit platforms.
+- **Node.js**: synced to `v26.x-staging@8a9c54c`. API compatible with `node:sqlite` from Node.js v26.12.0.
+- **`aggregate()` argument validation**: a non-string `name` or a missing or non-object `options` now throws `ERR_INVALID_ARG_TYPE`. A non-string `name` used to be replaced with an empty string. ([Node.js PR #66463](https://github.com/nodejs/node/pull/66463))
+- **`enableDefensive()` survives reopening**: the setting now applies again after `close()` and `open()`, instead of reverting to the constructor's `defensive` option. ([Node.js PR #66404](https://github.com/nodejs/node/pull/66404))
+- **Oversized SQLite strings**: SQLite error messages, `setAuthorizer()` callback arguments, and the `column`, `database`, `table`, and `type` fields of `columns()` that are longer than V8's maximum string length now throw `ERR_STRING_TOO_LONG`, as column values already did. They used to throw `Error: Unknown failure`. A `backup()` that fails with such a message now rejects with `ERR_STRING_TOO_LONG`; it used to crash the process with an uncaught exception. `DatabasePool` now rejects with `ERR_STRING_TOO_LONG` for such a message; it used to reject with `Error: Unknown failure`. ([Node.js PR #66521](https://github.com/nodejs/node/pull/66521))
+
 ## [3.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.2.0) (2026-10-09)
 
 ### Changed
