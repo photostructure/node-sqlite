@@ -188,7 +188,7 @@
   },
   "versions": {
     "nodejs": "v26.x-staging@8a9c54c",
-    "sqlite": "3.54.0"
+    "sqlite": "3.54.1"
   },
   "overrides": {
     "expect": "30.4.1"
