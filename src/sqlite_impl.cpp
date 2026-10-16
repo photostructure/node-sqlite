@@ -64,7 +64,10 @@ inline void ThrowErrSqliteErrorWithDb(Napi::Env env,
   }
 
   const char *msg = (message != nullptr) ? message : "SQLite error";
-  Napi::Error::New(env, msg).ThrowAsJavaScriptException();
+  Napi::Error error = node::NewErrorFromSqliteText(env, msg);
+  if (!error.IsEmpty()) {
+    error.ThrowAsJavaScriptException();
+  }
 }
 
 inline void ThrowEnhancedSqliteErrorWithDB(
@@ -382,6 +385,17 @@ bool SqliteTextToValue(Napi::Env env, const char *text, size_t length,
   }
   node::THROW_ERR_STRING_TOO_LONG(env);
   return false;
+}
+
+// Converts a nullable C string from SQLite to a JavaScript value. Returns false
+// with ERR_STRING_TOO_LONG pending when the string exceeds V8's limit.
+static bool NullableSQLiteStringToValue(Napi::Env env, const char *str,
+                                        napi_value *out) {
+  if (str == nullptr) {
+    *out = env.Null();
+    return true;
+  }
+  return SqliteTextToValue(env, str, strlen(str), out);
 }
 
 // DatabaseSync Implementation
@@ -1850,17 +1864,20 @@ Napi::Value DatabaseSync::AggregateFunction(const Napi::CallbackInfo &info) {
     return env.Undefined();
   }
 
-  // Node.js doesn't check argument count - it just accesses args directly
-  std::string name = info[0].IsString() ? info[0].As<Napi::String>().Utf8Value()
-                                        : std::string();
-  Napi::Object options =
-      info[1].IsObject() ? info[1].As<Napi::Object>() : Napi::Object();
-
-  if (options.IsEmpty() || options.IsNull() || options.IsUndefined()) {
-    // If options isn't an object, trying to access its properties will fail
-    // Node.js would throw from the property access, we mimic that
-    options = Napi::Object::New(env);
+  if (!info[0].IsString()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(env,
+                                     "The \"name\" argument must be a string.");
+    return env.Undefined();
   }
+
+  if (!info[1].IsObject()) {
+    node::THROW_ERR_INVALID_ARG_TYPE(
+        env, "The \"options\" argument must be an object.");
+    return env.Undefined();
+  }
+
+  std::string name = info[0].As<Napi::String>().Utf8Value();
+  Napi::Object options = info[1].As<Napi::Object>();
 
   // Parse start value
   Napi::Value start = options.Get("start");
@@ -2355,7 +2372,10 @@ Napi::Value DatabaseSync::EnableDefensive(const Napi::CallbackInfo &info) {
   if (result != SQLITE_OK) {
     node::ThrowEnhancedSqliteError(env, connection(), result,
                                    "Failed to set defensive mode");
+    return env.Undefined();
   }
+  // Open() applies config_, so a reopened connection keeps this setting.
+  config_.set_enable_defensive(enable != 0);
 
   return env.Undefined();
 }
@@ -3639,20 +3659,20 @@ Napi::Value StatementSync::Columns(const Napi::CallbackInfo &info) {
     Napi::Object column_info = CreateObjectWithNullPrototype(env);
 
     // column: The original column name (sqlite3_column_origin_name)
-    const char *origin_name = sqlite3_column_origin_name(statement_, i);
-    if (origin_name) {
-      column_info.Set("column", Napi::String::New(env, origin_name));
-    } else {
-      column_info.Set("column", env.Null());
+    napi_value origin_name;
+    if (!NullableSQLiteStringToValue(
+            env, sqlite3_column_origin_name(statement_, i), &origin_name)) {
+      return env.Undefined(); // ERR_STRING_TOO_LONG is pending
     }
+    column_info.Set("column", origin_name);
 
     // database: The database name (sqlite3_column_database_name)
-    const char *database_name = sqlite3_column_database_name(statement_, i);
-    if (database_name) {
-      column_info.Set("database", Napi::String::New(env, database_name));
-    } else {
-      column_info.Set("database", env.Null());
+    napi_value database_name;
+    if (!NullableSQLiteStringToValue(
+            env, sqlite3_column_database_name(statement_, i), &database_name)) {
+      return env.Undefined(); // ERR_STRING_TOO_LONG is pending
     }
+    column_info.Set("database", database_name);
 
     // name: The column name/alias (sqlite3_column_name)
     const char *column_name = sqlite3_column_name(statement_, i);
@@ -3663,20 +3683,20 @@ Napi::Value StatementSync::Columns(const Napi::CallbackInfo &info) {
     }
 
     // table: The table name (sqlite3_column_table_name)
-    const char *table_name = sqlite3_column_table_name(statement_, i);
-    if (table_name) {
-      column_info.Set("table", Napi::String::New(env, table_name));
-    } else {
-      column_info.Set("table", env.Null());
+    napi_value table_name;
+    if (!NullableSQLiteStringToValue(
+            env, sqlite3_column_table_name(statement_, i), &table_name)) {
+      return env.Undefined(); // ERR_STRING_TOO_LONG is pending
     }
+    column_info.Set("table", table_name);
 
     // type: The declared type (sqlite3_column_decltype)
-    const char *decl_type = sqlite3_column_decltype(statement_, i);
-    if (decl_type) {
-      column_info.Set("type", Napi::String::New(env, decl_type));
-    } else {
-      column_info.Set("type", env.Null());
+    napi_value decl_type;
+    if (!NullableSQLiteStringToValue(
+            env, sqlite3_column_decltype(statement_, i), &decl_type)) {
+      return env.Undefined(); // ERR_STRING_TOO_LONG is pending
     }
+    column_info.Set("type", decl_type);
 
     columns.Set(i, column_info);
   }
@@ -5083,7 +5103,18 @@ void BackupJob::Finish() {
       err_message = sqlite3_errstr(saved_status);
     }
 
-    Napi::Error detailed_error = Napi::Error::New(env, err_message);
+    Napi::Error detailed_error =
+        node::NewErrorFromSqliteText(env, err_message.c_str());
+    if (detailed_error.IsEmpty()) {
+      // ERR_STRING_TOO_LONG is pending. node:sqlite throws it from backup(),
+      // but this job finishes after backup() returned, so reject with it.
+      try {
+        deferred_.Reject(env.GetAndClearPendingException().Value());
+      } catch (...) {
+      }
+      delete this;
+      return;
+    }
     detailed_error.Set("code", Napi::String::New(env, "ERR_SQLITE_ERROR"));
     detailed_error.Set("errcode", Napi::Number::New(env, saved_status));
     detailed_error.Set("errstr",
@@ -5244,14 +5275,6 @@ Napi::Value DatabaseSync::Backup(const Napi::CallbackInfo &info) {
   return deferred.Promise();
 }
 
-// Helper function to convert nullable C string to JavaScript value
-static Napi::Value NullableSQLiteStringToValue(Napi::Env env, const char *str) {
-  if (str == nullptr) {
-    return env.Null();
-  }
-  return Napi::String::New(env, str);
-}
-
 // DatabaseSync::SetAuthorizer implementation
 Napi::Value DatabaseSync::SetAuthorizer(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
@@ -5317,10 +5340,15 @@ int DatabaseSync::AuthorizerCallback(void *user_data, int action_code,
     // Convert SQLite authorizer parameters to JavaScript values
     std::vector<napi_value> args;
     args.push_back(Napi::Number::New(env, action_code));
-    args.push_back(NullableSQLiteStringToValue(env, param1));
-    args.push_back(NullableSQLiteStringToValue(env, param2));
-    args.push_back(NullableSQLiteStringToValue(env, param3));
-    args.push_back(NullableSQLiteStringToValue(env, param4));
+    for (const char *param : {param1, param2, param3, param4}) {
+      napi_value arg;
+      if (!NullableSQLiteStringToValue(env, param, &arg)) {
+        db->SetDeferredAuthorizerException(env.GetAndClearPendingException());
+        db->SetIgnoreNextSQLiteError(true);
+        return SQLITE_DENY;
+      }
+      args.push_back(arg);
+    }
 
     // Raw Node-API (see pending_exception.h). The exception must be cleared
     // before returning to SQLite.

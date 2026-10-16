@@ -11,7 +11,11 @@
 // Flags: --expose-gc
 "use strict";
 const { enoughTestMem } = require("../common/test-utils.cjs");
-const { Database, Statement } = require("@photostructure/sqlite");
+const {
+  Database,
+  Statement,
+  constants: { SQLITE_OK },
+} = require("@photostructure/sqlite");
 const { constants } = require("node:buffer");
 const { suite, test } = require("node:test");
 
@@ -1623,6 +1627,11 @@ suite(
     // hex() doubles its input, so this is the smallest blob whose text form
     // exceeds what V8 can hold in a string.
     const blobSize = (constants.MAX_STRING_LENGTH >>> 1) + 1;
+    // '\u20ac' is 1 UTF-16 code unit but 3 UTF-8 bytes, so this identifier is a
+    // valid JS string whose UTF-8 form exceeds the limit.
+    const longIdentifier = "\u20ac".repeat(
+      Math.ceil(constants.MAX_STRING_LENGTH / 3) + 10,
+    );
     const tooLong = { code: "ERR_STRING_TOO_LONG", name: "Error" };
 
     test("get() throws instead of returning undefined", (t) => {
@@ -1631,6 +1640,30 @@ suite(
       t.assert.throws(() => {
         stmt.get(blobSize);
       }, tooLong);
+    });
+
+    test("prepare() throws when the SQLite error message is too long", (t) => {
+      using db = new Database(":memory:");
+      // SQLite repeats the identifier in the error.
+      t.assert.throws(() => {
+        db.prepare(`SELECT 1 FROM "${longIdentifier}"`);
+      }, tooLong);
+    });
+
+    test("prepare() throws for an oversized authorizer argument", (t) => {
+      using db = new Database(":memory:");
+      db.setAuthorizer(() => SQLITE_OK);
+      t.assert.throws(
+        () => db.prepare(`CREATE TABLE "${longIdentifier}" (x)`),
+        tooLong,
+      );
+    });
+
+    test("columns() throws for an oversized declared type", (t) => {
+      using db = new Database(":memory:");
+      db.exec(`CREATE TABLE t (x "${longIdentifier}")`);
+      using stmt = db.prepare("SELECT x FROM t");
+      t.assert.throws(() => stmt.columns(), tooLong);
     });
 
     test("exec() surfaces the error from a user-defined function", (t) => {

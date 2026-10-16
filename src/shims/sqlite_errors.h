@@ -2,6 +2,7 @@
 #define SRC_SHIMS_SQLITE_ERRORS_H_
 
 #include "../sqlite_exception.h"
+#include "node_errors.h"
 #include <napi.h>
 #include <sqlite3.h>
 #include <string>
@@ -95,7 +96,10 @@ inline void ThrowEnhancedSqliteError(Napi::Env env, sqlite3 *db,
   // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
   // where passing std::string directly to Napi::Error::New can result in
   // truncated or corrupted error messages
-  Napi::Error error = Napi::Error::New(env, message.c_str());
+  Napi::Error error = NewErrorFromSqliteText(env, message.c_str());
+  if (error.IsEmpty()) {
+    return; // ERR_STRING_TOO_LONG is pending
+  }
 
   // Node.js compatible properties
   error.Set("code", Napi::String::New(env, "ERR_SQLITE_ERROR"));
@@ -149,7 +153,10 @@ inline void ThrowSqliteError(Napi::Env env, sqlite3 *db,
   } else {
     // Fallback to simple error when no db handle available
     // Use c_str() explicitly to avoid potential ABI issues on Windows ARM
-    Napi::Error::New(env, message.c_str()).ThrowAsJavaScriptException();
+    Napi::Error error = NewErrorFromSqliteText(env, message.c_str());
+    if (!error.IsEmpty()) {
+      error.ThrowAsJavaScriptException();
+    }
   }
 }
 
@@ -158,7 +165,10 @@ inline void ThrowSqliteError(Napi::Env env, sqlite3 *db,
 inline void
 ThrowFromSqliteException(Napi::Env env,
                          const photostructure::sqlite::SqliteException &ex) {
-  Napi::Error error = Napi::Error::New(env, ex.what());
+  Napi::Error error = NewErrorFromSqliteText(env, ex.what());
+  if (error.IsEmpty()) {
+    return; // ERR_STRING_TOO_LONG is pending
+  }
 
   // Node.js compatible properties
   error.Set("code", Napi::String::New(env, "ERR_SQLITE_ERROR"));

@@ -9,7 +9,7 @@ import {
 import { constants } from "node:buffer";
 import * as diagnosticsChannel from "node:diagnostics_channel";
 import { totalmem } from "node:os";
-import { DatabaseSync, type DatabaseSyncInstance } from "../src";
+import { backup, DatabaseSync, type DatabaseSyncInstance } from "../src";
 import { DatabasePool } from "../src/experimental";
 import { getTestTimeout, isEmulated } from "./test-utils";
 
@@ -134,6 +134,49 @@ describeLarge("TEXT values longer than the maximum string length", () => {
     }
   });
 });
+
+// SQLite error messages repeat the offending identifier. The synced
+// test-sqlite-statement.js covers prepare(); exec() and backup() report their
+// errors through other helpers.
+describeLarge(
+  "SQLite error messages longer than the maximum string length",
+  () => {
+    jest.setTimeout(getTestTimeout(30_000));
+
+    // '€' is 1 UTF-16 code unit but 3 UTF-8 bytes, so this identifier is a
+    // valid JS string whose UTF-8 form exceeds the limit.
+    const longIdentifier = "€".repeat(
+      Math.ceil(constants.MAX_STRING_LENGTH / 3) + 10,
+    );
+
+    test("exec() throws ERR_STRING_TOO_LONG and the database stays usable", () => {
+      const db = new DatabaseSync(":memory:");
+      try {
+        expect(() => db.exec(`SELECT 1 FROM "${longIdentifier}"`)).toThrow(
+          expect.objectContaining(tooLong),
+        );
+        expect(db.prepare("SELECT 1 AS x").get()).toEqual({ x: 1 });
+      } finally {
+        db.close();
+      }
+    });
+
+    // node:sqlite calls sqlite3_backup_init() inside backup() and throws this
+    // error synchronously. This package calls it on a worker thread, so the
+    // returned promise rejects with it instead.
+    test("backup() rejects with ERR_STRING_TOO_LONG for an unknown source", async () => {
+      const db = new DatabaseSync(":memory:");
+      try {
+        await expect(
+          backup(db, ":memory:", { source: longIdentifier }),
+        ).rejects.toMatchObject(tooLong);
+        expect(await backup(db, ":memory:")).toEqual(expect.any(Number));
+      } finally {
+        db.close();
+      }
+    });
+  },
+);
 
 // A bound blob appears in expanded SQL as x'<hex>', twice its size, so a
 // blobSize blob also expands past the limit. node:sqlite has no behavior to
