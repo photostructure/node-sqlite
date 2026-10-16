@@ -62,8 +62,6 @@ try {
   const jestPath = path.join("node_modules", "jest", "bin", "jest.js");
   const nodeExe = process.execPath;
   const args = [
-    // See the --no-sparkplug note in AGENTS.md.
-    "--no-sparkplug",
     jestPath,
     "--no-coverage",
     "--runInBand",

@@ -5,9 +5,9 @@ Placeholder: not yet researched.
 ## Goal definition
 
 - **What success looks like**: `npm run memory:check` and `npm run memory:asan` run Jest without `--forceExit`, and Jest exits on its own.
-- **Core problem**: `scripts/check-memory.ts:74` and `scripts/sanitizers-test.sh:221` pass `--forceExit`, which the Tests section of `AGENTS.md` says is not a fix. The comment at `scripts/check-memory.ts:70` blames "a Jest issue with native modules", and nobody has checked that claim.
+- **Core problem**: `scripts/check-memory.ts:72` and `scripts/sanitizers-test.sh:221` pass `--forceExit`, which the Tests section of `AGENTS.md` says is not a fix. The comment at `scripts/check-memory.ts:68` blames "a Jest issue with native modules", and nobody has checked that claim.
 - **Key constraints**: find and close whatever keeps the process alive; don't replace `--forceExit` with sleeps, `global.gc()`, or `setImmediate` in `afterAll`.
-- **Success validation**: `TEST_MEMORY=1 node --expose-gc --no-sparkplug node_modules/jest/bin/jest.js --no-coverage --runInBand --detectOpenHandles test/memory.test.ts` exits with no open-handle report.
+- **Success validation**: `TEST_MEMORY=1 node --expose-gc node_modules/jest/bin/jest.js --no-coverage --runInBand --detectOpenHandles test/memory.test.ts` exits with no open-handle report.
 
 ## Tasks
 
