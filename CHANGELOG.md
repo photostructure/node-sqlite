@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [3.3.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.3.0) (2026-10-16)
+## [Unreleased]
+
+## [3.3.0] - 2026-10-16
 
 ### Changed
 
@@ -12,7 +14,7 @@ All notable changes to this project will be documented in this file.
 - **`enableDefensive()` survives reopening**: the setting now applies again after `close()` and `open()`, instead of reverting to the constructor's `defensive` option. ([Node.js PR #66404](https://github.com/nodejs/node/pull/66404))
 - **Oversized SQLite strings**: SQLite error messages, `setAuthorizer()` callback arguments, and the `column`, `database`, `table`, and `type` fields of `columns()` that are longer than V8's maximum string length now throw `ERR_STRING_TOO_LONG`, as column values already did. They used to throw `Error: Unknown failure`. A `backup()` that fails with such a message now rejects with `ERR_STRING_TOO_LONG`; it used to crash the process with an uncaught exception. `DatabasePool` now rejects with `ERR_STRING_TOO_LONG` for such a message; it used to reject with `Error: Unknown failure`. ([Node.js PR #66521](https://github.com/nodejs/node/pull/66521))
 
-## [3.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.2.0) (2026-10-09)
+## [3.2.0] - 2026-10-09
 
 ### Changed
 
@@ -27,7 +29,7 @@ All notable changes to this project will be documented in this file.
 - **Class names as types**: `Database`, `Statement`, `DatabaseSync`, and `StatementSync` are now types as well as values, so `const stmt: Statement = db.prepare(...)` compiles as it does with `node:sqlite`.
 - **`build:native:linux`** (developer tooling): no longer copies the container's `build/` to the host, which broke the next `npm run build:native`.
 
-## [3.1.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.1.1) (2026-10-07)
+## [3.1.1] - 2026-10-07
 
 ### Changed
 
@@ -44,7 +46,7 @@ All notable changes to this project will be documented in this file.
 - **Optional benchmark drivers** (developer tooling): skip `better-sqlite3` when its native binding is missing or incompatible with the running Node.js version, instead of failing when opening a benchmark database.
 - **Docker tests** (developer tooling): cached builds on macOS no longer treat AppleDouble metadata as test files. Debian tests now default to Node.js 22, 24, and 26.
 
-## [3.1.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.1.0) (2026-10-03)
+## [3.1.0] - 2026-10-03
 
 API compatible with `node:sqlite` from Node.js v26.10.0, plus `createModule()` and the changes listed under 3.0.0 that are on Node.js `v26.x-staging` but not yet in a release. SQLite is unchanged at 3.53.4.
 
@@ -58,7 +60,7 @@ API compatible with `node:sqlite` from Node.js v26.10.0, plus `createModule()` a
 - **Expanded SQL longer than V8's maximum string length**: with a `sqlite.db.query` diagnostics subscriber, running a statement whose expanded SQL exceeded V8's maximum string length (for example, one with a bound blob over about 256 MB, which expands to hex) threw `Error: Unknown failure` from a C++ exception that unwound through SQLite, and leaked the expanded SQL. The statement now succeeds and publishes no event. Reading `expandedSQL` on such a statement threw `Error: Unknown failure` with no `code`; it now throws `ERR_STRING_TOO_LONG`, as oversized TEXT values do since 3.0.0. `node:sqlite` aborts the process when reading `expandedSQL` on such a statement (checked on v24.21.0).
 - **C++ exceptions in aggregate callbacks**: a node-addon-api failure inside an aggregate's `step`, `inverse`, or final callback unwound through SQLite. A `step` or `inverse` result whose `then` getter threw made `exec()` leave `close()` failing with `ERR_INVALID_STATE` (`database cannot be closed while in a callback`), and `get()`/`all()` threw an unrelated error instead of the getter's. Exiting the process or a worker while a window aggregate with a `Uint8Array` accumulator was mid-query aborted with `terminate called after throwing an instance of 'Napi::Error'`. Function and aggregate callbacks now catch these exceptions; the statement throws the original error, and exit proceeds normally.
 
-## [3.0.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.0.0) (2026-10-02)
+## [3.0.0] - 2026-10-02
 
 API compatible with `node:sqlite` from Node.js v26.10.0, plus the `Database` and `Statement` class rename from [Node.js PR #65988](https://github.com/nodejs/node/pull/65988), which landed on `v26.x-staging`, and two fixes from Node.js `main` ([Node.js PR #66042](https://github.com/nodejs/node/pull/66042), [Node.js PR #66209](https://github.com/nodejs/node/pull/66209)). None of these is in a Node.js release yet. `Database.prototype.createModule()`, also only on `v26.x-staging` so far, is not ported yet. The rename changes the classes' `name` values, so this is a major release. SQLite is unchanged at 3.53.4.
 
@@ -98,7 +100,7 @@ API compatible with `node:sqlite` from Node.js v26.10.0, plus the `Database` and
 - **NUL in named-parameter keys documented**: SQLite matches a parameter name only up to a NUL, so a key such as `":tenant\0x"` never binds its own value here, while `node:sqlite` binds it and can replace the `":tenant"` binding. The `Statement` and `DatabasePool` type docs give the details. If parameter objects are built from untrusted keys, reject keys that contain NUL.
 - **`memory:check` hung with clang's ASan runtime** (developer tooling): the sanitizer harness preloaded `libclang_rt.ubsan_standalone` next to clang's ASan runtime, and with clang 21 node hung at startup, before any test ran. clang's ASan runtime already defines UBSan's `*_abort` handlers, so a separate UBSan runtime is now preloaded only with GCC's libasan.
 
-## [2.6.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.6.0) (2026-09-17)
+## [2.6.0] - 2026-09-17
 
 API compatible with `node:sqlite` from Node.js v26.9.0, plus the changes below that landed on `v26.x-staging` but are not yet in a Node.js release. Binding `undefined` now succeeds where it previously threw, so this is a minor release. SQLite is unchanged at 3.53.4.
 
@@ -110,7 +112,7 @@ API compatible with `node:sqlite` from Node.js v26.9.0, plus the changes below t
 
 - **Changeset detached by a user-defined SQL function**: `applyChangeset()` copies every non-empty changeset before applying it, not just when a `filter` or `onConflict` callback is supplied. SQLite reaches JavaScript through a user-defined SQL function in a `CHECK` constraint or trigger too, so a changeset could previously be detached or zeroed while SQLite was still reading it. Ports [Node.js PR #65870](https://github.com/nodejs/node/pull/65870).
 
-## [2.5.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.5.0) (2026-09-08)
+## [2.5.0] - 2026-09-08
 
 API compatible with `node:sqlite` from Node.js v26.8.1, plus four changes landed on `v26.x-staging` but not yet in a Node.js release. Two of them make calls throw that previously succeeded, so this is a minor release. SQLite is unchanged at 3.53.4.
 
@@ -127,13 +129,13 @@ API compatible with `node:sqlite` from Node.js v26.8.1, plus four changes landed
 - **Double free when `function()` or `aggregate()` registration fails**: when `sqlite3_create_function_v2()` or `sqlite3_create_window_function()` rejects a registration (for example a callback whose `length` exceeds `SQLITE_MAX_FUNCTION_ARG`, 1000 in this build), SQLite invokes the user data's `xDestroy` itself. The port freed it a second time and crashed the process instead of throwing `ERR_SQLITE_ERROR`. Found while porting the fixes above; not present in Node.js.
 - **Portable Linux prebuild**: `scripts/prebuild-linux-glibc.sh` no longer runs `apt-get` inside the `node:22-bullseye` image, which already ships GCC 10.2, make, and Python 3.9. Debian 11's `bullseye-security` Release file expired on 2026-09-07 (Bullseye LTS ended 2026-08-31), so `apt-get update` failed and blocked the glibc 2.31 prebuild locally and in both release workflows. The script now also removes its build container when a step fails. The glibc 2.31 target is unchanged.
 
-## [2.4.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.4.0) (2026-09-02)
+## [2.4.0] - 2026-09-02
 
 ### Added
 
 - **Experimental `DatabasePool`** (`@photostructure/sqlite/experimental`): a fixed-size pool of warm SQLite connections whose open, prepare, bind, step, finalize, and close work runs on libuv worker threads. It exposes only the connection-independent `run`, `get`, `all`, and `batch` operations; a strict authorizer (the default) rejects SQL that depends on which physical connection the pool leases. The stable root export is unchanged. Its compatibility policy is separate from the stable API — see the [async pool guide](doc/experimental-async-pool.md) for authorizer policy, connection setup, ordering, memory, and libuv sizing tradeoffs.
 
-## [2.3.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.3.0) (2026-08-10)
+## [2.3.0] - 2026-08-10
 
 API compatible with `node:sqlite` from Node.js v26.7.0, plus three APIs landed upstream but not yet in a Node.js release line. SQLite is unchanged at 3.53.4.
 
@@ -160,7 +162,7 @@ These three landed on `nodejs/node@main` but are not in the `v26.x-staging` line
 - **`memory:check` runs again** (developer tooling): the sanitizer harness had three independent faults, each masking the next. It exported `LD_PRELOAD` for the whole script, so `binding.gyp`'s `node -p` helper ran under LeakSanitizer, exited non-zero on an unrelated leak, and failed `configure`; it drove the build through `npx node-gyp`, which races on creating the `.deps` directories; and it preloaded only an ASan runtime, so the UBSan `*_abort` handlers were missing at load. The preload is now applied to the test command alone, the build goes through `npm run build:native:rebuild`, and a UBSan runtime is preloaded next to the ASan runtime. (With clang's ASan runtime, that pairing hangs node at startup; fixed in 3.0.0.) It also probes candidate ASan runtimes and skips any that cannot complete a leak check — clang's compiler-rt runtime wedges in LSan's `StopTheWorld` on clang 21 + Linux 7.x, where GCC's libasan works.
 - **Benchmark comparison refreshed** (developer tooling): pinned `better-sqlite3` 13.0.3 and regenerated the published throughput table and charts.
 
-## [2.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.2.0) (2026-07-25)
+## [2.2.0] - 2026-07-25
 
 No API changes. Upstream refresh and dependency updates.
 
@@ -170,7 +172,7 @@ No API changes. Upstream refresh and dependency updates.
 - **Upstream sync**: Node.js `v26.x-staging@955e669` → `v26.x-staging@68dc114`, now API compatible with `node:sqlite` from Node.js v26.5.0. The only `node_sqlite.cc` change in this range reads the column count after the first `step()` in `StatementSync.all()` ([Node.js PR #64219](https://github.com/nodejs/node/pull/64219)); our port already resolved column metadata lazily on the first row, so no change was needed.
 - **TypeScript held at 6.x**: `.ncurc.cjs` now pins `typescript` to the 6.x line. TypeScript 7 is not yet supported by `typedoc` (0.28.20 peers `<= 6.0.x`) or `typescript-eslint` (8.63.0 peers `< 6.1.0`).
 
-## [2.1.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.1.0) (2026-07-13)
+## [2.1.0] - 2026-07-13
 
 No API changes. Build hardening, supply-chain verification, and one undefined-behavior fix.
 
@@ -183,7 +185,7 @@ No API changes. Build hardening, supply-chain verification, and one undefined-be
 
 - **Empty changeset undefined behavior**: `session.changeset()` / `.patchset()` on a session with no recorded changes called `memcpy(NULL, NULL, 0)`, which is undefined behavior even at zero length. Results are unchanged (still a zero-length `Uint8Array`); the UB is gone. Surfaced by the new UndefinedBehaviorSanitizer pass in CI.
 
-## [2.0.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.0.0) (2026-07-11)
+## [2.0.0] - 2026-07-11
 
 API compatible with `node:sqlite` from Node.js v26.4.0.
 
@@ -219,13 +221,13 @@ API compatible with `node:sqlite` from Node.js v26.4.0.
 - Dependencies: node-addon-api 8.9.0, TypeScript 6, ESLint 10, prettier 3.8.5, `@types/node` 26.
 - CI: pinned-action updates (CodeQL, TruffleHog, OSV-Scanner, actions/checkout).
 
-## [1.2.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.1) (2026-04-27)
+## [1.2.1] - 2026-04-27
 
 ### Fixed
 
 - **Packaging**: Excluded test extension artifact (`test_extension.so`) from published npm tarball. The CI pipeline's `download-artifact` steps lacked a `pattern` filter, causing the musl test fixture to be merged into `prebuilds/` alongside production binaries.
 
-## [1.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.0) (2026-04-15)
+## [1.2.0] - 2026-04-15
 
 API compatible with `node:sqlite` from Node.js v25.9.0.
 
@@ -242,13 +244,13 @@ API compatible with `node:sqlite` from Node.js v25.9.0.
 
 - **Test sync**: skip `test-sqlite-serialize.js` — Node.js `DatabaseSync.prototype.serialize()` / `deserialize()` APIs are not yet ported.
 
-## [1.1.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.1.0) (2026-03-13)
+## [1.1.0] - 2026-03-13
 
 ### Changed
 
 - **SQLite 3.51.3**: Reverted from 3.52.0 (retracted by the SQLite team)
 
-## [1.0.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.0.0) (2026-03-07)
+## [1.0.0] - 2026-03-07
 
 Promotion to v1.0.0 following API stabilization and 0.5.0 release.
 
@@ -263,7 +265,7 @@ API compatible with `node:sqlite` from Node.js v25.8.0.
 
 - **SQLite 3.52.0**: Updated from 3.51.2
 
-## [0.5.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.5.0) (2026-02-06)
+## [0.5.0] - 2026-02-06
 
 ### Added
 
@@ -275,7 +277,7 @@ API compatible with `node:sqlite` from Node.js v25.8.0.
 - **`stmt.database`**: Back-reference from prepared statements to their parent database instance
 - **`EnhancedStatementMethods` type**: TypeScript interface for `pluck()`, `raw()`, `expand()`, and `database`
 
-## [0.4.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.4.0) (2026-02-04)
+## [0.4.0] - 2026-02-04
 
 API compatible with `node:sqlite` from Node.js v25.6.1.
 
@@ -309,7 +311,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - **Callback error preservation**: `applyChangeset()` now preserves the original error message when JavaScript callbacks throw
 - `createTagStore()` now throws errors with `code: 'ERR_INVALID_STATE'` property when database is closed, matching Node.js error format
 
-## [0.3.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.3.0) (2025-12-17)
+## [0.3.0] - 2025-12-17
 
 ### Changed
 
@@ -318,7 +320,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
   - After: `sql.size`
   - **Note**: This change was merged into Node.js main on December 11, 2025 and will appear in a future Node.js release. Current Node.js v24.x still uses `sql.size()` as a method.
 
-## [0.2.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.1) (2025-12-01)
+## [0.2.1] - 2025-12-01
 
 ### Added
 
@@ -329,7 +331,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - Error message handling on Windows ARM64 (ABI compatibility)
 - Error handling consistency across platforms
 
-## [0.2.0](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.0) (2025-12-01)
+## [0.2.0] - 2025-12-01
 
 ### Added
 
@@ -352,7 +354,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - Null and empty values in user function return value conversion
 - Native stability: N-API reference cleanup in aggregates/destructors, thread-local napi_env storage, statement-to-database reference tracking, deferred exception handling in authorizers
 
-## [0.0.1](https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.0.1) (2025-06-13)
+## [0.0.1] - 2025-06-13
 
 ### Added
 
@@ -390,3 +392,26 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - Windows (x64, ARM64)
 - macOS (x64, ARM64)
 - Linux (x64, ARM64), (glibc 2.28+, musl)
+
+[3.3.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.3.0
+[3.2.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.2.0
+[3.1.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.1.1
+[3.1.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.1.0
+[3.0.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.0.0
+[2.6.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.6.0
+[2.5.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.5.0
+[2.4.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.4.0
+[2.3.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.3.0
+[2.2.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.2.0
+[2.1.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.1.0
+[2.0.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v2.0.0
+[1.2.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.1
+[1.2.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.2.0
+[1.1.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.1.0
+[1.0.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v1.0.0
+[0.5.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.5.0
+[0.4.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.4.0
+[0.3.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.3.0
+[0.2.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.1
+[0.2.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.2.0
+[0.0.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v0.0.1
