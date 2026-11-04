@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [Unreleased (patch)]
+
+### Changed
+
+- **GitHub releases wait for the npm approval** (release process): the GitHub release is now created once npm serves the approved package, and its notes start with this file's section for the version.
 
 ## [3.3.0] - 2026-10-16
 

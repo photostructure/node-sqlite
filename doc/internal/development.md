@@ -110,11 +110,14 @@ See [Architecture Documentation](./architecture.md) for details on:
 ## Release process
 
 Releases are cut from CI: the **Build & Release** workflow
-(`.github/workflows/build.yml`) is triggered manually via `workflow_dispatch`
-with a version bump (`patch` / `minor` / `major`), builds the prebuilds for every
-platform, and publishes to npm with [provenance](https://docs.npmjs.com/generating-provenance-statements)
-using OIDC trusted publishing. The `version` field in `package.json` is owned by
-that workflow — do not bump it by hand.
+(`.github/workflows/build.yml`) is triggered manually via `workflow_dispatch`,
+reads the version bump from the `## [Unreleased (patch|minor|major)]` heading in
+`CHANGELOG.md`, tests every platform, and pushes a signed release commit and tag.
+**Stage npm Release** (`publish.yaml`) then rebuilds the prebuilds from that tag
+and stages the package on npm with [provenance](https://docs.npmjs.com/generating-provenance-statements)
+using OIDC trusted publishing, for a maintainer to approve with 2FA. See
+[RELEASE.md](../../RELEASE.md). The `version` field in `package.json` is owned by
+`build.yml` — do not bump it by hand.
 
 Before dispatching a release, run `npm run preflight` (full build, lint, clang-tidy,
 cross-platform tests, and the sanitizer/Valgrind memory suite) and confirm no

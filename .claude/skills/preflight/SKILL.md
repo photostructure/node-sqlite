@@ -1,11 +1,11 @@
 ---
 name: preflight
-description: Prepare a new release of @photostructure/sqlite. Syncs upstream Node.js + SQLite sources, updates npm deps, reviews commits since last release, decides semver bump (patch/minor/major), writes a CHANGELOG.md entry, and runs the full test+lint suite. Use when the user asks to "prep a release", "cut a release", "update everything and release", "sync upstream and release", or similar.
+description: Prepare a new release of @photostructure/sqlite. Syncs upstream Node.js + SQLite sources, updates npm deps, reviews commits since last release, decides semver bump (patch/minor/major), writes the CHANGELOG.md entry under a heading that names that bump, and runs the full test+lint suite. Use when the user asks to "prep a release", "cut a release", "update everything and release", "sync upstream and release", or similar.
 ---
 
 # Preflight
 
-Prepare @photostructure/sqlite for a new release. This skill does not publish: it leaves the repo ready for a maintainer to run the `Build & Release` workflow with the chosen version bump.
+Prepare @photostructure/sqlite for a new release. This skill does not publish: it leaves the repo ready for a maintainer to run the `Build & Release` workflow, which reads the version bump from the `## [Unreleased (patch|minor|major)]` heading in `CHANGELOG.md`.
 
 **Done means**:
 
@@ -19,7 +19,7 @@ Prepare @photostructure/sqlite for a new release. This skill does not publish: i
 
 ## Constraints
 
-- AGENTS.md applies. In particular, never bump `version` in `package.json` (the `Build & Release` workflow runs `npm version` from its `patch` | `minor` | `major` input), and never edit `src/upstream/`.
+- AGENTS.md applies. In particular, never bump `version` in `package.json` (the `Build & Release` workflow runs `npm version` with the bump named in `CHANGELOG.md`'s `## [Unreleased (patch|minor|major)]` heading), and never edit `src/upstream/`.
 - Don't create a git tag, run `npm publish`, or create a GitHub release. The release workflows do that.
 - The branch depends on `echo $USER`:
   - `mrm` (local hardware): commit on `main`, which is how the maintainer drives releases. Don't open a PR.
@@ -33,7 +33,7 @@ Keep a checklist of the steps below in `.cache/preflight-tasks.md`, which is git
 
 1. Confirm the branch matches Constraints: `git branch --show-current`.
 2. `git status` must be clean, apart from intentional in-progress work. Stash or commit anything unexpected before proceeding.
-3. Run `git fetch --tags origin`, then find the last release with `git describe --tags --abbrev=0 --match 'v[0-9]*'`. It should agree with the top entry in `CHANGELOG.md` and with `version` in `package.json`.
+3. Run `git fetch --tags origin`, then find the last release with `git describe --tags --abbrev=0 --match 'v[0-9]*'`. It should agree with the newest `## [X.Y.Z] - YYYY-MM-DD` entry in `CHANGELOG.md` and with `version` in `package.json`.
 4. Before syncing, record `versions.nodejs`, `versions.sqlite`, and `version` from `package.json`, and the README's `Synced with Node.js vX.Y.Z` and `compatible with Node.js vX.Y.Z` strings. §6 and §9 compare against these.
 
 ### 2. Update deps, sync upstream, run full checks
@@ -181,7 +181,7 @@ Pick one of `patch | minor | major` based on the highest-severity change from st
 - **minor** if any: new exported API, new option/method, **any vendored SQLite version bump** (including patch-level, e.g. 3.53.3 → 3.53.4 — always minor regardless of which specific features we expose), new SQLite feature exposed. No breaking changes.
 - **patch** otherwise: bug fixes in our own code, dep updates, internal refactors, doc updates — i.e. releases that ship the same SQLite the previous release did.
 
-Compute the next version by applying the bump to `package.json`'s current version. Use it only for the CHANGELOG heading; don't write it to `package.json`.
+The bump goes in the CHANGELOG heading (§5). Compute the next version by applying it to `package.json`'s current version, for the §9 hand-off only; don't write it to `package.json` or `CHANGELOG.md`.
 
 If the bump is ambiguous (e.g. a subtle behavior change that could be called a bug fix or breaking), stop and ask the user with AskUserQuestion. Include the evidence (commit hash, before/after behavior) so they can decide without scrolling.
 
@@ -189,31 +189,22 @@ If the bump is ambiguous (e.g. a subtle behavior change that could be called a b
 
 Open `CHANGELOG.md`. Follow the existing style exactly:
 
-- New section header, with an inline link to the release and today's date:
-  `## [X.Y.Z](https://github.com/PhotoStructure/node-sqlite/releases/tag/vX.Y.Z) (YYYY-MM-DD)`
-  Write the date yourself. **The release action does not fill it in** — it only
-  runs `npm version` and `gh release create --generate-notes`, and never edits
-  `CHANGELOG.md`. Assuming otherwise is how 1.1.0 through 2.1.0 all shipped
-  undated.
-
-  Dates in this file are the maintainer's **local (America/Los_Angeles)** date,
-  not UTC. Releases often go out late evening Pacific, by which time UTC has
-  already rolled to the next day — so `npm view ... time` (which is UTC) will
-  read one day later than the correct entry. If you are back-filling a date from
-  npm, convert it to Pacific first:
-
-  ```bash
-  TZ=America/Los_Angeles date -d "$(npm view @photostructure/sqlite time --json | jq -r '."X.Y.Z"')" +%F
-  ```
+- Write the notes under `## [Unreleased (patch)]`, `## [Unreleased (minor)]`, or
+  `## [Unreleased (major)]`, naming the bump from §4. If the file has a bare
+  `## [Unreleased]` heading, add the bump to it. If the heading already names a
+  bump, keep it unless this entry needs a bigger one; raise it then, and never
+  lower it. Keep exactly one Unreleased heading, above the newest
+  `## [X.Y.Z] - YYYY-MM-DD` section.
+- Don't write a version number, a date, or a `[X.Y.Z]: <url>` link definition.
+  The `Build & Release` workflow renames the heading to `## [X.Y.Z] - YYYY-MM-DD`,
+  adds an empty `## [Unreleased]` above it, and adds the link definition when it
+  cuts the release, and the GitHub release's notes are that section. If the
+  heading doesn't name a bump or has no notes under it, the workflow's
+  `changelog` job fails with instructions and nothing is tagged.
 - Use these subsections in this order, only including ones that apply: `### Added`, `### Changed`, `### Fixed`, `### Removed`.
 - Mark breaking changes with `**BREAKING**:` prefix.
 - Lead each bullet with a bold feature name / area: e.g. `- **SQLite 3.52.1**: patch release, no API impact`.
 - Keep it terse. Users skim changelogs. One line per change. Link to upstream PRs (`[Node.js PR #12345](...)`) when the change traces back to upstream.
-- Do **not** add a reference-style link definition at the bottom of the file —
-  the version heading above is a plain inline link. Reference-style links were a
-  second place to keep in sync, and it drifted: five releases rendered as dead
-  literal `[2.1.0]` text with no definition, while a `[1.3.0]` definition pointed
-  at a release that never existed.
 - If `node:sqlite` API parity changed, mention the Node.js version we're now compatible with (e.g. "API compatible with `node:sqlite` from Node.js v26.10.0").
 
 ### 6. Update other docs
@@ -278,10 +269,10 @@ Start the final message with what the user has to do, then report what changed.
 
 **Needs from you:**
 
-1. **Version bump**: `patch` | `minor` | `major` → next version `X.Y.Z`, with the 1–2 line justification, for the user to confirm.
+1. **Version bump**: `patch` | `minor` | `major` (as written in the `## [Unreleased (…)]` heading) → next version `X.Y.Z`, with the 1–2 line justification, for the user to confirm.
 2. **CHANGELOG entry**: quote the new section verbatim for the user to review.
 3. **Commit and push**: on local hardware, the commit you're asking to make and push. On a cloud VM, the PR link.
-4. **How to release**: merge this branch/PR to `main`, then follow [RELEASE.md](../../../RELEASE.md): trigger the `Build & Release` workflow with input `version = <patch|minor|major>`, which signs and pushes the version commit and tag, then dispatches `Stage npm Release` at that tag. That second workflow rebuilds the prebuilds, packs one tarball, tests it, and **stages** it on npm — the maintainer must approve the staged package with 2FA before it goes public. Link: https://github.com/photostructure/node-sqlite/actions/workflows/build.yml
+4. **How to release**: merge this branch/PR to `main`, then follow [RELEASE.md](../../../RELEASE.md): run the `Build & Release` workflow (it has no inputs; it reads the bump from the `## [Unreleased (…)]` heading), which signs and pushes the version commit and tag, then dispatches `Stage npm Release` at that tag. That second workflow rebuilds the prebuilds, packs one tarball, tests it, and **stages** it on npm — the maintainer must approve the staged package with 2FA before it goes public, and the GitHub release waits for that approval. Link: https://github.com/photostructure/node-sqlite/actions/workflows/build.yml
 
 **What changed:**
 

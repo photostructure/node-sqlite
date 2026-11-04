@@ -34,7 +34,7 @@ Jest, `test/*.test.ts`, run with `npm test` (builds `dist` first) or `npm run te
 ## Build and release
 
 - npm scripts follow `<action>[:<target>[:<variant>]]`: `test`, `test:all`, `lint`, `lint:full` (adds native lint and API checks), `build:native:rebuild`, `preflight` (everything that must pass before a release). No hidden lifecycle hooks; aggregates list what they run.
-- **Never bump `package.json` `version`.** The release action does it. Releases are staged, not published: `build.yml` signs and pushes the version commit and tag, `publish.yaml` rebuilds from that tag and stages one tarball, and a maintainer approves it on npm with 2FA. See `RELEASE.md` and the `preflight` skill.
+- **Never bump `package.json` `version`.** `build.yml` does it, with the bump named in `CHANGELOG.md`'s `## [Unreleased (patch|minor|major)]` heading, which the release commit renames to `## [X.Y.Z] - YYYY-MM-DD`. Releases are staged, not published: `build.yml` signs and pushes the version commit and tag, `publish.yaml` rebuilds from that tag and stages one tarball, and a maintainer approves it on npm with 2FA. Once npm serves the version, `publish.yaml` creates the GitHub release with that version's `CHANGELOG.md` section above GitHub's generated notes. See `RELEASE.md` and the `preflight` skill.
 - `package.json` `files` is the tarball allowlist. Everything `binding.gyp` compiles must stay listed, because `node-gyp-build` falls back to a source build wherever no prebuild matches.
 
 ## Git
