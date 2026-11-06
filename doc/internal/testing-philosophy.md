@@ -92,13 +92,14 @@ three detectors on Linux:
 | Valgrind Memcheck          | `scripts/valgrind-test.sh`   | Uninitialized reads, leaks (a different, overlapping set) |
 
 **How this gates a release.** Memory Tests is a _separate workflow_, and GitHub
-Actions `needs:` only works within a single workflow, so `publish` in `build.yml`
-does not depend on it mechanically. This is intentional: the release gate is
+Actions `needs:` only works within a single workflow, so the `release` job in
+`build.yml`, which signs and pushes the release tag, does not depend on it
+mechanically. This is intentional: the release gate is
 **procedural** — we do not cut a release while any workflow is red for that
 commit. Releases are `workflow_dispatch`-triggered by a human who checks CI
 first, so a machine-enforced dependency would buy little and couple the release
 path to a slow (ASan + Valgrind) job. Don't "fix" this by wiring
-`workflow_call` into `publish` without discussing it.
+`workflow_call` into `release` without discussing it.
 
 Two rules keep these honest:
 
