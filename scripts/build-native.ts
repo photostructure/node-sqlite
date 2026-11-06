@@ -46,7 +46,8 @@ function findValidNativeModule(dir: string): boolean {
 /**
  * True once node-gyp has configured build/ against Node headers that still
  * exist. prebuildify configures it against headers under os.tmpdir(), which
- * the OS may clear.
+ * the OS may clear. Temp cleaners can delete the files and keep the
+ * directories, so check for the file the Makefile depends on.
  */
 function isConfigured(): boolean {
   const configPath = join("build", "config.gypi");
@@ -54,7 +55,12 @@ function isConfigured(): boolean {
   const nodedir = /"nodedir":\s*("(?:[^"\\]|\\.)*")/.exec(
     readFileSync(configPath, "utf8"),
   );
-  return nodedir != null && existsSync(JSON.parse(nodedir[1]) as string);
+  return (
+    nodedir != null &&
+    existsSync(
+      join(JSON.parse(nodedir[1]) as string, "include", "node", "common.gypi"),
+    )
+  );
 }
 
 // Command line arguments are prebuildify's, so they always select prebuildify.
