@@ -108,8 +108,9 @@ function run({
   console.log(`\n▶ ${desc || cmd}${optional ? " (optional)" : ""}`);
   try {
     // Use npm to run the commands for better cross-platform compatibility
-    const [arg0, ...args] = cmd.split(" ");
-    execFileSync(arg0, args, { stdio: "inherit", shell: true });
+    // The whole command goes to the shell as one string: an args array with
+    // `shell: true` is only concatenated, and Node deprecates that (DEP0190).
+    execFileSync(cmd, { stdio: "inherit", shell: true });
   } catch (error) {
     if (optional) {
       console.log(`⚠ Skipped (command not available)`);
