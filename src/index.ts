@@ -196,6 +196,8 @@ export interface SqliteModule {
    * @see {@link SqliteAuthorizationActions} for authorization action codes
    */
   constants: SqliteConstants;
+  /** @see {@link backup} */
+  backup: typeof backup;
 }
 
 /**

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased (patch)]
 
+### Fixed
+
+- **`backup` on the default export's type**: `SqliteModule`, the type of the default export, now includes `backup()`, so `sqlite.backup(db, path)` compiles. The function was already there at runtime.
+
 ### Changed
 
 - **GitHub releases wait for the npm approval** (release process): the GitHub release is now created once npm serves the approved package, and its notes start with this file's section for the version.
