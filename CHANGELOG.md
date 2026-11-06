@@ -4,13 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased (patch)]
 
+### Changed
+
+- **Node.js**: synced to `v26.x-staging@e65b707`. The synced `node:sqlite` sources are unchanged since 3.3.0 and match Node.js v26.13.0, so the API is compatible with `node:sqlite` from Node.js v26.13.0.
+- **GitHub releases wait for the npm approval** (release process): the GitHub release is now created once npm serves the approved package, and its notes start with this file's section for the version.
+
 ### Fixed
 
 - **`backup` on the default export's type**: `SqliteModule`, the type of the default export, now includes `backup()`, so `sqlite.backup(db, path)` compiles. The function was already there at runtime.
-
-### Changed
-
-- **GitHub releases wait for the npm approval** (release process): the GitHub release is now created once npm serves the approved package, and its notes start with this file's section for the version.
 
 ## [3.3.0] - 2026-10-16
 
