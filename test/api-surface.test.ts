@@ -434,5 +434,12 @@ describe("API Surface Tests", () => {
 
       db.close();
     });
+
+    test("default export's backup() returns Promise<number>", async () => {
+      const db = new DatabaseSync(":memory:");
+      const result: number = await sqlite.backup(db, ":memory:");
+      expect(typeof result).toBe("number");
+      db.close();
+    });
   });
 });
