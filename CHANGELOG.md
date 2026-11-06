@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased (patch)]
+## [Unreleased]
+
+## [3.3.1] - 2026-11-06
 
 ### Changed
 
@@ -402,6 +404,7 @@ API compatible with `node:sqlite` from Node.js v25.6.1.
 - macOS (x64, ARM64)
 - Linux (x64, ARM64), (glibc 2.28+, musl)
 
+[3.3.1]: https://github.com/photostructure/node-sqlite/releases/tag/v3.3.1
 [3.3.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.3.0
 [3.2.0]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.2.0
 [3.1.1]: https://github.com/PhotoStructure/node-sqlite/releases/tag/v3.1.1
