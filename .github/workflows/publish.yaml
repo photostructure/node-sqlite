@@ -122,14 +122,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Install the release Node.js toolchain
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.19.0
           package-manager-cache: false
       - run: npm ci --ignore-scripts
       - run: npm run build:native
       - name: Upload the prebuild
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: prebuild-${{ matrix.target }}
           path: prebuilds/
@@ -155,7 +155,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install the release Node.js toolchain
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.19.0
           package-manager-cache: false
@@ -165,7 +165,7 @@ jobs:
           TARGET_ARCH: ${{ matrix.arch }}
         run: npm run build:native:linux
       - name: Upload the prebuild
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: prebuild-linux-${{ matrix.arch }}-glibc
           path: prebuilds/
@@ -203,7 +203,7 @@ jobs:
             node:22-alpine \
             -c 'apk add build-base git python3 py3-setuptools --update-cache && cd /tmp/project && npm ci --ignore-scripts && npm run build:native'
       - name: Upload the prebuild
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: prebuild-linux-${{ matrix.arch }}-musl
           path: prebuilds/
@@ -228,7 +228,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install the release Node.js toolchain
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # Node.js 24.19.0 bundles npm 11.17.0; the floor check below is what enforces the minimum.
           node-version: 24.19.0
@@ -237,7 +237,7 @@ jobs:
         run: node scripts/verify-npm-version.mjs 11.10.0
       - run: npm ci --ignore-scripts
       - name: Download exact-tag prebuilds
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: prebuild-*
           path: ./prebuilds
@@ -255,7 +255,7 @@ jobs:
             --expected-version "$EXPECTED_VERSION"
       - run: git diff --exit-code
       - name: Upload the exact package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-package-${{ github.ref_name }}
           path: package-artifact/
@@ -276,7 +276,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install the package-test toolchain
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # Node.js 24.19.0 bundles npm 11.17.0; the floor check below is what enforces the minimum.
           node-version: 24.19.0
@@ -284,7 +284,7 @@ jobs:
       - name: Verify the package-test npm version
         run: node scripts/verify-npm-version.mjs 11.10.0
       - run: npm ci --ignore-scripts
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: npm-package-${{ github.ref_name }}
           path: package-artifact/
@@ -296,7 +296,7 @@ jobs:
             --artifact-dir package-artifact \
             --install-root package-install
       - name: Install the target Node.js runtime
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node-version }}
           package-manager-cache: false
@@ -322,7 +322,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install the package-test toolchain
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # Node.js 24.19.0 bundles npm 11.17.0; the floor check below is what enforces the minimum.
           node-version: 24.19.0
@@ -330,7 +330,7 @@ jobs:
       - name: Verify the package-test npm version
         run: node scripts/verify-npm-version.mjs 11.10.0
       - run: npm ci --ignore-scripts
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: npm-package-${{ github.ref_name }}
           path: package-artifact/
@@ -342,7 +342,7 @@ jobs:
             --artifact-dir package-artifact \
             --install-root package-install
       - name: Install the target Node.js runtime
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node-version }}
           package-manager-cache: false
@@ -373,7 +373,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: npm-package-${{ github.ref_name }}
           path: package-artifact/
@@ -421,12 +421,12 @@ jobs:
       # install, no repository secret, and no third-party action: it is the only
       # job that can publish, so it runs nothing from the repository.
       - name: Download the exact package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: npm-package-${{ github.ref_name }}
           path: package-artifact/
       - name: Install the release Node.js toolchain
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # Node.js 24.19.0 bundles npm 11.17.0; the floor check below is what enforces the minimum.
           node-version: 24.19.0
